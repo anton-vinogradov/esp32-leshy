@@ -14,12 +14,12 @@ from pathlib import Path
 from typing import Any
 
 from esp_app_identity import app_elf_sha256
+from read_1x_version import read_version
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CURRENT_RUNNER = ROOT / "tools/run_1x_wifi_authentication_capture_hil.py"
 HIL_CHECKER = ROOT / "tools/check_wifi_authentication_capture_hil_run.py"
-VERSION = "1.0.0-dev.243"
 CID = "FE343253440000002000000055019CB7"
 BOARD = "board-01"
 PORT = "/dev/cu.usbmodem2101"
@@ -28,18 +28,22 @@ EXPECTATIONS_SCHEMA = (
     "leshy.wifi.authentication_capture_hil.acceptance_expectations.v1"
 )
 EVIDENCE = ROOT / "tests/hil/evidence"
-DEFAULT_POSITIVE = (
-    EVIDENCE / "board-01-wifi-authentication-capture-1.0.0-dev.243"
-)
-DEFAULT_EXPECTATIONS = EVIDENCE / (
-    "board-01-wifi-authentication-capture-1.0.0-dev.243-acceptance.json"
-)
+
+
+def evidence_paths(version: str) -> tuple[Path, Path]:
+    stem = f"board-01-wifi-authentication-capture-{version}"
+    return EVIDENCE / stem, EVIDENCE / f"{stem}-acceptance.json"
+
+
+VERSION = read_version()
+DEFAULT_POSITIVE, DEFAULT_EXPECTATIONS = evidence_paths(VERSION)
 SHA256 = re.compile(r"[0-9a-f]{64}")
 COMMIT = re.compile(r"[0-9a-f]{40}")
 SESSION_ID = re.compile(r"[0-9a-f]{32}")
 PRIVATE_TARGET_KEYS = frozenset({
     "target_bssid", "target_identity_hash", "identity_hash",
     "wifi_network_selected_identity_hash", "ssid", "bssid", "target_label",
+    "wifi_network_order_hash", "wifi_device_order_hash",
 })
 MAC_ADDRESS = re.compile(r"(?i)(?:[0-9a-f]{2}:){5}[0-9a-f]{2}")
 
@@ -281,16 +285,22 @@ def check(args: argparse.Namespace) -> list[str]:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--expectations", type=Path,
-                        default=DEFAULT_EXPECTATIONS)
-    parser.add_argument("--positive", type=Path, default=DEFAULT_POSITIVE)
+    parser.add_argument("--expectations", type=Path)
+    parser.add_argument("--positive", type=Path)
     parser.add_argument("--expected-version", default=VERSION)
     parser.add_argument("--expected-cid", default=CID)
     parser.add_argument("--expected-source-commit", required=True)
     parser.add_argument("--expected-firmware-sha256", required=True)
     parser.add_argument("--expected-app-elf-sha256", required=True)
     parser.add_argument("--expected-runner-sha256", required=True)
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    default_positive, default_expectations = evidence_paths(
+        args.expected_version)
+    if args.positive is None:
+        args.positive = default_positive
+    if args.expectations is None:
+        args.expectations = default_expectations
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:

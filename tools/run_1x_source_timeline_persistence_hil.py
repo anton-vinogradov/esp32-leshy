@@ -266,7 +266,8 @@ def main() -> int:
                         "runtime_owner": "survey",
                         "lease_mask": 15,
                         "survey_workflow_state": "running",
-                        "survey_product_backend_open": True,
+                        "survey_product_backend_open": False,
+                        "survey_product_storage_mounted": False,
                         "survey_scan_status": "valid",
                         "survey_scan_dropped": 0,
                         "survey_dropped": 0,
@@ -295,6 +296,7 @@ def main() -> int:
                         "survey_generation": before_generation + 1,
                         "survey_product_cleanup_complete": True,
                         "survey_product_backend_open": False,
+                        "survey_product_storage_mounted": False,
                         "survey_product_source_active": False,
                     }, "committed"))
                     failures.extend(timeline_failures(committed, True))

@@ -18,6 +18,8 @@ APP0_OFFSET = 0x10000
 APP0_SIZE = 0x400000
 OTA1_OFFSET = 0x410000
 OTA1_SIZE = 0x400000
+MINIMUM_APP_SLOT_FREE_BYTES = APP0_SIZE // 8
+MAXIMUM_APP_IMAGE_SIZE = APP0_SIZE - MINIMUM_APP_SLOT_FREE_BYTES
 
 
 def canonical_partition_table(path: Path) -> bytes:
@@ -32,7 +34,7 @@ def canonical_partition_table(path: Path) -> bytes:
 def validated_partition_layout(
     path: Path, firmware_size: int,
 ) -> dict[str, dict[str, int]]:
-    """Require the reviewed 16 MB app0/app1 layout and a fitting image."""
+    """Require the reviewed layout and the RB-02 OTA growth reserve."""
     payload = canonical_partition_table(path)
     entries: dict[str, dict[str, int]] = {}
     md5_verified = False
@@ -87,6 +89,11 @@ def validated_partition_layout(
         raise ValueError(
             f"candidate firmware {firmware_size} does not fit app0 "
             f"{entries['app0']['size']}")
+    if firmware_size > MAXIMUM_APP_IMAGE_SIZE:
+        raise ValueError(
+            f"candidate firmware {firmware_size} exceeds RB-02 maximum "
+            f"{MAXIMUM_APP_IMAGE_SIZE}; each 4 MiB OTA slot must retain "
+            f"at least {MINIMUM_APP_SLOT_FREE_BYTES} bytes")
     app0_end = entries["app0"]["offset"] + entries["app0"]["size"]
     if app0_end != entries["app1"]["offset"]:
         raise ValueError("Leshy 1.x app0/app1 boundary is not exact")

@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from read_1x_version import read_version
+
 
 def load(name: str, filename: str) -> Any:
     path = Path(__file__).with_name(filename)
@@ -40,6 +42,42 @@ class WifiAuthenticationCaptureRetentionTests(unittest.TestCase):
     source_commit = "1" * 40
     app = "2" * 64
     run_id = "3" * 32
+
+    def test_default_paths_follow_current_firmware_version(self) -> None:
+        version = read_version()
+        positive, expectations = ACCEPTANCE.evidence_paths(version)
+        self.assertEqual(version, ACCEPTANCE.VERSION)
+        self.assertEqual(positive, ACCEPTANCE.DEFAULT_POSITIVE)
+        self.assertEqual(expectations, ACCEPTANCE.DEFAULT_EXPECTATIONS)
+        self.assertEqual(positive, RETENTION.DEFAULT_DESTINATION)
+        self.assertEqual(expectations, RETENTION.DEFAULT_EXPECTATIONS)
+        self.assertEqual(
+            f"board-01-wifi-authentication-capture-{version}",
+            positive.name)
+        self.assertEqual(
+            f"board-01-wifi-authentication-capture-{version}-acceptance.json",
+            expectations.name)
+
+    def test_version_override_selects_matching_default_namespace(self) -> None:
+        version = "1.0.0-dev.243"
+        self.assertNotEqual(version, ACCEPTANCE.VERSION)
+        positive, expectations = ACCEPTANCE.evidence_paths(version)
+        pins = [
+            "--expected-version", version,
+            "--expected-source-commit", self.source_commit,
+            "--expected-firmware-sha256", "4" * 64,
+            "--expected-app-elf-sha256", self.app,
+            "--expected-runner-sha256", "5" * 64,
+        ]
+
+        acceptance_args = ACCEPTANCE.parse_args(pins)
+        self.assertEqual(positive, acceptance_args.positive)
+        self.assertEqual(expectations, acceptance_args.expectations)
+
+        retention_args = RETENTION.parse_args([
+            "--positive", "/tmp/historical-cap049", *pins])
+        self.assertEqual(positive, retention_args.destination)
+        self.assertEqual(expectations, retention_args.expectations)
 
     def make_bundle(self, parent: Path) -> tuple[Path, dict[str, str]]:
         bundle = parent / "source"
@@ -171,6 +209,13 @@ class WifiAuthenticationCaptureRetentionTests(unittest.TestCase):
             bundle, expected = self.make_bundle(parent)
             marker = parent / "pins.json"
             value = self.marker(bundle, expected)
+            value["version"] = "1.0.0-dev.other"
+            marker.write_text(json.dumps(value) + "\n", encoding="utf-8")
+            args = self.acceptance_args(bundle, marker, expected)
+            self.assertTrue(any("exact pin mismatch" in failure
+                                for failure in ACCEPTANCE.check(args)))
+
+            value["version"] = expected["version"]
             value["source_commit"] = "4" * 40
             marker.write_text(json.dumps(value) + "\n", encoding="utf-8")
             args = self.acceptance_args(bundle, marker, expected)
@@ -245,6 +290,8 @@ class WifiAuthenticationCaptureRetentionTests(unittest.TestCase):
         for leak in (
                 {"target_bssid": "00:11:22:33:44:55"},
                 {"identity_hash": 0x12345678},
+                {"wifi_network_order_hash": 0x12345678},
+                {"wifi_device_order_hash": 0x87654321},
                 {"innocent_name": "00:11:22:33:44:55"}):
             with self.subTest(leak=leak), \
                     tempfile.TemporaryDirectory() as temporary:

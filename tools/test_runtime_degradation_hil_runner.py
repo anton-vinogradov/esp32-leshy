@@ -26,7 +26,8 @@ class RuntimeDegradationAssertionsTest(unittest.TestCase):
             "page": "survey", "runtime_owner": "survey", "lease_mask": 15,
             "survey_workflow_state": "running",
             "survey_product_status": "running_degraded",
-            "survey_product_backend_open": True,
+            "survey_product_backend_open": False,
+            "survey_product_storage_mounted": False,
             "survey_product_cleanup_complete": False,
             "survey_product_source_active": True,
             "survey_product_selected_source_mask": DUAL_MASK,
@@ -138,6 +139,21 @@ class RuntimeDegradationAssertionsTest(unittest.TestCase):
         state["survey_product_active_source_mask"] = DUAL_MASK
         state["survey_ble_scan_accepted"] = 1
         self.assertTrue(degraded_failures(state))
+
+    def test_rejects_physical_storage_overlap_while_degraded(self) -> None:
+        for field in (
+                "survey_product_backend_open",
+                "survey_product_storage_mounted"):
+            with self.subTest(field=field):
+                state = self.degraded()
+                state[field] = True
+                self.assertTrue(degraded_failures(state))
+
+    def test_rejects_physical_storage_overlap_after_commit(self) -> None:
+        state = self.committed()
+        self.assertEqual([], committed_failures(state, 78))
+        state["survey_product_storage_mounted"] = True
+        self.assertTrue(committed_failures(state, 78))
 
     def test_rejects_export_without_retained_unavailability(self) -> None:
         artifact = self.exported()

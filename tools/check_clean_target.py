@@ -26,6 +26,10 @@ def main() -> int:
     session_store_router = TARGET / "src" / "storage" / "SessionStoreIoRouter.cpp"
     passive_wifi_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveScanner.cpp"
     passive_wifi_header = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveScanner.h"
+    passive_wifi_init_config = (
+        TARGET / "src" / "platform" / "arduino" /
+        "BoardWifiPassiveInitConfig.h"
+    )
     passive_wifi_capture_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveCapture.cpp"
     companion_web_adapter = (
         TARGET / "src" / "platform" / "arduino" /
@@ -425,7 +429,7 @@ def main() -> int:
         for marker in (
             "esp_event_loop_create_default",
             "esp_event_loop_delete_default",
-            "init.nvs_enable = 0",
+            "makeBoardWifiPassiveOnlyInitConfig()",
             "WIFI_STORAGE_RAM",
             "WIFI_SCAN_TYPE_PASSIVE",
         ):
@@ -665,6 +669,8 @@ def main() -> int:
 
     for marker in (
         '"survey.persistent_passive"',
+        "productSurveyMountTotalsSnapshot()",
+        '\\"survey_product_filesystem_mount_last_failure_error\\"',
         "startProductSurvey()",
         "closeProductSurveyBackend()",
         "productSurveyFilesystem.cachedFreeBytes()",
@@ -716,6 +722,40 @@ def main() -> int:
         ):
             if marker not in product_start_body:
                 errors.append(f"product Survey start is missing bounded identity retry: {marker}")
+        for marker in (
+            "kProductStartMaximumFilesystemAttempts",
+            "shouldRetryProductStartFilesystem",
+            "productStartFilesystemRetryDelayMs",
+            "productSurveyFilesystem.cleanupComplete()",
+            "productSurveyFilesystem.mounted()",
+            "report.filesystemMountTransientRetries = attempt",
+            "recordProductSurveyMountOutcome(filesystemMounted)",
+            "report.filesystemMountLastFailureError = report.filesystemMountError",
+            "evidence.storeCurrentlyOpen",
+            "evidence.radioCurrentlyActive",
+        ):
+            if marker not in product_start_body:
+                errors.append(
+                    "product Survey start is missing fail-closed filesystem "
+                    f"remount retry/telemetry: {marker}"
+                )
+        filesystem_attempts = product_start_body.find(
+            "kProductStartMaximumFilesystemAttempts"
+        )
+        cancellation_gate = product_start_body.find(
+            "if (productSurveyCancelRequested()) {", filesystem_attempts
+        )
+        filesystem_begin = product_start_body.find(
+            "productSurveyFilesystem.begin()", filesystem_attempts
+        )
+        if not (
+            filesystem_attempts >= 0
+            and filesystem_attempts < cancellation_gate < filesystem_begin
+        ):
+            errors.append(
+                "product Survey cancellation must be checked before every "
+                "filesystem remount attempt"
+            )
         store_open = product_start_body.find(
             "productSurveyStore.openExistingWritable(storePermit)"
         )
@@ -745,6 +785,42 @@ def main() -> int:
                 "stack lifetimes"
             )
 
+        logical_start = entry.find("bool startProductSurvey()")
+        logical_start_end = entry.find(
+            "bool reopenProductSurveyBackendForCommit()", logical_start)
+        logical_start_body = entry[logical_start:logical_start_end]
+        for marker in (
+            "productSurveyFilesystem.mounted()",
+            "productSurveyRuntime.backendOpen",
+            "productSurveyRuntime.sourceActive",
+            "productSurveyScanActive()",
+            "!productSurveyRuntime.cleanupComplete",
+            'productSurveyRuntime.status = "storage_not_quiescent"',
+        ):
+            if marker not in logical_start_body:
+                errors.append(
+                    "product Survey logical start can erase stale physical "
+                    f"ownership before refusing it: {marker}"
+                )
+
+        logical_commit_end = entry.find(
+            "void releaseProductSurveyAfterTerminal(", logical_start_end
+        )
+        logical_commit_body = entry[logical_start_end:logical_commit_end]
+        for marker in (
+            "kProductStartMaximumFilesystemAttempts",
+            "recordProductSurveyMountOutcome(filesystemMounted)",
+            "productSurveyRuntime.filesystemMountLastFailureError",
+            "evidence.storeCurrentlyOpen",
+            "evidence.radioCurrentlyActive",
+            "shouldRetryProductStartFilesystem",
+        ):
+            if marker not in logical_commit_body:
+                errors.append(
+                    "product Survey commit is missing fail-closed filesystem "
+                    f"remount retry/telemetry: {marker}"
+                )
+
         product_worker_body = entry[product_worker:entry.find(
             "bool initializeProductSurveyWorker()", product_worker
         )]
@@ -771,28 +847,30 @@ def main() -> int:
             )
 
         wifi_adapter = passive_wifi_adapter.read_text(encoding="utf-8")
+        wifi_init_config = passive_wifi_init_config.read_text(encoding="utf-8")
         for marker in (
-            "init.static_rx_buf_num = kPassiveStaticRxBuffers",
-            "init.dynamic_rx_buf_num = kPassiveDynamicRxBuffers",
-            "init.static_tx_buf_num = kPassiveStaticTxBuffers",
-            "init.dynamic_tx_buf_num = kPassiveDynamicTxBuffers",
+            "init.static_rx_buf_num = BoardWifiPassiveInitProfile::kStaticRxBuffers",
+            "init.dynamic_rx_buf_num = BoardWifiPassiveInitProfile::kDynamicRxBuffers",
+            "init.static_tx_buf_num = BoardWifiPassiveInitProfile::kStaticTxBuffers",
+            "init.dynamic_tx_buf_num = BoardWifiPassiveInitProfile::kDynamicTxBuffers",
             "init.ampdu_rx_enable = 0",
             "init.ampdu_tx_enable = 0",
             "init.rx_ba_win = 0",
-            "init.mgmt_sbuf_num = kPassiveManagementShortBuffers",
+            "BoardWifiPassiveInitProfile::kManagementShortBuffers",
+            "init.nvs_enable = 0",
         ):
-            if marker not in wifi_adapter:
+            if marker not in wifi_init_config:
                 errors.append(
                     "passive Wi-Fi coexistence budget is missing: " + marker
                 )
         for marker in (
-            "kPassiveStaticRxBuffers = 4",
-            "kPassiveDynamicRxBuffers = 8",
-            "kPassiveStaticTxBuffers = 0",
-            "kPassiveDynamicTxBuffers = 4",
-            "kPassiveManagementShortBuffers = 6",
+            "kStaticRxBuffers = 4",
+            "kDynamicRxBuffers = 8",
+            "kStaticTxBuffers = 0",
+            "kDynamicTxBuffers = 4",
+            "kManagementShortBuffers = 6",
         ):
-            if marker not in passive_wifi_header.read_text(encoding="utf-8"):
+            if marker not in wifi_init_config:
                 errors.append(
                     "passive Wi-Fi buffer bound is missing: " + marker
                 )
@@ -814,7 +892,15 @@ def main() -> int:
                 errors.append(
                     f"product Survey terminal reopen is missing: {marker}"
                 )
-
+        backend_open_assignment = "productSurveyRuntime.backendOpen = true;"
+        if (
+            entry.count(backend_open_assignment) != 1
+            or backend_open_assignment not in commit_reopen_body
+        ):
+            errors.append(
+                "survey_product_backend_open must describe only the physical "
+                "writable backend during terminal commit reopen"
+            )
     worker_end = entry.find("bool initializeProductSurveyWorker()", product_worker)
     if product_worker < 0 or worker_end <= product_worker:
         errors.append("product Survey terminal ownership could not be inspected")
@@ -1073,6 +1159,22 @@ def main() -> int:
         ):
             if marker not in product_start_retry:
                 errors.append(f"Product Start identity retry policy is missing: {marker}")
+        for marker in (
+            "kProductStartMaximumFilesystemAttempts = 3",
+            "kProductStartFilesystemRetryBaseDelayMs = 50",
+            "kProductStartTransientFilesystemMountError = 0x101",
+            "shouldRetryProductStartFilesystem",
+            "evidence.mountError == kProductStartTransientFilesystemMountError",
+            "evidence.filesystemCleanupComplete",
+            "!evidence.filesystemStillMounted",
+            "!evidence.storeCurrentlyOpen",
+            "!evidence.radioCurrentlyActive",
+            "!evidence.cancelRequested",
+        ):
+            if marker not in product_start_retry:
+                errors.append(
+                    f"Product Start filesystem retry policy is missing: {marker}"
+                )
 
     if not session_store_router.is_file():
         errors.append("allocation-free SessionStore backend router is missing")
@@ -1390,7 +1492,7 @@ def main() -> int:
     else:
         wifi_adapter = passive_wifi_adapter.read_text(encoding="utf-8")
         for marker in (
-            "init.nvs_enable = 0",
+            "makeBoardWifiPassiveOnlyInitConfig()",
             "esp_wifi_set_storage(WIFI_STORAGE_RAM)",
             "esp_wifi_set_mode(WIFI_MODE_STA)",
             "config.ssid = nullptr",
@@ -1441,7 +1543,7 @@ def main() -> int:
     else:
         frame_capture = passive_wifi_capture_adapter.read_text(encoding="utf-8")
         for marker in (
-            "init.nvs_enable = 0",
+            "makeBoardWifiPassiveOnlyInitConfig()",
             "esp_wifi_set_storage(WIFI_STORAGE_RAM)",
             "esp_wifi_set_mode(WIFI_MODE_STA)",
             "WIFI_PROMIS_FILTER_MASK_MGMT",

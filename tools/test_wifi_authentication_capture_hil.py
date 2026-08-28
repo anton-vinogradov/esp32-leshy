@@ -125,7 +125,7 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
         device.reset_input_buffer.assert_called_once_with()
         self.assertEqual(1, actual["host_wait_transport_timeouts"])
         self.assertEqual(
-            ["transient UI ACK loss"],
+            ["TimeoutError"],
             actual["host_wait_transport_errors"])
 
     def test_wifi_menu_preflight_accepts_unsnapshotted_worker_but_quiesces(
@@ -135,6 +135,7 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
             "runtime_owner": "wifi", "lease_mask": 15,
             "survey_workflow_state": "setup",
             "survey_product_backend_open": False,
+            "survey_product_storage_mounted": False,
             "survey_product_cleanup_complete": True,
             "survey_product_worker_ready": False,
             "survey_product_source_active": False,
@@ -172,6 +173,46 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
             'cancel_list.get("survey_product_worker_ready") is True', checker)
         self.assertIn(
             'network_list.get("survey_product_worker_ready") is True', checker)
+
+    def test_product_mount_proof_rejects_overlap_and_bad_accounting(self) -> None:
+        state = {
+            "survey_product_backend_open": False,
+            "survey_product_storage_mounted": False,
+            "survey_product_store_open_attempted": True,
+            "survey_product_store_status": "permitted",
+            "survey_product_admission_status": "permitted",
+            "survey_product_filesystem_mount_error": 0,
+            "survey_product_filesystem_mount_last_failure_error": 257,
+            "survey_product_filesystem_mount_attempts": 2,
+            "survey_product_filesystem_mount_transient_retries": 1,
+            "survey_product_mount_attempts_total": 3,
+            "survey_product_mount_successes_total": 2,
+        }
+        failures: list[str] = []
+        CHECKER.verify_product_mount(failures, state, "valid")
+        self.assertEqual([], failures)
+        for name, value in (
+                ("survey_product_backend_open", True),
+                ("survey_product_storage_mounted", True),
+                ("survey_product_filesystem_mount_error", 257),
+                ("survey_product_filesystem_mount_last_failure_error", 0),
+                ("survey_product_filesystem_mount_attempts", 4),
+                ("survey_product_filesystem_mount_transient_retries", 0),
+                ("survey_product_mount_successes_total", 4)):
+            with self.subTest(name=name):
+                changed = dict(state)
+                changed[name] = value
+                failures = []
+                CHECKER.verify_product_mount(failures, changed, "mutated")
+                self.assertTrue(failures)
+
+        first_attempt = dict(state)
+        first_attempt["survey_product_filesystem_mount_attempts"] = 1
+        first_attempt["survey_product_filesystem_mount_transient_retries"] = 0
+        first_attempt["survey_product_filesystem_mount_last_failure_error"] = 0
+        failures = []
+        CHECKER.verify_product_mount(failures, first_attempt, "first_attempt")
+        self.assertEqual([], failures)
 
     def test_one_shot_hold_has_exact_non_replayed_bounded_contract(self) -> None:
         ack = {
@@ -236,7 +277,7 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
                 object(), armed_auth_state(False))
         self.assertEqual(1, mutate.call_count)
         self.assertFalse(hold["host_arm_ack_received"])
-        self.assertIn("lost ack", hold["host_arm_ack_error"])
+        self.assertEqual("TimeoutError", hold["host_arm_ack_error"])
         hold["host_back_after_arm_ms"] = 10.0
         failures: list[str] = []
         CHECKER.verify_cancel_hold(failures, hold)
@@ -412,6 +453,8 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
         live = {
             "target_bssid": "00:11:22:33:44:55",
             "nested": [{"identity_hash": 123}, {"channel": 6}],
+            "wifi_network_order_hash": 0x12345678,
+            "wifi_device_order_hash": 0x87654321,
             "privacy": {"generic_target_ui": True},
         }
         retained = RUNNER.scrub_private_target_identifiers(live)
@@ -420,6 +463,9 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
             "privacy": {"generic_target_ui": True},
         }, retained)
         self.assertEqual([], RUNNER.private_target_failures(retained))
+        safe = RUNNER.privacy_safe_repr(live)
+        self.assertNotIn("order_hash", safe)
+        self.assertNotIn("identity_hash", safe)
 
     def test_capture_sidecar_and_screens_record_are_scrubbed(self) -> None:
         live = {
@@ -451,9 +497,11 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
             retained["frame_begin"]["status"])
         self.assertEqual([], RUNNER.private_target_failures(retained))
 
-    def test_capture_sanitizer_failure_leaves_no_json_sidecar(self) -> None:
-        def fake_capture(_device: Any, _frames: Path, _name: str,
+    def test_capture_sanitizer_failure_leaves_no_frame_artifacts(self) -> None:
+        def fake_capture(_device: Any, frames: Path, name: str,
                          *, record_transform: Any) -> dict[str, Any]:
+            (frames / f"{name}.rgb565").write_bytes(b"private framebuffer")
+            (frames / f"{name}.png").write_bytes(b"private screenshot")
             return record_transform({"state": {"ssid": "private-network"}})
 
         with tempfile.TemporaryDirectory() as temporary, \
@@ -462,16 +510,21 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
                     RUNNER, "scrub_private_target_identifiers",
                     side_effect=RuntimeError("synthetic sanitizer crash")):
             frames = Path(temporary)
-            sidecar = frames / "wifi-auth-running.json"
-            sidecar.write_text("unsanitized stale data", encoding="utf-8")
+            for suffix in ("json", "png", "rgb565"):
+                (frames / f"wifi-auth-running.{suffix}").write_bytes(
+                    b"unsanitized stale data")
             with self.assertRaisesRegex(RuntimeError, "sanitizer crash"):
                 RUNNER.capture_evidence_safe(
                     object(), frames, "wifi-auth-running")
-            self.assertFalse(sidecar.exists())
+            for suffix in ("json", "png", "rgb565"):
+                self.assertFalse(
+                    (frames / f"wifi-auth-running.{suffix}").exists())
 
     def test_private_target_checker_rejects_keys_and_mac_values(self) -> None:
         for value in (
                 {"identity_hash": 123},
+                {"wifi_network_order_hash": 123},
+                {"wifi_device_order_hash": 456},
                 {"safe_key": "00:11:22:33:44:55"},
                 {"nested": [{"target_bssid": "redacted"}]}):
             with self.subTest(value=value):

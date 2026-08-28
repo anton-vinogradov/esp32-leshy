@@ -69,6 +69,7 @@ REPORT_COUNTER_FIELDS = (
 PRIVATE_TARGET_KEYS = frozenset({
     "target_bssid", "target_identity_hash", "identity_hash",
     "wifi_network_selected_identity_hash", "ssid", "bssid", "target_label",
+    "wifi_network_order_hash", "wifi_device_order_hash",
 })
 MAC_ADDRESS = re.compile(r"(?i)(?:[0-9a-f]{2}:){5}[0-9a-f]{2}")
 SCREEN_NAMES = {
@@ -88,6 +89,34 @@ def require(failures: list[str], condition: bool, message: str) -> None:
         failures.append(message)
 
 
+def verify_product_mount(failures: list[str], state: dict[str, Any],
+                         label: str) -> None:
+    attempts = state.get("survey_product_filesystem_mount_attempts")
+    retries = state.get(
+        "survey_product_filesystem_mount_transient_retries")
+    last_failure = state.get(
+        "survey_product_filesystem_mount_last_failure_error")
+    attempts_total = state.get("survey_product_mount_attempts_total")
+    successes_total = state.get("survey_product_mount_successes_total")
+    require(failures,
+            state.get("survey_product_backend_open") is False and
+            state.get("survey_product_storage_mounted") is False and
+            state.get("survey_product_store_open_attempted") is True and
+            state.get("survey_product_store_status") == "permitted" and
+            state.get("survey_product_admission_status") == "permitted" and
+            state.get("survey_product_filesystem_mount_error") == 0,
+            f"{label}: physical storage was not released after admission")
+    require(failures,
+            non_negative_integer(attempts) and 1 <= attempts <= 3 and
+            retries == attempts - 1 and
+            last_failure == (257 if retries else 0) and
+            non_negative_integer(attempts_total) and
+            attempts_total >= attempts and
+            non_negative_integer(successes_total) and
+            1 <= successes_total <= attempts_total,
+            f"{label}: bounded filesystem remount accounting mismatch")
+
+
 def non_negative_integer(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
@@ -101,6 +130,7 @@ def verify_wifi_menu_quiescent(failures: list[str],
             state.get("lease_mask") == 15 and
             state.get("survey_workflow_state") == "setup" and
             state.get("survey_product_backend_open") is False and
+            state.get("survey_product_storage_mounted") is False and
             state.get("survey_product_cleanup_complete") is True and
             state.get("survey_product_source_active") is False and
             state.get("survey_product_scan_active") is False,
@@ -809,6 +839,7 @@ def main() -> int:
             cancel_list.get("runtime_owner") == "wifi" and
             cancel_list.get("lease_mask") == 15,
             "cancel preflight network list proof mismatch")
+    verify_product_mount(failures, cancel_list, "cancel preflight")
     require(failures,
             cancel_detail_ui.get("wifi_product_view") == "network_detail" and
             cancel_detail_ui.get("wifi_network_navigation_locked") is True and
@@ -901,6 +932,18 @@ def main() -> int:
             isinstance(network_list.get("wifi_networks_unique"), int) and
             network_list.get("wifi_networks_unique", 0) >= 1,
             "nearby-network selection proof mismatch")
+    verify_product_mount(failures, network_list, "same-boot second start")
+    second_attempts = network_list.get(
+        "survey_product_filesystem_mount_attempts")
+    if non_negative_integer(second_attempts):
+        require(failures,
+                network_list.get("survey_product_mount_attempts_total") ==
+                    cancel_list.get("survey_product_mount_attempts_total") +
+                    second_attempts and
+                network_list.get("survey_product_mount_successes_total") ==
+                    cancel_list.get("survey_product_mount_successes_total") + 1,
+                "same-boot second start did not prove a fresh successful "
+                "bounded filesystem remount")
     detail_ui = run.get("network_detail_ui", {})
     detail = run.get("network_detail", {})
     require(failures,

@@ -17,6 +17,10 @@ def main() -> int:
     adapter_cpp = (
         ROOT / "firmware/leshy1/src/platform/arduino/BoardWifiPassiveCapture.cpp"
     ).read_text()
+    init_profile = (
+        ROOT / "firmware/leshy1/src/platform/arduino/BoardWifiPassiveInitConfig.h"
+    ).read_text()
+    adapter_contract = adapter_cpp + init_profile
     strings = (
         ROOT / "firmware/leshy1/src/ui/UiStrings.def"
     ).read_text()
@@ -80,7 +84,7 @@ def main() -> int:
     )
     failures.extend(
         f"passive adapter token missing: {token}"
-        for token in required_adapter if token not in adapter_cpp
+        for token in required_adapter if token not in adapter_contract
     )
     failures.extend(
         f"adapter contains active/TX path: {token}"

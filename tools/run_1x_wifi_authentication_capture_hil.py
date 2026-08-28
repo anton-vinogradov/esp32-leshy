@@ -97,6 +97,7 @@ REPORT_COUNTER_FIELDS = (
 PRIVATE_TARGET_KEYS = frozenset({
     "target_bssid", "target_identity_hash", "identity_hash",
     "wifi_network_selected_identity_hash", "ssid", "bssid", "target_label",
+    "wifi_network_order_hash", "wifi_device_order_hash",
 })
 MAC_ADDRESS = re.compile(r"(?i)(?:[0-9a-f]{2}:){5}[0-9a-f]{2}")
 
@@ -139,6 +140,16 @@ def private_target_failures(value: Any, path: str = "run") -> list[str]:
     return failures
 
 
+def privacy_safe_repr(value: Any) -> str:
+    """Format diagnostics only after removing private radio identifiers."""
+    return repr(scrub_private_target_identifiers(value))
+
+
+def privacy_safe_exception(error: BaseException) -> str:
+    """Retain an exception class, never opaque transport text or raw JSON."""
+    return type(error).__name__
+
+
 def finalize_evidence_result(value: dict[str, Any], failures: list[str],
                              base_passed: bool) -> tuple[dict[str, Any], bool]:
     retained = scrub_private_target_identifiers(value)
@@ -156,8 +167,10 @@ def finalize_evidence_result(value: dict[str, Any], failures: list[str],
 def capture_evidence_safe(device: PassiveSerial, frames: Path,
                           name: str) -> dict[str, Any]:
     """Capture a frame without ever writing private UI state to its sidecar."""
-    sidecar = frames / f"{name}.json"
-    sidecar.unlink(missing_ok=True)
+    artifacts = tuple(
+        frames / f"{name}.{suffix}" for suffix in ("json", "png", "rgb565"))
+    for artifact in artifacts:
+        artifact.unlink(missing_ok=True)
 
     def retention_safe_record(live: dict[str, Any]) -> dict[str, Any]:
         retained = scrub_private_target_identifiers(live)
@@ -171,7 +184,8 @@ def capture_evidence_safe(device: PassiveSerial, frames: Path,
         return capture(
             device, frames, name, record_transform=retention_safe_record)
     except Exception:
-        sidecar.unlink(missing_ok=True)
+        for artifact in artifacts:
+            artifact.unlink(missing_ok=True)
         raise
 
 
@@ -273,7 +287,8 @@ def wait_auth_state(device: PassiveSerial,
         if predicate(last):
             return last
         time.sleep(0.05)
-    raise TimeoutError(f"{description}: last state {last!r}")
+    raise TimeoutError(
+        f"{description}: last state {privacy_safe_repr(last)}")
 
 
 def wait_ui_state(device: PassiveSerial,
@@ -290,7 +305,9 @@ def wait_ui_state(device: PassiveSerial,
                 device, b"ui.state", UI_SCHEMA, "state",
                 timeout=min(2.0, max(0.001, remaining)))
         except TimeoutError as error:
-            transport_errors.append(str(error))
+            # Exception text can contain a raw serial record.  Preserve the
+            # failure class without retaining already-formatted identifiers.
+            transport_errors.append(type(error).__name__)
             device.reset_input_buffer()
             time.sleep(0.05)
             continue
@@ -301,7 +318,7 @@ def wait_ui_state(device: PassiveSerial,
         time.sleep(0.05)
     raise TimeoutError(
         f"{description}: transport_errors={transport_errors!r}, "
-        f"last state {last!r}")
+        f"last state {privacy_safe_repr(last)}")
 
 
 def wifi_menu_quiescent(state: dict[str, Any]) -> bool:
@@ -313,6 +330,7 @@ def wifi_menu_quiescent(state: dict[str, Any]) -> bool:
         state.get("lease_mask") == 15 and
         state.get("survey_workflow_state") == "setup" and
         state.get("survey_product_backend_open") is False and
+        state.get("survey_product_storage_mounted") is False and
         state.get("survey_product_cleanup_complete") is True and
         state.get("survey_product_source_active") is False and
         state.get("survey_product_scan_active") is False
@@ -337,7 +355,7 @@ def arm_authentication_survey_stop_hold(
     except TimeoutError as error:
         ack = {}
         ack_received = False
-        ack_error = str(error)
+        ack_error = privacy_safe_exception(error)
 
     # A lost mutation ACK must still leave enough of the firmware's 1.5 s hold
     # for a read-only proof and the immediately following Back action.  Do not
@@ -407,7 +425,7 @@ def bounded_hold_navigation(device: PassiveSerial, action_name: str,
     except TimeoutError as error:
         record = {}
         ack_received = False
-        ack_error = str(error)
+        ack_error = privacy_safe_exception(error)
     record.update({
         "host_navigation_action": action_name,
         "host_navigation_action_writes": 1,
@@ -481,8 +499,7 @@ def collect_authentication_failure_diagnostics(
             device, b"capture.state", CAPTURE_SCHEMA, "state",
             timeout=3.0, maximum_attempts=1)
     except Exception as error:
-        diagnostics["capture_query_error"] = (
-            f"{type(error).__name__}: {error}")
+        diagnostics["capture_query_error"] = privacy_safe_exception(error)
     return diagnostics
 
 
@@ -504,7 +521,7 @@ def best_effort_final_diagnostics(
                 device, command, schema, "state",
                 timeout=2.5, maximum_attempts=1)
         except Exception as error:
-            errors.append(f"{name}: {type(error).__name__}: {error}")
+            errors.append(f"{name}: {privacy_safe_exception(error)}")
     return records, errors
 
 
@@ -659,7 +676,8 @@ def home_wifi(device: PassiveSerial,
         state = action(device, "back")
         trace.append(state)
     if state.get("page") != "home":
-        raise RuntimeError(f"cannot reach Home: {state!r}")
+        raise RuntimeError(
+            f"cannot reach Home: {privacy_safe_repr(state)}")
     for _ in range(10):
         if int(state.get("selection", -1)) == 0:
             break
@@ -698,8 +716,39 @@ def enter_network_detail(
         "survey_product_worker_ready": True,
         "survey_product_status": "running",
         "survey_product_active_source_mask": 1,
+        "survey_product_backend_open": False,
+        "survey_product_storage_mounted": False,
+        "survey_product_store_open_attempted": True,
+        "survey_product_store_status": "permitted",
+        "survey_product_admission_status": "permitted",
+        "survey_product_filesystem_mount_error": 0,
         "survey_scan_status": "valid", "survey_scan_dropped": 0,
     }, f"{label}_networks_live")
+    mount_attempts = network_list.get(
+        "survey_product_filesystem_mount_attempts")
+    mount_retries = network_list.get(
+        "survey_product_filesystem_mount_transient_retries")
+    mount_last_failure = network_list.get(
+        "survey_product_filesystem_mount_last_failure_error")
+    mount_attempts_total = network_list.get(
+        "survey_product_mount_attempts_total")
+    mount_successes_total = network_list.get(
+        "survey_product_mount_successes_total")
+    if (not isinstance(mount_attempts, int) or
+            isinstance(mount_attempts, bool) or
+            not 1 <= mount_attempts <= 3 or
+            mount_retries != mount_attempts - 1 or
+            mount_last_failure != (257 if mount_retries else 0) or
+            not isinstance(mount_attempts_total, int) or
+            isinstance(mount_attempts_total, bool) or
+            mount_attempts_total < mount_attempts or
+            not isinstance(mount_successes_total, int) or
+            isinstance(mount_successes_total, bool) or
+            mount_successes_total < 1 or
+            mount_successes_total > mount_attempts_total):
+        raise RuntimeError(
+            f"{label}: invalid filesystem remount accounting: "
+            f"{privacy_safe_repr(network_list)}")
     detail_ui = action(device, "right")
     trace.append(detail_ui)
     require_exact(detail_ui, {
@@ -720,7 +769,7 @@ def enter_network_detail(
             not 1 <= detail["channel"] <= 13):
         raise RuntimeError(
             f"{label}: network detail has no fixed identity/channel: "
-            f"{detail!r}")
+            f"{privacy_safe_repr(detail)}")
     return network_list, detail_ui, detail
 
 
@@ -1002,7 +1051,8 @@ def main() -> int:
                         cancel_pending, "cancel_pending"))
                 elif cancel_pending.get("state") != "idle":
                     raise RuntimeError(
-                        f"unexpected cancel transition: {cancel_pending!r}")
+                        "unexpected cancel transition: "
+                        f"{privacy_safe_repr(cancel_pending)}")
                 cancel_terminal_ui = wait_ui_state(
                     device,
                     lambda state: (
@@ -1035,6 +1085,19 @@ def main() -> int:
                 # Start a fresh, complete capture lifecycle after cancellation.
                 network_list, network_detail_ui, network_detail = \
                     enter_network_detail(device, trace, "capture")
+                second_mount_attempts = network_list[
+                    "survey_product_filesystem_mount_attempts"]
+                if (network_list["survey_product_mount_attempts_total"] !=
+                        cancel_network_list[
+                            "survey_product_mount_attempts_total"] +
+                        second_mount_attempts or
+                        network_list[
+                            "survey_product_mount_successes_total"] !=
+                        cancel_network_list[
+                            "survey_product_mount_successes_total"] + 1):
+                    raise RuntimeError(
+                        "same-boot second ProductSurvey start did not prove "
+                        "a fresh bounded filesystem remount")
 
                 auth_requested_ui = action(device, "right")
                 trace.append(auth_requested_ui)
@@ -1086,7 +1149,7 @@ def main() -> int:
                 if auth_running.get("state") != "running":
                     raise RuntimeError(
                         f"authentication capture skipped running proof: "
-                        f"{auth_running!r}")
+                        f"{privacy_safe_repr(auth_running)}")
                 require_exact(auth_running, {
                     "view": "authentication_capture", "passive": True,
                     "generation": generation,
@@ -1178,7 +1241,8 @@ def main() -> int:
                     failures.extend(start_failure_diagnostic_failures(
                         start_failure_diagnostics))
                     raise RuntimeError(
-                        f"authentication capture failed: {auth_terminal!r}")
+                        "authentication capture failed: "
+                        f"{privacy_safe_repr(auth_terminal)}")
                 require_exact(auth_terminal, {
                     "view": "authentication_capture", "passive": True,
                     "generation": generation,
@@ -1317,7 +1381,8 @@ def main() -> int:
                     failures.append("physical SD write observed")
                 workflow_completed = True
             except Exception as error:
-                failures.append(f"workflow: {type(error).__name__}: {error}")
+                failures.append(
+                    f"workflow: {privacy_safe_exception(error)}")
             finally:
                 diagnostics, diagnostic_errors = \
                     best_effort_final_diagnostics(device)
@@ -1335,7 +1400,7 @@ def main() -> int:
                         failures.append("cleanup_after: Home/zero lease unproven")
                 except Exception as error:
                     failures.append(
-                        f"cleanup_after: {type(error).__name__}: {error}")
+                        f"cleanup_after: {privacy_safe_exception(error)}")
                 finally:
                     if hil_started:
                         try:
@@ -1345,10 +1410,10 @@ def main() -> int:
                                           "hil_session_end")
                         except Exception as error:
                             failures.append(
-                                f"hil_session_end: {type(error).__name__}: "
-                                f"{error}")
+                                "hil_session_end: "
+                                f"{privacy_safe_exception(error)}")
     except Exception as error:
-        failures.append(f"runner: {type(error).__name__}: {error}")
+        failures.append(f"runner: {privacy_safe_exception(error)}")
 
     passed = candidate_verified and not failures
     result = {

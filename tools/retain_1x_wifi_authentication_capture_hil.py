@@ -16,14 +16,9 @@ import check_wifi_authentication_capture_hil_acceptance as acceptance
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = ROOT / "tests/hil/evidence"
 CURRENT_RUNNER = ROOT / "tools/run_1x_wifi_authentication_capture_hil.py"
-DEFAULT_DESTINATION = (
-    EVIDENCE / "board-01-wifi-authentication-capture-1.0.0-dev.243"
-)
-DEFAULT_EXPECTATIONS = EVIDENCE / (
-    "board-01-wifi-authentication-capture-1.0.0-dev.243-acceptance.json"
-)
+DEFAULT_DESTINATION, DEFAULT_EXPECTATIONS = acceptance.evidence_paths(
+    acceptance.VERSION)
 SHA256 = re.compile(r"[0-9a-f]{64}")
 COMMIT = re.compile(r"[0-9a-f]{40}")
 SESSION_ID = re.compile(r"[0-9a-f]{32}")
@@ -203,11 +198,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--expected-firmware-sha256", required=True)
     parser.add_argument("--expected-app-elf-sha256", required=True)
     parser.add_argument("--expected-runner-sha256", required=True)
-    parser.add_argument("--destination", type=Path,
-                        default=DEFAULT_DESTINATION)
-    parser.add_argument("--expectations", type=Path,
-                        default=DEFAULT_EXPECTATIONS)
-    return parser.parse_args(argv)
+    parser.add_argument("--destination", type=Path)
+    parser.add_argument("--expectations", type=Path)
+    args = parser.parse_args(argv)
+    default_destination, default_expectations = acceptance.evidence_paths(
+        args.expected_version)
+    if args.destination is None:
+        args.destination = default_destination
+    if args.expectations is None:
+        args.expectations = default_expectations
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:

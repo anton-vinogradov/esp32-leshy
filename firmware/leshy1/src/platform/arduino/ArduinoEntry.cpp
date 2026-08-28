@@ -1683,6 +1683,10 @@ struct ProductSurveyRuntimeState final {
     bool cleanupComplete = true;
     std::uint8_t identityAttempts = 0;
     std::uint8_t identityTransientRetries = 0;
+    std::uint8_t filesystemMountAttempts = 0;
+    std::uint8_t filesystemMountTransientRetries = 0;
+    int filesystemMountError = 0;
+    int filesystemMountLastFailureError = 0;
     leshy1::storage::SdTransportRunStatus identityStatus =
         leshy1::storage::SdTransportRunStatus::InvalidPlan;
     char expectedFingerprint[33] = {};
@@ -1799,6 +1803,10 @@ struct ProductSurveyWorkerReport final {
     std::uint64_t storeBytesWritten = 0;
     std::uint8_t identityAttempts = 0;
     std::uint8_t identityTransientRetries = 0;
+    std::uint8_t filesystemMountAttempts = 0;
+    std::uint8_t filesystemMountTransientRetries = 0;
+    int filesystemMountError = 0;
+    int filesystemMountLastFailureError = 0;
     leshy1::storage::SdTransportRunStatus identityStatus =
         leshy1::storage::SdTransportRunStatus::InvalidPlan;
     char expectedFingerprint[33] = {};
@@ -1875,6 +1883,26 @@ StaticSemaphore_t productSurveyScanStartGateStorage{};
 SemaphoreHandle_t productSurveyScanStartGate = nullptr;
 TaskHandle_t productSurveyWorkerTaskHandle = nullptr;
 portMUX_TYPE productSurveyWorkerMux = portMUX_INITIALIZER_UNLOCKED;
+std::uint32_t productSurveyFilesystemMountAttemptsTotal = 0;
+std::uint32_t productSurveyFilesystemMountSuccessesTotal = 0;
+struct ProductSurveyMountTotals final {
+    std::uint32_t attempts = 0;
+    std::uint32_t successes = 0;
+};
+void recordProductSurveyMountOutcome(bool success) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    ++productSurveyFilesystemMountAttemptsTotal;
+    if (success) ++productSurveyFilesystemMountSuccessesTotal;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+}
+ProductSurveyMountTotals productSurveyMountTotalsSnapshot() {
+    ProductSurveyMountTotals totals;
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    totals.attempts = productSurveyFilesystemMountAttemptsTotal;
+    totals.successes = productSurveyFilesystemMountSuccessesTotal;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return totals;
+}
 ProductSurveyWorkerControl productSurveyWorkerControl =
     ProductSurveyWorkerControl::Idle;
 AirspaceGuardBleWorkerControl airspaceGuardBleWorkerControl =
@@ -2807,6 +2835,14 @@ void applyProductSurveyWorkerReport(
     productSurveyRuntime.identityAttempts = report.identityAttempts;
     productSurveyRuntime.identityTransientRetries =
         report.identityTransientRetries;
+    productSurveyRuntime.filesystemMountAttempts =
+        report.filesystemMountAttempts;
+    productSurveyRuntime.filesystemMountTransientRetries =
+        report.filesystemMountTransientRetries;
+    productSurveyRuntime.filesystemMountError =
+        report.filesystemMountError;
+    productSurveyRuntime.filesystemMountLastFailureError =
+        report.filesystemMountLastFailureError;
     productSurveyRuntime.identityStatus = report.identityStatus;
     std::memcpy(productSurveyRuntime.expectedFingerprint,
                 report.expectedFingerprint,
@@ -3061,8 +3097,62 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
 
     report.filesystemAttempted = true;
     heartbeatProductSurveyPreparation();
-    if (!productSurveyFilesystem.begin()) {
-        report.status = "mount_failed";
+    bool filesystemMounted = false;
+    for (std::uint8_t attempt = 1;
+         attempt <=
+             leshy1::storage::kProductStartMaximumFilesystemAttempts;
+         ++attempt) {
+        if (productSurveyCancelRequested()) {
+            report.status = "cancelled";
+            return report;
+        }
+        report.filesystemMountAttempts = attempt;
+        filesystemMounted = productSurveyFilesystem.begin();
+        recordProductSurveyMountOutcome(filesystemMounted);
+        report.filesystemMountError = productSurveyFilesystem.mountError();
+        if (filesystemMounted) {
+            break;
+        }
+        report.filesystemMountLastFailureError = report.filesystemMountError;
+        leshy1::storage::ProductStartFilesystemRetryEvidence evidence;
+        evidence.explicitStart = true;
+        evidence.enrolled = true;
+        evidence.expectedFingerprintValid =
+            exactCidFingerprint(report.expectedFingerprint);
+        evidence.requiredResourcesHeld =
+            (ownedResources & required) == required;
+        evidence.identityValid =
+            identity.status == leshy1::storage::SdTransportRunStatus::Valid;
+        evidence.identityCleanupComplete = report.identityCleanupComplete;
+        evidence.observedFingerprintMatches =
+            std::strcmp(report.expectedFingerprint,
+                        report.observedFingerprint) == 0;
+        evidence.mountAttempted = true;
+        evidence.mountSucceeded = false;
+        evidence.mountError = report.filesystemMountError;
+        evidence.filesystemCleanupComplete =
+            productSurveyFilesystem.cleanupComplete();
+        evidence.filesystemStillMounted = productSurveyFilesystem.mounted();
+        evidence.storeCurrentlyOpen =
+            report.backendOpen || productSurveyFilesystem.mounted();
+        evidence.radioCurrentlyActive =
+            report.sourceActive || productSurveyScanActive();
+        evidence.cancelRequested = productSurveyCancelRequested();
+        if (!leshy1::storage::shouldRetryProductStartFilesystem(
+                evidence, attempt)) {
+            break;
+        }
+        report.filesystemMountTransientRetries = attempt;
+        ulTaskNotifyTake(
+            pdTRUE,
+            pdMS_TO_TICKS(
+                leshy1::storage::productStartFilesystemRetryDelayMs(
+                    attempt)));
+        heartbeatProductSurveyPreparation();
+    }
+    if (!filesystemMounted) {
+        report.status = productSurveyCancelRequested()
+            ? "cancelled" : "mount_failed";
         return report;
     }
     heartbeatProductSurveyPreparation();
@@ -3880,6 +3970,14 @@ bool startProductSurvey() {
         lastRuntimeEvent = productSurveyRuntime.status;
         return false;
     }
+    if (productSurveyFilesystem.mounted() ||
+        productSurveyRuntime.backendOpen ||
+        productSurveyRuntime.sourceActive || productSurveyScanActive() ||
+        !productSurveyRuntime.cleanupComplete) {
+        productSurveyRuntime.status = "storage_not_quiescent";
+        lastRuntimeEvent = productSurveyRuntime.status;
+        return false;
+    }
     productSurveyRuntime = {};
     productSurveyTimeline.reset();
     productSurveyRuntime.status = "preparing";
@@ -3983,7 +4081,65 @@ bool reopenProductSurveyBackendForCommit() {
     }
 
     productSurveyRuntime.filesystemAttempted = true;
-    if (!productSurveyFilesystem.begin()) return false;
+    productSurveyRuntime.filesystemMountAttempts = 0;
+    productSurveyRuntime.filesystemMountTransientRetries = 0;
+    productSurveyRuntime.filesystemMountError = 0;
+    productSurveyRuntime.filesystemMountLastFailureError = 0;
+    bool filesystemMounted = false;
+    for (std::uint8_t attempt = 1;
+         attempt <=
+             leshy1::storage::kProductStartMaximumFilesystemAttempts;
+         ++attempt) {
+        productSurveyRuntime.filesystemMountAttempts = attempt;
+        filesystemMounted = productSurveyFilesystem.begin();
+        recordProductSurveyMountOutcome(filesystemMounted);
+        productSurveyRuntime.filesystemMountError =
+            productSurveyFilesystem.mountError();
+        if (filesystemMounted) {
+            break;
+        }
+        productSurveyRuntime.filesystemMountLastFailureError =
+            productSurveyRuntime.filesystemMountError;
+        // This is a new, quiescent terminal mount attempt. The earlier
+        // validation open and radio windows are fully closed; policy fields
+        // describe only side effects after this mount attempt began.
+        const bool radioActive =
+            productSurveyRuntime.sourceActive || productSurveyScanActive() ||
+            !productSurveyRuntime.scannerCleanupComplete;
+        leshy1::storage::ProductStartFilesystemRetryEvidence evidence;
+        evidence.explicitStart = true;
+        evidence.enrolled = true;
+        evidence.expectedFingerprintValid =
+            exactCidFingerprint(productSurveyRuntime.expectedFingerprint);
+        evidence.requiredResourcesHeld =
+            (ownedResources & required) == required;
+        evidence.identityValid =
+            identity.status == leshy1::storage::SdTransportRunStatus::Valid;
+        evidence.identityCleanupComplete =
+            productSurveyRuntime.identityCleanupComplete;
+        evidence.observedFingerprintMatches =
+            std::strcmp(productSurveyRuntime.expectedFingerprint,
+                        productSurveyRuntime.observedFingerprint) == 0;
+        evidence.mountAttempted = true;
+        evidence.mountSucceeded = false;
+        evidence.mountError = productSurveyRuntime.filesystemMountError;
+        evidence.filesystemCleanupComplete =
+            productSurveyFilesystem.cleanupComplete();
+        evidence.filesystemStillMounted = productSurveyFilesystem.mounted();
+        evidence.storeCurrentlyOpen =
+            productSurveyRuntime.backendOpen ||
+            productSurveyFilesystem.mounted();
+        evidence.radioCurrentlyActive = radioActive;
+        evidence.cancelRequested = false;
+        if (!leshy1::storage::shouldRetryProductStartFilesystem(
+                evidence, attempt)) {
+            break;
+        }
+        productSurveyRuntime.filesystemMountTransientRetries = attempt;
+        vTaskDelay(pdMS_TO_TICKS(
+            leshy1::storage::productStartFilesystemRetryDelayMs(attempt)));
+    }
+    if (!filesystemMounted) return false;
     productSurveyRuntime.cardCapacityBytes =
         productSurveyFilesystem.cardCapacityBytes();
     productSurveyRuntime.cachedFreeBytes =
@@ -5236,7 +5392,6 @@ void serviceProductSurveyWorker() {
                 productSurveyRuntime.status = "workflow_start_failed";
             } else {
                 productSurveyRuntime.status = "running";
-                productSurveyRuntime.backendOpen = true;
                 productSurveyRuntime.sourceActive = true;
                 lastRuntimeEvent = "product_survey_running";
             }
@@ -18691,6 +18846,8 @@ void serviceInfraredCapture() {
 void emitUiState(Stream& reply, UiAction action, bool changed) {
     auto& line = diagnosticJson;
     line[0] = '\0';
+    const ProductSurveyMountTotals productSurveyMountTotals =
+        productSurveyMountTotalsSnapshot();
     const AppMenuItem* selected = appCatalog.get(uiController.selection());
     const LibraryEntry* selectedLibrary = libraryController.selected();
     std::snprintf(line, sizeof(line),
@@ -18829,6 +18986,12 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_product_identity_status\":\"%s\","
                       "\"survey_product_identity_attempts\":%u,"
                       "\"survey_product_identity_transient_retries\":%u,"
+                      "\"survey_product_filesystem_mount_error\":%d,"
+                      "\"survey_product_filesystem_mount_last_failure_error\":%d,"
+                      "\"survey_product_filesystem_mount_attempts\":%u,"
+                      "\"survey_product_filesystem_mount_transient_retries\":%u,"
+                      "\"survey_product_mount_attempts_total\":%lu,"
+                      "\"survey_product_mount_successes_total\":%lu,"
                       "\"survey_product_capacity_bytes\":%llu,"
                       "\"survey_product_cached_free_bytes\":%llu,"
                       "\"survey_scan_status\":\"%s\","
@@ -19056,6 +19219,16 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           productSurveyRuntime.identityAttempts),
                       static_cast<unsigned>(
                           productSurveyRuntime.identityTransientRetries),
+                      productSurveyRuntime.filesystemMountError,
+                      productSurveyRuntime.filesystemMountLastFailureError,
+                      static_cast<unsigned>(
+                          productSurveyRuntime.filesystemMountAttempts),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.filesystemMountTransientRetries),
+                      static_cast<unsigned long>(
+                          productSurveyMountTotals.attempts),
+                      static_cast<unsigned long>(
+                          productSurveyMountTotals.successes),
                       static_cast<unsigned long long>(
                           productSurveyRuntime.cardCapacityBytes),
                       static_cast<unsigned long long>(

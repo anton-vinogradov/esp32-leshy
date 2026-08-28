@@ -453,8 +453,9 @@ python3 "$repo_dir/tools/check_airspace_guard_contract.py"
 python3 "$repo_dir/tools/check_wifi_authentication_capture_contract.py"
 python3 "$repo_dir/tools/check_wifi_authentication_capture_presenter_contract.py"
 python3 "$repo_dir/tools/check_wifi_authentication_transition_contract.py"
-wifi_auth_capture_positive="$repo_dir/tests/hil/evidence/board-01-wifi-authentication-capture-1.0.0-dev.243"
-wifi_auth_capture_expectations="$repo_dir/tests/hil/evidence/board-01-wifi-authentication-capture-1.0.0-dev.243-acceptance.json"
+wifi_auth_capture_version="$(python3 "$repo_dir/tools/read_1x_version.py")"
+wifi_auth_capture_positive="$repo_dir/tests/hil/evidence/board-01-wifi-authentication-capture-$wifi_auth_capture_version"
+wifi_auth_capture_expectations="$repo_dir/tests/hil/evidence/board-01-wifi-authentication-capture-$wifi_auth_capture_version-acceptance.json"
 if [[ -e "$wifi_auth_capture_positive" || -L "$wifi_auth_capture_positive" || \
       -e "$wifi_auth_capture_expectations" || -L "$wifi_auth_capture_expectations" ]]; then
     if [[ -L "$wifi_auth_capture_positive" || \
@@ -467,10 +468,13 @@ if [[ -e "$wifi_auth_capture_positive" || -L "$wifi_auth_capture_positive" || \
     python3 "$repo_dir/tools/check_wifi_authentication_capture_hil_acceptance.py" \
         --expectations "$wifi_auth_capture_expectations" \
         --positive "$wifi_auth_capture_positive" \
+        --expected-version "$wifi_auth_capture_version" \
         --expected-source-commit "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_commit"])' "$wifi_auth_capture_expectations")" \
         --expected-firmware-sha256 "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["firmware_sha256"])' "$wifi_auth_capture_expectations")" \
         --expected-app-elf-sha256 "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["app_elf_sha256"])' "$wifi_auth_capture_expectations")" \
         --expected-runner-sha256 "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["runner_source_sha256"])' "$wifi_auth_capture_expectations")"
+else
+    echo "PENDING: no retained CAP049 HIL evidence for $wifi_auth_capture_version; CAP049 HIL acceptance is skipped and remains open"
 fi
 airspace_guard_positive="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.242"
 airspace_guard_negative_dev239="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.239-failed.json"
@@ -644,6 +648,7 @@ if [[ "$retained_evidence_mode" == "tracked" ]]; then
     python3 "$repo_dir/tools/check_source_history_waterfall_acceptance.py" --tracked-only
 fi
 python3 "$repo_dir/tools/test_sd_reset_runner.py"
+python3 "$repo_dir/tools/test_build_budget.py"
 python3 "$repo_dir/tools/test_hil_scenario_runner.py"
 python3 "$repo_dir/tools/test_hil_board_profile.py"
 python3 "$repo_dir/tools/test_ir_two_board_hil.py"

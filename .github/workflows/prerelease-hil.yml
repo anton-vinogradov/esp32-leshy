@@ -64,7 +64,9 @@ jobs:
         run: python3 -m pip install platformio==6.1.19
 
       - name: Build candidate once
-        run: pio run -d firmware/leshy1
+        run: |
+          pio run -d firmware/leshy1
+          python3 tools/check_1x_build_budget.py
 
       - name: Stage exact candidate
         run: |

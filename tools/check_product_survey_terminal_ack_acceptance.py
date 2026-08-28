@@ -162,8 +162,12 @@ def main() -> int:
                 "worker exposes Idle before terminal event consumption")
     require(failures, release_start >= 0 and service_end > release_start and
             entry[release_start:service_end].count(
-                "setProductSurveyControl(ProductSurveyWorkerControl::Idle)") == 2,
-            "UI does not exclusively acknowledge cleanup/commit terminals")
+                "setProductSurveyControl(ProductSurveyWorkerControl::Idle)") == 3 and
+            "const bool authenticationPending =" in
+                entry[release_start:service_end] and
+            "if (surveyQuiescent) {" in entry[release_start:service_end],
+            "UI does not exclusively acknowledge cleanup/commit/auth-transition "
+            "terminals after physical quiescence")
     require(failures,
             "product Survey worker exposes Idle before UI consumes terminal event" in
             (ROOT / "tools/check_clean_target.py").read_text(encoding="utf-8"),

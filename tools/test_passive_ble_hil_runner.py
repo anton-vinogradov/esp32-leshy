@@ -25,7 +25,8 @@ def valid_running() -> dict[str, Any]:
     state: dict[str, Any] = {
         "page": "survey", "runtime_owner": "survey", "lease_mask": 15,
         "survey_workflow_state": "running", "survey_product_status": "running",
-        "survey_product_backend_open": True,
+        "survey_product_backend_open": False,
+        "survey_product_storage_mounted": False,
         "survey_product_cleanup_complete": False,
         "survey_product_source_active": True,
         "survey_product_selected_source_mask": 3,
@@ -100,6 +101,35 @@ class PassiveBleHilRunnerTests(unittest.TestCase):
         state["survey_ble_scan_dropped"] = 1
         state["survey_product_ble_scan_cycles"] = 0
         self.assertGreaterEqual(len(RUNNER.running_failures(state)), 4)
+
+    def test_running_rejects_physical_storage_overlap(self) -> None:
+        for field in (
+                "survey_product_backend_open",
+                "survey_product_storage_mounted"):
+            with self.subTest(field=field):
+                state = valid_running()
+                state[field] = True
+                self.assertTrue(RUNNER.running_failures(state))
+
+    def test_committed_rejects_physical_storage_overlap(self) -> None:
+        state = valid_running()
+        state.update({
+            "survey_workflow_state": "result",
+            "survey_product_status": "committed",
+            "survey_generation": 75,
+            "survey_product_cleanup_complete": True,
+            "survey_product_source_active": False,
+            "survey_timeline_state": "stopped",
+            "survey_timeline_archive_status": "finalized",
+            "survey_timeline_persisted": True,
+            "survey_timeline_archived_windows": 6,
+            "survey_timeline_persisted_windows": 6,
+            "survey_timeline_retained_windows": 6,
+            "survey_timeline_evicted_windows": 0,
+        })
+        self.assertEqual([], RUNNER.committed_failures(state, 75))
+        state["survey_product_storage_mounted"] = True
+        self.assertTrue(RUNNER.committed_failures(state, 75))
 
     def test_export_requires_durable_dual_source_timeline(self) -> None:
         artifact = valid_export()

@@ -1983,6 +1983,54 @@ void testProductStartIdentityRetryStopsBeforeFilesystem() {
     CHECK(!shouldRetryProductStartIdentity(mutated, 1));
 }
 
+void testProductStartFilesystemRetryRequiresCleanQuiescentLifecycle() {
+    ProductStartFilesystemRetryEvidence evidence;
+    evidence.explicitStart = true;
+    evidence.enrolled = true;
+    evidence.expectedFingerprintValid = true;
+    evidence.requiredResourcesHeld = true;
+    evidence.identityValid = true;
+    evidence.identityCleanupComplete = true;
+    evidence.observedFingerprintMatches = true;
+    evidence.mountAttempted = true;
+    evidence.mountSucceeded = false;
+    evidence.mountError = kProductStartTransientFilesystemMountError;
+    evidence.filesystemCleanupComplete = true;
+    evidence.filesystemStillMounted = false;
+    CHECK(shouldRetryProductStartFilesystem(evidence, 1));
+    CHECK(shouldRetryProductStartFilesystem(evidence, 2));
+    CHECK(!shouldRetryProductStartFilesystem(evidence, 0));
+    CHECK(!shouldRetryProductStartFilesystem(
+        evidence, kProductStartMaximumFilesystemAttempts));
+    CHECK(productStartFilesystemRetryDelayMs(0) == 0);
+    CHECK(productStartFilesystemRetryDelayMs(1) == 50);
+    CHECK(productStartFilesystemRetryDelayMs(2) == 100);
+    CHECK(productStartFilesystemRetryDelayMs(3) == 0);
+
+    ProductStartFilesystemRetryEvidence mutated = evidence;
+#define CHECK_FILESYSTEM_RETRY_REJECTS(field, value) \
+    mutated = evidence;                                \
+    mutated.field = value;                             \
+    CHECK(!shouldRetryProductStartFilesystem(mutated, 1))
+    CHECK_FILESYSTEM_RETRY_REJECTS(explicitStart, false);
+    CHECK_FILESYSTEM_RETRY_REJECTS(enrolled, false);
+    CHECK_FILESYSTEM_RETRY_REJECTS(expectedFingerprintValid, false);
+    CHECK_FILESYSTEM_RETRY_REJECTS(requiredResourcesHeld, false);
+    CHECK_FILESYSTEM_RETRY_REJECTS(identityValid, false);
+    CHECK_FILESYSTEM_RETRY_REJECTS(identityCleanupComplete, false);
+    CHECK_FILESYSTEM_RETRY_REJECTS(observedFingerprintMatches, false);
+    CHECK_FILESYSTEM_RETRY_REJECTS(mountAttempted, false);
+    CHECK_FILESYSTEM_RETRY_REJECTS(mountSucceeded, true);
+    CHECK_FILESYSTEM_RETRY_REJECTS(mountError, 0);
+    CHECK_FILESYSTEM_RETRY_REJECTS(mountError, 0x107);
+    CHECK_FILESYSTEM_RETRY_REJECTS(filesystemCleanupComplete, false);
+    CHECK_FILESYSTEM_RETRY_REJECTS(filesystemStillMounted, true);
+    CHECK_FILESYSTEM_RETRY_REJECTS(storeCurrentlyOpen, true);
+    CHECK_FILESYSTEM_RETRY_REJECTS(radioCurrentlyActive, true);
+    CHECK_FILESYSTEM_RETRY_REJECTS(cancelRequested, true);
+#undef CHECK_FILESYSTEM_RETRY_REJECTS
+}
+
 void testStorageTimingSummaryUsesNearestRank() {
     std::array<std::uint64_t, 20> timings{};
     for (std::size_t index = 0; index < timings.size(); ++index) {
@@ -6310,6 +6358,7 @@ int main() {
     testSafetySupervisorLatchesOnlyExactUntornEvidence();
     testWorkerDeadlineSupervisorTripsOnceAndRetainsEvidence();
     testProductStartIdentityRetryStopsBeforeFilesystem();
+    testProductStartFilesystemRetryRequiresCleanQuiescentLifecycle();
     testStorageTimingSummaryUsesNearestRank();
     testIngressRateSummaryUsesNearestRankAndRejectsZero();
     testObservationQueueIsBoundedFifoAndScrubbable();

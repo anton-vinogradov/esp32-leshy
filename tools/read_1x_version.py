@@ -11,11 +11,15 @@ CONFIG = Path(__file__).parents[1] / "firmware" / "leshy1" / "platformio.ini"
 PATTERN = re.compile(r'^\s*-D\s+LESHY1_VERSION=\\"([^\"]+)\\"\s*$', re.MULTILINE)
 
 
-def main() -> int:
+def read_version() -> str:
     match = PATTERN.search(CONFIG.read_text(encoding="utf-8"))
     if match is None:
         raise SystemExit(f"LESHY1_VERSION not found in {CONFIG}")
-    print(match.group(1))
+    return match.group(1)
+
+
+def main() -> int:
+    print(read_version())
     return 0
 
 

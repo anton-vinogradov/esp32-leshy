@@ -18,6 +18,8 @@ def main() -> int:
     navigation = (ROOT / "firmware/leshy1/src/apps/wifi/WifiDeviceNavigationOrder.h").read_text()
     adapter_h = (ROOT / "firmware/leshy1/src/platform/arduino/BoardWifiPassiveCapture.h").read_text()
     adapter_cpp = (ROOT / "firmware/leshy1/src/platform/arduino/BoardWifiPassiveCapture.cpp").read_text()
+    init_profile = (ROOT / "firmware/leshy1/src/platform/arduino/BoardWifiPassiveInitConfig.h").read_text()
+    adapter_contract = adapter_h + adapter_cpp + init_profile
     strings = (ROOT / "firmware/leshy1/src/ui/UiStrings.def").read_text()
     runner = (ROOT / "tools/run_1x_wifi_devices_hil.py").read_text()
     checker = (ROOT / "tools/check_wifi_devices_run.py").read_text()
@@ -103,7 +105,7 @@ def main() -> int:
     )
     failures.extend(
         f"adapter token missing: {token}"
-        for token in required_adapter if token not in adapter_h + adapter_cpp
+        for token in required_adapter if token not in adapter_contract
     )
     failures.extend(
         f"adapter contains active/TX path: {token}"
