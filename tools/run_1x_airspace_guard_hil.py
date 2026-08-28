@@ -960,7 +960,7 @@ def main() -> int:
         "scope": {
             "single_flash": candidate_verified,
             "manual_button_presses": 0,
-            "screenshots_automatic": True,
+            "screenshots_automatic": bool(screens),
             "passive_receive_only": passed,
             "deterministic_ble_fixture": (
                 deterministic_ble_fixture_succeeded(external_ble_fixture)

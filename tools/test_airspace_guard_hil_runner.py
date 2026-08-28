@@ -140,6 +140,7 @@ class AirspaceGuardHilRunnerTests(unittest.TestCase):
             self.assertNotIn('"flashed": True', source)
             self.assertIn('"single_flash": candidate_verified', source)
             self.assertIn('"passive_receive_only": passed', source)
+        self.assertIn('"screenshots_automatic": bool(screens)', full_source)
 
     def test_ble_fixture_requires_exact_advertising_state(self) -> None:
         fixture = {
