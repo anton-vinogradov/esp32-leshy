@@ -1,14 +1,15 @@
 {
   "schema": "leshy.hil.delta_scope.v1",
-  "id": "airspace-guard-1.0.0-dev.226",
-  "candidate_version": "1.0.0-dev.226",
+  "id": "airspace-guard-1.0.0-dev.227",
+  "candidate_version": "1.0.0-dev.227",
   "changed_surfaces": [
     "airspace_guard_low_confidence_elevated_noise_indicator",
     "airspace_guard_read_only_diagnostic_contract",
     "airspace_guard_bounded_incremental_rendering",
     "airspace_guard_loop_stack_panic_fix_and_exact_elf_gate",
     "airspace_guard_single_workspace_and_token_queue_memory_fix",
-    "airspace_guard_repeat_init_fragmentation_queue_lifecycle_fix"
+    "airspace_guard_repeat_init_fragmentation_queue_lifecycle_fix",
+    "airspace_guard_bounded_identity_projection_and_malformed_accounting_fix"
   ],
   "required_delta_regression": [
     "one_exact_flash_on_board_01",
@@ -18,6 +19,8 @@
     "ble_stage_cancel_and_complete_cleanup",
     "two_complete_wifi_plus_ble_lifecycles",
     "all_evidence_accounting_and_retention_complete",
+    "identity_projection_matches_retained_profiles",
+    "malformed_ingress_reason_accounting_is_exact",
     "all_findings_bounded_and_noise_indicator_low_confidence",
     "passive_receive_only_and_zero_application_tx",
     "zero_heap_drift_after_warmup",

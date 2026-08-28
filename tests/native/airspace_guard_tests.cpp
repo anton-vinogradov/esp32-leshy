@@ -331,6 +331,20 @@ void testLiveIdentityRetentionKeyIsExactAndFailClosed() {
     CHECK(firstKey.networkNameLength == 8U);
     CHECK(firstKey.security == AirspaceWifiSecurity::Rsn);
 
+    std::array<std::uint8_t, kWifiIdentityProjectionCapacity> projection{};
+    const std::size_t projectionLength =
+        writeWifiIdentityRetentionProjection(
+            firstKey, projection.data(), projection.size());
+    CHECK(projectionLength > 0U);
+    CHECK(projectionLength <= projection.size());
+    WifiIdentityRetentionKey projectedKey{};
+    CHECK(wifiIdentityRetentionKey(
+              projection.data(), projectionLength, true, &projectedKey) ==
+          WifiIdentityIngressStatus::RetainableAdvertisement);
+    CHECK(sameWifiIdentityRetentionKey(firstKey, projectedKey));
+    CHECK(writeWifiIdentityRetentionProjection(
+              firstKey, projection.data(), projectionLength - 1U) == 0U);
+
     FixtureSource duplicate;
     duplicate.addIdentityAdvertisement(5U, 1100000ULL, kTransmitterA,
                                        "Workshop",
@@ -362,12 +376,20 @@ void testLiveIdentityRetentionKeyIsExactAndFailClosed() {
     first.length = 37U;
     CHECK(wifiIdentityRetentionKey(first.payload.data(), first.length, false,
                                    &firstKey) ==
-          WifiIdentityIngressStatus::MalformedAdvertisement);
+          WifiIdentityIngressStatus::MalformedElements);
+    CHECK(wifiIdentityIngressMalformed(
+        WifiIdentityIngressStatus::MalformedElements));
     CHECK(wifiIdentityRetentionKey(nullptr, 0U, false, &firstKey) ==
           WifiIdentityIngressStatus::NotAdvertisement);
     CHECK(wifiIdentityRetentionKey(first.payload.data(), first.length, false,
                                    nullptr) ==
-          WifiIdentityIngressStatus::MalformedAdvertisement);
+          WifiIdentityIngressStatus::MalformedEnvelope);
+
+    first.length = 42U;
+    first.payload[16] ^= 0x02U;
+    CHECK(wifiIdentityRetentionKey(first.payload.data(), first.length, false,
+                                   &firstKey) ==
+          WifiIdentityIngressStatus::MalformedAddressing);
 }
 
 void testLiveRetentionPartitionKeepsDisconnectCapacity() {

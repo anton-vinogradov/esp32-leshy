@@ -615,6 +615,17 @@ void BoardWifiPassiveCapture::accept(void* buffer,
                   &identityKey)
             : leshy1::services::guard::
                   WifiIdentityIngressStatus::NotAdvertisement;
+        std::array<std::uint8_t,
+                   leshy1::services::guard::kWifiIdentityProjectionCapacity>
+            identityProjection{};
+        const std::size_t identityProjectionLength =
+            identityStatus == leshy1::services::guard::
+                    WifiIdentityIngressStatus::RetainableAdvertisement
+                ? leshy1::services::guard::
+                      writeWifiIdentityRetentionProjection(
+                          identityKey, identityProjection.data(),
+                          identityProjection.size())
+                : 0U;
         std::uint64_t receivedUs =
             static_cast<std::uint64_t>(esp_timer_get_time());
         if (receivedUs == 0U) receivedUs = 1U;
@@ -644,6 +655,7 @@ void BoardWifiPassiveCapture::accept(void* buffer,
         if (!receiveValid || packet->rx_ctrl.channel < 1U ||
             packet->rx_ctrl.channel > 13U || packet->rx_ctrl.sig_len < 2U) {
             ++airspaceGuardStats_.invalidFrames;
+            ++airspaceGuardStats_.receiveInvalidFrames;
         } else if (disconnectCandidate) {
             if (!leshy1::services::guard::
                     wifiDisconnectRetentionSlotAvailable(
@@ -667,11 +679,6 @@ void BoardWifiPassiveCapture::accept(void* buffer,
         } else if (identityStatus == leshy1::services::guard::
                        WifiIdentityIngressStatus::RetainableAdvertisement) {
             ++airspaceGuardStats_.identityAdvertisementsObserved;
-            if (packet->rx_ctrl.sig_len > capture_.plan().snapLength) {
-                ++airspaceGuardStats_.identityProfilesDropped;
-                portEXIT_CRITICAL(&mux_);
-                return;
-            }
             bool duplicate = false;
             for (std::size_t index = 0U;
                  index < airspaceGuardIdentityKeyCount_; ++index) {
@@ -686,7 +693,8 @@ void BoardWifiPassiveCapture::accept(void* buffer,
                 portEXIT_CRITICAL(&mux_);
                 return;
             }
-            if (!leshy1::services::guard::wifiIdentityRetentionSlotAvailable(
+            if (identityProjectionLength == 0U ||
+                !leshy1::services::guard::wifiIdentityRetentionSlotAvailable(
                     apps::capture::WifiFrameCapture::kFrameCapacity,
                     capture_.size(),
                     airspaceGuardStats_.disconnectFramesRetained,
@@ -696,24 +704,43 @@ void BoardWifiPassiveCapture::accept(void* buffer,
                 return;
             }
             const bool retained = capture_.append(
-                packet->payload, packet->rx_ctrl.sig_len, receivedUs,
+                identityProjection.data(),
+                static_cast<std::uint16_t>(identityProjectionLength),
+                receivedUs,
                 packet->rx_ctrl.rssi, packet->rx_ctrl.channel,
                 WifiFrameKind::Management, true);
             if (retained) {
                 airspaceGuardIdentityKeys_[airspaceGuardIdentityKeyCount_++] =
                     identityKey;
                 ++airspaceGuardStats_.identityProfilesRetained;
+                ++airspaceGuardStats_.identityProfilesProjected;
             } else {
                 ++airspaceGuardStats_.identityProfilesDropped;
             }
-        } else if (identityStatus == leshy1::services::guard::
-                       WifiIdentityIngressStatus::MalformedAdvertisement) {
+        } else if (leshy1::services::guard::wifiIdentityIngressMalformed(
+                       identityStatus)) {
             ++airspaceGuardStats_.invalidFrames;
+            if (identityStatus == leshy1::services::guard::
+                    WifiIdentityIngressStatus::MalformedEnvelope) {
+                ++airspaceGuardStats_.identityMalformedEnvelope;
+            } else if (identityStatus == leshy1::services::guard::
+                           WifiIdentityIngressStatus::MalformedAddressing) {
+                ++airspaceGuardStats_.identityMalformedAddressing;
+            } else {
+                ++airspaceGuardStats_.identityMalformedElements;
+            }
         } else if (capture_.size() == 0U) {
+            // Keep one bounded proof that the passive callback observed the
+            // management plane. Raw ignored frames may exceed the 256-byte
+            // snap length, so retaining one verbatim would turn an otherwise
+            // valid truncated beacon into invented malformed evidence.
+            std::array<std::uint8_t, 24> coverageProjection{};
+            coverageProjection[0] = 0x40U;  // Probe request, not a finding.
             const bool retained = capture_.append(
-                packet->payload, packet->rx_ctrl.sig_len, receivedUs,
+                coverageProjection.data(), coverageProjection.size(),
+                receivedUs,
                 packet->rx_ctrl.rssi, packet->rx_ctrl.channel,
-                WifiFrameKind::Management, true);
+                WifiFrameKind::Management, false);
             if (!retained) ++airspaceGuardStats_.invalidFrames;
         } else {
             ++airspaceGuardStats_.ignoredFrames;

@@ -62,8 +62,17 @@ enum class WifiIdentityIngressStatus : std::uint8_t {
     NotAdvertisement,
     IgnoredAdvertisement,
     RetainableAdvertisement,
-    MalformedAdvertisement,
+    MalformedEnvelope,
+    MalformedAddressing,
+    MalformedElements,
 };
+
+constexpr bool wifiIdentityIngressMalformed(
+    WifiIdentityIngressStatus status) {
+    return status == WifiIdentityIngressStatus::MalformedEnvelope ||
+        status == WifiIdentityIngressStatus::MalformedAddressing ||
+        status == WifiIdentityIngressStatus::MalformedElements;
+}
 
 struct WifiIdentityRetentionKey final {
     static constexpr std::size_t kNetworkNameCapacity = 32;
@@ -76,6 +85,7 @@ struct WifiIdentityRetentionKey final {
 
 inline constexpr std::size_t kWifiDisconnectLiveRetentionCapacity = 8;
 inline constexpr std::size_t kWifiIdentityLiveRetentionCapacity = 8;
+inline constexpr std::size_t kWifiIdentityProjectionCapacity = 80;
 inline constexpr std::size_t kWifiNoiseFloorLiveRetentionCapacity = 8;
 inline constexpr std::size_t kBleTrackerLiveRetentionCapacity = 32;
 inline constexpr std::int16_t kWifiNoiseFloorIngressThresholdDbm = -85;
@@ -127,6 +137,9 @@ bool isWifiIdentityAdvertisementCandidate(const std::uint8_t* payload,
 WifiIdentityIngressStatus wifiIdentityRetentionKey(
     const std::uint8_t* payload, std::size_t length, bool fcsIncluded,
     WifiIdentityRetentionKey* output);
+std::size_t writeWifiIdentityRetentionProjection(
+    const WifiIdentityRetentionKey& key, std::uint8_t* output,
+    std::size_t capacity);
 bool sameWifiIdentityRetentionKey(const WifiIdentityRetentionKey& left,
                                   const WifiIdentityRetentionKey& right);
 bool wifiDisconnectRetentionSlotAvailable(std::size_t totalCapacity,

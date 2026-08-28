@@ -27,8 +27,16 @@ enum class IdentityDecode : std::uint8_t {
     NotAdvertisement,
     IgnoredAdvertisement,
     Advertisement,
-    Malformed,
+    MalformedEnvelope,
+    MalformedAddressing,
+    MalformedElements,
 };
+
+bool identityDecodeMalformed(IdentityDecode decoded) {
+    return decoded == IdentityDecode::MalformedEnvelope ||
+        decoded == IdentityDecode::MalformedAddressing ||
+        decoded == IdentityDecode::MalformedElements;
+}
 
 struct DisconnectEvent final {
     std::size_t frameIndex = 0;
@@ -197,7 +205,7 @@ IdentityDecode decodeIdentityAdvertisement(
     if (output == nullptr || frame.payload == nullptr ||
         frame.capturedLength < 2U || frame.monotonicUs == 0U ||
         frame.channel == 0U || frame.channel > 14U) {
-        return IdentityDecode::Malformed;
+        return IdentityDecode::MalformedEnvelope;
     }
     if (frame.kind != WifiFrameKind::Management) {
         return IdentityDecode::NotAdvertisement;
@@ -213,13 +221,15 @@ IdentityDecode decodeIdentityAdvertisement(
     }
     std::size_t payloadLength = frame.capturedLength;
     if (frame.fcsIncluded) {
-        if (payloadLength < 4U) return IdentityDecode::Malformed;
+        if (payloadLength < 4U) return IdentityDecode::MalformedEnvelope;
         payloadLength -= 4U;
     }
-    if (payloadLength < 36U ||
-        !validTransmitter(frame.payload + 10U) ||
+    if (payloadLength < 36U) {
+        return IdentityDecode::MalformedEnvelope;
+    }
+    if (!validTransmitter(frame.payload + 10U) ||
         std::memcmp(frame.payload + 10U, frame.payload + 16U, 6U) != 0) {
-        return IdentityDecode::Malformed;
+        return IdentityDecode::MalformedAddressing;
     }
 
     IdentityAdvertisement decoded{};
@@ -240,17 +250,17 @@ IdentityDecode decodeIdentityAdvertisement(
     std::size_t offset = 36U;
     while (offset < payloadLength) {
         if (payloadLength - offset < 2U) {
-            return IdentityDecode::Malformed;
+            return IdentityDecode::MalformedElements;
         }
         const std::uint8_t id = frame.payload[offset++];
         const std::uint8_t length = frame.payload[offset++];
         if (payloadLength - offset < length) {
-            return IdentityDecode::Malformed;
+            return IdentityDecode::MalformedElements;
         }
         const std::uint8_t* value = frame.payload + offset;
         if (id == 0U) {
             if (ssidSeen || length > decoded.networkName.size()) {
-                return IdentityDecode::Malformed;
+                return IdentityDecode::MalformedElements;
             }
             ssidSeen = true;
             decoded.networkNameLength = length;
@@ -258,7 +268,7 @@ IdentityDecode decodeIdentityAdvertisement(
                 std::memcpy(decoded.networkName.data(), value, length);
             }
         } else if (id == 48U) {
-            if (length < 2U) return IdentityDecode::Malformed;
+            if (length < 2U) return IdentityDecode::MalformedElements;
             rsnSeen = true;
         } else if (id == 221U && length >= 4U && value[0] == 0x00U &&
                    value[1] == 0x50U && value[2] == 0xf2U &&
@@ -571,14 +581,14 @@ WifiIdentityIngressStatus wifiIdentityRetentionKey(
     const std::uint8_t* payload, std::size_t length, bool fcsIncluded,
     WifiIdentityRetentionKey* output) {
     if (output == nullptr) {
-        return WifiIdentityIngressStatus::MalformedAdvertisement;
+        return WifiIdentityIngressStatus::MalformedEnvelope;
     }
     *output = {};
     if (!isWifiIdentityAdvertisementCandidate(payload, length)) {
         return WifiIdentityIngressStatus::NotAdvertisement;
     }
     if (length > 0xffffU) {
-        return WifiIdentityIngressStatus::MalformedAdvertisement;
+        return WifiIdentityIngressStatus::MalformedEnvelope;
     }
     WifiFrameView frame{};
     frame.monotonicUs = 1U;
@@ -594,8 +604,12 @@ WifiIdentityIngressStatus wifiIdentityRetentionKey(
             return WifiIdentityIngressStatus::NotAdvertisement;
         case IdentityDecode::IgnoredAdvertisement:
             return WifiIdentityIngressStatus::IgnoredAdvertisement;
-        case IdentityDecode::Malformed:
-            return WifiIdentityIngressStatus::MalformedAdvertisement;
+        case IdentityDecode::MalformedEnvelope:
+            return WifiIdentityIngressStatus::MalformedEnvelope;
+        case IdentityDecode::MalformedAddressing:
+            return WifiIdentityIngressStatus::MalformedAddressing;
+        case IdentityDecode::MalformedElements:
+            return WifiIdentityIngressStatus::MalformedElements;
         case IdentityDecode::Advertisement:
             output->transmitter = advertisement.transmitter;
             output->networkName = advertisement.networkName;
@@ -603,7 +617,52 @@ WifiIdentityIngressStatus wifiIdentityRetentionKey(
             output->security = advertisement.security;
             return WifiIdentityIngressStatus::RetainableAdvertisement;
     }
-    return WifiIdentityIngressStatus::MalformedAdvertisement;
+    return WifiIdentityIngressStatus::MalformedEnvelope;
+}
+
+std::size_t writeWifiIdentityRetentionProjection(
+    const WifiIdentityRetentionKey& key, std::uint8_t* output,
+    std::size_t capacity) {
+    const std::size_t securityBytes =
+        key.security == AirspaceWifiSecurity::Rsn ? 4U
+        : key.security == AirspaceWifiSecurity::Wpa ? 6U : 0U;
+    const std::size_t required = 36U + 2U + key.networkNameLength +
+        securityBytes + 4U;
+    if (output == nullptr || capacity < required ||
+        key.networkNameLength == 0U ||
+        key.networkNameLength > key.networkName.size() ||
+        key.security == AirspaceWifiSecurity::Unknown ||
+        !validTransmitter(key.transmitter.data())) {
+        return 0U;
+    }
+
+    std::memset(output, 0, required);
+    output[0] = 0x80U;  // Canonical beacon projection.
+    std::memset(output + 4U, 0xff, 6U);
+    std::memcpy(output + 10U, key.transmitter.data(), key.transmitter.size());
+    std::memcpy(output + 16U, key.transmitter.data(), key.transmitter.size());
+    if (key.security != AirspaceWifiSecurity::Open) output[34] = 0x10U;
+    std::size_t offset = 36U;
+    output[offset++] = 0U;
+    output[offset++] = key.networkNameLength;
+    std::memcpy(output + offset, key.networkName.data(),
+                key.networkNameLength);
+    offset += key.networkNameLength;
+    if (key.security == AirspaceWifiSecurity::Rsn) {
+        output[offset++] = 48U;
+        output[offset++] = 2U;
+        output[offset++] = 1U;
+        output[offset++] = 0U;
+    } else if (key.security == AirspaceWifiSecurity::Wpa) {
+        output[offset++] = 221U;
+        output[offset++] = 4U;
+        output[offset++] = 0x00U;
+        output[offset++] = 0x50U;
+        output[offset++] = 0xf2U;
+        output[offset++] = 0x01U;
+    }
+    offset += 4U;  // Deterministic zero FCS retained with the projection.
+    return offset;
 }
 
 bool sameWifiIdentityRetentionKey(const WifiIdentityRetentionKey& left,
@@ -818,7 +877,7 @@ AirspaceGuardReport AirspaceGuard::inspectWifi(
                 readIdentity(leftIndex, &left);
             if (leftDecoded == IdentityDecode::Advertisement) {
                 ++report.identityAdvertisementFrames;
-            } else if (leftDecoded == IdentityDecode::Malformed) {
+            } else if (identityDecodeMalformed(leftDecoded)) {
                 ++report.malformedFrames;
                 continue;
             } else {

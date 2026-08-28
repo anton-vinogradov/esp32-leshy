@@ -235,8 +235,12 @@ def result_failures(state: dict[str, Any], label: str) -> list[str]:
         "wifi_monitor_active": False,
         "wifi_disconnects_dropped": 0,
         "wifi_identity_dropped": 0,
+        "wifi_identity_malformed_envelope": 0,
+        "wifi_identity_malformed_addressing": 0,
+        "wifi_identity_malformed_elements": 0,
         "wifi_noise_dropped": 0,
         "wifi_invalid_frames": 0,
+        "wifi_receive_invalid_frames": 0,
         "wifi_identity_retention_complete": True,
         "wifi_noise_retention_complete": True,
         "ble_worker_control": 0,
@@ -260,6 +264,20 @@ def result_failures(state: dict[str, Any], label: str) -> list[str]:
     observed = int(state.get("source_frames_observed", -1))
     if inspected > available or observed < available:
         failures.append(f"{label}.frame_accounting: invalid")
+    retained = int(state.get("wifi_identity_retained", -1))
+    projected = int(state.get("wifi_identity_projected", -1))
+    if retained < 0 or projected != retained:
+        failures.append(
+            f"{label}.identity_projection: {projected} != {retained}")
+    malformed_total = sum(int(state.get(key, -1)) for key in (
+        "wifi_identity_malformed_envelope",
+        "wifi_identity_malformed_addressing",
+        "wifi_identity_malformed_elements",
+        "wifi_receive_invalid_frames",
+    ))
+    if malformed_total != int(state.get("wifi_invalid_frames", -1)):
+        failures.append(
+            f"{label}.invalid_frame_accounting: {malformed_total}")
     noise_observed = int(state.get("noise_samples_observed", -1))
     noise_available = int(state.get("noise_samples_available", -1))
     noise_inspected = int(state.get("noise_samples_inspected", -1))

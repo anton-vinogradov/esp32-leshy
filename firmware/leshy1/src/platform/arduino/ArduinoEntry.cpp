@@ -19409,10 +19409,15 @@ void emitAirspaceGuardState(Stream& reply) {
         "\"wifi_disconnects_dropped\":%lu,"
         "\"wifi_identity_observed\":%lu,"
         "\"wifi_identity_retained\":%lu,"
+        "\"wifi_identity_projected\":%lu,"
         "\"wifi_identity_deduplicated\":%lu,"
         "\"wifi_identity_dropped\":%lu,"
+        "\"wifi_identity_malformed_envelope\":%lu,"
+        "\"wifi_identity_malformed_addressing\":%lu,"
+        "\"wifi_identity_malformed_elements\":%lu,"
         "\"wifi_noise_observed\":%lu,\"wifi_noise_retained\":%lu,"
         "\"wifi_noise_dropped\":%lu,\"wifi_invalid_frames\":%lu,"
+        "\"wifi_receive_invalid_frames\":%lu,"
         "\"wifi_ignored_frames\":%lu,\"wifi_channel_hops\":%lu,"
         "\"wifi_identity_retention_complete\":%s,"
         "\"wifi_noise_retention_complete\":%s,"
@@ -19473,12 +19478,17 @@ void emitAirspaceGuardState(Stream& reply) {
         static_cast<unsigned long>(monitor.disconnectFramesDropped),
         static_cast<unsigned long>(monitor.identityAdvertisementsObserved),
         static_cast<unsigned long>(monitor.identityProfilesRetained),
+        static_cast<unsigned long>(monitor.identityProfilesProjected),
         static_cast<unsigned long>(monitor.identityProfilesDeduplicated),
         static_cast<unsigned long>(monitor.identityProfilesDropped),
+        static_cast<unsigned long>(monitor.identityMalformedEnvelope),
+        static_cast<unsigned long>(monitor.identityMalformedAddressing),
+        static_cast<unsigned long>(monitor.identityMalformedElements),
         static_cast<unsigned long>(monitor.noiseSamplesObserved),
         static_cast<unsigned long>(monitor.noiseSamplesRetained),
         static_cast<unsigned long>(monitor.noiseSamplesDropped),
         static_cast<unsigned long>(monitor.invalidFrames),
+        static_cast<unsigned long>(monitor.receiveInvalidFrames),
         static_cast<unsigned long>(monitor.ignoredFrames),
         static_cast<unsigned long>(monitor.channelHops),
         monitor.identityRetentionComplete ? "true" : "false",

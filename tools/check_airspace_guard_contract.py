@@ -44,7 +44,7 @@ HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
 START_REGRESSION_RUNNER = (
     ROOT / "tools/run_1x_airspace_guard_start_regression_hil.py"
 )
-HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.226.json"
+HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.227.json"
 STACK_CHECKER = ROOT / "tools/check_airspace_guard_stack_elf_contract.py"
 
 
@@ -100,6 +100,7 @@ def main() -> int:
         "isWifiIdentityAdvertisementCandidate",
         "WifiIdentityRetentionKey",
         "wifiIdentityRetentionKey",
+        "writeWifiIdentityRetentionProjection",
         "sameWifiIdentityRetentionKey",
         "kWifiDisconnectLiveRetentionCapacity = 8",
         "kWifiIdentityLiveRetentionCapacity = 8",
@@ -434,8 +435,14 @@ def main() -> int:
         "noiseSamplesDropped",
         "noiseRetentionComplete",
         "wifiIdentityRetentionKey",
+        "writeWifiIdentityRetentionProjection",
         "sameWifiIdentityRetentionKey",
-        "packet->rx_ctrl.sig_len > capture_.plan().snapLength",
+        "identityProfilesProjected",
+        "identityMalformedEnvelope",
+        "identityMalformedAddressing",
+        "identityMalformedElements",
+        "receiveInvalidFrames",
+        "coverageProjection",
         "capture_.size() == 0U",
         "airspaceGuardStats_.cleanupComplete",
         "return stop(nowUs)",
@@ -501,7 +508,7 @@ def main() -> int:
                 f"missing Airspace Guard start-regression contract: {marker}")
     for marker in (
         '"schema": "leshy.hil.delta_scope.v1"',
-        '"candidate_version": "1.0.0-dev.226"',
+        '"candidate_version": "1.0.0-dev.227"',
         '"full_matrix_required": false',
         '"cadence_after_acceptance": "6/15"',
     ):
@@ -515,6 +522,7 @@ def main() -> int:
         '"renderAirspaceGuardPage(": 1280',
         '"AirspaceGuard::inspectWifi(": 2816',
         '"mergeAirspaceGuardReports(": 2560',
+        '"BoardWifiPassiveCapture::accept(": 512',
         '"leshy.airspace_guard_stack_elf.v1"',
     ):
         require(failures, marker in stack_checker,

@@ -48,14 +48,19 @@ public:
         std::uint32_t disconnectFramesDropped = 0;
         std::uint32_t identityAdvertisementsObserved = 0;
         std::uint32_t identityProfilesRetained = 0;
+        std::uint32_t identityProfilesProjected = 0;
         std::uint32_t identityProfilesDeduplicated = 0;
         std::uint32_t identityProfilesDropped = 0;
+        std::uint32_t identityMalformedEnvelope = 0;
+        std::uint32_t identityMalformedAddressing = 0;
+        std::uint32_t identityMalformedElements = 0;
         std::array<services::guard::WifiNoiseFloorSample,
                    kNoiseRetentionCapacity> noiseSamples{};
         std::uint32_t noiseSamplesObserved = 0;
         std::uint32_t noiseSamplesRetained = 0;
         std::uint32_t noiseSamplesDropped = 0;
         std::uint32_t invalidFrames = 0;
+        std::uint32_t receiveInvalidFrames = 0;
         std::uint32_t ignoredFrames = 0;
         std::uint32_t channelHops = 0;
         bool active = false;

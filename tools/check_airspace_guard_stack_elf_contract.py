@@ -22,6 +22,7 @@ LIMITS = {
     "renderAirspaceGuardPage(": 1280,
     "AirspaceGuard::inspectWifi(": 2816,
     "mergeAirspaceGuardReports(": 2560,
+    "BoardWifiPassiveCapture::accept(": 512,
 }
 
 
