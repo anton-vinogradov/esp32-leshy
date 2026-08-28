@@ -178,7 +178,9 @@ bool BoardSdFilesystem::beginWithMode(bool readOnly) {
     device.wait_for_miso = 100;
     esp_vfs_fat_mount_config_t mount = VFS_FAT_MOUNT_DEFAULT_CONFIG();
     mount.format_if_mount_failed = false;
-    mount.max_files = 5;
+    // Board consumers use direct FatFs and serialize access through one FIL
+    // workspace, so the VFS descriptor table only needs one entry.
+    mount.max_files = 1;
     mount.disk_status_check_enable = true;
     heapFreeBeforeVfs_ = static_cast<std::uint32_t>(
         heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));

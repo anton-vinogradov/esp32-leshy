@@ -524,6 +524,7 @@ def main() -> int:
             "ff_diskio_get_drive(&availableDrive)",
             "driveAvailableBeforeVfs",
             "mount.format_if_mount_failed = false",
+            "mount.max_files = 1",
             "ff_diskio_get_pdrv_card",
             "guardSharedChipSelect",
             "cachedFreeBytes",
