@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import json
 import secrets
+import select
 import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -37,6 +39,7 @@ BLE_LIVE_TOP = 88
 BLE_LIVE_BOTTOM = 132
 ALLOWED_FINDING_MASK = 0x1F
 ELEVATED_NOISE_FINDING_MASK = 1 << 3
+MACOS_BLE_FIXTURE_SCHEMA = "leshy.hil.macos_ble_name_fixture.v1"
 
 
 def require_exact(record: dict[str, Any], expected: dict[str, Any],
@@ -259,6 +262,8 @@ def result_failures(state: dict[str, Any], label: str) -> list[str]:
                 "frames_inspected"):
         if not isinstance(state.get(key), int) or state[key] < 1:
             failures.append(f"{label}.{key}: expected >= 1")
+    if not isinstance(state.get("ble_records"), int) or state["ble_records"] < 1:
+        failures.append(f"{label}.ble_records: expected >= 1")
     available = int(state.get("frames_available", -1))
     inspected = int(state.get("frames_inspected", -1))
     observed = int(state.get("source_frames_observed", -1))
@@ -337,6 +342,14 @@ def main() -> int:
     parser.add_argument("--flash", action="store_true")
     parser.add_argument("--reuse-exact-flash", action="store_true")
     parser.add_argument("--flash-baud", type=int, default=460800)
+    parser.add_argument(
+        "--external-ble-label",
+        help="BLE local name advertised by --external-ble-executable",
+    )
+    parser.add_argument(
+        "--external-ble-executable", type=Path,
+        help="bounded macOS CoreBluetooth fixture executable",
+    )
     args = parser.parse_args()
     if not args.firmware.is_file():
         parser.error("--firmware must name an existing app image")
@@ -348,6 +361,16 @@ def main() -> int:
         parser.error("--source-commit must be a full Git commit ID")
     if args.flash == args.reuse_exact_flash:
         parser.error("choose exactly one of --flash or --reuse-exact-flash")
+    if ((args.external_ble_label is None) !=
+            (args.external_ble_executable is None)):
+        parser.error(
+            "--external-ble-label and --external-ble-executable are a pair")
+    if (args.external_ble_executable is not None and
+            not args.external_ble_executable.is_file()):
+        parser.error("external BLE fixture executable is missing")
+    if (args.external_ble_label is not None and
+            not 1 <= len(args.external_ble_label.encode("utf-8")) <= 29):
+        parser.error("external BLE label must occupy 1..29 UTF-8 bytes")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -377,8 +400,40 @@ def main() -> int:
     input_state: dict[str, Any] = {}
     safe_outputs: dict[str, Any] = {}
     pixel_proof: dict[str, Any] = {}
+    fixture_process: subprocess.Popen[str] | None = None
+    fixture_states: list[dict[str, Any]] = []
+    external_ble_fixture: dict[str, Any] = {
+        "kind": ("macos_corebluetooth"
+                 if args.external_ble_executable is not None else "none"),
+        "label": args.external_ble_label,
+        "states": fixture_states,
+        "host_wifi_control_calls": 0,
+        "terminated": args.external_ble_executable is None,
+    }
+    if args.external_ble_executable is not None:
+        external_ble_fixture["executable_sha256"] = sha256_file(
+            args.external_ble_executable)
 
     try:
+        if args.external_ble_executable is not None:
+            fixture_process = subprocess.Popen(
+                [str(args.external_ble_executable.resolve()),
+                 str(args.external_ble_label)],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            if fixture_process.stdout is None:
+                raise RuntimeError("external BLE fixture has no stdout")
+            readable, _, _ = select.select(
+                [fixture_process.stdout], [], [], 10.0)
+            if not readable:
+                raise RuntimeError("external BLE fixture did not become ready")
+            fixture_state = json.loads(fixture_process.stdout.readline())
+            fixture_states.append(fixture_state)
+            if (fixture_state.get("schema") != MACOS_BLE_FIXTURE_SCHEMA or
+                    fixture_state.get("state") != "advertising" or
+                    fixture_state.get("label") != args.external_ble_label):
+                raise RuntimeError(
+                    f"external BLE fixture start failed: {fixture_state}")
         if args.flash:
             flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
             time.sleep(0.5)
@@ -524,6 +579,20 @@ def main() -> int:
                     failures.append("cleanup_after: Home/zero lease unproven")
     except Exception as error:
         failures.append(f"runner: {type(error).__name__}: {error}")
+    finally:
+        if fixture_process is not None:
+            fixture_process.terminate()
+            try:
+                fixture_process.wait(timeout=5.0)
+            except subprocess.TimeoutExpired:
+                fixture_process.kill()
+                fixture_process.wait(timeout=5.0)
+            external_ble_fixture["terminated"] = True
+            external_ble_fixture["returncode"] = fixture_process.returncode
+            if fixture_process.stderr is not None:
+                fixture_stderr = fixture_process.stderr.read().strip()
+                if fixture_stderr:
+                    external_ble_fixture["stderr"] = fixture_stderr
 
     result = {
         "schema": RUN_SCHEMA,
@@ -557,6 +626,7 @@ def main() -> int:
         "input": input_state,
         "safe_outputs": safe_outputs,
         "pixel_proof": pixel_proof,
+        "external_ble_fixture": external_ble_fixture,
         "screens": screens,
         "trace": trace,
         "cleanup_before": cleanup_before,
@@ -566,6 +636,12 @@ def main() -> int:
             "manual_button_presses": 0,
             "screenshots_automatic": True,
             "passive_receive_only": True,
+            "deterministic_ble_fixture": (
+                external_ble_fixture.get("kind") == "macos_corebluetooth" and
+                bool(fixture_states) and
+                external_ble_fixture.get("terminated") is True
+            ),
+            "host_wifi_control_calls": 0,
             "application_wifi_connect_calls": 0,
             "application_raw_tx_calls": 0,
             "wifi_cancel_cleanup_proved": bool(wifi_cancelled),

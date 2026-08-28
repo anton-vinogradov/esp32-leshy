@@ -494,6 +494,13 @@ def main() -> int:
         "absence_of_noise_finding_is_not_absence_of_interference",
         "application_wifi_connect_calls",
         "application_raw_tx_calls",
+        'MACOS_BLE_FIXTURE_SCHEMA = "leshy.hil.macos_ble_name_fixture.v1"',
+        '"--external-ble-executable"',
+        '"--external-ble-label"',
+        '"deterministic_ble_fixture"',
+        '"host_wifi_control_calls": 0',
+        'fixture_process.terminate()',
+        'state.get("ble_records")',
     ):
         require(failures, marker in hil_runner,
                 f"missing Airspace Guard HIL contract: {marker}")

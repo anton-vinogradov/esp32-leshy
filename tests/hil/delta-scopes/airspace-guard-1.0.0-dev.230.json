@@ -12,7 +12,8 @@
     "airspace_guard_bounded_identity_projection_and_malformed_accounting_fix",
     "airspace_guard_deferred_coverage_and_bssid_identity_fix",
     "airspace_guard_compact_56_identity_retention_fix",
-    "airspace_guard_post_ble_cancel_queue_restore_fix"
+    "airspace_guard_post_ble_cancel_queue_restore_fix",
+    "deterministic_bounded_macos_ble_coverage_fixture"
   ],
   "required_delta_regression": [
     "one_exact_flash_on_board_01",
@@ -21,6 +22,9 @@
     "automatic_ble_stage_screenshots_and_static_pixel_proof",
     "ble_stage_cancel_then_post_scanner_queue_restore",
     "two_complete_wifi_plus_ble_lifecycles",
+    "explicitly_authorized_macos_ble_name_fixture_is_started_and_stopped",
+    "at_least_one_ble_record_in_each_complete_lifecycle",
+    "zero_host_wifi_control_calls",
     "all_evidence_accounting_and_retention_complete",
     "identity_projection_matches_retained_profiles",
     "compact_identity_source_and_disconnect_source_fit_detector_capacity",
