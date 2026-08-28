@@ -31,6 +31,15 @@ BOARD_CAPTURE_HEADER = (
 BOARD_CAPTURE_SOURCE = (
     ROOT / "firmware/leshy1/src/platform/arduino/BoardWifiPassiveCapture.cpp"
 )
+BOARD_BLE_HEADER = (
+    ROOT / "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.h"
+)
+BOARD_BLE_SOURCE = (
+    ROOT / "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.cpp"
+)
+BLE_CONTRACT_HEADER = (
+    ROOT / "firmware/leshy1/src/drivers/ble/BlePassiveContract.h"
+)
 
 
 def require(failures: list[str], condition: bool, message: str) -> None:
@@ -55,6 +64,10 @@ def main() -> int:
         board_capture = BOARD_CAPTURE_HEADER.read_text(encoding="utf-8") + (
             BOARD_CAPTURE_SOURCE.read_text(encoding="utf-8")
         )
+        board_ble = BOARD_BLE_HEADER.read_text(encoding="utf-8") + (
+            BOARD_BLE_SOURCE.read_text(encoding="utf-8")
+        )
+        ble_contract = BLE_CONTRACT_HEADER.read_text(encoding="utf-8")
     except OSError as error:
         print(f"airspace guard contract check failed: {error}", file=sys.stderr)
         return 1
@@ -91,6 +104,10 @@ def main() -> int:
         "bleTrackerPresenceThreshold = 3",
         "bleTrackerPresenceWindowUs = 10000000ULL",
         "BleObservationSource",
+        "AirspaceGuardBleRetention",
+        "kBleTrackerLiveRetentionCapacity = 32",
+        "bleTrackerIngressStatus",
+        "mergeAirspaceGuardReports",
         "inspectBle(",
         "channel = 0U",
         "AirspaceWifiSecurity::Rsn",
@@ -123,6 +140,9 @@ def main() -> int:
         "testBleTrackerPresenceRejectsLookalikesAndStaleEvidence",
         "testBleTrackerProtocolsRemainDistinct",
         "testBleTrackerPresenceFailsClosedOnIncompleteEvidence",
+        "testLiveBleRetentionKeepsCoverageThenAllTrackerRepeats",
+        "testLiveBleRetentionFailsClosedOnMalformedOrCapacityLoss",
+        "testCompletedWifiAndBleReportsMergeWithoutInventingEvidence",
     ):
         require(failures, marker in tests,
                 f"missing Airspace Guard native coverage: {marker}")
@@ -143,6 +163,24 @@ def main() -> int:
     ):
         require(failures, forbidden not in combined,
                 f"Airspace Guard bypasses receive-evidence boundary: {forbidden}")
+
+    for marker in (
+        "deduplicateAddresses = true",
+        "recordsObserved = 0",
+        "scanContext.deduplicateAddresses = plan.deduplicateAddresses",
+        "parameters.passive = 1U",
+        "parameters.filter_duplicates = 0U",
+        "takeReportsObserved",
+    ):
+        require(failures, marker in board_ble + ble_contract,
+                f"missing complete BLE live-ingress contract: {marker}")
+    for forbidden in (
+        "ble_gap_adv_start",
+        "ble_gap_connect",
+        "ble_gap_ext_connect",
+    ):
+        require(failures, forbidden not in board_ble,
+                f"BLE live retention gained an active path: {forbidden}")
 
     controller = controller_header + controller_source
     for marker in (

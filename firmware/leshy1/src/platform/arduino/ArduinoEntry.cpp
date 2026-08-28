@@ -2529,6 +2529,8 @@ void accumulateProductSurveyBleScan(BoardBlePassiveScanResult* total,
         total->attempts + scan.attempts);
     total->transientRetries = static_cast<std::uint16_t>(
         total->transientRetries + scan.transientRetries);
+    total->recordsObserved = static_cast<std::uint16_t>(
+        total->recordsObserved + scan.recordsObserved);
     total->recordsReported = static_cast<std::uint16_t>(
         total->recordsReported + scan.recordsReported);
     total->recordsRead = static_cast<std::uint16_t>(

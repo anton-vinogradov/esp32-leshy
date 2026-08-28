@@ -44,6 +44,19 @@ enum class AirspaceBleTrackerProtocol : std::uint8_t {
     Tile,
 };
 
+enum class BleTrackerIngressStatus : std::uint8_t {
+    CoverageAdvertisement,
+    TrackerAdvertisement,
+    MalformedAdvertisement,
+};
+
+enum class BleLiveRetentionDisposition : std::uint8_t {
+    Retained,
+    Ignored,
+    Malformed,
+    Full,
+};
+
 enum class WifiIdentityIngressStatus : std::uint8_t {
     NotAdvertisement,
     IgnoredAdvertisement,
@@ -62,6 +75,7 @@ struct WifiIdentityRetentionKey final {
 
 inline constexpr std::size_t kWifiDisconnectLiveRetentionCapacity = 8;
 inline constexpr std::size_t kWifiIdentityLiveRetentionCapacity = 8;
+inline constexpr std::size_t kBleTrackerLiveRetentionCapacity = 32;
 
 const char* airspaceGuardStatusName(AirspaceGuardStatus status);
 const char* airspaceFindingKindName(AirspaceFindingKind kind);
@@ -112,6 +126,8 @@ bool wifiIdentityRetentionSlotAvailable(std::size_t totalCapacity,
                                         std::size_t retainedFrames,
                                         std::size_t disconnectFrames,
                                         std::size_t identityProfiles);
+BleTrackerIngressStatus bleTrackerIngressStatus(
+    const domain::observations::Observation& observation);
 
 struct AirspaceEvidenceRef final {
     std::size_t frameIndex = 0;
@@ -182,6 +198,52 @@ public:
         std::size_t index,
         domain::observations::Observation* output) const = 0;
 };
+
+struct AirspaceGuardBleRetentionStats final {
+    std::size_t recordsObserved = 0;
+    std::size_t validAdvertisements = 0;
+    std::size_t trackerAdvertisements = 0;
+    std::size_t recordsRetained = 0;
+    std::size_t advertisementsIgnored = 0;
+    std::size_t malformedRecords = 0;
+    std::size_t capacityDrops = 0;
+    bool coverageOnly = false;
+
+    bool complete() const {
+        return malformedRecords == 0U && capacityDrops == 0U;
+    }
+};
+
+// Complete bounded live evidence for the BLE tracker detector. One benign
+// advertisement is retained as coverage until tracker-compatible evidence
+// arrives; it is then replaced so all 32 slots remain available for repeated
+// exact identity/protocol observations. Irrelevant valid advertisements are
+// counted but do not consume detector capacity.
+class AirspaceGuardBleRetention final : public BleObservationSource {
+public:
+    void reset();
+    BleLiveRetentionDisposition accept(
+        const domain::observations::Observation& observation);
+
+    std::size_t observationCount() const override { return size_; }
+    bool observationAt(
+        std::size_t index,
+        domain::observations::Observation* output) const override;
+    const AirspaceGuardBleRetentionStats& stats() const { return stats_; }
+
+private:
+    std::array<domain::observations::Observation,
+               kBleTrackerLiveRetentionCapacity> records_{};
+    AirspaceGuardBleRetentionStats stats_{};
+    std::size_t size_ = 0;
+};
+
+// Combines independently completed Wi-Fi and BLE reports without erasing the
+// source-local evidence index carried by each finding kind. The current live
+// capacities sum to at most the detector's 64-record validation boundary.
+bool mergeAirspaceGuardReports(const AirspaceGuardReport& wifi,
+                               const AirspaceGuardReport& ble,
+                               AirspaceGuardReport* output);
 
 // A bounded, allocation-free, receive-evidence-only detector. It never owns a
 // radio driver or an action path: callers decide when to capture and how to

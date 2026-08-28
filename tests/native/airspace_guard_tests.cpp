@@ -834,6 +834,115 @@ void testBleTrackerPresenceFailsClosedOnIncompleteEvidence() {
     CHECK(truncatedReport.inspectionTruncated);
 }
 
+void testLiveBleRetentionKeepsCoverageThenAllTrackerRepeats() {
+    AirspaceGuardBleRetention retention;
+    BleFixtureSource fixture;
+    fixture.add(kTransmitterA, 1000000ULL,
+                AirspaceBleTrackerProtocol::None);
+    CHECK(retention.accept(fixture.mutableAt(0).observation) ==
+          BleLiveRetentionDisposition::Retained);
+    CHECK(retention.observationCount() == 1U);
+    CHECK(retention.stats().coverageOnly);
+
+    fixture.add(kTransmitterB, 1100000ULL,
+                AirspaceBleTrackerProtocol::None);
+    CHECK(retention.accept(fixture.mutableAt(1).observation) ==
+          BleLiveRetentionDisposition::Ignored);
+    CHECK(retention.observationCount() == 1U);
+
+    fixture.add(kTransmitterA, 1200000ULL,
+                AirspaceBleTrackerProtocol::FindMy, -58, 1U);
+    fixture.add(kTransmitterA, 1300000ULL,
+                AirspaceBleTrackerProtocol::FindMy, -56, 1U);
+    fixture.add(kTransmitterA, 1400000ULL,
+                AirspaceBleTrackerProtocol::FindMy, -54, 1U);
+    for (std::size_t index = 2U; index < 5U; ++index) {
+        CHECK(retention.accept(fixture.mutableAt(index).observation) ==
+              BleLiveRetentionDisposition::Retained);
+    }
+    CHECK(retention.observationCount() == 3U);
+    CHECK(!retention.stats().coverageOnly);
+    CHECK(retention.stats().recordsObserved == 5U);
+    CHECK(retention.stats().validAdvertisements == 5U);
+    CHECK(retention.stats().trackerAdvertisements == 3U);
+    CHECK(retention.stats().recordsRetained == 3U);
+    CHECK(retention.stats().advertisementsIgnored == 1U);
+    CHECK(retention.stats().complete());
+
+    AirspaceGuardPolicy policy = bleTrackerPolicy();
+    const AirspaceGuardReport report = AirspaceGuard{}.inspectBle(
+        retention, policy, 0U, retention.stats().recordsObserved);
+    CHECK(report.status == AirspaceGuardStatus::Finding);
+    CHECK(report.findingCount == 1U);
+    CHECK(report.findings[0].observed == 3U);
+    CHECK(report.findings[0].evidenceCount == 3U);
+}
+
+void testLiveBleRetentionFailsClosedOnMalformedOrCapacityLoss() {
+    AirspaceGuardBleRetention retention;
+    BleFixtureSource fixture;
+    fixture.add(kTransmitterA, 1000000ULL,
+                AirspaceBleTrackerProtocol::FindMy);
+    fixture.mutableAt(0).observation.identity.fill(0U);
+    CHECK(retention.accept(fixture.mutableAt(0).observation) ==
+          BleLiveRetentionDisposition::Malformed);
+    CHECK(!retention.stats().complete());
+    CHECK(retention.observationCount() == 0U);
+
+    retention.reset();
+    BleFixtureSource repeats;
+    for (std::size_t index = 0U;
+         index < kBleTrackerLiveRetentionCapacity + 1U; ++index) {
+        repeats.add(kTransmitterA, 2000000ULL + index,
+                    AirspaceBleTrackerProtocol::Tile);
+        const BleLiveRetentionDisposition disposition =
+            retention.accept(repeats.mutableAt(index).observation);
+        CHECK(disposition ==
+              (index < kBleTrackerLiveRetentionCapacity
+                   ? BleLiveRetentionDisposition::Retained
+                   : BleLiveRetentionDisposition::Full));
+    }
+    CHECK(retention.observationCount() ==
+          kBleTrackerLiveRetentionCapacity);
+    CHECK(retention.stats().capacityDrops == 1U);
+    CHECK(!retention.stats().complete());
+}
+
+void testCompletedWifiAndBleReportsMergeWithoutInventingEvidence() {
+    FixtureSource wifiSource;
+    wifiSource.add(8U, 1000000ULL, kTransmitterB, 6U, -62);
+    const AirspaceGuardReport wifi = AirspaceGuard{}.inspectWifi(wifiSource);
+    CHECK(wifi.status == AirspaceGuardStatus::Clear);
+
+    BleFixtureSource bleSource;
+    bleSource.add(kTransmitterA, 2000000ULL,
+                  AirspaceBleTrackerProtocol::SmartTag, -59, 1U);
+    bleSource.add(kTransmitterA, 2100000ULL,
+                  AirspaceBleTrackerProtocol::SmartTag, -57, 1U);
+    bleSource.add(kTransmitterA, 2200000ULL,
+                  AirspaceBleTrackerProtocol::SmartTag, -55, 1U);
+    const AirspaceGuardReport ble = AirspaceGuard{}.inspectBle(
+        bleSource, bleTrackerPolicy());
+    CHECK(ble.status == AirspaceGuardStatus::Finding);
+
+    AirspaceGuardReport merged{};
+    CHECK(mergeAirspaceGuardReports(wifi, ble, &merged));
+    CHECK(merged.status == AirspaceGuardStatus::Finding);
+    CHECK(merged.framesAvailable == 4U);
+    CHECK(merged.framesInspected == 4U);
+    CHECK(merged.bleAdvertisementRecords == 3U);
+    CHECK(merged.findingCount == 1U);
+    CHECK(merged.findings[0].kind ==
+          AirspaceFindingKind::BleTrackerPresence);
+    CHECK(merged.findings[0].evidence[0].frameIndex == 0U);
+    CHECK(merged.findings[0].evidence[0].channel == 0U);
+
+    AirspaceGuardReport wrongSource = ble;
+    wrongSource.disconnectFrames = 1U;
+    CHECK(!mergeAirspaceGuardReports(wifi, wrongSource, &merged));
+    CHECK(!mergeAirspaceGuardReports(wifi, ble, nullptr));
+}
+
 void testStableNames() {
     CHECK(std::strcmp(airspaceGuardStatusName(AirspaceGuardStatus::Finding),
                       "finding") == 0);
@@ -880,6 +989,9 @@ int main() {
     testBleTrackerPresenceRejectsLookalikesAndStaleEvidence();
     testBleTrackerProtocolsRemainDistinct();
     testBleTrackerPresenceFailsClosedOnIncompleteEvidence();
+    testLiveBleRetentionKeepsCoverageThenAllTrackerRepeats();
+    testLiveBleRetentionFailsClosedOnMalformedOrCapacityLoss();
+    testCompletedWifiAndBleReportsMergeWithoutInventingEvidence();
     testStableNames();
     std::puts("Airspace Guard detector tests passed");
     return 0;

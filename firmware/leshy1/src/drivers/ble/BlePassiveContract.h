@@ -10,6 +10,10 @@ namespace leshy1::drivers::ble {
 
 struct BleScanPlan final {
     bool passive = true;
+    // Product Survey keeps one row per address. Defensive evidence capture
+    // explicitly opts out so repeated advertisements from the same identity
+    // remain available to a threshold/window detector.
+    bool deduplicateAddresses = true;
     std::uint32_t durationMs = 2000;
     std::uint16_t intervalMs = 100;
     std::uint16_t windowMs = 90;

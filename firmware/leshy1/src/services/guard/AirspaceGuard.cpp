@@ -304,6 +304,151 @@ AirspaceConfidence confidenceFor(std::size_t observed,
 
 }  // namespace
 
+BleTrackerIngressStatus bleTrackerIngressStatus(
+    const Observation& observation) {
+    BleTrackerEvent ignored{};
+    switch (decodeBleObservation(observation, &ignored, 0U)) {
+        case BleObservationDecode::Advertisement:
+            return BleTrackerIngressStatus::CoverageAdvertisement;
+        case BleObservationDecode::TrackerAdvertisement:
+            return BleTrackerIngressStatus::TrackerAdvertisement;
+        case BleObservationDecode::Malformed:
+            return BleTrackerIngressStatus::MalformedAdvertisement;
+    }
+    return BleTrackerIngressStatus::MalformedAdvertisement;
+}
+
+void AirspaceGuardBleRetention::reset() {
+    records_.fill(Observation{});
+    stats_ = {};
+    size_ = 0U;
+}
+
+BleLiveRetentionDisposition AirspaceGuardBleRetention::accept(
+    const Observation& observation) {
+    ++stats_.recordsObserved;
+    const BleTrackerIngressStatus ingress =
+        bleTrackerIngressStatus(observation);
+    if (ingress == BleTrackerIngressStatus::MalformedAdvertisement) {
+        ++stats_.malformedRecords;
+        return BleLiveRetentionDisposition::Malformed;
+    }
+
+    ++stats_.validAdvertisements;
+    if (ingress == BleTrackerIngressStatus::CoverageAdvertisement) {
+        if (size_ == 0U) {
+            records_[0] = observation;
+            size_ = 1U;
+            stats_.recordsRetained = 1U;
+            stats_.coverageOnly = true;
+            return BleLiveRetentionDisposition::Retained;
+        }
+        ++stats_.advertisementsIgnored;
+        return BleLiveRetentionDisposition::Ignored;
+    }
+
+    ++stats_.trackerAdvertisements;
+    if (stats_.coverageOnly) {
+        records_[0] = observation;
+        stats_.coverageOnly = false;
+        stats_.trackerAdvertisements = 1U;
+        return BleLiveRetentionDisposition::Retained;
+    }
+    if (size_ >= records_.size()) {
+        ++stats_.capacityDrops;
+        return BleLiveRetentionDisposition::Full;
+    }
+    records_[size_++] = observation;
+    stats_.recordsRetained = size_;
+    return BleLiveRetentionDisposition::Retained;
+}
+
+bool AirspaceGuardBleRetention::observationAt(
+    std::size_t index, Observation* output) const {
+    if (output == nullptr || index >= size_) return false;
+    *output = records_[index];
+    return true;
+}
+
+bool mergeAirspaceGuardReports(const AirspaceGuardReport& wifi,
+                               const AirspaceGuardReport& ble,
+                               AirspaceGuardReport* output) {
+    if (output == nullptr ||
+        wifi.status == AirspaceGuardStatus::InvalidPolicy ||
+        ble.status == AirspaceGuardStatus::InvalidPolicy ||
+        wifi.bleAdvertisementRecords != 0U || ble.disconnectFrames != 0U ||
+        ble.identityAdvertisementFrames != 0U ||
+        wifi.findingCount > wifi.findings.size() ||
+        ble.findingCount > ble.findings.size() ||
+        wifi.inspectionTruncated || ble.inspectionTruncated ||
+        wifi.framesAvailable > AirspaceGuard::kFrameInspectionCapacity ||
+        ble.framesAvailable > AirspaceGuard::kFrameInspectionCapacity ||
+        wifi.framesAvailable + ble.framesAvailable >
+            AirspaceGuard::kFrameInspectionCapacity) {
+        return false;
+    }
+    for (std::size_t index = 0U; index < wifi.findingCount; ++index) {
+        if (wifi.findings[index].kind ==
+            AirspaceFindingKind::BleTrackerPresence) {
+            return false;
+        }
+    }
+    for (std::size_t index = 0U; index < ble.findingCount; ++index) {
+        if (ble.findings[index].kind !=
+            AirspaceFindingKind::BleTrackerPresence) {
+            return false;
+        }
+    }
+
+    AirspaceGuardReport merged{};
+    merged.sourceFramesObserved =
+        wifi.sourceFramesObserved + ble.sourceFramesObserved;
+    merged.framesAvailable = wifi.framesAvailable + ble.framesAvailable;
+    merged.framesInspected = wifi.framesInspected + ble.framesInspected;
+    merged.disconnectFrames = wifi.disconnectFrames;
+    merged.identityAdvertisementFrames = wifi.identityAdvertisementFrames;
+    merged.bleAdvertisementRecords = ble.bleAdvertisementRecords;
+    merged.malformedFrames = wifi.malformedFrames + ble.malformedFrames;
+    merged.sourceReadFailures =
+        wifi.sourceReadFailures + ble.sourceReadFailures;
+    merged.sourceFramesDropped =
+        wifi.sourceFramesDropped + ble.sourceFramesDropped;
+    merged.findingsDropped = wifi.findingsDropped + ble.findingsDropped;
+
+    const auto append = [&](const AirspaceGuardReport& source) {
+        for (std::size_t index = 0U; index < source.findingCount; ++index) {
+            if (merged.findingCount < merged.findings.size()) {
+                merged.findings[merged.findingCount++] =
+                    source.findings[index];
+            } else {
+                ++merged.findingsDropped;
+            }
+        }
+    };
+    append(wifi);
+    append(ble);
+
+    if (merged.sourceFramesObserved < merged.framesAvailable ||
+        merged.framesInspected + merged.sourceReadFailures !=
+            merged.framesAvailable ||
+        merged.sourceFramesDropped > merged.sourceFramesObserved ||
+        merged.findingsDropped > merged.framesInspected) {
+        return false;
+    }
+    merged.status = merged.findingCount != 0U
+        ? AirspaceGuardStatus::Finding
+        : (merged.sourceFramesObserved == 0U ||
+                   merged.framesAvailable == 0U ||
+                   merged.framesInspected == 0U ||
+                   merged.sourceReadFailures != 0U ||
+                   merged.sourceFramesDropped != 0U ||
+                   merged.malformedFrames != 0U
+               ? AirspaceGuardStatus::Inconclusive
+               : AirspaceGuardStatus::Clear);
+    *output = merged;
+    return true;
+}
+
 const char* airspaceGuardStatusName(AirspaceGuardStatus status) {
     switch (status) {
         case AirspaceGuardStatus::Clear: return "clear";

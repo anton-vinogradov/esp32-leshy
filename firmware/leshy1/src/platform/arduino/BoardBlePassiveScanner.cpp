@@ -43,6 +43,7 @@ struct NimbleObserverState final {
     std::size_t readIndex = 0;
     std::size_t writeIndex = 0;
     std::size_t queued = 0;
+    std::uint16_t reportsObserved = 0;
     std::uint16_t queueDrops = 0;
     bool acceptingReports = false;
 };
@@ -57,6 +58,7 @@ struct RawScanContext final {
     std::array<std::array<std::uint8_t, 6>, 128> seenAddresses{};
     std::uint16_t seenCount = 0;
     std::uint16_t maximumRecords = 0;
+    bool deduplicateAddresses = true;
     BleRecordVisitor visitor = nullptr;
     void* visitorContext = nullptr;
     BoardBlePassiveScanResult* result = nullptr;
@@ -319,6 +321,7 @@ void clearReportQueue() {
     nimbleObserver.readIndex = 0U;
     nimbleObserver.writeIndex = 0U;
     nimbleObserver.queued = 0U;
+    nimbleObserver.reportsObserved = 0U;
     nimbleObserver.queueDrops = 0U;
     portEXIT_CRITICAL(&nimbleObserver.lock);
 }
@@ -347,9 +350,20 @@ std::uint16_t takeQueueDrops() {
     return drops;
 }
 
+std::uint16_t takeReportsObserved() {
+    portENTER_CRITICAL(&nimbleObserver.lock);
+    const std::uint16_t observed = nimbleObserver.reportsObserved;
+    nimbleObserver.reportsObserved = 0U;
+    portEXIT_CRITICAL(&nimbleObserver.lock);
+    return observed;
+}
+
 void queueReport(const RawAdvertisement& report) {
     portENTER_CRITICAL(&nimbleObserver.lock);
     if (nimbleObserver.acceptingReports) {
+        if (nimbleObserver.reportsObserved != UINT16_MAX) {
+            ++nimbleObserver.reportsObserved;
+        }
         if (nimbleObserver.queued < NimbleObserverState::kQueueCapacity) {
             nimbleObserver.queue[nimbleObserver.writeIndex] = report;
             nimbleObserver.writeIndex =
@@ -420,14 +434,16 @@ void processAdvertisement(const RawAdvertisement& source,
     std::array<std::uint8_t, 6> canonicalAddress{};
     std::reverse_copy(source.address.begin(), source.address.end(),
                       canonicalAddress.begin());
-    for (std::uint16_t index = 0; index < context->seenCount; ++index) {
-        if (context->seenAddresses[index] == canonicalAddress) return;
+    if (context->deduplicateAddresses) {
+        for (std::uint16_t index = 0; index < context->seenCount; ++index) {
+            if (context->seenAddresses[index] == canonicalAddress) return;
+        }
+        if (context->seenCount >= context->seenAddresses.size()) {
+            increment(&context->result->dropped);
+            return;
+        }
+        context->seenAddresses[context->seenCount++] = canonicalAddress;
     }
-    if (context->seenCount >= context->seenAddresses.size()) {
-        increment(&context->result->dropped);
-        return;
-    }
-    context->seenAddresses[context->seenCount++] = canonicalAddress;
     increment(&context->result->recordsReported);
     if (context->result->recordsRead >= context->maximumRecords) {
         increment(&context->result->dropped);
@@ -459,8 +475,12 @@ void processAdvertisement(const RawAdvertisement& source,
 void drainReports(RawScanContext* context) {
     RawAdvertisement report;
     while (popReport(&report)) processAdvertisement(report, context);
+    const std::uint16_t observed = takeReportsObserved();
     const std::uint16_t queueDrops = takeQueueDrops();
     if (context == nullptr || context->result == nullptr) return;
+    for (std::uint16_t index = 0U; index < observed; ++index) {
+        increment(&context->result->recordsObserved);
+    }
     for (std::uint16_t index = 0U; index < queueDrops; ++index) {
         increment(&context->result->dropped);
     }
@@ -609,6 +629,7 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
 
     RawScanContext scanContext;
     scanContext.maximumRecords = plan.maximumRecords;
+    scanContext.deduplicateAddresses = plan.deduplicateAddresses;
     scanContext.visitor = visitor;
     scanContext.visitorContext = context;
     scanContext.result = &result;

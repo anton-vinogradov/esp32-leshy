@@ -3220,7 +3220,11 @@ void testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations() {
     BleScanPlan plan = leshy1::drivers::ble::defaultPassivePlan();
     CHECK(leshy1::drivers::ble::validatePassivePlan(plan));
     CHECK(plan.passive);
+    CHECK(plan.deduplicateAddresses);
     CHECK(plan.windowMs <= plan.intervalMs);
+
+    plan.deduplicateAddresses = false;
+    CHECK(leshy1::drivers::ble::validatePassivePlan(plan));
 
     plan.passive = false;
     CHECK(!leshy1::drivers::ble::validatePassivePlan(plan));

@@ -32,6 +32,7 @@ struct BoardBlePassiveScanResult final {
     std::uint64_t durationUs = 0;
     std::uint16_t attempts = 0;
     std::uint16_t transientRetries = 0;
+    std::uint16_t recordsObserved = 0;
     std::uint16_t recordsReported = 0;
     std::uint16_t recordsRead = 0;
     std::uint16_t accepted = 0;
