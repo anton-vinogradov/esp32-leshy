@@ -36,7 +36,6 @@ from run_1x_product_survey_hil import (
     expect,
     query,
     valid_cid,
-    wait_ui_state,
 )
 
 
@@ -275,6 +274,34 @@ def wait_auth_state(device: PassiveSerial,
             return last
         time.sleep(0.05)
     raise TimeoutError(f"{description}: last state {last!r}")
+
+
+def wait_ui_state(device: PassiveSerial,
+                  predicate: Callable[[dict[str, Any]], bool],
+                  timeout: float, description: str) -> dict[str, Any]:
+    """Poll read-only UI state through bounded transient serial timeouts."""
+    deadline = time.monotonic() + timeout
+    last: dict[str, Any] = {}
+    transport_errors: list[str] = []
+    while time.monotonic() < deadline:
+        remaining = deadline - time.monotonic()
+        try:
+            last = query(
+                device, b"ui.state", UI_SCHEMA, "state",
+                timeout=min(2.0, max(0.001, remaining)))
+        except TimeoutError as error:
+            transport_errors.append(str(error))
+            device.reset_input_buffer()
+            time.sleep(0.05)
+            continue
+        if predicate(last):
+            last["host_wait_transport_timeouts"] = len(transport_errors)
+            last["host_wait_transport_errors"] = transport_errors
+            return last
+        time.sleep(0.05)
+    raise TimeoutError(
+        f"{description}: transport_errors={transport_errors!r}, "
+        f"last state {last!r}")
 
 
 def wifi_menu_quiescent(state: dict[str, Any]) -> bool:

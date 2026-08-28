@@ -106,6 +106,28 @@ def armed_auth_state(armed: bool = True) -> dict[str, Any]:
 
 
 class WifiAuthenticationCaptureHilTests(unittest.TestCase):
+    def test_ui_wait_recovers_read_only_transport_timeout(self) -> None:
+        device = MagicMock()
+        ready = {
+            "schema": RUNNER.UI_SCHEMA, "kind": "state",
+            "wifi_product_view": "networks",
+        }
+        with patch.object(
+                RUNNER, "query",
+                side_effect=(TimeoutError("transient UI ACK loss"), ready)
+                ) as query_state, \
+                patch.object(RUNNER.time, "sleep"):
+            actual = RUNNER.wait_ui_state(
+                device,
+                lambda state: state.get("wifi_product_view") == "networks",
+                5.0, "Networks")
+        self.assertEqual(2, query_state.call_count)
+        device.reset_input_buffer.assert_called_once_with()
+        self.assertEqual(1, actual["host_wait_transport_timeouts"])
+        self.assertEqual(
+            ["transient UI ACK loss"],
+            actual["host_wait_transport_errors"])
+
     def test_wifi_menu_preflight_accepts_unsnapshotted_worker_but_quiesces(
             self) -> None:
         state = {
