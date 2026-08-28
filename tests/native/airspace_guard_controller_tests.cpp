@@ -591,6 +591,29 @@ void testMergedIndependentInspectionBudgetsRemainLoadable() {
     ++invalid.framesInspected;
     CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
 
+    invalid = report;
+    invalid.identityAdvertisementFrames =
+        AirspaceGuard::kFrameInspectionCapacity + 1U;
+    invalid.bleAdvertisementRecords =
+        AirspaceGuard::kFrameInspectionCapacity - 1U;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.framesAvailable =
+        AirspaceGuard::kMergedFrameInspectionCapacity + 1U;
+    invalid.sourceFramesObserved = invalid.framesAvailable;
+    invalid.status = AirspaceGuardStatus::Inconclusive;
+    invalid.inspectionTruncated = true;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.status = AirspaceGuardStatus::Finding;
+    invalid.findingCount = 1U;
+    invalid.findings[0] = makeBleTrackerFinding();
+    invalid.findings[0].evidence[0].frameIndex =
+        AirspaceGuard::kFrameInspectionCapacity;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+
     // The wider aggregate allowance must not hide a truncated single-source
     // report. Its attempted count is still the original 64-record budget.
     AirspaceGuardReport truncated{};

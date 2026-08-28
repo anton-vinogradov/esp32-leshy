@@ -165,6 +165,9 @@ bool AirspaceGuardController::validateReport(
         : sourceInspectionCapacity;
     const std::size_t attempted = report.framesAvailable < inspectionCapacity
         ? report.framesAvailable : inspectionCapacity;
+    const std::size_t evidenceInspectionCapacity = mergedInspectionBudget
+        ? sourceInspectionCapacity
+        : attempted;
     if (report.findingCount > report.findings.size()) return false;
     if (report.status == AirspaceGuardStatus::InvalidPolicy) {
         return report.findingCount == 0U && report.framesAvailable == 0U &&
@@ -187,9 +190,17 @@ bool AirspaceGuardController::validateReport(
         report.framesInspected > attempted ||
         report.sourceReadFailures > attempted ||
         report.framesInspected + report.sourceReadFailures != attempted ||
+        (mergedInspectionBudget &&
+         (report.inspectionTruncated ||
+          report.bleAdvertisementRecords == 0U ||
+          report.framesInspected + report.sourceReadFailures <=
+              report.bleAdvertisementRecords)) ||
         report.disconnectFrames > report.framesInspected ||
         report.identityAdvertisementFrames > report.framesInspected ||
         report.bleAdvertisementRecords > report.framesInspected ||
+        report.disconnectFrames > sourceInspectionCapacity ||
+        report.identityAdvertisementFrames > sourceInspectionCapacity ||
+        report.bleAdvertisementRecords > sourceInspectionCapacity ||
         report.wifiNoiseSamplesAvailable >
             services::guard::kWifiNoiseFloorLiveRetentionCapacity ||
         report.wifiNoiseSamplesObserved <
@@ -378,7 +389,7 @@ bool AirspaceGuardController::validateReport(
                 evidence.monotonicUs > finding.lastUs ||
                 (finding.kind == AirspaceFindingKind::WifiElevatedNoise
                      ? evidence.frameIndex >= report.sourceFramesObserved
-                     : evidence.frameIndex >= attempted) ||
+                     : evidence.frameIndex >= evidenceInspectionCapacity) ||
                 (finding.kind == AirspaceFindingKind::BleTrackerPresence
                      ? evidence.channel != 0U
                      : (evidence.channel == 0U || evidence.channel > 14U)) ||
