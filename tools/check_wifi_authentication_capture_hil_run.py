@@ -14,6 +14,7 @@ from esp_app_identity import app_elf_sha256
 
 
 SCHEMA = "leshy.wifi.authentication_capture_hil.run.v1"
+AUTH_SCHEMA = "leshy.wifi.authentication_capture.v1"
 AUTH_HOLD_SCHEMA = "leshy.wifi.authentication.hil_hold.v1"
 RUNNER = Path(__file__).with_name("run_1x_wifi_authentication_capture_hil.py")
 BOARD_ID = "board-01"
@@ -36,6 +37,9 @@ STATUS_Y1 = 26
 CAPTURE_DURATION_MS = 10_000
 CAPTURE_TERMINAL_SLACK_US = 2_500_000
 AUTH_HOLD_TIMEOUT_MS = 1_500
+AUTH_HOLD_ACK_TIMEOUT_MS = 250.0
+AUTH_HOLD_STATE_TIMEOUT_MS = 250.0
+AUTH_HOLD_NAV_ACK_TIMEOUT_MS = 250.0
 AUTH_FAILURE_STAGES = frozenset({
     "admission", "capture_begin", "event_loop_create", "wifi_init",
     "set_storage", "set_mode", "wifi_start", "set_channel",
@@ -88,7 +92,8 @@ def non_negative_integer(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
-def verify_wifi_menu_ready(failures: list[str], state: dict[str, Any]) -> None:
+def verify_wifi_menu_quiescent(failures: list[str],
+                               state: dict[str, Any]) -> None:
     require(failures,
             state.get("page") == "survey" and
             state.get("wifi_product_view") == "menu" and
@@ -97,16 +102,32 @@ def verify_wifi_menu_ready(failures: list[str], state: dict[str, Any]) -> None:
             state.get("survey_workflow_state") == "setup" and
             state.get("survey_product_backend_open") is False and
             state.get("survey_product_cleanup_complete") is True and
-            state.get("survey_product_worker_ready") is True and
             state.get("survey_product_source_active") is False and
             state.get("survey_product_scan_active") is False,
-            "Wi-Fi menu worker was not quiescent/ready before Networks")
+            "Wi-Fi menu was not quiescent before Networks")
 
 
 def verify_cancel_hold(failures: list[str], hold: dict[str, Any]) -> None:
     ack = hold.get("ack", {})
+    pre_arm_state = hold.get("pre_arm_state", {})
     armed_state = hold.get("armed_state", {})
     ack_received = hold.get("host_arm_ack_received")
+    pre_attempts = pre_arm_state.get("host_transport_attempts")
+    pre_retries = pre_arm_state.get("host_transport_transient_retries")
+    pre_errors = pre_arm_state.get("host_transport_transient_errors")
+    require(failures,
+            pre_arm_state.get("schema") == AUTH_SCHEMA and
+            pre_arm_state.get("kind") == "state" and
+            pre_arm_state.get("read_only_query") is True and
+            pre_arm_state.get("survey_terminal_hold_armed") is False and
+            isinstance(pre_attempts, int) and
+            not isinstance(pre_attempts, bool) and
+            1 <= pre_attempts <= 3 and
+            pre_retries == pre_attempts - 1 and
+            isinstance(pre_errors, list) and
+            len(pre_errors) == pre_retries and
+            all(isinstance(error, str) and error for error in pre_errors),
+            "read-only pre-arm state did not prove the hold inactive")
     require(failures,
             hold.get("host_arm_action_writes") == 1 and
             hold.get("host_arm_action_replays") == 0 and
@@ -125,22 +146,73 @@ def verify_cancel_hold(failures: list[str], hold: dict[str, Any]) -> None:
                 ack.get("hardware_touched") is False and
                 ack.get("radio_started") is False and
                 ack.get("storage_mounted") is False and
-                ack.get("storage_written") is False,
+                ack.get("storage_written") is False and
+                "host_arm_ack_error" not in hold,
                 "survey-stop hold ACK contract mismatch")
     else:
         require(failures,
+                ack == {} and
                 isinstance(hold.get("host_arm_ack_error"), str) and
                 bool(hold.get("host_arm_ack_error")),
-                "lost hold ACK has no retained error")
+                "lost hold ACK has contradictory data or no retained error")
     require(failures,
-            armed_state.get("survey_terminal_hold_armed") is True,
-            "read-only auth state did not prove the one-shot hold armed")
+            armed_state.get("schema") == AUTH_SCHEMA and
+            armed_state.get("kind") == "state" and
+            armed_state.get("read_only_query") is True and
+            armed_state.get("survey_terminal_hold_armed") is True and
+            armed_state.get("host_transport_attempts") == 1 and
+            armed_state.get("host_transport_transient_retries") == 0 and
+            armed_state.get("host_transport_transient_errors") == [],
+            "exact read-only auth state did not prove the one-shot hold armed")
+    arm_elapsed = hold.get("host_arm_elapsed_ms")
+    require(failures,
+            hold.get("host_arm_ack_timeout_ms") ==
+                AUTH_HOLD_ACK_TIMEOUT_MS and
+            hold.get("host_arm_state_timeout_ms") ==
+                AUTH_HOLD_STATE_TIMEOUT_MS and
+            isinstance(arm_elapsed, (int, float)) and
+            not isinstance(arm_elapsed, bool) and
+            0 <= arm_elapsed < AUTH_HOLD_TIMEOUT_MS,
+            "survey-stop hold host recovery budget was not bounded")
     elapsed = hold.get("host_back_after_arm_ms")
     require(failures,
             isinstance(elapsed, (int, float)) and
             not isinstance(elapsed, bool) and
-            0 <= elapsed < AUTH_HOLD_TIMEOUT_MS,
+            isinstance(arm_elapsed, (int, float)) and
+            0 <= arm_elapsed <= elapsed < AUTH_HOLD_TIMEOUT_MS,
             "Back was not sent inside the bounded survey-stop hold")
+
+
+def verify_bounded_hold_navigation(
+        failures: list[str], record: dict[str, Any], action_name: str,
+        label: str) -> None:
+    ack_received = record.get("host_navigation_ack_received")
+    write_elapsed = record.get("host_navigation_write_after_arm_ms")
+    require(failures,
+            record.get("host_navigation_action") == action_name and
+            record.get("host_navigation_action_writes") == 1 and
+            record.get("host_navigation_action_replays") == 0 and
+            record.get("host_navigation_ack_timeout_ms") ==
+                AUTH_HOLD_NAV_ACK_TIMEOUT_MS and
+            isinstance(ack_received, bool) and
+            isinstance(write_elapsed, (int, float)) and
+            not isinstance(write_elapsed, bool) and
+            0 <= write_elapsed < AUTH_HOLD_TIMEOUT_MS,
+            f"{label}: one-shot navigation timing/accounting mismatch")
+    if ack_received is True:
+        require(failures,
+                record.get("schema") == "leshy.ui.v1" and
+                record.get("kind") == "state" and
+                record.get("action") == action_name and
+                "host_navigation_ack_error" not in record,
+                f"{label}: received ACK does not match the exact action")
+    else:
+        require(failures,
+                isinstance(record.get("host_navigation_ack_error"), str) and
+                bool(record.get("host_navigation_ack_error")) and
+                "schema" not in record and "kind" not in record and
+                "action" not in record and "changed" not in record,
+                f"{label}: lost ACK retained contradictory UI state")
 
 
 def verify_start_failure_diagnostics(
@@ -716,7 +788,7 @@ def main() -> int:
     verify_boot_and_recovery(
         failures, run, candidate.get("app_elf_sha256"),
         args.expected_version, args.expected_cid)
-    verify_wifi_menu_ready(failures, run.get("wifi_menu_ready", {}))
+    verify_wifi_menu_quiescent(failures, run.get("wifi_menu_ready", {}))
 
     cancel_list = run.get("cancel_network_list", {})
     cancel_detail_ui = run.get("cancel_network_detail_ui", {})
@@ -731,6 +803,7 @@ def main() -> int:
     require(failures,
             cancel_list.get("wifi_product_view") == "networks" and
             cancel_list.get("survey_workflow_state") == "running" and
+            cancel_list.get("survey_product_worker_ready") is True and
             cancel_list.get("survey_scan_status") == "valid" and
             cancel_list.get("survey_scan_dropped") == 0 and
             cancel_list.get("runtime_owner") == "wifi" and
@@ -744,18 +817,41 @@ def main() -> int:
             cancel_detail.get("active_probe_allowed") is False,
             "cancel preflight NetworkDetail proof mismatch")
     verify_cancel_hold(failures, cancel_hold)
+    verify_bounded_hold_navigation(
+        failures, cancel_requested_ui, "right", "cancel request")
+    verify_bounded_hold_navigation(
+        failures, cancel_back_ui, "left", "cancel Back")
+    require(failures,
+            cancel_hold.get("host_back_after_arm_ms") ==
+                cancel_back_ui.get("host_navigation_write_after_arm_ms") and
+            isinstance(cancel_requested_ui.get(
+                "host_navigation_write_after_arm_ms"), (int, float)) and
+            isinstance(cancel_back_ui.get(
+                "host_navigation_write_after_arm_ms"), (int, float)) and
+            cancel_requested_ui["host_navigation_write_after_arm_ms"] <=
+                cancel_back_ui["host_navigation_write_after_arm_ms"],
+            "cancel Right/Back write chronology mismatch")
     cancel_generation = cancel_pending.get("generation")
+    if cancel_requested_ui.get("host_navigation_ack_received") is True:
+        require(failures,
+                cancel_requested_ui.get("wifi_product_view") ==
+                    "authentication_capture" and
+                cancel_requested_ui.get("runtime_event") ==
+                    "authentication_waiting_for_survey_stop",
+                "cancel Right ACK did not prove waiting_for_survey_stop")
+    if cancel_back_ui.get("host_navigation_ack_received") is True:
+        require(failures,
+                cancel_back_ui.get("wifi_product_view") ==
+                    "authentication_capture" and
+                cancel_back_ui.get("runtime_event") ==
+                    "authentication_back_waiting_for_survey_stop" and
+                cancel_back_ui.get("runtime_owner") == "wifi" and
+                cancel_back_ui.get("lease_mask") == 15 and
+                cancel_back_ui.get("changed") is True,
+                "cancel Back ACK did not prove the waiting-state latch")
     require(failures,
-            cancel_requested_ui.get("wifi_product_view") ==
-                "authentication_capture" and
-            cancel_requested_ui.get("runtime_event") ==
-                "authentication_waiting_for_survey_stop" and
             non_negative_integer(cancel_generation) and cancel_generation != 0,
-            "cancel ACK did not prove waiting_for_survey_stop")
-    require(failures,
-            cancel_back_ui.get("action") == "left" and
-            cancel_back_ui.get("changed") is True,
-            "Back-during-wait action was not acknowledged")
+            "cancel lifecycle has no nonzero generation")
     require(failures,
             cancel_pending.get("generation") == cancel_generation and
             cancel_pending.get("back_during_wait_observed") is True and
@@ -797,6 +893,7 @@ def main() -> int:
             network_list.get("wifi_product_view") == "networks" and
             network_list.get("runtime_owner") == "wifi" and
             network_list.get("lease_mask") == 15 and
+            network_list.get("survey_product_worker_ready") is True and
             network_list.get("survey_product_status") == "running" and
             network_list.get("survey_product_active_source_mask") == 1 and
             network_list.get("survey_scan_status") == "valid" and

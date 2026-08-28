@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from capture_1x_ui import PassiveSerial, synchronize_console
+from capture_1x_ui import PassiveSerial, read_json, synchronize_console
 from esp_app_identity import app_elf_sha256
 from run_1x_airspace_guard_hil import (
     action,
@@ -66,6 +66,9 @@ STATUS_Y1 = 26
 CAPTURE_DURATION_MS = 10_000
 CAPTURE_TERMINAL_SLACK_US = 2_500_000
 AUTH_HOLD_TIMEOUT_MS = 1_500
+AUTH_HOLD_ACK_TIMEOUT_S = 0.250
+AUTH_HOLD_STATE_TIMEOUT_S = 0.250
+AUTH_HOLD_NAV_ACK_TIMEOUT_S = 0.250
 AUTH_FAILURE_STAGES = frozenset({
     "admission", "capture_begin", "event_loop_create", "wifi_init",
     "set_storage", "set_mode", "wifi_start", "set_channel",
@@ -274,8 +277,8 @@ def wait_auth_state(device: PassiveSerial,
     raise TimeoutError(f"{description}: last state {last!r}")
 
 
-def wifi_menu_worker_ready(state: dict[str, Any]) -> bool:
-    """Require a quiescent, reusable survey worker before opening Networks."""
+def wifi_menu_quiescent(state: dict[str, Any]) -> bool:
+    """Require idle Wi-Fi menu state before its eager worker is snapshotted."""
     return (
         state.get("page") == "survey" and
         state.get("wifi_product_view") == "menu" and
@@ -284,19 +287,24 @@ def wifi_menu_worker_ready(state: dict[str, Any]) -> bool:
         state.get("survey_workflow_state") == "setup" and
         state.get("survey_product_backend_open") is False and
         state.get("survey_product_cleanup_complete") is True and
-        state.get("survey_product_worker_ready") is True and
         state.get("survey_product_source_active") is False and
         state.get("survey_product_scan_active") is False
     )
 
 
 def arm_authentication_survey_stop_hold(
-        device: PassiveSerial) -> dict[str, Any]:
+        device: PassiveSerial,
+        pre_arm_state: dict[str, Any]) -> dict[str, Any]:
     """Arm the HIL-only hold exactly once; never replay a lost mutation ACK."""
+    require_exact(pre_arm_state, {
+        "schema": AUTH_SCHEMA, "kind": "state", "read_only_query": True,
+        "survey_terminal_hold_armed": False,
+    }, "authentication_hil_hold_pre_arm")
+    arm_started_at = time.monotonic()
     try:
         ack = query(
             device, AUTH_HOLD_COMMAND, AUTH_HOLD_SCHEMA, "armed",
-            timeout=5.0)
+            timeout=AUTH_HOLD_ACK_TIMEOUT_S)
         ack_received = True
         ack_error = ""
     except TimeoutError as error:
@@ -304,13 +312,22 @@ def arm_authentication_survey_stop_hold(
         ack_received = False
         ack_error = str(error)
 
-    armed_state = auth_state(device)
+    # A lost mutation ACK must still leave enough of the firmware's 1.5 s hold
+    # for a read-only proof and the immediately following Back action.  Do not
+    # retry either command inside this time-critical one-shot boundary.
+    armed_state = read_only_query(
+        device, b"wifi.authentication.state", AUTH_SCHEMA, "state",
+        timeout=AUTH_HOLD_STATE_TIMEOUT_S, maximum_attempts=1)
     record: dict[str, Any] = {
         "ack": ack,
+        "pre_arm_state": pre_arm_state,
         "armed_state": armed_state,
         "host_arm_action_writes": 1,
         "host_arm_action_replays": 0,
         "host_arm_ack_received": ack_received,
+        "host_arm_ack_timeout_ms": AUTH_HOLD_ACK_TIMEOUT_S * 1000.0,
+        "host_arm_state_timeout_ms": AUTH_HOLD_STATE_TIMEOUT_S * 1000.0,
+        "host_arm_elapsed_ms": (time.monotonic() - arm_started_at) * 1000.0,
     }
     if not ack_received:
         record["host_arm_ack_error"] = ack_error
@@ -328,6 +345,53 @@ def arm_authentication_survey_stop_hold(
     if armed_state.get("survey_terminal_hold_armed") is not True:
         raise RuntimeError(
             "authentication HIL hold was not armed after the one host write")
+    return record
+
+
+def read_expected_ui_action_ack(
+        device: PassiveSerial, action_name: str, timeout: float,
+        semantic_predicate: Callable[[dict[str, Any]], bool]) -> dict[str, Any]:
+    """Ignore a delayed previous UI ACK and return only this action's ACK."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        state = read_json(
+            device, UI_SCHEMA, "state",
+            timeout=max(0.001, deadline - time.monotonic()))
+        if (state.get("action") == action_name and
+                semantic_predicate(state)):
+            return state
+    raise TimeoutError(f"timed out waiting for ui.key {action_name} ACK")
+
+
+def bounded_hold_navigation(device: PassiveSerial, action_name: str,
+                            hold_armed_at: float,
+                            semantic_predicate: Callable[
+                                [dict[str, Any]], bool]) -> dict[str, Any]:
+    """Write one time-critical key once and never delay/replay on lost ACK."""
+    device.write(f"ui.key {action_name}\n".encode("ascii"))
+    device.flush()
+    write_after_arm_ms = (time.monotonic() - hold_armed_at) * 1000.0
+    try:
+        record = read_expected_ui_action_ack(
+            device, action_name, AUTH_HOLD_NAV_ACK_TIMEOUT_S,
+            semantic_predicate)
+        ack_received = True
+        ack_error = ""
+    except TimeoutError as error:
+        record = {}
+        ack_received = False
+        ack_error = str(error)
+    record.update({
+        "host_navigation_action": action_name,
+        "host_navigation_action_writes": 1,
+        "host_navigation_action_replays": 0,
+        "host_navigation_ack_received": ack_received,
+        "host_navigation_ack_timeout_ms":
+            AUTH_HOLD_NAV_ACK_TIMEOUT_S * 1000.0,
+        "host_navigation_write_after_arm_ms": write_after_arm_ms,
+    })
+    if not ack_received:
+        record["host_navigation_ack_error"] = ack_error
     return record
 
 
@@ -597,12 +661,14 @@ def enter_network_detail(
         lambda state: (
             state.get("wifi_product_view") == "networks" and
             state.get("survey_workflow_state") == "running" and
+            state.get("survey_product_worker_ready") is True and
             state.get("wifi_networks_strongest_first") is True and
             int(state.get("wifi_networks_unique", 0)) >= 1 and
             int(state.get("survey_product_wifi_scan_cycles", 0)) >= 1
         ), 45.0, f"{label}: nearby Wi-Fi network did not appear")
     require_exact(network_list, {
         "runtime_owner": "wifi", "lease_mask": 15,
+        "survey_product_worker_ready": True,
         "survey_product_status": "running",
         "survey_product_active_source_mask": 1,
         "survey_scan_status": "valid", "survey_scan_dropped": 0,
@@ -831,31 +897,61 @@ def main() -> int:
                     "lease_mask": 15,
                 }, "wifi_menu")
                 wifi_menu_ready_state = wait_ui_state(
-                    device, wifi_menu_worker_ready, 15.0,
-                    "Wi-Fi menu survey worker did not become quiescent/ready")
+                    device, wifi_menu_quiescent, 15.0,
+                    "Wi-Fi menu did not become quiescent before Networks")
                 # First prove the highest-risk lifecycle edge: Back while the
                 # shared survey worker is still stopping must not start a
                 # capture and must return to an entirely quiescent Wi-Fi menu.
                 (cancel_network_list, cancel_network_detail_ui,
                  cancel_network_detail) = enter_network_detail(
                     device, trace, "cancel")
+                hold_pre_arm_state = auth_state(device)
                 hold_armed_at = time.monotonic()
-                cancel_hold = arm_authentication_survey_stop_hold(device)
-                cancel_requested_ui = action(device, "right")
+                cancel_hold = arm_authentication_survey_stop_hold(
+                    device, hold_pre_arm_state)
+                cancel_requested_ui = bounded_hold_navigation(
+                    device, "right", hold_armed_at,
+                    lambda state: (
+                        state.get("wifi_product_view") ==
+                            "authentication_capture" and
+                        state.get("runtime_event") ==
+                            "authentication_waiting_for_survey_stop" and
+                        state.get("runtime_owner") == "wifi" and
+                        state.get("lease_mask") == 15))
                 trace.append(cancel_requested_ui)
-                require_exact(cancel_requested_ui, {
-                    "wifi_product_view": "authentication_capture",
-                    "runtime_event": "authentication_waiting_for_survey_stop",
-                    "runtime_owner": "wifi", "lease_mask": 15,
-                }, "cancel_requested_ui")
-                # The acknowledgement above is the waiting-state oracle.  Do
-                # not insert a read here: the worker may legitimately finish
-                # between two serial replies.  The bounded HIL hold makes the
-                # immediately following Back deterministic.
-                cancel_back_ui = action(device, "left")
+                if cancel_requested_ui.get(
+                        "host_navigation_ack_received") is True:
+                    require_exact(cancel_requested_ui, {
+                        "wifi_product_view": "authentication_capture",
+                        "runtime_event":
+                            "authentication_waiting_for_survey_stop",
+                        "runtime_owner": "wifi", "lease_mask": 15,
+                    }, "cancel_requested_ui")
+                # Do not insert another read here: a lost Right ACK must not
+                # consume the 1.5 s hold.  The later read-only state proves both
+                # one-shot keys even when either transport ACK was lost.
+                cancel_back_ui = bounded_hold_navigation(
+                    device, "left", hold_armed_at,
+                    lambda state: (
+                        state.get("wifi_product_view") ==
+                            "authentication_capture" and
+                        state.get("runtime_event") ==
+                            "authentication_back_waiting_for_survey_stop" and
+                        state.get("runtime_owner") == "wifi" and
+                        state.get("lease_mask") == 15 and
+                        state.get("changed") is True))
                 trace.append(cancel_back_ui)
-                cancel_hold["host_back_after_arm_ms"] = (
-                    time.monotonic() - hold_armed_at) * 1000.0
+                if cancel_back_ui.get(
+                        "host_navigation_ack_received") is True:
+                    require_exact(cancel_back_ui, {
+                        "wifi_product_view": "authentication_capture",
+                        "runtime_event":
+                            "authentication_back_waiting_for_survey_stop",
+                        "runtime_owner": "wifi", "lease_mask": 15,
+                        "changed": True,
+                    }, "cancel_back_ui")
+                cancel_hold["host_back_after_arm_ms"] = cancel_back_ui[
+                    "host_navigation_write_after_arm_ms"]
                 if cancel_hold["host_back_after_arm_ms"] >= \
                         AUTH_HOLD_TIMEOUT_MS:
                     raise RuntimeError(

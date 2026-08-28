@@ -11,11 +11,12 @@ import types
 import unittest
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 capture_stub = types.ModuleType("capture_1x_ui")
 capture_stub.PassiveSerial = object
+capture_stub.read_json = lambda *_args, **_kwargs: {}
 capture_stub.synchronize_console = lambda *_args, **_kwargs: None
 sys.modules.setdefault("capture_1x_ui", capture_stub)
 
@@ -92,24 +93,42 @@ def terminal_state(outcome: str = "inconclusive") -> dict[str, Any]:
     }
 
 
+def armed_auth_state(armed: bool = True) -> dict[str, Any]:
+    return {
+        "schema": RUNNER.AUTH_SCHEMA,
+        "kind": "state",
+        "read_only_query": True,
+        "survey_terminal_hold_armed": armed,
+        "host_transport_attempts": 1,
+        "host_transport_transient_retries": 0,
+        "host_transport_transient_errors": [],
+    }
+
+
 class WifiAuthenticationCaptureHilTests(unittest.TestCase):
-    def test_wifi_menu_preflight_requires_quiescent_ready_worker(self) -> None:
+    def test_wifi_menu_preflight_accepts_unsnapshotted_worker_but_quiesces(
+            self) -> None:
         state = {
             "page": "survey", "wifi_product_view": "menu",
             "runtime_owner": "wifi", "lease_mask": 15,
             "survey_workflow_state": "setup",
             "survey_product_backend_open": False,
             "survey_product_cleanup_complete": True,
-            "survey_product_worker_ready": True,
+            "survey_product_worker_ready": False,
             "survey_product_source_active": False,
             "survey_product_scan_active": False,
         }
-        self.assertTrue(RUNNER.wifi_menu_worker_ready(state))
+        self.assertTrue(RUNNER.wifi_menu_quiescent(state))
         failures: list[str] = []
-        CHECKER.verify_wifi_menu_ready(failures, state)
+        CHECKER.verify_wifi_menu_quiescent(failures, state)
+        self.assertEqual([], failures)
+        initialized = dict(state)
+        initialized["survey_product_worker_ready"] = True
+        self.assertTrue(RUNNER.wifi_menu_quiescent(initialized))
+        failures = []
+        CHECKER.verify_wifi_menu_quiescent(failures, initialized)
         self.assertEqual([], failures)
         for name, value in (
-                ("survey_product_worker_ready", False),
                 ("survey_product_source_active", True),
                 ("survey_product_cleanup_complete", False),
                 ("survey_product_backend_open", True),
@@ -117,10 +136,20 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
             with self.subTest(name=name):
                 changed = dict(state)
                 changed[name] = value
-                self.assertFalse(RUNNER.wifi_menu_worker_ready(changed))
+                self.assertFalse(RUNNER.wifi_menu_quiescent(changed))
                 failures = []
-                CHECKER.verify_wifi_menu_ready(failures, changed)
+                CHECKER.verify_wifi_menu_quiescent(failures, changed)
                 self.assertTrue(failures)
+
+    def test_network_list_requires_eager_worker_runtime_snapshot(self) -> None:
+        source = Path(RUNNER.__file__).read_text(encoding="utf-8")
+        checker = Path(CHECKER.__file__).read_text(encoding="utf-8")
+        self.assertIn(
+            'state.get("survey_product_worker_ready") is True', source)
+        self.assertIn(
+            'cancel_list.get("survey_product_worker_ready") is True', checker)
+        self.assertIn(
+            'network_list.get("survey_product_worker_ready") is True', checker)
 
     def test_one_shot_hold_has_exact_non_replayed_bounded_contract(self) -> None:
         ack = {
@@ -132,11 +161,17 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
             "storage_written": False,
         }
         with patch.object(RUNNER, "query", return_value=ack) as mutate, \
-                patch.object(RUNNER, "auth_state", return_value={
-                    "survey_terminal_hold_armed": True,
-                }):
-            hold = RUNNER.arm_authentication_survey_stop_hold(object())
+                patch.object(RUNNER, "read_only_query",
+                             return_value=armed_auth_state()) as prove:
+            hold = RUNNER.arm_authentication_survey_stop_hold(
+                object(), armed_auth_state(False))
         self.assertEqual(1, mutate.call_count)
+        self.assertEqual(RUNNER.AUTH_HOLD_ACK_TIMEOUT_S,
+                         mutate.call_args.kwargs["timeout"])
+        self.assertEqual(1, prove.call_count)
+        self.assertEqual(RUNNER.AUTH_HOLD_STATE_TIMEOUT_S,
+                         prove.call_args.kwargs["timeout"])
+        self.assertEqual(1, prove.call_args.kwargs["maximum_attempts"])
         self.assertEqual(1, hold["host_arm_action_writes"])
         self.assertEqual(0, hold["host_arm_action_replays"])
         hold["host_back_after_arm_ms"] = 20.0
@@ -149,19 +184,34 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
         failures = []
         CHECKER.verify_cancel_hold(failures, replayed)
         self.assertTrue(failures)
+        contradictory_ack = copy.deepcopy(hold)
+        contradictory_ack["host_arm_ack_error"] = "impossible"
+        failures = []
+        CHECKER.verify_cancel_hold(failures, contradictory_ack)
+        self.assertTrue(failures)
         timed_out = copy.deepcopy(hold)
         timed_out["host_back_after_arm_ms"] = RUNNER.AUTH_HOLD_TIMEOUT_MS
         failures = []
         CHECKER.verify_cancel_hold(failures, timed_out)
         self.assertTrue(failures)
+        for field, value in (
+                ("host_arm_ack_timeout_ms", 5_000.0),
+                ("host_arm_state_timeout_ms", 5_000.0),
+                ("host_arm_elapsed_ms", RUNNER.AUTH_HOLD_TIMEOUT_MS)):
+            with self.subTest(field=field):
+                unbounded = copy.deepcopy(hold)
+                unbounded[field] = value
+                failures = []
+                CHECKER.verify_cancel_hold(failures, unbounded)
+                self.assertTrue(failures)
 
     def test_lost_hold_ack_is_never_replayed_and_requires_state_proof(self) -> None:
         with patch.object(
                 RUNNER, "query", side_effect=TimeoutError("lost ack")) as mutate, \
-                patch.object(RUNNER, "auth_state", return_value={
-                    "survey_terminal_hold_armed": True,
-                }):
-            hold = RUNNER.arm_authentication_survey_stop_hold(object())
+                patch.object(RUNNER, "read_only_query",
+                             return_value=armed_auth_state()):
+            hold = RUNNER.arm_authentication_survey_stop_hold(
+                object(), armed_auth_state(False))
         self.assertEqual(1, mutate.call_count)
         self.assertFalse(hold["host_arm_ack_received"])
         self.assertIn("lost ack", hold["host_arm_ack_error"])
@@ -169,13 +219,91 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
         failures: list[str] = []
         CHECKER.verify_cancel_hold(failures, hold)
         self.assertEqual([], failures)
+        contradictory = copy.deepcopy(hold)
+        contradictory["ack"] = {"replayed": True}
+        failures = []
+        CHECKER.verify_cancel_hold(failures, contradictory)
+        self.assertTrue(failures)
 
         with patch.object(RUNNER, "query", side_effect=TimeoutError("lost")), \
-                patch.object(RUNNER, "auth_state", return_value={
-                    "survey_terminal_hold_armed": False,
-                }):
+                patch.object(RUNNER, "read_only_query",
+                             return_value=armed_auth_state(False)):
             with self.assertRaisesRegex(RuntimeError, "was not armed"):
-                RUNNER.arm_authentication_survey_stop_hold(object())
+                RUNNER.arm_authentication_survey_stop_hold(
+                    object(), armed_auth_state(False))
+
+        with self.assertRaisesRegex(
+                RuntimeError, "authentication_hil_hold_pre_arm"):
+            RUNNER.arm_authentication_survey_stop_hold(
+                object(), armed_auth_state(True))
+
+    def test_time_critical_navigation_is_one_write_and_bounded(self) -> None:
+        device = MagicMock()
+        ack = {
+            "schema": RUNNER.UI_SCHEMA, "kind": "state",
+            "action": "right", "changed": True,
+        }
+        armed_at = RUNNER.time.monotonic()
+        with patch.object(RUNNER, "read_expected_ui_action_ack",
+                          return_value=ack) as receive:
+            record = RUNNER.bounded_hold_navigation(
+                device, "right", armed_at, lambda _state: True)
+        device.write.assert_called_once_with(b"ui.key right\n")
+        device.flush.assert_called_once_with()
+        self.assertEqual(RUNNER.AUTH_HOLD_NAV_ACK_TIMEOUT_S,
+                         receive.call_args.args[2])
+        failures: list[str] = []
+        CHECKER.verify_bounded_hold_navigation(
+            failures, record, "right", "test")
+        self.assertEqual([], failures)
+        contradictory_ack = copy.deepcopy(record)
+        contradictory_ack["host_navigation_ack_error"] = "impossible"
+        failures = []
+        CHECKER.verify_bounded_hold_navigation(
+            failures, contradictory_ack, "right", "contradictory ACK")
+        self.assertTrue(failures)
+
+        device = MagicMock()
+        with patch.object(RUNNER, "read_expected_ui_action_ack",
+                          side_effect=TimeoutError("lost right")):
+            lost = RUNNER.bounded_hold_navigation(
+                device, "right", RUNNER.time.monotonic(),
+                lambda _state: True)
+        self.assertFalse(lost["host_navigation_ack_received"])
+        self.assertEqual(1, lost["host_navigation_action_writes"])
+        self.assertEqual(0, lost["host_navigation_action_replays"])
+        failures = []
+        CHECKER.verify_bounded_hold_navigation(
+            failures, lost, "right", "lost")
+        self.assertEqual([], failures)
+        lost["action"] = "right"
+        failures = []
+        CHECKER.verify_bounded_hold_navigation(
+            failures, lost, "right", "contradictory")
+        self.assertTrue(failures)
+
+    def test_bounded_ack_reader_skips_same_action_stale_semantics(self) -> None:
+        stale = {
+            "schema": RUNNER.UI_SCHEMA, "kind": "state",
+            "action": "right", "wifi_product_view": "network_detail",
+            "runtime_event": "wifi_network_detail",
+        }
+        current = {
+            "schema": RUNNER.UI_SCHEMA, "kind": "state",
+            "action": "right",
+            "wifi_product_view": "authentication_capture",
+            "runtime_event": "authentication_waiting_for_survey_stop",
+        }
+        expected = lambda state: (
+            state.get("wifi_product_view") == "authentication_capture" and
+            state.get("runtime_event") ==
+                "authentication_waiting_for_survey_stop")
+        with patch.object(RUNNER, "read_json",
+                          side_effect=(stale, current)) as receive:
+            actual = RUNNER.read_expected_ui_action_ack(
+                object(), "right", 0.25, expected)
+        self.assertEqual(current, actual)
+        self.assertEqual(2, receive.call_count)
 
     def test_start_wait_accepts_all_terminal_start_observations(self) -> None:
         for state in ("running", "result", "failed"):

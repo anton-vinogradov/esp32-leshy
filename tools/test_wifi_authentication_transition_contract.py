@@ -121,7 +121,7 @@ class WifiAuthenticationTransitionContractTests(unittest.TestCase):
         self.assertTrue(any("timeout" in item for item in failures))
 
     def test_stable_waiting_query_before_back_is_rejected(self) -> None:
-        marker = 'cancel_back_ui = action(device, "left")'
+        marker = 'cancel_back_ui = bounded_hold_navigation('
         self.assertIn(marker, self.runner)
         runner = self.runner.replace(
             marker,
@@ -130,6 +130,14 @@ class WifiAuthenticationTransitionContractTests(unittest.TestCase):
             1)
         failures = self.failures(runner=runner)
         self.assertTrue(any("stable transitional" in item
+                            for item in failures))
+
+    def test_semantic_ack_filter_bypass_is_rejected(self) -> None:
+        runner = self.runner.replace(
+            "semantic_predicate(state)", "True", 1)
+        self.assertNotEqual(runner, self.runner)
+        failures = self.failures(runner=runner)
+        self.assertTrue(any("semantic_predicate" in item
                             for item in failures))
 
     def test_stable_waiting_query_before_running_is_rejected(self) -> None:

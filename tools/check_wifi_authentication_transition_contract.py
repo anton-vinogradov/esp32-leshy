@@ -226,10 +226,9 @@ def check_sources(
             f"test-only authentication hold leaked into {name} RF adapter",
         )
 
-    # The UI action acknowledgement is the proof that Waiting was entered.
-    # Waiting is transitional: a subsequent read-only query may legitimately
-    # see Running/Failed, so the runner must send Back immediately in the held
-    # edge and wait for Running directly in the normal edge.
+    # Waiting is transitional.  In the held edge the runner must write Right
+    # and Back exactly once inside the firmware deadline even if either ACK is
+    # lost; the following read-only auth state is the semantic oracle.
     require(
         failures,
         'b"wifi.authentication.hil-hold-survey-stoponce"' in runner_compact,
@@ -245,8 +244,24 @@ def check_sources(
         require(failures, marker in runner_compact,
                 f"runner does not retain exact waiting acknowledgement: {marker}")
 
-    cancel_start = runner.find("cancel_requested_ui = action(device, \"right\")")
-    cancel_back = runner.find("cancel_back_ui = action(device, \"left\")",
+    for marker in (
+        "AUTH_HOLD_NAV_ACK_TIMEOUT_S=0.250",
+        "defbounded_hold_navigation(",
+        'device.write(f"ui.key{action_name}\\n".encode("ascii"))',
+        '"host_navigation_action_writes":1',
+        '"host_navigation_action_replays":0',
+        '"host_navigation_write_after_arm_ms":write_after_arm_ms',
+        "semantic_predicate(state)",
+        "hold_pre_arm_state=auth_state(device)",
+        '"survey_terminal_hold_armed":False',
+    ):
+        require(failures, marker in runner_compact,
+                f"held navigation lost bounded/no-replay marker: {marker}")
+
+    cancel_start = runner.find(
+        "cancel_requested_ui = bounded_hold_navigation(")
+    cancel_back = runner.find(
+        "cancel_back_ui = bounded_hold_navigation(",
                               max(cancel_start, 0))
     cancel_window = (runner[cancel_start:cancel_back]
                      if cancel_start >= 0 and cancel_back > cancel_start else "")
