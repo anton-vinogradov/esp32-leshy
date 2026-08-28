@@ -1020,6 +1020,7 @@ void testBleTrackerPresenceFailsClosedOnIncompleteEvidence() {
 }
 
 void testLiveBleRetentionKeepsCoverageThenAllTrackerRepeats() {
+    CHECK(sizeof(AirspaceGuardBleRetention) <= 2048U);
     AirspaceGuardBleRetention retention;
     BleFixtureSource fixture;
     fixture.add(kTransmitterA, 1000000ULL,

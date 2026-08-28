@@ -332,7 +332,7 @@ BleTrackerIngressStatus bleTrackerIngressStatus(
 }
 
 void AirspaceGuardBleRetention::reset() {
-    records_.fill(Observation{});
+    records_.fill(RetainedRecord{});
     stats_ = {};
     size_ = 0U;
 }
@@ -350,7 +350,13 @@ BleLiveRetentionDisposition AirspaceGuardBleRetention::accept(
     ++stats_.validAdvertisements;
     if (ingress == BleTrackerIngressStatus::CoverageAdvertisement) {
         if (size_ == 0U) {
-            records_[0] = observation;
+            RetainedRecord& retained = records_[0];
+            retained = {};
+            retained.monotonicUs = observation.monotonicUs;
+            retained.identity = observation.identity;
+            retained.rssiDbm = observation.rssiDbm;
+            retained.addressType =
+                observation.bleAdvertisement.addressType;
             size_ = 1U;
             stats_.recordsRetained = 1U;
             stats_.coverageOnly = true;
@@ -361,8 +367,23 @@ BleLiveRetentionDisposition AirspaceGuardBleRetention::accept(
     }
 
     ++stats_.trackerAdvertisements;
+    BleTrackerEvent incoming{};
+    if (decodeBleObservation(observation, &incoming, 0U) !=
+            BleObservationDecode::TrackerAdvertisement) {
+        ++stats_.malformedRecords;
+        return BleLiveRetentionDisposition::Malformed;
+    }
+    const auto retainIncoming = [&](std::size_t index) {
+        RetainedRecord& retained = records_[index];
+        retained = {};
+        retained.monotonicUs = incoming.monotonicUs;
+        retained.identity = incoming.identity;
+        retained.rssiDbm = incoming.rssiDbm;
+        retained.protocol = incoming.protocol;
+        retained.addressType = incoming.addressType;
+    };
     if (stats_.coverageOnly) {
-        records_[0] = observation;
+        retainIncoming(0U);
         stats_.coverageOnly = false;
         stats_.trackerAdvertisements = 1U;
         return BleLiveRetentionDisposition::Retained;
@@ -375,16 +396,12 @@ BleLiveRetentionDisposition AirspaceGuardBleRetention::accept(
     // live window. New identities still fail closed when total capacity is
     // exhausted.
     std::size_t matchingRepeats = 0U;
-    BleTrackerEvent incoming{};
-    if (decodeBleObservation(observation, &incoming, 0U) ==
-            BleObservationDecode::TrackerAdvertisement) {
-        for (std::size_t index = 0U; index < size_; ++index) {
-            BleTrackerEvent retained{};
-            if (decodeBleObservation(records_[index], &retained, index) ==
-                    BleObservationDecode::TrackerAdvertisement &&
-                sameBleTracker(incoming, retained)) {
-                ++matchingRepeats;
-            }
+    for (std::size_t index = 0U; index < size_; ++index) {
+        const RetainedRecord& retained = records_[index];
+        if (retained.protocol == incoming.protocol &&
+            retained.addressType == incoming.addressType &&
+            retained.identity == incoming.identity) {
+            ++matchingRepeats;
         }
     }
     if (matchingRepeats >= AirspaceFinding::kEvidenceCapacity) {
@@ -395,7 +412,7 @@ BleLiveRetentionDisposition AirspaceGuardBleRetention::accept(
         ++stats_.capacityDrops;
         return BleLiveRetentionDisposition::Full;
     }
-    records_[size_++] = observation;
+    retainIncoming(size_++);
     stats_.recordsRetained = size_;
     return BleLiveRetentionDisposition::Retained;
 }
@@ -403,7 +420,33 @@ BleLiveRetentionDisposition AirspaceGuardBleRetention::accept(
 bool AirspaceGuardBleRetention::observationAt(
     std::size_t index, Observation* output) const {
     if (output == nullptr || index >= size_) return false;
-    *output = records_[index];
+    const RetainedRecord& retained = records_[index];
+    *output = {};
+    output->monotonicUs = retained.monotonicUs;
+    output->radio = RadioKind::Ble;
+    output->rssiDbm = retained.rssiDbm;
+    output->identity = retained.identity;
+    output->identityLength = output->identity.size();
+    output->bleAdvertisement.present = true;
+    output->bleAdvertisement.addressType = retained.addressType;
+    output->bleAdvertisement.payloadLength = 1U;
+    switch (retained.protocol) {
+        case AirspaceBleTrackerProtocol::FindMy:
+            output->bleAdvertisement.companyKnown = true;
+            output->bleAdvertisement.companyId = 0x004cU;
+            output->bleAdvertisement.appleContinuityType = 0x12U;
+            break;
+        case AirspaceBleTrackerProtocol::SmartTag:
+            output->bleAdvertisement.knownServiceMask =
+                BleAdvertisementFacts::kServiceSmartTag;
+            break;
+        case AirspaceBleTrackerProtocol::Tile:
+            output->bleAdvertisement.knownServiceMask =
+                BleAdvertisementFacts::kServiceTile;
+            break;
+        case AirspaceBleTrackerProtocol::None:
+            break;
+    }
     return true;
 }
 

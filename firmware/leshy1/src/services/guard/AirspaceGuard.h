@@ -339,8 +339,18 @@ public:
     const AirspaceGuardBleRetentionStats& stats() const { return stats_; }
 
 private:
-    std::array<domain::observations::Observation,
-               kBleTrackerLiveRetentionCapacity> records_{};
+    // Keep only detector inputs. A full Observation is 144 bytes and retaining
+    // 64 of them starves the zero-PSRAM board when the BLE stack starts.
+    struct RetainedRecord final {
+        std::uint64_t monotonicUs = 0;
+        std::array<std::uint8_t, 6> identity{};
+        std::int16_t rssiDbm = 0;
+        AirspaceBleTrackerProtocol protocol =
+            AirspaceBleTrackerProtocol::None;
+        std::uint8_t addressType = 0xffU;
+    };
+
+    std::array<RetainedRecord, kBleTrackerLiveRetentionCapacity> records_{};
     AirspaceGuardBleRetentionStats stats_{};
     std::size_t size_ = 0;
 };
