@@ -189,7 +189,7 @@ receiver, calibrated range, historical Target tracking or proof of packet traffi
 
 | ID | 1.0 capability | Commitment | Requirements | Ready stage |
 |---|---|---|---|---|
-| CAP-048 | Airspace Guard passively detects and explains suspicious Wi-Fi/BLE conditions; every conclusion opens its source evidence and uncertainty | P1 | J-07, PR-020 | S7 |
+| CAP-048 | Airspace Guard passively detects and explains suspicious Wi-Fi/BLE conditions: disconnect bursts, identity conflicts/churn, sustained elevated Wi-Fi noise and tracker-compatible BLE presence; every conclusion opens its source evidence and uncertainty | P1 | J-07, PR-020 | S7 |
 | CAP-049 | Focused Wi-Fi authentication Capture identifies EAPOL/PMKID and complete/incomplete handshakes, then exports immutable PCAP and `hc22000` evidence | P1 | J-03, J-07, PR-015, PR-021 | S7 |
 | CAP-050 | Offline Field Survey joins Wi-Fi AP/station and BLE observations with optional GPS track, deduplication, revisit comparison, and WiGLE-compatible local export | P1, GPS conditional | J-01, J-07, PR-022 | S7 |
 | CAP-051 | BLE Inspector preserves compatible raw packets and offers an explicit permissioned connected-GATT mode with deterministic disconnect and provenance | P1 | J-02, J-07, PR-023 | S7 |

@@ -1020,6 +1020,18 @@ app/factory/ELF — 3 352 544/3 418 080/22 544 696 B
 Полный tracked host suite и production build проходят. Runtime heap/stack, radio
 cleanup и timing TFT не заявляются до physical HIL.
 
+Bounded индикатор Wi-Fi noise Защиты эфира `RB-M182`: exact
+`1.0.0-dev.222` добавляет восемь fixed normalized samples receive noise и их
+fail-closed accounting; новый task, radio owner, TX path или dynamic allocation не
+добавляются. Static RAM равна 235 680 B (+256 B), linked flash — 3 356 404 B
+(+4 356 B). Размеры app/factory/ELF — 3 356 912/3 422 448/22 567 052 B
+(+4 368/+4 368/+22 356 B). SHA-256 firmware/factory/ELF:
+`7a75b5db714eabf1eb730c50e64e34670a5cbad82905c4c50ebac38b2c2756b6`/
+`1341dd90ad7b7a7512cf963fabdacfa2c2b069cdfb68279e301d854fcab81024`/
+`b1103ab3499d684f553e41fcf146dd72a740b6d849cb6fe625cc60e9d9760b5d`.
+Полный tracked host suite и production build проходят. Runtime heap/stack, radio
+cleanup и timing TFT не заявляются до physical HIL.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

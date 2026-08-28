@@ -789,6 +789,18 @@ actual scan. The live BLE step repaints only its elapsed-time row between state
 changes. This adds no second task, stack or concurrent radio owner; physical TFT,
 radio-cleanup and negative-corpus evidence are still required.
 
+Exact `1.0.0-dev.222` adds the remaining bounded Wi-Fi loss/interference-adjacent
+signal without claiming a jammer detector. The passive adapter normalizes the
+official ESP32-S3 per-packet receive noise floor only when it is plausible
+(-85…-30 dBm), retains at most eight fixed samples without allocation, and may
+report a same-channel burst only after four samples at or above -75 dBm inside two
+seconds. The finding is always Low confidence, says possible interference and
+unknown cause, and cannot identify a transmitter or prove jamming. Missing samples
+or an absent finding are not evidence that no interference exists. Invalid, stale,
+split, malformed, capacity-lost or dropped evidence fails closed as incomplete and
+blocks the subsequent Wi-Fi→BLE handoff. The detector adds no TX or automatic
+response; physical TFT, cleanup and negative-corpus evidence remain required.
+
 ## 1.x implementation sequence
 
 1. Freeze the board capability/conflict map and reference workflows.

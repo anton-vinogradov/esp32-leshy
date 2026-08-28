@@ -870,6 +870,18 @@ BLE step между сменами состояния перерисовывае
 task, stack или параллельный radio owner не добавляются; physical evidence TFT,
 radio cleanup и negative corpus всё ещё нужны.
 
+Exact `1.0.0-dev.222` добавляет оставшийся bounded сигнал потери/
+interference-adjacent Wi-Fi, не выдавая его за detector глушилки. Passive adapter
+нормализует официальный per-packet receive noise floor ESP32-S3 только в
+правдоподобном диапазоне -85…-30 dBm, без allocation сохраняет не более восьми
+fixed samples и может сообщить same-channel burst только после четырёх samples не
+ниже -75 dBm за две секунды. Finding всегда имеет Low confidence, говорит лишь о
+возможной помехе и неизвестной причине, не идентифицирует передатчик и не доказывает
+глушение. Отсутствие samples или finding не доказывает отсутствие помех. Invalid,
+stale, split, malformed, потерянные по capacity или dropped evidence fail closed как
+incomplete и блокируют следующий handoff Wi-Fi→BLE. Detector не добавляет TX или
+automatic response; physical evidence TFT, cleanup и negative corpus всё ещё нужны.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;

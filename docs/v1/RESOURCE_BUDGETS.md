@@ -1026,6 +1026,18 @@ Firmware/factory/ELF SHA-256 are
 The complete tracked host suite and production build pass. Runtime heap/stack,
 radio cleanup and TFT timing remain unclaimed until physical HIL.
 
+Airspace Guard bounded Wi-Fi noise indicator `RB-M182`: exact
+`1.0.0-dev.222` adds eight fixed normalized receive-noise samples and their
+fail-closed accounting; it adds no task, radio owner, TX path or dynamic allocation.
+Static RAM is 235,680 B (+256 B) and linked flash is 3,356,404 B (+4,356 B).
+App/factory/ELF sizes are 3,356,912/3,422,448/22,567,052 B
+(+4,368/+4,368/+22,356 B). Firmware/factory/ELF SHA-256 are
+`7a75b5db714eabf1eb730c50e64e34670a5cbad82905c4c50ebac38b2c2756b6`/
+`1341dd90ad7b7a7512cf963fabdacfa2c2b069cdfb68279e301d854fcab81024`/
+`b1103ab3499d684f553e41fcf146dd72a740b6d849cb6fe625cc60e9d9760b5d`.
+The complete tracked host suite and production build pass. Runtime heap/stack,
+radio cleanup and TFT timing remain unclaimed until physical HIL.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

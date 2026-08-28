@@ -190,7 +190,7 @@ calibrated range, исторический Target tracking или доказат
 
 | ID | Возможность 1.0 | Обязательство | Требования | Этап готовности |
 |---|---|---|---|---|
-| CAP-048 | Защита эфира пассивно обнаруживает и объясняет подозрительные Wi-Fi/BLE conditions; каждый вывод открывает source evidence и uncertainty | P1 | J-07, PR-020 | S7 |
+| CAP-048 | Защита эфира пассивно обнаруживает и объясняет подозрительные Wi-Fi/BLE conditions: bursts отключений, конфликты/смену identity, устойчиво повышенный Wi-Fi noise и tracker-compatible BLE presence; каждый вывод открывает source evidence и uncertainty | P1 | J-07, PR-020 | S7 |
 | CAP-049 | Focused Wi-Fi authentication Capture распознаёт EAPOL/PMKID и complete/incomplete handshakes, затем экспортирует immutable PCAP и `hc22000` evidence | P1 | J-03, J-07, PR-015, PR-021 | S7 |
 | CAP-050 | Offline Field Survey объединяет Wi-Fi AP/station и BLE observations с optional GPS track, deduplication, сравнением повторного прохода и локальным WiGLE-compatible export | P1, GPS conditional | J-01, J-07, PR-022 | S7 |
 | CAP-051 | BLE Inspector сохраняет compatible raw packets и даёт явный permissioned connected-GATT mode с детерминированным disconnect и provenance | P1 | J-02, J-07, PR-023 | S7 |

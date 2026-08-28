@@ -50,15 +50,17 @@ identity retention `1.0.0-dev.216`, индикатор быстрой смены
 одного BSSID `1.0.0-dev.217`, source-only BLE tracker-compatible presence detector
 `1.0.0-dev.218`, его отдельный channel-free presentation `1.0.0-dev.219`, bounded
 duplicate-preserving retention foundation `1.0.0-dev.220` и supervised sequential
-runtime handoff Wi-Fi→BLE `1.0.0-dev.221` — только host/build
+runtime handoff Wi-Fi→BLE `1.0.0-dev.221`, а также bounded индикатор повышенного
+noise `1.0.0-dev.222` — только host/build
 foundations CAP-048. Их golden/negative corpus, receive-only guard, strongest-first
 ordering, exact drilldown, контракт текста не только цветом, no-clear repaint, явный
 учёт capture loss и publication только после cleanup ещё не закрывают DEMO-S7.
 Wi-Fi identity detectors теперь включаются только после complete live retention и
 cleanup; BLE finding теперь имеет strict kind-aware validation, owner-unknown EN/RU
-evidence, complete bounded retention и fail-closed runtime worker handoff. Нужны physical
-golden/negative evidence TFT/navigation/cleanup, оставшийся loss detector и их negative
-corpora.
+evidence, complete bounded retention и fail-closed runtime worker handoff. Noise
+finding всегда имеет Low confidence и никогда не доказывает глушилку или источник.
+Всё ещё нужны consolidated physical golden/negative evidence TFT/navigation/cleanup
+и negative corpora.
 
 `DEMO-S2` принят evidence `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 выполнил 29 public Action/query steps и совпал с

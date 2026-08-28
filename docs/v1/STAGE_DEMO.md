@@ -51,15 +51,17 @@ visible-name-change indicator for one BSSID, the `1.0.0-dev.218` source-only
 BLE tracker-compatible presence detector and its `1.0.0-dev.219` dedicated
 channel-free presentation, the `1.0.0-dev.220` bounded duplicate-preserving
 retention foundation and the `1.0.0-dev.221` supervised sequential Wi-Fi→BLE
-runtime handoff are host/build CAP-048
+runtime handoff, plus the `1.0.0-dev.222` bounded elevated-noise indicator, are
+host/build CAP-048
 foundations only. Their golden/negative corpus, receive-only guard, strongest-first
 ordering, exact drilldown, non-color-only text, no-clear repaint, explicit capture-loss
 accounting and cleanup-before-publication do not yet satisfy DEMO-S7. The Wi-Fi
 identity detectors are enabled only after complete live retention and cleanup; the
 BLE finding now has strict kind-aware validation, owner-unknown EN/RU evidence,
-complete bounded retention and a fail-closed runtime worker handoff. Physical
-golden/negative TFT/navigation/cleanup evidence, the remaining loss detector and
-their negative corpora are still required.
+complete bounded retention and a fail-closed runtime worker handoff. The noise
+finding is always Low confidence and never proves a jammer or source. Consolidated
+physical golden/negative TFT/navigation/cleanup evidence and negative corpora are
+still required.
 
 `DEMO-S2` is accepted by `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 completed 29 public Action/query steps and matched nine
