@@ -3388,6 +3388,11 @@ void testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations() {
     CHECK(observation.bleAdvertisement.companyId == 0x0075);
     CHECK(observation.bleAdvertisement.knownServiceMask != 0U);
 
+    record.payloadLength = static_cast<std::uint8_t>(record.payload.size() + 1U);
+    CHECK(!leshy1::drivers::ble::normalizePassiveRecord(
+        record, 3001, &observation));
+    record.payloadLength = 0U;
+
     record.address = {};
     CHECK(!leshy1::drivers::ble::normalizePassiveRecord(
         record, 3000, &observation));

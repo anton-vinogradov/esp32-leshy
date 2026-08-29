@@ -459,7 +459,11 @@ void processAdvertisement(const RawAdvertisement& source,
     drivers::ble::BleAdvertisementRecord record;
     record.address = canonicalAddress;
     record.addressType = source.addressType;
+    record.eventType = source.eventType;
     record.rssiDbm = source.rssiDbm;
+    record.payloadLength = source.payloadLength;
+    std::copy_n(source.payload.begin(), source.payloadLength,
+                record.payload.begin());
     parseAdvertisementPayload(source, &record.name, &record.nameLength,
                               &record.advertisement);
     increment(&context->result->recordsRead);

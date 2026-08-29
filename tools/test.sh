@@ -126,6 +126,19 @@ run_opaque_evidence_check() {
     -Wall -Wextra -Werror -pedantic \
     -Wconversion -Wsign-conversion -Wshadow \
     -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/ble_inspector_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/kernel/runtime/ResourceBroker.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/ble/BleInspector.cpp" \
+    -o "$test_tmp/ble_inspector_tests"
+
+"$test_tmp/ble_inspector_tests"
+python3 "$repo_dir/tools/check_ble_inspector_contract.py"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -Wconversion -Wsign-conversion -Wshadow \
+    -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/field_survey_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/FieldSurveyCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/FieldSurveyNativeCsv.cpp" \

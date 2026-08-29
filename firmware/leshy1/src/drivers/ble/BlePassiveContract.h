@@ -15,6 +15,7 @@ namespace leshy1::drivers::ble {
 // larger bounded budget.
 constexpr std::uint16_t kMaximumDeduplicatedRecords = 128U;
 constexpr std::uint16_t kMaximumStreamingRecords = 4096U;
+constexpr std::size_t kLegacyAdvertisementPayloadCapacity = 31U;
 
 struct BleScanPlan final {
     bool passive = true;
@@ -31,7 +32,10 @@ struct BleScanPlan final {
 struct BleAdvertisementRecord final {
     std::array<std::uint8_t, 6> address{};
     std::uint8_t addressType = 0;
+    std::uint8_t eventType = 0;
     std::int16_t rssiDbm = 0;
+    std::array<std::uint8_t, kLegacyAdvertisementPayloadCapacity> payload{};
+    std::uint8_t payloadLength = 0;
     const char* name = nullptr;
     std::size_t nameLength = 0;
     domain::observations::BleAdvertisementFacts advertisement{};

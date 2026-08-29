@@ -20,6 +20,7 @@ bool normalizePassiveRecord(
     domain::observations::Observation* observation) {
     if (observation == nullptr || monotonicUs == 0 ||
         record.rssiDbm < -127 || record.rssiDbm > 20 ||
+        record.payloadLength > record.payload.size() ||
         record.nameLength > domain::observations::Observation::kLabelCapacity ||
         (record.nameLength != 0 && record.name == nullptr)) {
         return false;
