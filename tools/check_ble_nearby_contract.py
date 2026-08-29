@@ -318,6 +318,12 @@ def main() -> int:
         f"BLE HIL lifecycle token missing: {token}"
         for token in required_runner if token not in runner
     )
+    if "list_render_first = ble_detail(device)" in runner and \
+            'screens["ble_devices_first"] = capture(' in runner and \
+            runner.index("list_render_first = ble_detail(device)") > \
+            runner.index('screens["ble_devices_first"] = capture('):
+        failures.append(
+            "BLE list repaint oracle must be sampled before the first frame")
     failures.extend(
         f"BLE HIL overclaims unmeasured storage state: {token}"
         for token in forbidden_runner if token in runner

@@ -279,9 +279,13 @@ def main() -> int:
                         first_retries != first_attempts - first_cycles:
                     raise RuntimeError(
                         "BLE bounded scan-retry accounting mismatch")
+                # Snapshot the repaint oracle before the first frame. The
+                # product worker is serviced between serial commands, so a
+                # post-capture baseline can already include the update that
+                # differentiates the first and second physical frames.
+                list_render_first = ble_detail(device)
                 screens["ble_devices_first"] = capture(
                     device, frames, "ble-devices-first")
-                list_render_first = ble_detail(device)
                 first_cycle = int(live_first["survey_product_ble_scan_cycles"])
                 first_revision = int(live_first["ble_device_catalog_revision"])
                 live_second = wait_live(
