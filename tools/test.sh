@@ -124,6 +124,20 @@ run_opaque_evidence_check() {
 "${CXX:-c++}" \
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
+    -Wconversion -Wsign-conversion -Wshadow \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/field_survey_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/survey/FieldSurveyCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/survey/FieldSurveyWigleCsv.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SurveySession.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SourceTimeline.cpp" \
+    -o "$test_tmp/field_survey_tests"
+
+"$test_tmp/field_survey_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/airspace_guard_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/services/guard/AirspaceGuard.cpp" \
