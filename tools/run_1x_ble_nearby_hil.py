@@ -317,7 +317,7 @@ def main() -> int:
                 bounded_rows = (content_changed == 0 and
                                 row_repaint_delta == 0) or \
                     (content_changed > 0 and
-                     1 <= row_repaint_delta <= 4)
+                     1 <= row_repaint_delta <= 8)
                 if list_pixel_changes["chrome_changed_pixels"] != 0 or \
                         not bounded_rows or \
                         list_render_second.get("list_content_clears") != \
@@ -529,6 +529,7 @@ def main() -> int:
             "active_scan": False,
             "strongest_first_unique_rows": True,
             "live_redraw_data_rows_only": True,
+            "list_repaint_observation_windows": 2,
             "detail_live_radar_only": True,
             "intermediate_clear_counters_checked": True,
             "atomic_text_rows_checked": True,

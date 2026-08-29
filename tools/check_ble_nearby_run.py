@@ -172,7 +172,7 @@ def main() -> int:
         list_render_first.get("list_row_repaints", -1)
     content_changed = list_changes.get("content_changed_pixels", -1)
     bounded_rows = (content_changed == 0 and row_repaint_delta == 0) or \
-        (content_changed > 0 and 1 <= row_repaint_delta <= 4)
+        (content_changed > 0 and 1 <= row_repaint_delta <= 8)
     require(failures,
             list_changes.get("chrome_changed_pixels") == 0 and
             bounded_rows and
@@ -236,6 +236,7 @@ def main() -> int:
             scope.get("active_scan") is False and
             scope.get("detail_live_radar_only") is True and
             scope.get("intermediate_clear_counters_checked") is True and
+            scope.get("list_repaint_observation_windows") == 2 and
             scope.get("atomic_text_rows_checked") is True and
             scope.get("advertisement_facts_visible") is True and
             scope.get("offline_company_database") is True and

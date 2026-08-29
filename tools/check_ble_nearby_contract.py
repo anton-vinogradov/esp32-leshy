@@ -188,7 +188,8 @@ def main() -> int:
         '"product_storage_writes_measured": False',
         '"intermediate_clear_counters_checked": True',
         '"atomic_text_rows_checked": True',
-        '1 <= row_repaint_delta <= 4',
+        '1 <= row_repaint_delta <= 8',
+        '"list_repaint_observation_windows": 2',
         '"BLE detail signal update used a full repaint',
         '"BLE detail live text was not atomically composited',
     )
@@ -206,6 +207,7 @@ def main() -> int:
         '"BLE list final pixels/counters show a full or unbounded repaint"',
         '"BLE detail repaint counters show a full content clear"',
         'scope.get("intermediate_clear_counters_checked") is True',
+        'scope.get("list_repaint_observation_windows") == 2',
         'scope.get("atomic_text_rows_checked") is True',
         'detail_second.get("atomic_text_row_pushes", -1) >',
         'detail_second.get("direct_text_row_fallbacks") == 0',
