@@ -206,6 +206,7 @@ def main() -> int:
     parser.add_argument("--allowed-ssid-fnv1a64", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash", action="store_true")
+    parser.add_argument("--reuse-exact-flash", action="store_true")
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
     if args.port == FORBIDDEN_FIXTURE_PORT:
@@ -216,8 +217,10 @@ def main() -> int:
         parser.error("--firmware must name an existing app image")
     if args.output.exists():
         parser.error("--output must not exist")
-    if not args.flash:
-        parser.error("CAP049 persistence requires one fresh app flash")
+    if args.flash and args.reuse_exact_flash:
+        parser.error("--flash and --reuse-exact-flash are mutually exclusive")
+    if not args.flash and not args.reuse_exact_flash:
+        parser.error("use --flash or explicitly acknowledge --reuse-exact-flash")
     if not valid_cid(args.expected_cid):
         parser.error("--expected-cid must be 32 uppercase hexadecimal characters")
     if re.fullmatch(r"[0-9a-fA-F]{40}", args.source_commit) is None:
@@ -268,8 +271,9 @@ def main() -> int:
     hc_payload = b""
 
     try:
-        flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
-        time.sleep(0.5)
+        if args.flash:
+            flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            time.sleep(0.5)
         with PassiveSerial(args.port, 115200, timeout=0.25) as device:
             try:
                 synchronize_console(device, 30.0)
@@ -558,7 +562,8 @@ def main() -> int:
             "source_commit": args.source_commit,
             "firmware_sha256": firmware_sha,
             "app_elf_sha256": app_identity,
-            "flashed": True,
+            "flashed": args.flash,
+            "reused_exact_flash": args.reuse_exact_flash,
         },
         "board": {"id": BOARD_ID, "expected_cid": args.expected_cid},
         "boot_before": {
