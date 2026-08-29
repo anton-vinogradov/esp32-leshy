@@ -52,7 +52,9 @@
 #include "apps/spectrum/Nrf24SignalFinder.h"
 #include "apps/spectrum/Nrf24SpectrumController.h"
 #include "apps/spectrum/SpectrumViewport.h"
+#include "apps/survey/FieldSurveyNativeCsv.h"
 #include "apps/survey/FieldSurveyTracker.h"
+#include "apps/survey/FieldSurveyWigleCsv.h"
 #include "apps/survey/ProductSurveyAdmission.h"
 #include "apps/survey/SurveyController.h"
 #include "apps/survey/SurveyPipeline.h"
@@ -11328,6 +11330,11 @@ NavigationFooter navigationFooterForCurrentState() {
                      surveyController.filterFocused()
                          ? UiTextId::NavFilter : UiTextId::NavDetails}};
         }
+        if (wifiProductView == WifiProductView::Visit &&
+            fieldSurveyTracker.result().complete()) {
+            return {{NavigationKey::Left, UiTextId::NavHome}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavExport}};
+        }
         return {{NavigationKey::Left, UiTextId::NavHome}, {}, {}};
     }
 
@@ -16134,6 +16141,9 @@ void renderInventoryPage(bool clearContent) {
 
 UiTextId libraryEntryTitle(const LibraryEntry& entry) {
     if (entry.session == nullptr) return UiTextId::LibraryRecord;
+    if (std::strcmp(entry.session->id(), FieldSurveyTracker::kSessionId) == 0) {
+        return UiTextId::FieldSurveyTitle;
+    }
     const auto& capture = entry.session->captureMetadata();
     if (capture.infraredRawCaptured) return UiTextId::LibraryInfraredCapture;
     if (capture.subGhzRawCaptured) return UiTextId::LibrarySubGhzCapture;
@@ -16206,6 +16216,15 @@ void renderLibraryPage(bool clearContent) {
         renderHeader(tr(UiTextId::ExportReady), clearContent);
         if (selected == nullptr || selected->session == nullptr) return;
         renderMetric(0, tr(libraryEntryTitle(*selected)), Tone::Positive);
+        if (std::strcmp(selected->session->id(),
+                        FieldSurveyTracker::kSessionId) == 0) {
+            renderMetric(1, tr(UiTextId::FieldSurveyNativeReady),
+                         Tone::Positive);
+            renderMetric(2, tr(UiTextId::FieldSurveyWigleLocal),
+                         Tone::Warning);
+            renderMetric(3, tr(UiTextId::ExportUsbRequired), Tone::Positive);
+            return;
+        }
         renderMetric(1, tr(UiTextId::FormatSummaryReady));
         const auto& capture = selected->session->captureMetadata();
         const bool rawFrames = capture.framePayloadCaptured;
@@ -23136,6 +23155,32 @@ bool selectionCanRepaintInPlace(UiAction action) {
            selfTestController.view() == SelfTestView::ModeMenu;
 }
 
+bool openCurrentFieldSurveyExport() {
+    const LibraryEntry* entry = libraryController.selected();
+    if (entry == nullptr || entry->session == nullptr ||
+        std::strcmp(entry->session->id(), FieldSurveyTracker::kSessionId) != 0 ||
+        entry->session->state() != SessionState::Stopped) {
+        return false;
+    }
+    if (libraryController.view() == LibraryView::ExportReady &&
+        !libraryController.back()) {
+        return false;
+    }
+    if (libraryController.view() == LibraryView::SessionDetail &&
+        !libraryController.back()) {
+        return false;
+    }
+    if (libraryController.view() != LibraryView::SessionList ||
+        !libraryController.openSelected() ||
+        !libraryController.requestExport()) {
+        return false;
+    }
+    if (uiController.openChild(3U)) return true;
+    (void)libraryController.back();
+    (void)libraryController.back();
+    return false;
+}
+
 bool applyUiAction(UiAction action, bool render = true) {
     const bool incrementalCandidate = selectionCanRepaintInPlace(action);
     lastUiActionUsedIncrementalRender = false;
@@ -23768,14 +23813,23 @@ bool applyUiAction(UiAction action, bool render = true) {
             }
         } else if (wifiProductView == WifiProductView::Visit &&
                    (surveyWorkflow.state() == SurveyWorkflowState::Result ||
-                    surveyWorkflow.state() == SurveyWorkflowState::Error) &&
-                   (action == UiAction::Back || action == UiAction::Left)) {
-            handled = true;
-            surveyPipeline.resetToSetup();
-            wifiProductView = WifiProductView::Menu;
-            wifiProductSelection = 3;
-            lastRuntimeEvent = "wifi_menu";
-            changed = true;
+                    surveyWorkflow.state() == SurveyWorkflowState::Error)) {
+            if (action == UiAction::Back || action == UiAction::Left) {
+                handled = true;
+                surveyPipeline.resetToSetup();
+                wifiProductView = WifiProductView::Menu;
+                wifiProductSelection = 3;
+                lastRuntimeEvent = "wifi_menu";
+                changed = true;
+            } else if ((action == UiAction::Select ||
+                        action == UiAction::Right) &&
+                       fieldSurveyTracker.result().complete()) {
+                handled = true;
+                changed = openCurrentFieldSurveyExport();
+                lastRuntimeEvent = changed
+                    ? "field_visit_export_ready"
+                    : "field_visit_export_unavailable";
+            }
         } else if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
             productSurveySourceUnavailableVisible() &&
             (action == UiAction::Select || action == UiAction::Right ||
@@ -28818,6 +28872,222 @@ void emitLibraryCsvExport(Stream& reply) {
     reply.println(diagnosticJson);
 }
 
+void emitLibraryFieldSurveyNative(Stream& reply) {
+    const LibraryEntry* entry = libraryController.selected();
+    if (libraryController.view() != LibraryView::ExportReady ||
+        entry == nullptr || entry->session == nullptr ||
+        std::strcmp(entry->session->id(), FieldSurveyTracker::kSessionId) != 0) {
+        reply.println(
+            "{\"schema\":\"leshy.field_survey.native_csv.v1\","
+            "\"kind\":\"begin\",\"status\":\"not_requested\","
+            "\"radio_touched\":false}");
+        return;
+    }
+    FieldSurveyCatalog* catalog = acquireFieldSurveyScratch();
+    if (catalog == nullptr) {
+        reply.println(
+            "{\"schema\":\"leshy.field_survey.native_csv.v1\","
+            "\"kind\":\"begin\",\"status\":\"workspace_unavailable\","
+            "\"radio_touched\":false}");
+        return;
+    }
+    const auto build = catalog->build(*entry->session);
+    if (build != leshy1::apps::survey::FieldSurveyBuildStatus::Complete ||
+        !catalog->complete()) {
+        std::snprintf(
+            diagnosticJson, sizeof(diagnosticJson),
+            "{\"schema\":\"leshy.field_survey.native_csv.v1\","
+            "\"kind\":\"begin\",\"status\":\"%s\","
+            "\"radio_touched\":false}",
+            fieldSurveyBuildStatusName(build));
+        releaseFieldSurveyScratch(catalog);
+        reply.println(diagnosticJson);
+        return;
+    }
+    char row[512] = {};
+    const auto header = leshy1::apps::survey::formatFieldSurveyNativeHeader(
+        row, sizeof(row));
+    if (!header.valid()) {
+        releaseFieldSurveyScratch(catalog);
+        reply.println(
+            "{\"schema\":\"leshy.field_survey.native_csv.v1\","
+            "\"kind\":\"begin\",\"status\":\"buffer_too_small\","
+            "\"radio_touched\":false}");
+        return;
+    }
+    std::snprintf(
+        diagnosticJson, sizeof(diagnosticJson),
+        "{\"schema\":\"leshy.field_survey.native_csv.v1\","
+        "\"kind\":\"begin\",\"status\":\"valid\","
+        "\"generation\":%lu,\"session_id\":\"%s\","
+        "\"records\":%u,\"columns\":14,\"line_endings\":\"crlf\","
+        "\"deduplicated\":true,\"persistent\":%s,"
+        "\"radio_touched\":false}",
+        static_cast<unsigned long>(entry->generation), entry->session->id(),
+        static_cast<unsigned>(catalog->size()),
+        entry->persistent ? "true" : "false");
+    reply.println(diagnosticJson);
+    reply.flush();
+    bool valid = reply.write(reinterpret_cast<const std::uint8_t*>(row),
+                             header.bytes) == header.bytes;
+    std::size_t bytes = valid ? header.bytes : 0U;
+    std::size_t records = 0U;
+    const char* failure = valid ? "valid" : "stream_failed";
+    for (std::size_t index = 0U;
+         valid && index < catalog->size(); ++index) {
+        const auto* record = catalog->get(index);
+        const auto formatted = record == nullptr
+            ? leshy1::apps::survey::FieldSurveyNativeResult{}
+            : leshy1::apps::survey::formatFieldSurveyNativeRow(
+                  *record, row, sizeof(row));
+        if (!formatted.valid()) {
+            valid = false;
+            failure = leshy1::apps::survey::fieldSurveyNativeStatusName(
+                formatted.status);
+        } else if (reply.write(reinterpret_cast<const std::uint8_t*>(row),
+                               formatted.bytes) != formatted.bytes) {
+            valid = false;
+            failure = "stream_failed";
+        } else {
+            bytes += formatted.bytes;
+            ++records;
+        }
+    }
+    releaseFieldSurveyScratch(catalog);
+    std::snprintf(
+        diagnosticJson, sizeof(diagnosticJson),
+        "{\"schema\":\"leshy.field_survey.native_csv.v1\","
+        "\"kind\":\"end\",\"status\":\"%s\","
+        "\"records\":%u,\"bytes\":%u,\"radio_touched\":false}",
+        valid ? "complete" : failure, static_cast<unsigned>(records),
+        static_cast<unsigned>(bytes));
+    reply.println(diagnosticJson);
+    reply.flush();
+}
+
+void emitLibraryFieldSurveyWigle(Stream& reply) {
+    const LibraryEntry* entry = libraryController.selected();
+    if (libraryController.view() != LibraryView::ExportReady ||
+        entry == nullptr || entry->session == nullptr ||
+        std::strcmp(entry->session->id(), FieldSurveyTracker::kSessionId) != 0) {
+        reply.println(
+            "{\"schema\":\"leshy.field_survey.wigle_csv.v1\","
+            "\"kind\":\"begin\",\"status\":\"not_requested\","
+            "\"radio_touched\":false}");
+        return;
+    }
+    FieldSurveyCatalog* catalog = acquireFieldSurveyScratch();
+    if (catalog == nullptr) {
+        reply.println(
+            "{\"schema\":\"leshy.field_survey.wigle_csv.v1\","
+            "\"kind\":\"begin\",\"status\":\"workspace_unavailable\","
+            "\"radio_touched\":false}");
+        return;
+    }
+    const auto build = catalog->build(*entry->session);
+    if (build != leshy1::apps::survey::FieldSurveyBuildStatus::Complete ||
+        !catalog->complete()) {
+        std::snprintf(
+            diagnosticJson, sizeof(diagnosticJson),
+            "{\"schema\":\"leshy.field_survey.wigle_csv.v1\","
+            "\"kind\":\"begin\",\"status\":\"%s\","
+            "\"radio_touched\":false}",
+            fieldSurveyBuildStatusName(build));
+        releaseFieldSurveyScratch(catalog);
+        reply.println(diagnosticJson);
+        return;
+    }
+    std::size_t wifiStations = 0U;
+    for (std::size_t index = 0U; index < catalog->size(); ++index) {
+        const auto* record = catalog->get(index);
+        if (record != nullptr &&
+            record->kind == leshy1::apps::survey::
+                FieldSurveyEntityKind::WifiStation) {
+            ++wifiStations;
+        }
+    }
+    const std::size_t wigleRecords = catalog->size() - wifiStations;
+    char row[512] = {};
+    const auto metadata = leshy1::apps::survey::
+        formatFieldSurveyWigleMetadata(LESHY1_VERSION, row, sizeof(row));
+    if (!metadata.valid()) {
+        releaseFieldSurveyScratch(catalog);
+        reply.println(
+            "{\"schema\":\"leshy.field_survey.wigle_csv.v1\","
+            "\"kind\":\"begin\",\"status\":\"metadata_failed\","
+            "\"radio_touched\":false}");
+        return;
+    }
+    std::snprintf(
+        diagnosticJson, sizeof(diagnosticJson),
+        "{\"schema\":\"leshy.field_survey.wigle_csv.v1\","
+        "\"kind\":\"begin\",\"status\":\"valid\","
+        "\"generation\":%lu,\"session_id\":\"%s\","
+        "\"format\":\"wigle_wifi_1.6\",\"records\":%u,"
+        "\"skipped_wifi_stations\":%u,\"readiness\":\"untimed_unlocated\","
+        "\"trusted_utc\":false,\"trusted_location\":false,"
+        "\"upload_ready\":false,\"persistent\":%s,"
+        "\"radio_touched\":false}",
+        static_cast<unsigned long>(entry->generation), entry->session->id(),
+        static_cast<unsigned>(wigleRecords),
+        static_cast<unsigned>(wifiStations),
+        entry->persistent ? "true" : "false");
+    reply.println(diagnosticJson);
+    reply.flush();
+    bool valid = reply.write(reinterpret_cast<const std::uint8_t*>(row),
+                             metadata.bytes) == metadata.bytes;
+    std::size_t bytes = valid ? metadata.bytes : 0U;
+    std::size_t records = 0U;
+    const auto columns = leshy1::apps::survey::formatFieldSurveyWigleColumns(
+        row, sizeof(row));
+    valid = valid && columns.valid() &&
+        reply.write(reinterpret_cast<const std::uint8_t*>(row),
+                    columns.bytes) == columns.bytes;
+    if (valid) bytes += columns.bytes;
+    const leshy1::apps::survey::FieldSurveyWigleContext context{};
+    const char* failure = valid ? "valid" : "stream_failed";
+    for (std::size_t index = 0U;
+         valid && index < catalog->size(); ++index) {
+        const auto* record = catalog->get(index);
+        if (record != nullptr &&
+            record->kind == leshy1::apps::survey::
+                FieldSurveyEntityKind::WifiStation) {
+            continue;
+        }
+        const auto formatted = record == nullptr
+            ? leshy1::apps::survey::FieldSurveyWigleResult{}
+            : leshy1::apps::survey::formatFieldSurveyWigleRow(
+                  *record, context, row, sizeof(row));
+        if (!formatted.valid() || formatted.uploadReady ||
+            formatted.readiness != leshy1::apps::survey::
+                FieldSurveyWigleReadiness::UntimedUnlocated) {
+            valid = false;
+            failure = leshy1::apps::survey::fieldSurveyWigleStatusName(
+                formatted.status);
+        } else if (reply.write(reinterpret_cast<const std::uint8_t*>(row),
+                               formatted.bytes) != formatted.bytes) {
+            valid = false;
+            failure = "stream_failed";
+        } else {
+            bytes += formatted.bytes;
+            ++records;
+        }
+    }
+    releaseFieldSurveyScratch(catalog);
+    std::snprintf(
+        diagnosticJson, sizeof(diagnosticJson),
+        "{\"schema\":\"leshy.field_survey.wigle_csv.v1\","
+        "\"kind\":\"end\",\"status\":\"%s\","
+        "\"records\":%u,\"bytes\":%u,"
+        "\"skipped_wifi_stations\":%u,"
+        "\"readiness\":\"untimed_unlocated\",\"upload_ready\":false,"
+        "\"radio_touched\":false}",
+        valid ? "complete" : failure, static_cast<unsigned>(records),
+        static_cast<unsigned>(bytes), static_cast<unsigned>(wifiStations));
+    reply.println(diagnosticJson);
+    reply.flush();
+}
+
 void emitLibraryPcapStatus(Stream& reply) {
     if (libraryController.view() != LibraryView::ExportReady) {
         reply.println(
@@ -31524,6 +31794,12 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitAirspaceGuardState(reply);
     } else if (std::strcmp(command, "capture.export.pcap") == 0) {
         emitWifiFrameCapturePcap(reply);
+    } else if (std::strcmp(
+                   command, "library.field-survey.export.native") == 0) {
+        emitLibraryFieldSurveyNative(reply);
+    } else if (std::strcmp(
+                   command, "library.field-survey.export.wigle") == 0) {
+        emitLibraryFieldSurveyWigle(reply);
     } else if (std::strcmp(command, "capture.subghz.state") == 0) {
         emitSubGhzRawCaptureState(reply);
     } else if (std::strcmp(command,

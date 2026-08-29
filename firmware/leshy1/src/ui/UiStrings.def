@@ -635,6 +635,8 @@ LESHY_UI_TEXT(FieldSurveyUniqueFormat, Body, 212, "UNIQUE %u", u8"УНИКАЛЬ
 LESHY_UI_TEXT(FieldSurveyBaselineSaved, Body, 212, "BASELINE SAVED", u8"БАЗА СОХРАНЕНА")
 LESHY_UI_TEXT(FieldSurveyIncomplete, Body, 212, "RESULT INCOMPLETE", u8"РЕЗУЛЬТАТ НЕПОЛНЫЙ")
 LESHY_UI_TEXT(FieldSurveyNoComparison, Meta, 212, "COMPARISON NOT PUBLISHED", u8"СРАВНЕНИЕ НЕ ПОКАЗАНО")
+LESHY_UI_TEXT(FieldSurveyNativeReady, Body, 212, "NATIVE CSV READY", u8"NATIVE CSV ГОТОВ")
+LESHY_UI_TEXT(FieldSurveyWigleLocal, Body, 212, "WiGLE LOCAL, NO GPS/UTC", u8"WiGLE БЕЗ GPS/UTC")
 LESHY_UI_TEXT(SurveyFoundFormat, Body, 212, "FOUND: %u", u8"НАЙДЕНО: %u")
 LESHY_UI_TEXT(SurveyResultsSaved, Body, 212, "SAVED TO LIBRARY", u8"СОХРАНЕНО В БИБЛИОТЕКЕ")
 LESHY_UI_TEXT(SurveyResultsTemporary, Body, 212, "TEMPORARY RESULT", u8"ВРЕМЕННЫЙ РЕЗУЛЬТАТ")

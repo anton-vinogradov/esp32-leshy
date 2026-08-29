@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "apps/survey/FieldSurveyCatalog.h"
+#include "apps/survey/FieldSurveyNativeCsv.h"
 #include "apps/survey/FieldSurveyTracker.h"
 #include "apps/survey/FieldSurveyWigleCsv.h"
 #include "services/survey/SurveySession.h"
@@ -247,6 +248,55 @@ void testWigleExportIsExactAndTruthful() {
           nullptr);
 }
 
+void testNativeExportPreservesDeduplicatedEvidence() {
+    FieldSurveyCatalog catalog;
+    Observation first = accessPoint(
+        {0xa0U, 0xb1U, 0xc2U, 0xd3U, 0xe4U, 0xf5U},
+        1100U, -70, "old");
+    Observation strongest = accessPoint(
+        {0xa0U, 0xb1U, 0xc2U, 0xd3U, 0xe4U, 0xf5U},
+        1300U, -42, "Cafe,\"North\"");
+    CHECK(catalog.ingest(first, FieldSurveyEntityKind::WifiAccessPoint) ==
+          FieldSurveyIngestStatus::Added);
+    CHECK(catalog.ingest(strongest, FieldSurveyEntityKind::WifiAccessPoint) ==
+          FieldSurveyIngestStatus::Updated);
+    const FieldSurveyRecord* record = catalog.get(0U);
+    CHECK(record != nullptr);
+
+    std::array<char, 512> output{};
+    FieldSurveyNativeResult formatted = formatFieldSurveyNativeHeader(
+        output.data(), output.size());
+    CHECK(formatted.valid());
+    CHECK(std::strcmp(
+              output.data(),
+              "entity_kind,identity,label,first_seen_monotonic_us,"
+              "last_seen_monotonic_us,observations,strongest_frequency_khz,"
+              "strongest_channel,strongest_rssi_dbm,latest_rssi_dbm,"
+              "wifi_authentication,wifi_pairwise_cipher,wifi_group_cipher,"
+              "ble_company_id\r\n") == 0);
+
+    formatted = formatFieldSurveyNativeRow(
+        *record, output.data(), output.size());
+    CHECK(formatted.valid());
+    CHECK(std::strcmp(
+              output.data(),
+              "wifi_access_point,A0:B1:C2:D3:E4:F5,"
+              "\"Cafe,\"\"North\"\"\",1100,1300,2,2437000,6,-42,-42,"
+              "wpa2_psk,ccmp,ccmp,\r\n") == 0);
+
+    FieldSurveyRecord invalid = *record;
+    invalid.observations = 0U;
+    formatted = formatFieldSurveyNativeRow(
+        invalid, output.data(), output.size());
+    CHECK(formatted.status == FieldSurveyNativeStatus::InvalidArgument);
+    CHECK(output[0] == '\0');
+    std::array<char, 8> tiny{};
+    formatted = formatFieldSurveyNativeRow(
+        *record, tiny.data(), tiny.size());
+    CHECK(formatted.status == FieldSurveyNativeStatus::BufferTooSmall);
+    CHECK(tiny[0] == '\0');
+}
+
 void testWigleBleAndFailureBoundaries() {
     FieldSurveyCatalog catalog;
     CHECK(catalog.ingest(
@@ -408,6 +458,7 @@ void testFieldVisitAutoPauseRequiresOneCoveredPass() {
 int main() {
     testCatalogDeduplicatesAndComparesVisits();
     testCatalogBuildFailsClosedOnDropsAndInvalidInput();
+    testNativeExportPreservesDeduplicatedEvidence();
     testWigleExportIsExactAndTruthful();
     testWigleBleAndFailureBoundaries();
     testVisitTrackerUsesOnlyAnExplicitPreviousFieldVisit();

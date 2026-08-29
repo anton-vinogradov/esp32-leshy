@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ENTRY = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 STRINGS = ROOT / "firmware/leshy1/src/ui/UiStrings.def"
+NATIVE = ROOT / "firmware/leshy1/src/apps/survey/FieldSurveyNativeCsv.cpp"
 
 
 def require(text: str, needle: str, label: str) -> None:
@@ -17,6 +18,7 @@ def require(text: str, needle: str, label: str) -> None:
 def main() -> None:
     entry = ENTRY.read_text(encoding="utf-8")
     strings = STRINGS.read_text(encoding="utf-8")
+    native = NATIVE.read_text(encoding="utf-8")
 
     require(entry, '#include "apps/survey/FieldSurveyTracker.h"', "tracker")
     require(entry, "FieldSurveyTracker fieldSurveyTracker;", "bounded state")
@@ -64,6 +66,26 @@ def main() -> None:
     require(strings, "FieldSurveyCompare", "comparison label")
     require(strings, "FieldSurveyNewSeenFormat", "revisit summary")
     require(strings, "FieldSurveyNoComparison", "incomplete disclosure")
+    require(entry, "openCurrentFieldSurveyExport();", "result-to-Library route")
+    require(
+        entry,
+        "library.field-survey.export.native",
+        "bounded native Library export command",
+    )
+    require(
+        entry,
+        "library.field-survey.export.wigle",
+        "bounded WiGLE Library export command",
+    )
+    require(entry, "formatFieldSurveyWigleMetadata(", "WiGLE 1.6 stream")
+    require(entry, "trusted_utc\\\":false", "truthful missing UTC")
+    require(entry, "trusted_location\\\":false", "truthful missing location")
+    require(entry, "upload_ready\\\":false", "truthful local-only status")
+    require(native, "entity_kind,identity,label", "native evidence columns")
+    require(native, "first_seen_monotonic_us", "native first-seen evidence")
+    require(native, "latest_rssi_dbm", "native latest signal evidence")
+    require(strings, "FieldSurveyNativeReady", "native-ready label")
+    require(strings, "FieldSurveyWigleLocal", "local WiGLE disclosure")
     print("field survey product contract passed")
 
 

@@ -128,6 +128,7 @@ run_opaque_evidence_check() {
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/field_survey_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/FieldSurveyCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/survey/FieldSurveyNativeCsv.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/FieldSurveyTracker.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/FieldSurveyWigleCsv.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SurveySession.cpp" \

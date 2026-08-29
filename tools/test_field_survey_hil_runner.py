@@ -55,6 +55,59 @@ def result(status: str = "first_visit") -> dict[str, Any]:
 
 
 class FieldSurveyHilRunnerTests(unittest.TestCase):
+    def test_export_validators_require_deduplicated_truthful_rows(self) -> None:
+        native_payload = (
+            ",".join(RUNNER.NATIVE_COLUMNS) + "\r\n" +
+            "wifi_access_point,AA:BB:CC:DD:EE:FF,Cafe,1,2,3,2437000,"
+            "6,-42,-51,wpa2_psk,ccmp,ccmp,\r\n" +
+            "ble_device,11:22:33:44:55:66,Tag,3,4,1,0,0,-60,-60,,,,0x004C\r\n"
+        ).encode("utf-8")
+        native_begin = {
+            "status": "valid", "generation": 172,
+            "session_id": "product-field-visit", "records": 2,
+            "columns": 14, "line_endings": "crlf",
+            "deduplicated": True, "persistent": True,
+            "radio_touched": False,
+        }
+        native_end = {
+            "status": "complete", "records": 2,
+            "bytes": len(native_payload), "radio_touched": False,
+        }
+        failures, summary = RUNNER.native_export_failures(
+            native_begin, native_payload, native_end,
+            generation=172, records=2)
+        self.assertEqual([], failures)
+        self.assertEqual(4, summary["observations"])
+        self.assertFalse(summary["ambient_identifiers_retained"])
+
+        wigle_payload = (
+            "WigleWifi-1.6,appRelease=ESP32-Leshy-test\r\n" +
+            ",".join(RUNNER.WIGLE_COLUMNS) + "\r\n" +
+            "AA:BB:CC:DD:EE:FF,Cafe,Auth,,6,2437,-42,,,,,,,WIFI\r\n" +
+            "11:22:33:44:55:66,Tag,Misc [LE],,0,,-60,,,,,,0x004C,BLE\r\n"
+        ).encode("utf-8")
+        wigle_begin = {
+            "status": "valid", "generation": 172,
+            "session_id": "product-field-visit",
+            "format": "wigle_wifi_1.6", "records": 2,
+            "skipped_wifi_stations": 0,
+            "readiness": "untimed_unlocated", "trusted_utc": False,
+            "trusted_location": False, "upload_ready": False,
+            "persistent": True, "radio_touched": False,
+        }
+        wigle_end = {
+            "status": "complete", "records": 2,
+            "bytes": len(wigle_payload), "skipped_wifi_stations": 0,
+            "readiness": "untimed_unlocated", "upload_ready": False,
+            "radio_touched": False,
+        }
+        failures, summary = RUNNER.wigle_export_failures(
+            wigle_begin, wigle_payload, wigle_end,
+            generation=172, records=2)
+        self.assertEqual([], failures)
+        self.assertEqual({"WIFI": 1, "BLE": 1}, summary["entity_counts"])
+        self.assertFalse(summary["upload_ready"])
+
     def test_first_visit_result_requires_exact_count_accounting(self) -> None:
         record = result()
         self.assertEqual(
@@ -180,6 +233,15 @@ class FieldSurveyHilRunnerTests(unittest.TestCase):
         self.assertIn("--expected-generation", source)
         self.assertIn("not args.recovery_only and", source)
         self.assertIn("bool(post_commit_recovery) and", source)
+
+    def test_export_mode_is_read_only_and_retains_no_ambient_ids(self) -> None:
+        source = inspect.getsource(RUNNER.run_exports)
+        self.assertIn('b"library.field-survey.export.native"', source)
+        self.assertIn('b"library.field-survey.export.wigle"', source)
+        self.assertNotIn("run_visit(", source)
+        self.assertNotIn("write_bytes", source)
+        self.assertIn("ambient_identifiers_retained", inspect.getsource(
+            RUNNER.native_export_failures))
 
 
 if __name__ == "__main__":

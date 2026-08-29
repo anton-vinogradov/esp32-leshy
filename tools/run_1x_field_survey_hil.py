@@ -4,7 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
+import io
 import json
+import re
 import secrets
 import shutil
 import time
@@ -35,6 +39,21 @@ from run_1x_product_survey_hil import (
 RUN_SCHEMA = "leshy.field_survey_hil.run.v1"
 FIELD_SCHEMA = "leshy.survey.field_visit.v1"
 HIL_SCHEMA = "leshy.hil.session.v1"
+NATIVE_SCHEMA = "leshy.field_survey.native_csv.v1"
+WIGLE_SCHEMA = "leshy.field_survey.wigle_csv.v1"
+MAC_PATTERN = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
+NATIVE_COLUMNS = [
+    "entity_kind", "identity", "label", "first_seen_monotonic_us",
+    "last_seen_monotonic_us", "observations", "strongest_frequency_khz",
+    "strongest_channel", "strongest_rssi_dbm", "latest_rssi_dbm",
+    "wifi_authentication", "wifi_pairwise_cipher", "wifi_group_cipher",
+    "ble_company_id",
+]
+WIGLE_COLUMNS = [
+    "MAC", "SSID", "AuthMode", "FirstSeen", "Channel", "Frequency",
+    "RSSI", "CurrentLatitude", "CurrentLongitude", "AltitudeMeters",
+    "AccuracyMeters", "RCOIs", "MfgrId", "Type",
+]
 
 
 def require(record: dict[str, Any], expected: dict[str, Any], label: str) -> None:
@@ -116,6 +135,224 @@ def wait_state(device: Any,
 def field_state(device: Any) -> dict[str, Any]:
     return read_only_query(
         device, b"survey.field-visit", FIELD_SCHEMA, "state")
+
+
+def read_framed_csv(device: Any, command: bytes, schema: str,
+                    timeout: float = 20.0
+                    ) -> tuple[dict[str, Any], bytes, dict[str, Any]]:
+    """Read begin/payload/end without retaining ambient identities on disk."""
+    device.reset_input_buffer()
+    device.write(command + b"\n")
+    device.flush()
+    deadline = time.monotonic() + timeout
+    begin: dict[str, Any] | None = None
+    end: dict[str, Any] | None = None
+    payload = bytearray()
+    while time.monotonic() < deadline:
+        line = device.readline()
+        if not line:
+            continue
+        try:
+            value = json.loads(line)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            value = None
+        if isinstance(value, dict) and value.get("schema") == schema:
+            if value.get("kind") == "begin":
+                begin = value
+                continue
+            if value.get("kind") == "end" and begin is not None:
+                end = value
+                break
+        if begin is not None:
+            payload.extend(line)
+    if begin is None or end is None:
+        raise TimeoutError(f"{schema}: incomplete begin/end framing")
+    return begin, bytes(payload), end
+
+
+def parse_csv(payload: bytes, columns: list[str], label: str
+              ) -> tuple[list[str], list[dict[str, str]]]:
+    failures: list[str] = []
+    rows: list[dict[str, str]] = []
+    try:
+        text = payload.decode("utf-8")
+        reader = csv.DictReader(io.StringIO(text, newline=""))
+        if reader.fieldnames != columns:
+            failures.append(
+                f"{label}.columns: {reader.fieldnames!r} != {columns!r}")
+        rows = list(reader)
+    except (UnicodeDecodeError, csv.Error) as error:
+        failures.append(f"{label}.parse: {error}")
+    return failures, rows
+
+
+def native_export_failures(begin: dict[str, Any], payload: bytes,
+                           end: dict[str, Any], *, generation: int,
+                           records: int
+                           ) -> tuple[list[str], dict[str, Any]]:
+    failures = expect(begin, {
+        "status": "valid", "generation": generation,
+        "session_id": "product-field-visit", "records": records,
+        "columns": len(NATIVE_COLUMNS), "line_endings": "crlf",
+        "deduplicated": True, "persistent": True,
+        "radio_touched": False,
+    }, "native.begin")
+    failures.extend(expect(end, {
+        "status": "complete", "records": records,
+        "bytes": len(payload), "radio_touched": False,
+    }, "native.end"))
+    parsed_failures, rows = parse_csv(payload, NATIVE_COLUMNS, "native")
+    failures.extend(parsed_failures)
+    if len(rows) != records:
+        failures.append(f"native.rows: {len(rows)} != {records}")
+    identities: set[tuple[str, str]] = set()
+    kinds: dict[str, int] = {
+        "wifi_access_point": 0, "wifi_station": 0, "ble_device": 0,
+    }
+    observations = 0
+    for index, row in enumerate(rows, start=1):
+        prefix = f"native.row[{index}]"
+        kind = row.get("entity_kind", "")
+        identity = row.get("identity", "")
+        if kind not in kinds:
+            failures.append(f"{prefix}.entity_kind: {kind!r}")
+        else:
+            kinds[kind] += 1
+        if MAC_PATTERN.fullmatch(identity) is None:
+            failures.append(f"{prefix}.identity: invalid canonical MAC")
+        key = (kind, identity)
+        if key in identities:
+            failures.append(f"{prefix}: duplicate deduplicated identity")
+        identities.add(key)
+        try:
+            first = int(row.get("first_seen_monotonic_us", ""))
+            last = int(row.get("last_seen_monotonic_us", ""))
+            count = int(row.get("observations", ""))
+            strongest = int(row.get("strongest_rssi_dbm", ""))
+            latest = int(row.get("latest_rssi_dbm", ""))
+        except ValueError:
+            failures.append(f"{prefix}: invalid numeric evidence")
+            continue
+        if first < 1 or last < first or count < 1:
+            failures.append(f"{prefix}: invalid lifecycle evidence")
+        if not -127 <= strongest <= 0 or not -127 <= latest <= 0:
+            failures.append(f"{prefix}: invalid RSSI evidence")
+        observations += count
+    return failures, {
+        "payload_sha256": hashlib.sha256(payload).hexdigest(),
+        "payload_bytes": len(payload), "records": len(rows),
+        "observations": observations, "entity_counts": kinds,
+        "ambient_identifiers_retained": False,
+    }
+
+
+def wigle_export_failures(begin: dict[str, Any], payload: bytes,
+                          end: dict[str, Any], *, generation: int,
+                          records: int
+                          ) -> tuple[list[str], dict[str, Any]]:
+    failures = expect(begin, {
+        "status": "valid", "generation": generation,
+        "session_id": "product-field-visit", "format": "wigle_wifi_1.6",
+        "records": records, "skipped_wifi_stations": 0,
+        "readiness": "untimed_unlocated", "trusted_utc": False,
+        "trusted_location": False, "upload_ready": False,
+        "persistent": True, "radio_touched": False,
+    }, "wigle.begin")
+    failures.extend(expect(end, {
+        "status": "complete", "records": records,
+        "bytes": len(payload), "skipped_wifi_stations": 0,
+        "readiness": "untimed_unlocated", "upload_ready": False,
+        "radio_touched": False,
+    }, "wigle.end"))
+    lines = payload.splitlines(keepends=True)
+    if not lines or not lines[0].startswith(b"WigleWifi-1.6,"):
+        failures.append("wigle.metadata: canonical WiGLE 1.6 line missing")
+        csv_payload = b""
+    else:
+        csv_payload = b"".join(lines[1:])
+    parsed_failures, rows = parse_csv(csv_payload, WIGLE_COLUMNS, "wigle")
+    failures.extend(parsed_failures)
+    if len(rows) != records:
+        failures.append(f"wigle.rows: {len(rows)} != {records}")
+    types = {"WIFI": 0, "BLE": 0}
+    identities: set[tuple[str, str]] = set()
+    for index, row in enumerate(rows, start=1):
+        prefix = f"wigle.row[{index}]"
+        kind = row.get("Type", "")
+        mac = row.get("MAC", "")
+        if kind not in types:
+            failures.append(f"{prefix}.Type: {kind!r}")
+        else:
+            types[kind] += 1
+        if MAC_PATTERN.fullmatch(mac) is None:
+            failures.append(f"{prefix}.MAC: invalid canonical MAC")
+        key = (kind, mac)
+        if key in identities:
+            failures.append(f"{prefix}: duplicate exported identity")
+        identities.add(key)
+        for field in (
+                "FirstSeen", "CurrentLatitude", "CurrentLongitude",
+                "AltitudeMeters", "AccuracyMeters"):
+            if row.get(field) != "":
+                failures.append(f"{prefix}.{field}: must be truthfully empty")
+    return failures, {
+        "payload_sha256": hashlib.sha256(payload).hexdigest(),
+        "payload_bytes": len(payload), "records": len(rows),
+        "entity_counts": types, "readiness": "untimed_unlocated",
+        "upload_ready": False, "ambient_identifiers_retained": False,
+    }
+
+
+def run_exports(device: Any, frames: Path, trace: list[dict[str, Any]],
+                generation: int, records: int
+                ) -> tuple[dict[str, Any], list[str]]:
+    from run_1x_product_survey_hil import open_latest_library
+
+    failures: list[str] = []
+    library = open_latest_library(device, trace)
+    failures.extend(expect(library, {
+        "page": "library", "library_view": "list",
+        "library_entries": 1, "library_generation": generation,
+        "library_persistent": True, "runtime_owner": "none",
+        "lease_mask": 0,
+    }, "export.library"))
+    detail = action(device, "right")
+    trace.append(detail)
+    failures.extend(expect(detail, {
+        "page": "library", "library_view": "detail",
+        "library_generation": generation, "runtime_owner": "none",
+        "lease_mask": 0,
+    }, "export.detail"))
+    export_ready = action(device, "right")
+    trace.append(export_ready)
+    failures.extend(expect(export_ready, {
+        "page": "library", "library_view": "export_ready",
+        "library_generation": generation, "runtime_owner": "none",
+        "lease_mask": 0,
+    }, "export.ready"))
+    screenshot = capture(device, frames, "field-survey-export-ready")
+
+    native_begin, native_payload, native_end = read_framed_csv(
+        device, b"library.field-survey.export.native", NATIVE_SCHEMA)
+    native_failures, native_summary = native_export_failures(
+        native_begin, native_payload, native_end,
+        generation=generation, records=records)
+    failures.extend(native_failures)
+    wigle_begin, wigle_payload, wigle_end = read_framed_csv(
+        device, b"library.field-survey.export.wigle", WIGLE_SCHEMA)
+    wigle_failures, wigle_summary = wigle_export_failures(
+        wigle_begin, wigle_payload, wigle_end,
+        generation=generation, records=records)
+    failures.extend(wigle_failures)
+
+    return {
+        "library": library, "detail": detail,
+        "export_ready": export_ready, "screenshot": screenshot,
+        "native": {"begin": native_begin, "end": native_end,
+                   "summary": native_summary},
+        "wigle": {"begin": wigle_begin, "end": wigle_end,
+                  "summary": wigle_summary},
+    }, failures
 
 
 def field_result_failures(record: dict[str, Any], status: str,
@@ -487,9 +724,19 @@ def main() -> int:
         help=("cold-reset and prove the already-committed exact generation "
               "read-only without scanning or writing"),
     )
+    mode.add_argument(
+        "--export-only", action="store_true",
+        help=("cold-reset and prove bounded native/WiGLE Library exports "
+              "without scanning or writing"),
+    )
     parser.add_argument(
         "--expected-generation", type=int,
-        help="exact retained generation required by --recovery-only",
+        help=("exact retained generation required by --recovery-only or "
+              "--export-only"),
+    )
+    parser.add_argument(
+        "--expected-records", type=int,
+        help="exact deduplicated record count required by --export-only",
     )
     args = parser.parse_args()
     for path in (args.firmware, args.elf, args.map):
@@ -501,10 +748,18 @@ def main() -> int:
         parser.error("--expected-cid must be 32 uppercase hex characters")
     if len(args.source_commit) != 40:
         parser.error("--source-commit must be a full commit")
-    if args.recovery_only and args.expected_generation is None:
-        parser.error("--recovery-only requires --expected-generation")
-    if not args.recovery_only and args.expected_generation is not None:
-        parser.error("--expected-generation is valid only with --recovery-only")
+    if ((args.recovery_only or args.export_only) and
+            args.expected_generation is None):
+        parser.error(
+            "--recovery-only/--export-only require --expected-generation")
+    if (not args.recovery_only and not args.export_only and
+            args.expected_generation is not None):
+        parser.error(
+            "--expected-generation is valid only with recovery/export mode")
+    if args.export_only and args.expected_records is None:
+        parser.error("--export-only requires --expected-records")
+    if not args.export_only and args.expected_records is not None:
+        parser.error("--expected-records is valid only with --export-only")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -520,6 +775,7 @@ def main() -> int:
     first: dict[str, Any] = {}
     revisit: dict[str, Any] = {}
     preflight: dict[str, Any] = {}
+    exports: dict[str, Any] = {}
     cleanup: dict[str, Any] = {"attempted": False}
     boot: dict[str, Any] = {}
     recovery: dict[str, Any] = {}
@@ -577,7 +833,26 @@ def main() -> int:
                     begun = begin_hil(device, run_id, app_sha,
                                       args.expected_version)
                     generation = int(recovery["generation"])
-                if args.preflight_only:
+                if args.export_only:
+                    failures.extend(post_commit_recovery_failures(
+                        recovery, args.expected_cid,
+                        int(args.expected_generation), "export_recovery"))
+                    if recovery.get("observations") != args.expected_records:
+                        failures.append(
+                            "export_recovery.observations: "
+                            f"{recovery.get('observations')!r} != "
+                            f"{args.expected_records}")
+                    if failures:
+                        raise RuntimeError("; ".join(failures))
+                    exports, export_failures = run_exports(
+                        device, frames, trace, int(args.expected_generation),
+                        int(args.expected_records))
+                    failures.extend(export_failures)
+                    cleanup = best_effort_cleanup(device)
+                    if not cleanup.get("complete"):
+                        raise RuntimeError(
+                            "export cleanup: terminal Home/none/lease0 unproven")
+                elif args.preflight_only:
                     preflight = run_preflight(
                         device, frames, trace, args.expected_cid)
                     cleanup = best_effort_cleanup(device)
@@ -616,7 +891,8 @@ def main() -> int:
                         failures.append(f"hil_cleanup: {type(error).__name__}: {error}")
                 if not cleanup.get("complete"):
                     failures.append("cleanup: terminal Home/none/lease0 unproven")
-        if not args.preflight_only and not args.recovery_only and not failures:
+        if (not args.preflight_only and not args.recovery_only and
+                not args.export_only and not failures):
             expected_generation = int(revisit["committed"]["library_generation"])
             post_commit_boot, post_commit_recovery, post_commit_boot_timing = (
                 reset_capture(
@@ -646,13 +922,14 @@ def main() -> int:
         "status": "pass" if not failures else "failed",
         "passed": not failures,
         "mode": ("preflight" if args.preflight_only else
-                 "recovery" if args.recovery_only else "full"),
+                 "recovery" if args.recovery_only else
+                 "export" if args.export_only else "full"),
         "gate_eligible": (
-            not args.preflight_only and
-            not args.recovery_only and
-            (flashed or args.reuse_exact_flash) and
-            bool(post_commit_recovery) and
-            not failures
+            (flashed or args.reuse_exact_flash) and not failures and (
+                (args.export_only and bool(exports)) or
+                (not args.preflight_only and not args.recovery_only and
+                 not args.export_only and bool(post_commit_recovery) and
+                 bool(revisit)))
         ),
         "failures": failures,
         "flashed": flashed,
@@ -666,6 +943,7 @@ def main() -> int:
         },
         "hil_begin": begun,
         "preflight": preflight,
+        "exports": exports,
         "first_visit": first,
         "revisit": revisit,
         "hil_end": ended,
