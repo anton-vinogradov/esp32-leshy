@@ -1424,6 +1424,56 @@ Observation bleDeviceDetail;
 Observation bleDeviceRenderedDetail;
 BleDeviceSignalStats bleDeviceDetailSignal;
 
+struct BleDeviceRowVisual final {
+    bool present = false;
+    bool selected = false;
+    bool tracker = false;
+    std::int16_t rssiDbm = 0;
+    std::array<char, 22> label{};
+    std::array<char, 64> note{};
+
+    bool operator==(const BleDeviceRowVisual& other) const {
+        return present == other.present && selected == other.selected &&
+            tracker == other.tracker && rssiDbm == other.rssiDbm &&
+            label == other.label && note == other.note;
+    }
+};
+
+enum class BleDeviceListRenderState : std::uint8_t {
+    Unknown,
+    Rows,
+    Searching,
+    Unavailable,
+};
+
+struct BleDeviceRadarVisual final {
+    bool valid = false;
+    std::int16_t rssiDbm = 0;
+    std::int16_t minimumRssiDbm = 0;
+    std::int16_t maximumRssiDbm = 0;
+    std::int16_t rssiTrendDb = 0;
+
+    bool operator==(const BleDeviceRadarVisual& other) const {
+        return valid == other.valid && rssiDbm == other.rssiDbm &&
+            minimumRssiDbm == other.minimumRssiDbm &&
+            maximumRssiDbm == other.maximumRssiDbm &&
+            rssiTrendDb == other.rssiTrendDb;
+    }
+};
+
+constexpr std::size_t kVisibleBleDeviceRows = 4U;
+std::array<BleDeviceRowVisual, kVisibleBleDeviceRows>
+    bleDeviceRenderedRows{};
+std::array<bool, kVisibleBleDeviceRows> bleDeviceRenderedRowValid{};
+BleDeviceListRenderState bleDeviceListRenderState =
+    BleDeviceListRenderState::Unknown;
+BleDeviceRadarVisual bleDeviceRenderedRadar{};
+std::uint32_t bleDeviceListRowRepaints = 0U;
+std::uint32_t bleDeviceListContentClears = 0U;
+std::uint32_t bleDeviceDetailContentClears = 0U;
+std::uint32_t bleDeviceRadarFullRepaints = 0U;
+std::uint32_t bleDeviceRadarDeltaRepaints = 0U;
+
 std::size_t bleDeviceVisibleSize() {
     return bleDeviceNavigationOrder.size(bleDeviceCatalog);
 }
@@ -12457,6 +12507,21 @@ UiTextId radioSignalQualityText(std::int16_t rssiDbm) {
     }
 }
 
+std::uint16_t radioSignalTone(std::int16_t rssiDbm) {
+    const std::uint8_t level = wifiSignalLevel(rssiDbm);
+    return level >= 3U
+        ? Palette::Positive : (level == 2U ? Palette::Warning
+                                           : Palette::Danger);
+}
+
+std::int16_t radioSignalTrackFillWidth(std::int16_t rssiDbm,
+                                      std::int16_t trackWidth) {
+    const std::int16_t clamped = rssiDbm < -100
+        ? -100 : (rssiDbm > -40 ? -40 : rssiDbm);
+    return static_cast<std::int16_t>(
+        (static_cast<std::int32_t>(clamped + 100) * (trackWidth - 2)) / 60);
+}
+
 void renderRadioSignalCard(
         std::int16_t rssiDbm,
         const Rect& bounds = {
@@ -12467,10 +12532,7 @@ void renderRadioSignalCard(
     const std::int16_t kTrackY = bounds.y + (compact ? 50 : 59);
     const std::int16_t kTrackWidth = bounds.width - 2 * kTrackInset;
     constexpr std::int16_t kTrackHeight = 14;
-    const std::uint8_t level = wifiSignalLevel(rssiDbm);
-    const std::uint16_t tone = level >= 3U
-        ? Palette::Positive : (level == 2U ? Palette::Warning
-                                           : Palette::Danger);
+    const std::uint16_t tone = radioSignalTone(rssiDbm);
     if (force) {
         display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
                               Layout::Radius, Palette::Surface);
@@ -12495,10 +12557,8 @@ void renderRadioSignalCard(
                      kTrackHeight, Palette::Canvas);
     display.drawRect(bounds.x + kTrackInset, kTrackY, kTrackWidth,
                      kTrackHeight, Palette::Divider);
-    const std::int16_t clamped = rssiDbm < -100
-        ? -100 : (rssiDbm > -40 ? -40 : rssiDbm);
-    const std::int16_t fillWidth = static_cast<std::int16_t>(
-        (static_cast<std::int32_t>(clamped + 100) * (kTrackWidth - 2)) / 60);
+    const std::int16_t fillWidth =
+        radioSignalTrackFillWidth(rssiDbm, kTrackWidth);
     if (fillWidth > 0) {
         display.fillRect(bounds.x + kTrackInset + 1, kTrackY + 1,
                          fillWidth, kTrackHeight - 2, tone);
@@ -12513,6 +12573,68 @@ void renderRadioSignalCard(
                                      display.textWidth(strong);
         setUiCursor(UiTextRole::Meta, strongX, scaleY);
         display.print(strong);
+    }
+}
+
+void renderRadioSignalCardDelta(
+        std::int16_t previousRssiDbm, std::int16_t rssiDbm,
+        const Rect& bounds) {
+    if (previousRssiDbm == rssiDbm) return;
+    constexpr std::int16_t kTrackInset = 10;
+    constexpr std::int16_t kTrackHeight = 14;
+    constexpr std::int16_t kValueRegionWidth = 74;
+    const bool compact = bounds.height < 100;
+    const std::int16_t trackY = bounds.y + (compact ? 50 : 59);
+    const std::int16_t trackWidth = bounds.width - 2 * kTrackInset;
+    const std::uint16_t previousTone = radioSignalTone(previousRssiDbm);
+    const std::uint16_t tone = radioSignalTone(rssiDbm);
+
+    if (radioSignalQualityText(previousRssiDbm) !=
+        radioSignalQualityText(rssiDbm)) {
+        display.fillRect(
+            bounds.x + 6, bounds.y + 25,
+            bounds.width - 12 - kValueRegionWidth, 24, Palette::Surface);
+        display.setTextColor(tone, Palette::Surface);
+        setUiCursor(UiTextRole::Body, bounds.x + 10, bounds.y + 29);
+        display.print(tr(radioSignalQualityText(rssiDbm)));
+    }
+
+    display.fillRect(bounds.x + bounds.width - 6 - kValueRegionWidth,
+                     bounds.y + 25, kValueRegionWidth, 24,
+                     Palette::Surface);
+    char value[24] = {};
+    std::snprintf(value, sizeof(value), tr(UiTextId::RadioSignalDbmFormat),
+                  static_cast<int>(rssiDbm));
+    display.setTextColor(tone, Palette::Surface);
+    setUiCursor(UiTextRole::Body, bounds.x + 10, bounds.y + 29);
+    const std::int16_t valueX = bounds.x + bounds.width - 10 -
+                                display.textWidth(value);
+    setUiCursor(UiTextRole::Body, valueX, bounds.y + 29);
+    display.print(value);
+
+    const std::int16_t previousWidth =
+        radioSignalTrackFillWidth(previousRssiDbm, trackWidth);
+    const std::int16_t fillWidth =
+        radioSignalTrackFillWidth(rssiDbm, trackWidth);
+    const std::int16_t innerX = bounds.x + kTrackInset + 1;
+    const std::int16_t innerY = trackY + 1;
+    const std::int16_t innerHeight = kTrackHeight - 2;
+    if (previousTone != tone) {
+        if (fillWidth > 0) {
+            display.fillRect(innerX, innerY, fillWidth, innerHeight, tone);
+        }
+        if (previousWidth > fillWidth) {
+            display.fillRect(innerX + fillWidth, innerY,
+                             previousWidth - fillWidth, innerHeight,
+                             Palette::Canvas);
+        }
+    } else if (fillWidth > previousWidth) {
+        display.fillRect(innerX + previousWidth, innerY,
+                         fillWidth - previousWidth, innerHeight, tone);
+    } else if (fillWidth < previousWidth) {
+        display.fillRect(innerX + fillWidth, innerY,
+                         previousWidth - fillWidth, innerHeight,
+                         Palette::Canvas);
     }
 }
 
@@ -12948,77 +13070,143 @@ const char* compactBleService(const Observation& device, char* output,
     return output;
 }
 
-void renderBleDeviceRow(std::size_t index, std::size_t firstVisible) {
+static_assert(kVisibleBleDeviceRows == kVisibleWifiNetworkRows,
+              "Bluetooth and Wi-Fi lists share the four-row layout");
+
+void resetBleDeviceListRenderCache() {
+    bleDeviceRenderedRows = {};
+    bleDeviceRenderedRowValid = {};
+    bleDeviceListRenderState = BleDeviceListRenderState::Unknown;
+}
+
+BleDeviceRowVisual composeBleDeviceRowVisual(
+        std::size_t index, std::size_t firstVisible) {
+    BleDeviceRowVisual visual{};
     const Observation* device = bleDeviceAt(index);
     if (device == nullptr || index < firstVisible ||
-        index >= firstVisible + kVisibleWifiNetworkRows) {
-        return;
+        index >= firstVisible + kVisibleBleDeviceRows) {
+        return visual;
     }
-    const Rect bounds = Components::homeRow(
-        static_cast<std::uint8_t>(index - firstVisible));
-    const bool selected = bleDeviceSelection == index;
-    const std::uint16_t background = selected ? Palette::SurfaceFocus
-                                               : Palette::Surface;
-    display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
-                          Layout::Radius, background);
-    renderFocusCue(bounds, selected);
-    char label[22] = {};
-    compactBlePrimary(*device, label, sizeof(label));
-    const std::int16_t labelTop = menuRowTextTop(bounds);
-    display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
-                         background);
-    setUiCursor(UiTextRole::Body,
-                bounds.x + kInteractiveRowTextInset, labelTop);
-    display.print(label);
-    char note[64] = {};
+    visual.present = true;
+    visual.selected = bleDeviceSelection == index;
+    visual.tracker = leshy1::apps::ble::classifyBleTracker(*device) !=
+        BleTrackerKind::None;
+    visual.rssiDbm = device->rssiDbm;
+    compactBlePrimary(*device, visual.label.data(), visual.label.size());
     char vendor[BleCompanyDatabase::kNameSize + 1U] = {};
     const char* descriptor =
         bleDeviceDescriptor(*device, vendor, sizeof(vendor));
-    if (std::strcmp(label, descriptor) == 0) {
+    if (std::strcmp(visual.label.data(), descriptor) == 0) {
         const bool hasDifferentVendor =
             bleDeviceVendor(*device, vendor, sizeof(vendor)) &&
-            std::strcmp(label, vendor) != 0;
+            std::strcmp(visual.label.data(), vendor) != 0;
         descriptor = hasDifferentVendor
             ? vendor
             : tr(bleAdvertisementModeText(device->bleAdvertisement));
     }
-    std::snprintf(note, sizeof(note), tr(UiTextId::BleDeviceRowFormat),
-                  descriptor, static_cast<int>(device->rssiDbm));
-    display.setTextColor(
-        leshy1::apps::ble::classifyBleTracker(*device) !=
-                BleTrackerKind::None
-            ? Palette::Warning : Palette::Positive,
+    std::snprintf(visual.note.data(), visual.note.size(),
+                  tr(UiTextId::BleDeviceRowFormat), descriptor,
+                  static_cast<int>(device->rssiDbm));
+    return visual;
+}
+
+bool renderBleDeviceRow(std::size_t index, std::size_t firstVisible,
+                        bool force = false) {
+    if (index < firstVisible ||
+        index >= firstVisible + kVisibleBleDeviceRows) {
+        return false;
+    }
+    const std::size_t slot = index - firstVisible;
+    const BleDeviceRowVisual visual =
+        composeBleDeviceRowVisual(index, firstVisible);
+    if (!force && bleDeviceRenderedRowValid[slot] &&
+        bleDeviceRenderedRows[slot] == visual) {
+        return false;
+    }
+    ++bleDeviceListRowRepaints;
+    const Rect bounds = Components::homeRow(
+        static_cast<std::uint8_t>(slot));
+    if (!visual.present) {
+        if (force || (bleDeviceRenderedRowValid[slot] &&
+                      bleDeviceRenderedRows[slot].present)) {
+            display.fillRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                             Palette::Canvas);
+        }
+        bleDeviceRenderedRows[slot] = visual;
+        bleDeviceRenderedRowValid[slot] = true;
+        return true;
+    }
+    const std::uint16_t background = visual.selected
+        ? Palette::SurfaceFocus : Palette::Surface;
+    display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                          Layout::Radius, background);
+    renderFocusCue(bounds, visual.selected);
+    const std::int16_t labelTop = menuRowTextTop(bounds);
+    display.setTextColor(visual.selected ? Palette::Focus
+                                         : Palette::TextSecondary,
+                         background);
+    setUiCursor(UiTextRole::Body,
+                bounds.x + kInteractiveRowTextInset, labelTop);
+    display.print(visual.label.data());
+    display.setTextColor(visual.tracker ? Palette::Warning
+                                        : Palette::Positive,
         background);
     setUiCursor(UiTextRole::Meta,
                 bounds.x + kInteractiveRowTextInset,
                 labelTop + kRobotoCondensedBodyAscent +
                     kRobotoCondensedBodyDescent + 1);
-    display.print(note);
-    renderWifiSignalBars(bounds, device->rssiDbm, background);
+    display.print(visual.note.data());
+    renderWifiSignalBars(bounds, visual.rssiDbm, background);
+    bleDeviceRenderedRows[slot] = visual;
+    bleDeviceRenderedRowValid[slot] = true;
+    return true;
 }
 
-void renderBleDevicesData() {
-    if (bleDeviceCatalog.size() == 0U) {
+bool renderBleDevicesData(bool force = false) {
+    const std::size_t visibleSize = bleDeviceVisibleSize();
+    if (visibleSize == 0U) {
         const bool unavailable = productSurveySourceUnavailableVisible();
+        const BleDeviceListRenderState nextState = unavailable
+            ? BleDeviceListRenderState::Unavailable
+            : BleDeviceListRenderState::Searching;
+        if (!force && bleDeviceListRenderState == nextState) return false;
+        display.fillRect(
+            Layout::Edge, Layout::ContentTop, Layout::ContentWidth,
+            Layout::FooterDividerY - Layout::ContentTop, Palette::Canvas);
+        ++bleDeviceListContentClears;
+        bleDeviceRenderedRows = {};
+        bleDeviceRenderedRowValid = {};
         display.setTextColor(unavailable ? Palette::Danger : Palette::Positive,
                              Palette::Canvas);
         setUiCursor(UiTextRole::Meta, 14, 70);
         display.print(tr(unavailable ? UiTextId::BleReceiverUnavailable
                                      : UiTextId::BleDevicesSearching));
-        return;
+        bleDeviceListRenderState = nextState;
+        return true;
+    }
+    if (bleDeviceListRenderState != BleDeviceListRenderState::Rows) {
+        if (!force) {
+            display.fillRect(
+                Layout::Edge, Layout::ContentTop, Layout::ContentWidth,
+                Layout::FooterDividerY - Layout::ContentTop, Palette::Canvas);
+            ++bleDeviceListContentClears;
+        }
+        bleDeviceRenderedRows = {};
+        bleDeviceRenderedRowValid = {};
     }
     const std::size_t first = bleDeviceFirstVisible(bleDeviceSelection);
-    const std::size_t end = bleDeviceVisibleSize() <
-            first + kVisibleWifiNetworkRows
-        ? bleDeviceVisibleSize() : first + kVisibleWifiNetworkRows;
-    for (std::size_t index = first; index < end; ++index) {
-        renderBleDeviceRow(index, first);
+    bool changed = false;
+    for (std::size_t slot = 0U; slot < kVisibleBleDeviceRows; ++slot) {
+        changed = renderBleDeviceRow(first + slot, first, force) || changed;
     }
+    bleDeviceListRenderState = BleDeviceListRenderState::Rows;
+    return changed;
 }
 
 void renderBleDevices(bool clearContent) {
+    if (clearContent) resetBleDeviceListRenderCache();
     renderHeader(tr(UiTextId::BleDevicesTitle), clearContent);
-    renderBleDevicesData();
+    renderBleDevicesData(clearContent);
 }
 
 bool bleDeviceDetailStaticFieldsDiffer(const Observation& left,
@@ -13030,33 +13218,84 @@ bool bleDeviceDetailStaticFieldsDiffer(const Observation& left,
             left.bleAdvertisement, right.bleAdvertisement);
 }
 
+BleDeviceRadarVisual bleDeviceRadarVisual(
+        const Observation& device, const BleDeviceSignalStats& signal) {
+    return {
+        true,
+        device.rssiDbm,
+        signal.minimumRssiDbm,
+        signal.maximumRssiDbm,
+        signal.rssiTrendDb,
+    };
+}
+
+void renderBleDeviceRange(const BleDeviceRadarVisual& visual) {
+    display.fillRect(Layout::Edge, 242, Layout::ContentWidth, 22,
+                     Palette::Canvas);
+    char line[64] = {};
+    std::snprintf(line, sizeof(line),
+                  tr(UiTextId::WifiDeviceRssiRangeFormat),
+                  static_cast<int>(visual.minimumRssiDbm),
+                  static_cast<int>(visual.maximumRssiDbm));
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 246);
+    display.print(line);
+}
+
+void renderBleDeviceTrend(const BleDeviceRadarVisual& visual) {
+    display.fillRect(Layout::Edge, 264, Layout::ContentWidth,
+                     Layout::FooterDividerY - 264, Palette::Canvas);
+    display.setTextColor(
+        visual.rssiTrendDb >= 4 ? Palette::Positive :
+        (visual.rssiTrendDb <= -4 ? Palette::Danger : Palette::TextMuted),
+        Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 269);
+    display.print(tr(wifiDeviceTrendText(visual.rssiTrendDb)));
+}
+
 void renderBleDeviceRadar(const Observation& device,
                           const BleDeviceSignalStats& signal,
                           bool force = true) {
     constexpr std::int16_t kRadarTop = 170;
+    const BleDeviceRadarVisual next = bleDeviceRadarVisual(device, signal);
+    if (!force && bleDeviceRenderedRadar.valid &&
+        bleDeviceRenderedRadar == next) {
+        return;
+    }
     if (force) {
+        ++bleDeviceRadarFullRepaints;
         display.fillRect(Layout::Edge, kRadarTop, Layout::ContentWidth,
                          Layout::FooterDividerY - kRadarTop, Palette::Canvas);
+        renderRadioSignalCard(
+            device.rssiDbm,
+            {Layout::Edge, kRadarTop, Layout::ContentWidth, 68}, true);
+        renderBleDeviceRange(next);
+        renderBleDeviceTrend(next);
+    } else {
+        ++bleDeviceRadarDeltaRepaints;
+        if (!bleDeviceRenderedRadar.valid ||
+            bleDeviceRenderedRadar.rssiDbm != next.rssiDbm) {
+            if (bleDeviceRenderedRadar.valid) {
+                renderRadioSignalCardDelta(
+                    bleDeviceRenderedRadar.rssiDbm, next.rssiDbm,
+                    {Layout::Edge, kRadarTop, Layout::ContentWidth, 68});
+            } else {
+                renderRadioSignalCard(
+                    device.rssiDbm,
+                    {Layout::Edge, kRadarTop, Layout::ContentWidth, 68}, true);
+            }
+        }
+        if (!bleDeviceRenderedRadar.valid ||
+            bleDeviceRenderedRadar.minimumRssiDbm != next.minimumRssiDbm ||
+            bleDeviceRenderedRadar.maximumRssiDbm != next.maximumRssiDbm) {
+            renderBleDeviceRange(next);
+        }
+        if (!bleDeviceRenderedRadar.valid ||
+            bleDeviceRenderedRadar.rssiTrendDb != next.rssiTrendDb) {
+            renderBleDeviceTrend(next);
+        }
     }
-    renderRadioSignalCard(
-        device.rssiDbm,
-        {Layout::Edge, kRadarTop, Layout::ContentWidth, 68}, force);
-    display.fillRect(Layout::Edge, 242, Layout::ContentWidth,
-                     Layout::FooterDividerY - 242, Palette::Canvas);
-    char line[64] = {};
-    std::snprintf(line, sizeof(line),
-                  tr(UiTextId::WifiDeviceRssiRangeFormat),
-                  static_cast<int>(signal.minimumRssiDbm),
-                  static_cast<int>(signal.maximumRssiDbm));
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 246);
-    display.print(line);
-    display.setTextColor(
-        signal.rssiTrendDb >= 4 ? Palette::Positive :
-        (signal.rssiTrendDb <= -4 ? Palette::Danger : Palette::TextMuted),
-        Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 269);
-    display.print(tr(wifiDeviceTrendText(signal.rssiTrendDb)));
+    bleDeviceRenderedRadar = next;
 }
 
 void renderBleDeviceDetailData() {
@@ -13067,6 +13306,7 @@ void renderBleDeviceDetailData() {
     display.fillRect(0, Layout::ContentTop, Layout::ScreenWidth,
                      Layout::FooterDividerY - Layout::ContentTop,
                      Palette::Canvas);
+    ++bleDeviceDetailContentClears;
     char primary[24] = {};
     compactBlePrimary(device, primary, sizeof(primary));
     display.setTextColor(Palette::Focus, Palette::Canvas);
@@ -16815,25 +17055,13 @@ bool renderSelectionDelta() {
             renderedUi.bleDeviceRevision != bleDeviceCatalog.revision();
         const bool stateChanged = renderedUi.surveyState !=
             static_cast<std::uint8_t>(surveyWorkflow.state());
-        if (dataChanged || oldFirst != currentFirst) {
-            const bool clearRows = oldFirst != currentFirst ||
-                renderedUi.bleDeviceSize == 0U ||
-                bleDeviceVisibleSize() == 0U;
-            if (clearRows) {
-                display.fillRect(
-                    Layout::Edge, Layout::ContentTop, Layout::ContentWidth,
-                    Layout::FooterDividerY - Layout::ContentTop,
-                    Palette::Canvas);
-                renderBleDevicesData();
-            } else {
-                const std::size_t end = bleDeviceVisibleSize() <
-                        currentFirst + kVisibleWifiNetworkRows
-                    ? bleDeviceVisibleSize()
-                    : currentFirst + kVisibleWifiNetworkRows;
-                for (std::size_t index = currentFirst; index < end; ++index) {
-                    renderBleDeviceRow(index, currentFirst);
-                }
-            }
+        const bool selectionChanged =
+            renderedUi.bleDeviceSelection != current;
+        if (dataChanged || oldFirst != currentFirst || selectionChanged ||
+            stateChanged) {
+            // The visible-row cache compares final pixels, so a catalog
+            // revision repaints only rows whose user-facing content changed.
+            renderBleDevicesData(false);
         }
         if (stateChanged) {
             display.fillRect(128, 0, Layout::ScreenWidth - 128,
@@ -16841,17 +17069,9 @@ bool renderSelectionDelta() {
             renderHeaderStatus();
             renderNavigationFooter();
         }
-        if (dataChanged || stateChanged || oldFirst != currentFirst) {
-            return true;
-        }
-        if (renderedUi.bleDeviceSelection == current) {
-            // The shared survey worker can report a duplicate advertisement.
-            // Nothing visible changed, so acknowledge the refresh without a
-            // fallback full-screen repaint.
-            return true;
-        }
-        renderBleDeviceRow(renderedUi.bleDeviceSelection, currentFirst);
-        renderBleDeviceRow(current, currentFirst);
+        // The shared survey worker can report a duplicate advertisement.
+        // Nothing visible changed, so acknowledge the refresh without a
+        // fallback full-screen repaint.
         return true;
     }
 
@@ -21832,6 +22052,13 @@ bool startBleDevicesProduct() {
     bleDeviceDetail = {};
     bleDeviceRenderedDetail = {};
     bleDeviceDetailSignal = {};
+    bleDeviceRenderedRadar = {};
+    resetBleDeviceListRenderCache();
+    bleDeviceListRowRepaints = 0U;
+    bleDeviceListContentClears = 0U;
+    bleDeviceDetailContentClears = 0U;
+    bleDeviceRadarFullRepaints = 0U;
+    bleDeviceRadarDeltaRepaints = 0U;
     productSurveyRuntime = {};
     productSurveyRuntime.selected = true;
     productSurveyRuntime.workerReady = productSurveyWorkerReady;
@@ -22508,6 +22735,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                     bleDeviceDetailSignal = signal == nullptr
                         ? BleDeviceSignalStats{} : *signal;
                     bleDeviceRenderedDetail = {};
+                    bleDeviceRenderedRadar = {};
                     bleProductView = BleProductView::DeviceDetail;
                     lastRuntimeEvent = "ble_device_detail";
                     changed = true;
@@ -29794,7 +30022,10 @@ void emitBleDeviceDetailState(Stream& reply) {
         "\"manufacturer_data_length\":%u,\"payload_length\":%u,"
         "\"rssi_dbm\":%d,\"signal_samples\":%u,"
         "\"minimum_rssi_dbm\":%d,\"maximum_rssi_dbm\":%d,"
-        "\"rssi_trend_db\":%d,\"catalog_revision\":%lu}",
+        "\"rssi_trend_db\":%d,\"catalog_revision\":%lu,"
+        "\"list_row_repaints\":%lu,\"list_content_clears\":%lu,"
+        "\"detail_content_clears\":%lu,"
+        "\"radar_full_repaints\":%lu,\"radar_delta_repaints\":%lu}",
         live ? "true" : "false",
         static_cast<unsigned long>(identityHash),
         device.labelLength != 0U ? "true" : "false",
@@ -29826,7 +30057,12 @@ void emitBleDeviceDetailState(Stream& reply) {
         static_cast<int>(signal.minimumRssiDbm),
         static_cast<int>(signal.maximumRssiDbm),
         static_cast<int>(signal.rssiTrendDb),
-        static_cast<unsigned long>(bleDeviceCatalog.revision()));
+        static_cast<unsigned long>(bleDeviceCatalog.revision()),
+        static_cast<unsigned long>(bleDeviceListRowRepaints),
+        static_cast<unsigned long>(bleDeviceListContentClears),
+        static_cast<unsigned long>(bleDeviceDetailContentClears),
+        static_cast<unsigned long>(bleDeviceRadarFullRepaints),
+        static_cast<unsigned long>(bleDeviceRadarDeltaRepaints));
     reply.println(line);
 }
 

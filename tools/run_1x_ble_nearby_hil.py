@@ -216,6 +216,8 @@ def main() -> int:
     detail_pixel_changes: dict[str, int] = {}
     live_first: dict[str, Any] = {}
     live_second: dict[str, Any] = {}
+    list_render_first: dict[str, Any] = {}
+    list_render_second: dict[str, Any] = {}
     detail_first: dict[str, Any] = {}
     detail_second: dict[str, Any] = {}
     detail_oracle_first: dict[str, Any] = {}
@@ -279,6 +281,7 @@ def main() -> int:
                         "BLE bounded scan-retry accounting mismatch")
                 screens["ble_devices_first"] = capture(
                     device, frames, "ble-devices-first")
+                list_render_first = ble_detail(device)
                 first_cycle = int(live_first["survey_product_ble_scan_cycles"])
                 first_revision = int(live_first["ble_device_catalog_revision"])
                 live_second = wait_live(
@@ -299,12 +302,24 @@ def main() -> int:
                         "second bounded BLE pipeline accounting mismatch")
                 screens["ble_devices_second"] = capture(
                     device, frames, "ble-devices-second")
+                list_render_second = ble_detail(device)
                 list_pixel_changes = changed_pixels(
                     frames, "ble-devices-first", "ble-devices-second")
                 if list_pixel_changes["content_changed_pixels"] <= 0 or \
                         list_pixel_changes["chrome_changed_pixels"] != 0:
                     raise RuntimeError(
                         f"live list redraw escaped rows: {list_pixel_changes}")
+                row_repaint_delta = int(list_render_second.get(
+                    "list_row_repaints", -1)) - int(list_render_first.get(
+                        "list_row_repaints", -1))
+                if not 1 <= row_repaint_delta <= 4 or \
+                        list_render_second.get("list_content_clears") != \
+                        list_render_first.get("list_content_clears"):
+                    raise RuntimeError(
+                        "BLE live list used an unbounded repaint: "
+                        f"rows={row_repaint_delta}, "
+                        f"first={list_render_first!r}, "
+                        f"second={list_render_second!r}")
 
                 detail_first = action(device, "right")
                 trace.append(detail_first)
@@ -364,6 +379,18 @@ def main() -> int:
                         detail_pixel_changes["chrome_changed_pixels"] != 0:
                     raise RuntimeError(
                         f"BLE live redraw escaped radar: {detail_pixel_changes}")
+                if detail_oracle_second.get("detail_content_clears") != \
+                        detail_oracle_first.get("detail_content_clears") or \
+                        detail_oracle_second.get("radar_full_repaints") != \
+                        detail_oracle_first.get("radar_full_repaints") or \
+                        int(detail_oracle_second.get(
+                            "radar_delta_repaints", -1)) <= int(
+                                detail_oracle_first.get(
+                                    "radar_delta_repaints", -1)):
+                    raise RuntimeError(
+                        "BLE detail signal update used a full repaint: "
+                        f"first={detail_oracle_first!r}, "
+                        f"second={detail_oracle_second!r}")
 
                 back_to_list = action(device, "left")
                 trace.append(back_to_list)
@@ -461,6 +488,8 @@ def main() -> int:
         "safe_outputs": safe_outputs,
         "live_first": live_first,
         "live_second": live_second,
+        "list_render_first": list_render_first,
+        "list_render_second": list_render_second,
         "detail_first": detail_first,
         "detail_second": detail_second,
         "detail_oracle_first": detail_oracle_first,
@@ -482,6 +511,7 @@ def main() -> int:
             "strongest_first_unique_rows": True,
             "live_redraw_data_rows_only": True,
             "detail_live_radar_only": True,
+            "intermediate_clear_counters_checked": True,
             "advertisement_facts_visible": True,
             "offline_company_database": True,
             "two_complete_ble_lifecycles": True,

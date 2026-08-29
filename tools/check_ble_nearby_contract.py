@@ -56,16 +56,24 @@ def main() -> int:
         "startBleDevicesProduct()",
         "SurveySourceScope::BleOnly",
         "bleDeviceCatalog.upsert(",
-        "renderBleDevicesData();",
-        "renderBleDeviceRow(index, currentFirst);",
+        "struct BleDeviceRowVisual final",
+        "bleDeviceRenderedRows",
+        "renderBleDevicesData(false);",
+        "The visible-row cache compares final pixels",
         "renderBleDeviceRadar(live, signal, false)",
+        "renderRadioSignalCardDelta(",
+        "bleDeviceRenderedRadar == next",
+        "previousWidth - fillWidth",
+        "bleDeviceListContentClears",
+        "bleDeviceDetailContentClears",
+        "bleDeviceRadarDeltaRepaints",
         "liveBleDeviceSignal()",
         "bleDeviceDetailStaticFieldsDiffer(",
         "bleCompanyDatabase.lookup(",
         "emitBleDeviceDetailState(",
         "leshy.ble.device_detail.v1",
         "active_probe_allowed\\\":false",
-        "return true;\n        }\n        renderBleDeviceRow(",
+        "acknowledge the refresh without a",
         "TouchTargetLayout::HomeRows",
         "ble_product_view",
         "ble_devices_unique",
@@ -104,6 +112,7 @@ def main() -> int:
     forbidden_entry = (
         "const bool bleStackPrepared =",
         "bleStackPrepared && bleScanner.initialized()",
+        "renderBleDeviceRow(index, currentFirst);",
     )
     required_catalog = (
         "static constexpr std::size_t kCapacity = 32",
@@ -170,6 +179,9 @@ def main() -> int:
         '"delayed_entry_stability_gate": True',
         '"boot_recovery_continuity": boot_recovery_continuity(',
         '"product_storage_writes_measured": False',
+        '"intermediate_clear_counters_checked": True',
+        '1 <= row_repaint_delta <= 4',
+        '"BLE detail signal update used a full repaint',
     )
     forbidden_runner = (
         '"survey_product_store_bytes_written": 0',
@@ -182,6 +194,9 @@ def main() -> int:
         "boot_recovery_continuity(before, after)",
         'scope.get("boot_recovery_continuity") is True',
         'first.get("survey_product_store_bytes_written") >= 0',
+        '"BLE list repaint counters show a full/unbounded repaint"',
+        '"BLE detail repaint counters show a full content clear"',
+        'scope.get("intermediate_clear_counters_checked") is True',
     )
     required_entry_gate = (
         "NIMBLE_SYNC_TIMEOUT_MS = 5000",
@@ -328,7 +343,7 @@ def main() -> int:
         "Bluetooth nearby contract passed: direct passive BLE list, "
         "strongest-first bounded catalog, monotonic advertisement intelligence, "
         "identity-stable navigation, offline company lookup and bounded live "
-        "device radar"
+        "device radar with changed-row and changed-region repainting"
     )
     return 0
 

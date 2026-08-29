@@ -115,9 +115,13 @@ def main() -> int:
         if f"UiTextId::{identifier}" not in renderer:
             failures.append(f"dense detail string is not rendered: {identifier}")
 
-    if renderer.count("renderRadioSignalCard(") != 3:
+    if renderer.count("void renderRadioSignalCard(") != 1 or \
+            renderer.count("renderRadioSignalCard(") < 3 or \
+            renderer.count("void renderRadioSignalCardDelta(") != 1 or \
+            renderer.count("renderRadioSignalCardDelta(") < 2:
         failures.append(
-            "shared signal card must have one definition and exactly two detail uses"
+            "radio details must share one full signal card and one bounded "
+            "delta renderer"
         )
 
     for internal in (

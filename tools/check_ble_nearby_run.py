@@ -171,6 +171,15 @@ def main() -> int:
             run.get("list_pixel_changes", {}).get(
                 "chrome_changed_pixels") == 0,
             "live redraw escaped content rows")
+    list_render_first = run.get("list_render_first", {})
+    list_render_second = run.get("list_render_second", {})
+    row_repaint_delta = list_render_second.get("list_row_repaints", -1) - \
+        list_render_first.get("list_row_repaints", -1)
+    require(failures,
+            1 <= row_repaint_delta <= 4 and
+            list_render_second.get("list_content_clears") ==
+                list_render_first.get("list_content_clears"),
+            "BLE list repaint counters show a full/unbounded repaint")
     detail_changes = run.get("detail_pixel_changes", {})
     require(failures,
             detail_changes.get("radar_changed_pixels", 0) > 0 and
@@ -196,6 +205,14 @@ def main() -> int:
             display_signal_signature(detail_second) !=
                 display_signal_signature(detail_first),
             "BLE detail was not identity-stable with a live signal update")
+    require(failures,
+            detail_second.get("detail_content_clears") ==
+                detail_first.get("detail_content_clears") and
+            detail_second.get("radar_full_repaints") ==
+                detail_first.get("radar_full_repaints") and
+            detail_second.get("radar_delta_repaints", -1) >
+                detail_first.get("radar_delta_repaints", -1),
+            "BLE detail repaint counters show a full content clear")
 
     first_heap = run.get("metrics_after_first", {})
     final_heap = run.get("metrics_after", {})
@@ -213,6 +230,7 @@ def main() -> int:
             scope.get("passive_ble_only") is True and
             scope.get("active_scan") is False and
             scope.get("detail_live_radar_only") is True and
+            scope.get("intermediate_clear_counters_checked") is True and
             scope.get("advertisement_facts_visible") is True and
             scope.get("offline_company_database") is True and
             storage_measurement_scope_valid(scope),
