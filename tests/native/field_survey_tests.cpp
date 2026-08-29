@@ -324,7 +324,8 @@ void testVisitTrackerUsesOnlyAnExplicitPreviousFieldVisit() {
         "product-passive-live",
         {accessPoint(kSame, 100U, -50, "same"), {}, {}}, 1U);
     FieldSurveyTracker tracker;
-    CHECK(!tracker.capturePrevious(unrelated));
+    FieldSurveyCatalog scratch;
+    CHECK(!tracker.capturePrevious(unrelated, scratch));
     CHECK(!tracker.previousAvailable());
     CHECK(!tracker.toggleComparePrevious());
 
@@ -332,7 +333,7 @@ void testVisitTrackerUsesOnlyAnExplicitPreviousFieldVisit() {
         FieldSurveyTracker::kSessionId,
         {accessPoint(kSame, 100U, -50, "same"),
          bleDevice(kMissing, 200U, -70, "missing"), {}}, 2U);
-    CHECK(tracker.capturePrevious(previous));
+    CHECK(tracker.capturePrevious(previous, scratch));
     CHECK(tracker.previousAvailable());
     CHECK(tracker.comparePrevious());
 
@@ -341,7 +342,8 @@ void testVisitTrackerUsesOnlyAnExplicitPreviousFieldVisit() {
         {accessPoint(kSame, 300U, -40, "same"),
          accessPoint(kNew, 400U, -60, "new"),
          bleDevice(kBle, 500U, -55, "tag")}, 3U);
-    const FieldSurveyVisitResult& compared = tracker.completeVisit(current);
+    const FieldSurveyVisitResult& compared =
+        tracker.completeVisit(current, scratch);
     CHECK(compared.status == FieldSurveyVisitStatus::Compared);
     CHECK(compared.complete());
     CHECK(compared.currentUnique == 3U);
@@ -355,7 +357,7 @@ void testVisitTrackerUsesOnlyAnExplicitPreviousFieldVisit() {
 
     CHECK(tracker.toggleComparePrevious());
     CHECK(!tracker.comparePrevious());
-    const FieldSurveyVisitResult& first = tracker.completeVisit(current);
+    const FieldSurveyVisitResult& first = tracker.completeVisit(current, scratch);
     CHECK(first.status == FieldSurveyVisitStatus::FirstVisit);
     CHECK(first.newThisVisit == 3U);
     CHECK(first.seenAgain == 0U);
@@ -364,10 +366,11 @@ void testVisitTrackerUsesOnlyAnExplicitPreviousFieldVisit() {
 
 void testVisitTrackerFailsClosedOnIncompleteCurrentVisit() {
     FieldSurveyTracker tracker;
+    FieldSurveyCatalog scratch;
     SurveySession running;
     CHECK(running.start(FieldSurveyTracker::kSessionId, 1U) ==
           SessionStatus::Started);
-    const FieldSurveyVisitResult& result = tracker.completeVisit(running);
+    const FieldSurveyVisitResult& result = tracker.completeVisit(running, scratch);
     CHECK(result.status == FieldSurveyVisitStatus::Incomplete);
     CHECK(!result.complete());
     CHECK(result.buildStatus == FieldSurveyBuildStatus::SessionNotStopped);

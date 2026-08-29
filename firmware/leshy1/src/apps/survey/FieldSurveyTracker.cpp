@@ -15,7 +15,6 @@ const char* fieldSurveyVisitStatusName(FieldSurveyVisitStatus status) {
 }
 
 void FieldSurveyTracker::reset() {
-    current_.reset();
     previous_.fill({});
     previousSize_ = 0;
     previousAvailable_ = false;
@@ -24,7 +23,6 @@ void FieldSurveyTracker::reset() {
 }
 
 void FieldSurveyTracker::clearPrevious() {
-    current_.reset();
     previous_.fill({});
     previousSize_ = 0;
     previousAvailable_ = false;
@@ -33,20 +31,21 @@ void FieldSurveyTracker::clearPrevious() {
 }
 
 bool FieldSurveyTracker::capturePrevious(
-    const services::survey::SurveySession& session) {
+    const services::survey::SurveySession& session,
+    FieldSurveyCatalog& scratch) {
     clearPrevious();
     if (session.state() != services::survey::SessionState::Stopped ||
         session.id() == nullptr || std::strcmp(session.id(), kSessionId) != 0) {
         return false;
     }
-    if (current_.build(session) != FieldSurveyBuildStatus::Complete ||
-        !current_.complete()) {
-        current_.reset();
+    if (scratch.build(session) != FieldSurveyBuildStatus::Complete ||
+        !scratch.complete()) {
+        scratch.reset();
         return false;
     }
-    previousSize_ = current_.size();
+    previousSize_ = scratch.size();
     for (std::size_t index = 0; index < previousSize_; ++index) {
-        const FieldSurveyRecord* record = current_.get(index);
+        const FieldSurveyRecord* record = scratch.get(index);
         if (record == nullptr) {
             clearPrevious();
             return false;
@@ -55,7 +54,7 @@ bool FieldSurveyTracker::capturePrevious(
         previous_[index].identity = record->identity;
         previous_[index].identityLength = record->identityLength;
     }
-    current_.reset();
+    scratch.reset();
     previousAvailable_ = true;
     comparePrevious_ = true;
     return true;
@@ -83,24 +82,26 @@ bool FieldSurveyTracker::baselineContains(
 }
 
 bool FieldSurveyTracker::currentContains(
+    const FieldSurveyCatalog& current,
     const BaselineIdentity& baseline) const {
-    return current_.indexOf(baseline.kind, baseline.identity.data(),
-                            baseline.identityLength) < current_.size();
+    return current.indexOf(baseline.kind, baseline.identity.data(),
+                           baseline.identityLength) < current.size();
 }
 
 const FieldSurveyVisitResult& FieldSurveyTracker::completeVisit(
-    const services::survey::SurveySession& session) {
+    const services::survey::SurveySession& session,
+    FieldSurveyCatalog& scratch) {
     result_ = {};
-    result_.buildStatus = current_.build(session);
-    result_.currentUnique = static_cast<std::uint16_t>(current_.size());
+    result_.buildStatus = scratch.build(session);
+    result_.currentUnique = static_cast<std::uint16_t>(scratch.size());
     if (result_.buildStatus != FieldSurveyBuildStatus::Complete ||
-        !current_.complete()) {
+        !scratch.complete()) {
         result_.status = FieldSurveyVisitStatus::Incomplete;
         return result_;
     }
 
-    for (std::size_t index = 0; index < current_.size(); ++index) {
-        const FieldSurveyRecord* record = current_.get(index);
+    for (std::size_t index = 0; index < scratch.size(); ++index) {
+        const FieldSurveyRecord* record = scratch.get(index);
         if (record == nullptr) {
             result_.status = FieldSurveyVisitStatus::Incomplete;
             return result_;
@@ -125,8 +126,8 @@ const FieldSurveyVisitResult& FieldSurveyTracker::completeVisit(
     }
 
     result_.baselineUnique = static_cast<std::uint16_t>(previousSize_);
-    for (std::size_t index = 0; index < current_.size(); ++index) {
-        const FieldSurveyRecord* record = current_.get(index);
+    for (std::size_t index = 0; index < scratch.size(); ++index) {
+        const FieldSurveyRecord* record = scratch.get(index);
         if (record != nullptr && baselineContains(*record)) {
             ++result_.seenAgain;
         } else {
@@ -134,9 +135,19 @@ const FieldSurveyVisitResult& FieldSurveyTracker::completeVisit(
         }
     }
     for (std::size_t index = 0; index < previousSize_; ++index) {
-        if (!currentContains(previous_[index])) ++result_.missingThisVisit;
+        if (!currentContains(scratch, previous_[index])) {
+            ++result_.missingThisVisit;
+        }
     }
     result_.status = FieldSurveyVisitStatus::Compared;
+    return result_;
+}
+
+const FieldSurveyVisitResult& FieldSurveyTracker::rejectVisit(
+    FieldSurveyBuildStatus status) {
+    result_ = {};
+    result_.status = FieldSurveyVisitStatus::Incomplete;
+    result_.buildStatus = status;
     return result_;
 }
 

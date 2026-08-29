@@ -208,6 +208,7 @@ using leshy1::apps::spectrum::Nrf24SpectrumViewState;
 using leshy1::apps::spectrum::SpectrumDisplayMode;
 using leshy1::apps::spectrum::SpectrumViewport;
 using leshy1::apps::survey::FieldSurveyTracker;
+using leshy1::apps::survey::FieldSurveyCatalog;
 using leshy1::apps::survey::FieldSurveyVisitStatus;
 using leshy1::apps::survey::fieldSurveyBuildStatusName;
 using leshy1::apps::survey::fieldSurveyVisitStatusName;
@@ -735,6 +736,7 @@ union TargetsStoreCodecWorkspace final {
     leshy1::storage::SessionStoreWorkspace session;
     leshy1::storage::TargetDecisionStateStoreWorkspace targetDecision;
     TargetCatalog admissionScratch;
+    FieldSurveyCatalog fieldSurveyScratch;
     SpectrumViewport spectrum;
 
     TargetsStoreCodecWorkspace() : session{} {}
@@ -749,6 +751,8 @@ static_assert(
     "shared store codec workspace must add only the larger member");
 static_assert(sizeof(TargetCatalog) <= sizeof(TargetsStoreCodecWorkspace),
               "admission scratch must fit the shared store workspace");
+static_assert(sizeof(FieldSurveyCatalog) <= sizeof(TargetsStoreCodecWorkspace),
+              "field survey scratch must fit the shared store workspace");
 static_assert(sizeof(SpectrumViewport) <= sizeof(TargetsStoreCodecWorkspace),
               "spectrum history must fit the shared store workspace");
 static_assert(
@@ -759,6 +763,7 @@ enum class TargetsStoreCodecWorkspaceOwner : std::uint8_t {
     Session,
     TargetDecision,
     AdmissionScratch,
+    FieldSurveyScratch,
     Spectrum,
 };
 TargetsStoreCodecWorkspace targetsStoreCodecWorkspace;
@@ -831,6 +836,52 @@ void releaseTargetsAdmissionScratch(TargetCatalog* scratch) {
     targetsStoreCodecWorkspaceOwner =
         TargetsStoreCodecWorkspaceOwner::Session;
     surveyWorkflow.bindWorkspace(&targetsStoreCodecWorkspace.session);
+}
+
+FieldSurveyCatalog* acquireFieldSurveyScratch() {
+    if (targetsStoreCodecWorkspaceOwner !=
+        TargetsStoreCodecWorkspaceOwner::Session) return nullptr;
+    surveyWorkflow.bindWorkspace(nullptr);
+    targetsStoreCodecWorkspace.session.~SessionStoreWorkspace();
+    auto* scratch = new (&targetsStoreCodecWorkspace.fieldSurveyScratch)
+        FieldSurveyCatalog();
+    targetsStoreCodecWorkspaceOwner =
+        TargetsStoreCodecWorkspaceOwner::FieldSurveyScratch;
+    return scratch;
+}
+
+void releaseFieldSurveyScratch(FieldSurveyCatalog* scratch) {
+    if (targetsStoreCodecWorkspaceOwner !=
+            TargetsStoreCodecWorkspaceOwner::FieldSurveyScratch ||
+        scratch != &targetsStoreCodecWorkspace.fieldSurveyScratch) {
+        return;
+    }
+    scratch->~FieldSurveyCatalog();
+    new (&targetsStoreCodecWorkspace.session)
+        leshy1::storage::SessionStoreWorkspace();
+    targetsStoreCodecWorkspaceOwner =
+        TargetsStoreCodecWorkspaceOwner::Session;
+    surveyWorkflow.bindWorkspace(&targetsStoreCodecWorkspace.session);
+}
+
+bool captureFieldSurveyPrevious(const SurveySession& session) {
+    FieldSurveyCatalog* scratch = acquireFieldSurveyScratch();
+    if (scratch == nullptr) {
+        fieldSurveyTracker.clearPrevious();
+        return false;
+    }
+    const bool captured = fieldSurveyTracker.capturePrevious(session, *scratch);
+    releaseFieldSurveyScratch(scratch);
+    return captured;
+}
+
+const leshy1::apps::survey::FieldSurveyVisitResult&
+completeFieldSurveyVisit(const SurveySession& session) {
+    FieldSurveyCatalog* scratch = acquireFieldSurveyScratch();
+    if (scratch == nullptr) return fieldSurveyTracker.rejectVisit();
+    const auto& result = fieldSurveyTracker.completeVisit(session, *scratch);
+    releaseFieldSurveyScratch(scratch);
+    return result;
 }
 ArduinoFsSessionStoreWorkspace sdSessionStoreIoWorkspace;
 RamSessionStoreIo ramSessionStore;
@@ -4683,7 +4734,7 @@ bool commitPausedProductSurvey() {
     const SurveyPipelineStatus committed = stopProductSurvey();
     if (committed == SurveyPipelineStatus::Committed) {
         if (wifiProductView == WifiProductView::Visit) {
-            fieldSurveyTracker.completeVisit(surveySession);
+            completeFieldSurveyVisit(surveySession);
         }
         constexpr ProductSurveyWorkerControl terminalControl =
             ProductSurveyWorkerControl::Idle;
@@ -6097,7 +6148,7 @@ void serviceProductSurveyWorker() {
                 render = false;
             } else {
                 if (wifiProductView == WifiProductView::Visit) {
-                    fieldSurveyTracker.completeVisit(surveySession);
+                    completeFieldSurveyVisit(surveySession);
                 }
                 setProductSurveyControl(ProductSurveyWorkerControl::Idle);
                 render = true;
@@ -22568,7 +22619,7 @@ bool openWifiVisitProduct() {
     // Only an exact retained Field Survey is eligible as an automatic
     // baseline. A generic Wi-Fi/BLE scan must never silently become a visit
     // comparison merely because it happens to be the newest library entry.
-    fieldSurveyTracker.capturePrevious(librarySession);
+    captureFieldSurveyPrevious(librarySession);
     // A retained visit is a device-level observation source, not merely a
     // Wi-Fi list refresh. Listen with every available built-in receiver by
     // default so consecutive visits can support cross-radio Target review.
@@ -28294,7 +28345,7 @@ void emitFieldSurveyIncompleteTest(Stream& reply) {
     // Exercise the same product tracker with a physically live, therefore
     // intentionally incomplete, session. The normal Stop/commit path below
     // recomputes the result from the stopped session and remains untouched.
-    fieldSurveyTracker.completeVisit(surveySession);
+    completeFieldSurveyVisit(surveySession);
     emitFieldSurveyState(reply);
 }
 

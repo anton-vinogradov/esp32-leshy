@@ -38,14 +38,16 @@ struct FieldSurveyVisitResult final {
 };
 
 // Product-facing state for a retained field visit. It keeps only identity and
-// entity kind from the previous visit, then reuses one full catalog to build
-// the current result. This avoids reserving two 5.6 KiB catalogs on N16 boards.
+// entity kind from the previous visit. The caller lends one terminal-only
+// catalog scratch while loading/comparing; no 5.6 KiB catalog remains resident
+// while Wi-Fi or NimBLE owns the no-PSRAM board's internal heap.
 class FieldSurveyTracker final {
 public:
     static constexpr const char* kSessionId = "field-visit-live";
 
     void reset();
-    bool capturePrevious(const services::survey::SurveySession& session);
+    bool capturePrevious(const services::survey::SurveySession& session,
+                         FieldSurveyCatalog& scratch);
     void clearPrevious();
 
     bool previousAvailable() const { return previousAvailable_; }
@@ -58,7 +60,10 @@ public:
     bool toggleComparePrevious();
 
     const FieldSurveyVisitResult& completeVisit(
-        const services::survey::SurveySession& session);
+        const services::survey::SurveySession& session,
+        FieldSurveyCatalog& scratch);
+    const FieldSurveyVisitResult& rejectVisit(
+        FieldSurveyBuildStatus status = FieldSurveyBuildStatus::InputRejected);
     const FieldSurveyVisitResult& result() const { return result_; }
 
 private:
@@ -72,9 +77,9 @@ private:
     };
 
     bool baselineContains(const FieldSurveyRecord& record) const;
-    bool currentContains(const BaselineIdentity& baseline) const;
+    bool currentContains(const FieldSurveyCatalog& current,
+                         const BaselineIdentity& baseline) const;
 
-    FieldSurveyCatalog current_{};
     std::array<BaselineIdentity, FieldSurveyCatalog::kCapacity> previous_{};
     std::size_t previousSize_ = 0;
     bool previousAvailable_ = false;
@@ -82,7 +87,7 @@ private:
     FieldSurveyVisitResult result_{};
 };
 
-static_assert(sizeof(FieldSurveyTracker) <= 6400U,
-              "field survey tracker exceeded its foreground RAM budget");
+static_assert(sizeof(FieldSurveyTracker) <= 640U,
+              "field survey retained state exceeded its foreground RAM budget");
 
 }  // namespace leshy1::apps::survey

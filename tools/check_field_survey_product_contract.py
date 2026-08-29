@@ -22,7 +22,7 @@ def main() -> None:
     require(entry, "FieldSurveyTracker fieldSurveyTracker;", "bounded state")
     require(
         entry,
-        "fieldSurveyTracker.capturePrevious(librarySession);",
+        "captureFieldSurveyPrevious(librarySession);",
         "explicit retained baseline capture",
     )
     require(
@@ -30,7 +30,7 @@ def main() -> None:
         "? FieldSurveyTracker::kSessionId",
         "field-visit session identity",
     )
-    if entry.count("fieldSurveyTracker.completeVisit(surveySession);") != 3:
+    if entry.count("completeFieldSurveyVisit(surveySession);") != 3:
         raise SystemExit(
             "FAIL: field survey result must cover normal/paused commit and HIL negative"
         )
@@ -39,6 +39,8 @@ def main() -> None:
         "fieldSurveyTracker.toggleComparePrevious();",
         "previous/first-visit selection",
     )
+    require(entry, "FieldSurveyCatalog fieldSurveyScratch;", "shared scratch")
+    require(entry, "releaseFieldSurveyScratch(scratch);", "scratch restore")
     require(
         entry,
         "result.status == FieldSurveyVisitStatus::Incomplete",
