@@ -135,6 +135,8 @@ class FieldSurveyHilRunnerTests(unittest.TestCase):
         source = inspect.getsource(RUNNER.run_preflight)
         self.assertIn('"survey_product_wifi_scan_cycles"', source)
         self.assertIn('"survey_product_ble_scan_cycles"', source)
+        self.assertIn('"survey_product_status") == "paused"', source)
+        self.assertNotIn('action(device, "up")', source)
         self.assertIn('"writes_committed": 0', source)
         self.assertNotIn("field_state(", source)
         self.assertNotIn("committed_failures(", source)

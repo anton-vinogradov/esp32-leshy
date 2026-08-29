@@ -18,6 +18,21 @@ enum class FieldSurveyVisitStatus : std::uint8_t {
 
 const char* fieldSurveyVisitStatusName(FieldSurveyVisitStatus status);
 
+struct FieldSurveyCycleEvidence final {
+    bool fieldVisit = false;
+    bool scanFailed = false;
+    bool stopRequested = false;
+    std::uint8_t selectedSourceMask = 0;
+    std::uint8_t attemptedSourceMask = 0;
+    std::uint8_t unavailableSourceMask = 0;
+};
+
+// A field visit is one bounded snapshot, not a continuous monitor. Pause only
+// after every selected source has either completed its first attempt or has
+// been reported unavailable. Generic Wi-Fi/BLE monitoring never enables this
+// policy and remains continuous.
+bool shouldAutoPauseFieldVisit(const FieldSurveyCycleEvidence& evidence);
+
 struct FieldSurveyVisitResult final {
     FieldSurveyVisitStatus status = FieldSurveyVisitStatus::Empty;
     FieldSurveyBuildStatus buildStatus =

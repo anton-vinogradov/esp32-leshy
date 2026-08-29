@@ -14,6 +14,17 @@ const char* fieldSurveyVisitStatusName(FieldSurveyVisitStatus status) {
     return "incomplete";
 }
 
+bool shouldAutoPauseFieldVisit(const FieldSurveyCycleEvidence& evidence) {
+    if (!evidence.fieldVisit || evidence.scanFailed ||
+        evidence.stopRequested || evidence.selectedSourceMask == 0U) {
+        return false;
+    }
+    const std::uint8_t covered = static_cast<std::uint8_t>(
+        evidence.attemptedSourceMask | evidence.unavailableSourceMask);
+    return (covered & evidence.selectedSourceMask) ==
+           evidence.selectedSourceMask;
+}
+
 void FieldSurveyTracker::reset() {
     previous_.fill({});
     previousSize_ = 0;

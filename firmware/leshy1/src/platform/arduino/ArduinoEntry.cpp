@@ -2308,6 +2308,7 @@ ProductSurveyMountTotals productSurveyMountTotalsSnapshot() {
 }
 ProductSurveyWorkerControl productSurveyWorkerControl =
     ProductSurveyWorkerControl::Idle;
+bool productSurveyWorkerFieldVisit = false;
 AirspaceGuardBleWorkerControl airspaceGuardBleWorkerControl =
     AirspaceGuardBleWorkerControl::Idle;
 std::uint32_t airspaceGuardBleRequestedGeneration = 0;
@@ -2663,9 +2664,19 @@ ProductSurveyWorkerControl productSurveyControl() {
     return control;
 }
 
+bool productSurveyFieldVisit() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool fieldVisit = productSurveyWorkerFieldVisit;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return fieldVisit;
+}
+
 void setProductSurveyControl(ProductSurveyWorkerControl control) {
     portENTER_CRITICAL(&productSurveyWorkerMux);
     productSurveyWorkerControl = control;
+    if (control == ProductSurveyWorkerControl::Idle) {
+        productSurveyWorkerFieldVisit = false;
+    }
     portEXIT_CRITICAL(&productSurveyWorkerMux);
 }
 
@@ -4022,6 +4033,7 @@ void runProductSurveyWorker(void*) {
         std::uint64_t pendingScanEndedUs = 0;
         std::uint16_t pendingScanDropped = 0;
         while (!productSurveyStopRequested()) {
+            std::uint8_t attemptedSourceMask = 0;
             const std::array<RadioKind, 2> schedule{
                 RadioKind::Wifi, RadioKind::Ble};
             for (const RadioKind source : schedule) {
@@ -4029,6 +4041,8 @@ void runProductSurveyWorker(void*) {
                     leshy1::services::survey::sourceMask(source);
                 if ((report.activeSourceMask & mask) == 0) continue;
                 if (productSurveyStopRequested()) break;
+                attemptedSourceMask = static_cast<std::uint8_t>(
+                    attemptedSourceMask | mask);
                 heartbeatProductSurveyWorker();
                 std::uint64_t scanStartedUs =
                     static_cast<std::uint64_t>(esp_timer_get_time());
@@ -4180,6 +4194,18 @@ void runProductSurveyWorker(void*) {
                     scanEndedUs, scanStartedUs, scanEndedUs,
                     pendingScanDropped);
                 pendingScanWindow = false;
+            }
+            const bool stopRequested = productSurveyStopRequested();
+            const leshy1::apps::survey::FieldSurveyCycleEvidence
+                cycleEvidence{
+                    productSurveyFieldVisit(), scanFailed, stopRequested,
+                    report.selectedSourceMask, attemptedSourceMask,
+                    report.unavailableSourceMask};
+            if (leshy1::apps::survey::shouldAutoPauseFieldVisit(
+                    cycleEvidence)) {
+                transitionProductSurveyControl(
+                    ProductSurveyWorkerControl::Running,
+                    ProductSurveyWorkerControl::PauseRequested);
             }
             if (productSurveyStopRequested() || scanFailed) break;
             ulTaskNotifyTake(
@@ -4472,6 +4498,8 @@ bool startProductSurvey() {
     portENTER_CRITICAL(&productSurveyWorkerMux);
     productSurveyWorkerOwnedResources = appRuntime.activeResources();
     productSurveyWorkerScanActive = false;
+    productSurveyWorkerFieldVisit =
+        wifiProductView == WifiProductView::Visit;
     productSurveyWorkerControl = ProductSurveyWorkerControl::Starting;
     portEXIT_CRITICAL(&productSurveyWorkerMux);
     xTaskNotifyGive(productSurveyWorkerTaskHandle);

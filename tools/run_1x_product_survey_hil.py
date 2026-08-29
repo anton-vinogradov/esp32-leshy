@@ -270,7 +270,8 @@ def list_after_detail_failures(state: dict[str, Any], minimum_observations: int,
 
 
 def committed_failures(state: dict[str, Any], before_generation: int,
-                       expected_owner: str = "survey") -> list[str]:
+                       expected_owner: str = "survey",
+                       automatic_pause: bool = False) -> list[str]:
     failures = expect(state, {
         "page": "survey",
         "runtime_owner": expected_owner,
@@ -294,10 +295,13 @@ def committed_failures(state: dict[str, Any], before_generation: int,
     if state.get("library_generation") != state.get("survey_generation"):
         failures.append("committed.library_generation: does not match Survey")
     stop_action_us = state.get("survey_product_stop_action_us")
+    minimum_stop_action_us = 0 if automatic_pause else 1
     if (not isinstance(stop_action_us, int) or isinstance(stop_action_us, bool)
-            or stop_action_us <= 0 or stop_action_us > 10_000):
+            or stop_action_us < minimum_stop_action_us or
+            stop_action_us > 10_000):
         failures.append(
-            "committed.survey_product_stop_action_us: expected in (0, 10000]"
+            "committed.survey_product_stop_action_us: "
+            f"expected in [{minimum_stop_action_us}, 10000]"
         )
     return failures
 

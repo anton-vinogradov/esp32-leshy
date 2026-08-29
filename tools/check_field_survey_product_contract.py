@@ -51,6 +51,16 @@ def main() -> None:
         "survey.field-visit.test-incomplete once",
         "physical incomplete-session negative",
     )
+    require(
+        entry,
+        "shouldAutoPauseFieldVisit(",
+        "single-pass field visit policy",
+    )
+    require(
+        entry,
+        "productSurveyWorkerFieldVisit =",
+        "explicit worker visit mode",
+    )
     require(strings, "FieldSurveyCompare", "comparison label")
     require(strings, "FieldSurveyNewSeenFormat", "revisit summary")
     require(strings, "FieldSurveyNoComparison", "incomplete disclosure")

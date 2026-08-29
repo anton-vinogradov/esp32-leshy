@@ -376,6 +376,33 @@ void testVisitTrackerFailsClosedOnIncompleteCurrentVisit() {
     CHECK(result.buildStatus == FieldSurveyBuildStatus::SessionNotStopped);
 }
 
+void testFieldVisitAutoPauseRequiresOneCoveredPass() {
+    FieldSurveyCycleEvidence evidence;
+    evidence.fieldVisit = true;
+    evidence.selectedSourceMask = 0x03U;
+    evidence.attemptedSourceMask = 0x03U;
+    CHECK(shouldAutoPauseFieldVisit(evidence));
+
+    evidence.fieldVisit = false;
+    CHECK(!shouldAutoPauseFieldVisit(evidence));
+    evidence.fieldVisit = true;
+    evidence.attemptedSourceMask = 0x01U;
+    CHECK(!shouldAutoPauseFieldVisit(evidence));
+
+    // A reported unavailable source completes the bounded first pass without
+    // pretending that it produced observations.
+    evidence.unavailableSourceMask = 0x02U;
+    CHECK(shouldAutoPauseFieldVisit(evidence));
+    evidence.scanFailed = true;
+    CHECK(!shouldAutoPauseFieldVisit(evidence));
+    evidence.scanFailed = false;
+    evidence.stopRequested = true;
+    CHECK(!shouldAutoPauseFieldVisit(evidence));
+    evidence.stopRequested = false;
+    evidence.selectedSourceMask = 0U;
+    CHECK(!shouldAutoPauseFieldVisit(evidence));
+}
+
 }  // namespace
 
 int main() {
@@ -385,6 +412,7 @@ int main() {
     testWigleBleAndFailureBoundaries();
     testVisitTrackerUsesOnlyAnExplicitPreviousFieldVisit();
     testVisitTrackerFailsClosedOnIncompleteCurrentVisit();
+    testFieldVisitAutoPauseRequiresOneCoveredPass();
     std::printf(
         "field survey tests passed (record=%zu B, catalog=%zu B, tracker=%zu B)\n",
         sizeof(FieldSurveyRecord), sizeof(FieldSurveyCatalog),

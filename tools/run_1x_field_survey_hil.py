@@ -27,7 +27,6 @@ from run_1x_product_survey_hil import (
     query,
     reset_capture,
     return_home_after_commit,
-    running_failures,
     setup_failures,
     valid_cid,
 )
@@ -171,6 +170,46 @@ def field_result_failures(record: dict[str, Any], status: str,
     return failures
 
 
+def auto_paused_failures(state: dict[str, Any], expected_cid: str,
+                         label: str) -> list[str]:
+    observations = state.get("survey_observations")
+    scan_cycles = state.get("survey_product_scan_cycles")
+    failures: list[str] = []
+    if not isinstance(observations, int) or observations < 1:
+        failures.append(f"{label}.survey_observations: expected >= 1")
+        return failures
+    if not isinstance(scan_cycles, int) or scan_cycles != 1:
+        failures.append(f"{label}.survey_product_scan_cycles: expected 1")
+        return failures
+    failures.extend(paused_failures(
+        state, observations, scan_cycles, "wifi"))
+    failures.extend(expect(state, {
+        "survey_product_expected_cid": expected_cid,
+        "survey_product_observed_cid": expected_cid,
+        "survey_product_identity_status": "valid",
+        "survey_product_selected_source_mask": 3,
+        "survey_product_active_source_mask": 3,
+        "survey_product_wifi_scan_cycles": 1,
+        "survey_product_ble_scan_cycles": 1,
+        "survey_scan_rejected": 0,
+        "survey_scan_dropped": 0,
+        "survey_ble_scan_rejected": 0,
+        "survey_ble_scan_dropped": 0,
+        "survey_dropped": 0,
+    }, label))
+    wifi_accepted = state.get("survey_scan_accepted")
+    ble_accepted = state.get("survey_ble_scan_accepted")
+    forwarded = state.get("survey_forwarded")
+    if (not isinstance(wifi_accepted, int) or
+            not isinstance(ble_accepted, int) or
+            wifi_accepted + ble_accepted != observations or
+            forwarded != observations):
+        failures.append(
+            f"{label}.observation_accounting: "
+            "wifi+ble accepted/forwarded/observations differ")
+    return failures
+
+
 def begin_hil(device: Any, run_id: str, app_sha: str,
               version: str) -> dict[str, Any]:
     try:
@@ -254,23 +293,19 @@ def run_visit(device: Any, frames: Path, name: str,
         "page": "survey", "runtime_owner": "wifi", "lease_mask": 15,
         "survey_product_status": "preparing",
     }, f"{name}.start_ack")
-    running = wait_state(
+    paused = wait_state(
         device,
         lambda state: (
-            state.get("survey_product_status") == "running" and
+            state.get("survey_product_status") == "paused" and
+            state.get("survey_product_source_active") is False and
             state.get("survey_product_wifi_scan_cycles", 0) >= 1 and
             state.get("survey_product_ble_scan_cycles", 0) >= 1 and
             state.get("survey_observations", 0) >= 1
-        ), 35.0, f"{name}: both receive sources did not complete one cycle",
+        ), 35.0, f"{name}: one receive pass did not auto-pause",
         trace)
-    trace.append(running)
-    failures = running_failures(running, expected_cid, "wifi")
-    failures.extend(expect(running, {
-        "survey_product_selected_source_mask": 3,
-        "survey_product_active_source_mask": 3,
-        "survey_scan_dropped": 0,
-        "survey_ble_scan_dropped": 0,
-    }, f"{name}.running_sources"))
+    trace.append(paused)
+    failures = auto_paused_failures(
+        paused, expected_cid, f"{name}.auto_paused")
     if failures:
         raise RuntimeError("; ".join(failures))
 
@@ -290,15 +325,6 @@ def run_visit(device: Any, frames: Path, name: str,
             "storage_touched": False,
         }, f"{name}.incomplete_negative")
 
-    pause_ack = action(device, "up")
-    trace.append(pause_ack)
-    paused = wait_state(
-        device,
-        lambda state: (
-            state.get("survey_product_status") == "paused" and
-            state.get("survey_product_source_active") is False
-        ), 20.0, f"{name}: did not pause", trace)
-    trace.append(paused)
     paused_observations = int(paused["survey_observations"])
     paused_cycles = int(paused["survey_product_scan_cycles"])
     failures = paused_failures(
@@ -325,7 +351,8 @@ def run_visit(device: Any, frames: Path, name: str,
             lambda state: state.get("survey_product_status") == "committed",
             20.0, f"{name}: did not commit", trace)
         trace.append(committed)
-    failures = committed_failures(committed, before_generation, "wifi")
+    failures = committed_failures(
+        committed, before_generation, "wifi", automatic_pause=True)
     if failures:
         raise RuntimeError("; ".join(failures))
 
@@ -347,7 +374,7 @@ def run_visit(device: Any, frames: Path, name: str,
         "setup": setup,
         "setup_field": setup_field,
         "setup_capture": setup_capture,
-        "running": running,
+        "auto_paused": paused,
         "incomplete_negative": incomplete,
         "paused": paused,
         "committed": committed,
@@ -380,33 +407,29 @@ def run_preflight(device: Any, frames: Path,
         "page": "survey", "runtime_owner": "wifi", "lease_mask": 15,
         "survey_product_status": "preparing",
     }, "preflight.start_ack")
-    running = wait_state(
+    paused = wait_state(
         device,
         lambda state: (
-            state.get("survey_product_status") == "running" and
+            state.get("survey_product_status") == "paused" and
+            state.get("survey_product_source_active") is False and
             state.get("survey_product_wifi_scan_cycles", 0) >= 1 and
             state.get("survey_product_ble_scan_cycles", 0) >= 1 and
             state.get("survey_observations", 0) >= 1
-        ), 35.0, "preflight: both receive sources did not complete one cycle",
+        ), 35.0, "preflight: one receive pass did not auto-pause",
         trace)
-    trace.append(running)
-    failures = running_failures(running, expected_cid, "wifi")
-    failures.extend(expect(running, {
-        "survey_product_selected_source_mask": 3,
-        "survey_product_active_source_mask": 3,
-        "survey_scan_dropped": 0,
-        "survey_ble_scan_dropped": 0,
-    }, "preflight.running_sources"))
+    trace.append(paused)
+    failures = auto_paused_failures(
+        paused, expected_cid, "preflight.auto_paused")
     if failures:
         raise RuntimeError("; ".join(failures))
-    running_capture = capture(device, frames, "preflight-running")
+    paused_capture = capture(device, frames, "preflight-auto-paused")
     return {
         "setup": setup,
         "setup_capture": setup_capture,
         "start": start,
         "started": started,
-        "running": running,
-        "running_capture": running_capture,
+        "auto_paused": paused,
+        "auto_paused_capture": paused_capture,
         "writes_committed": 0,
     }
 
