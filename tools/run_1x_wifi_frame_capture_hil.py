@@ -75,7 +75,9 @@ def read_pcap(device: Any, timeout: float = 20.0
     return begin, payload, end
 
 
-def parse_pcap(payload: bytes) -> tuple[dict[str, Any], list[str]]:
+def parse_pcap(
+        payload: bytes, *, expected_fcs_included: bool | None = True,
+        ) -> tuple[dict[str, Any], list[str]]:
     failures: list[str] = []
     summary: dict[str, Any] = {
         "bytes": len(payload),
@@ -87,6 +89,7 @@ def parse_pcap(payload: bytes) -> tuple[dict[str, Any], list[str]]:
         "frequencies_mhz": [],
         "rssi_min_dbm": None,
         "rssi_max_dbm": None,
+        "fcs_included_records": 0,
         "frame_types": {"management": 0, "control": 0, "data": 0,
                         "reserved": 0},
     }
@@ -137,8 +140,14 @@ def parse_pcap(payload: bytes) -> tuple[dict[str, Any], list[str]]:
         flags = record[8]
         frequency, channel_flags = struct.unpack_from("<HH", record, 10)
         rssi = struct.unpack_from("<b", record, 14)[0]
-        if flags & 0x10 == 0 or channel_flags & 0x0080 == 0:
-            failures.append("pcap: FCS/2GHz radiotap flags missing")
+        fcs_included = flags & 0x10 != 0
+        if fcs_included:
+            summary["fcs_included_records"] += 1
+        if (expected_fcs_included is not None and
+                fcs_included != expected_fcs_included):
+            failures.append("pcap: radiotap FCS flag mismatch")
+        if channel_flags & 0x0080 == 0:
+            failures.append("pcap: 2GHz radiotap flag missing")
         if not 2412 <= frequency <= 2472:
             failures.append(f"pcap: unexpected frequency {frequency}")
         frequencies.add(frequency)

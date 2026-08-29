@@ -121,7 +121,8 @@ def hc22000_summary(payload: bytes) -> tuple[dict[str, Any], list[str]]:
     fields = record.split("*")
     if len(fields) != 9 or fields[:2] != ["WPA", "02"]:
         failures.append("hc22000 payload is not one WPA*02 EAPOL record")
-    if record and re.fullmatch(r"[A-Z0-9*]+", record) is None:
+    if (record and
+            re.fullmatch(r"WPA\*02(?:\*[0-9A-Fa-f]+){7}", record) is None):
         failures.append("hc22000 payload contains unexpected characters")
     return {
         "records": len(lines),
@@ -497,7 +498,11 @@ def main() -> int:
                         "frames": 2, "persistent": True,
                         "radio_touched": False,
                     }, "pcap_end")
-                    pcap_summary, pcap_failures = parse_pcap(pcap_payload)
+                    # The deterministic raw fixture deliberately models frames
+                    # captured without a trailing FCS.  Radiotap must describe
+                    # that truth instead of claiming an FCS that is not there.
+                    pcap_summary, pcap_failures = parse_pcap(
+                        pcap_payload, expected_fcs_included=False)
                     failures.extend(pcap_failures)
                     pcap_summary["sha256"] = hashlib.sha256(
                         pcap_payload).hexdigest()

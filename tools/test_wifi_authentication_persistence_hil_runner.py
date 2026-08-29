@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import struct
 import unittest
 from unittest.mock import patch
 
@@ -10,12 +11,28 @@ import run_1x_wifi_authentication_persistence_hil as runner
 
 class WifiAuthenticationPersistenceHilRunnerTests(unittest.TestCase):
     def test_hc22000_summary_accepts_one_wpa02_record(self) -> None:
-        payload = b"WPA*02*AA*BB*CC*DD*EE*FF*00\n"
+        payload = b"WPA*02*aa*BB*cc*DD*ee*FF*00\n"
         summary, failures = runner.hc22000_summary(payload)
         self.assertEqual(failures, [])
         self.assertEqual(summary["records"], 1)
         self.assertEqual(summary["format"], "WPA*02")
         self.assertNotIn(payload.decode("ascii").strip(), str(summary))
+
+    def test_pcap_summary_accepts_truthful_absent_fcs_fixture(self) -> None:
+        global_header = struct.pack(
+            "<IHHIIII", 0xA1B2C3D4, 2, 4, 0, 0, 271, 127)
+        radiotap = struct.pack(
+            "<BBHIBxHHb", 0, 0, 15, 0x2A, 0, 2437, 0x0080, -42)
+        frame = b"\x08"
+        record = radiotap + frame
+        packet_header = struct.pack(
+            "<IIII", 1, 0, len(record), len(record))
+        summary, failures = runner.parse_pcap(
+            global_header + packet_header + record,
+            expected_fcs_included=False)
+        self.assertEqual(failures, [])
+        self.assertEqual(summary["fcs_included_records"], 0)
+        self.assertEqual(summary["frequencies_mhz"], [2437])
 
     def test_hc22000_summary_rejects_raw_or_multiple_records(self) -> None:
         for payload in (
