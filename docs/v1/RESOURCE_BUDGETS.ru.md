@@ -1239,6 +1239,28 @@ bounded comparison O(64²) выполняется только после Stop/c
 В app-slot OTA 4 MiB остаётся 739 152 B при floor 524 288 B. Runtime heap и
 physical cleanup остаются открыты до focused board HIL.
 
+Regression bound старта BLE Field Survey `RB-M195`: exact physical
+`1.0.0-dev.261` на source `b38464f93cdb7807734a24b1e1a08f03d4bbae24`
+выносит 4 560 B raw capture CAP-049, нужного только HIL, из resident RAM продукта.
+Он создаётся через `nothrow` только после допуска exact authenticated fixture и
+освобождается на каждом path clear/rejection. Static RAM — 231 624 B, ровно на
+4 560 B меньше dev.260 и на 10 192 B меньше product-slice build dev.257; отдельное
+изменение terminal workspace dev.260 и это allocation change нельзя суммировать по
+размерам source objects, потому что менялись также code и alignment. Размеры linked
+image/app/factory/ELF — 3 447 556/3 447 712/3 513 248/23 392 412 B. SHA-256
+app/factory/ELF/map —
+`e5322abf49c43f8c7b561306bb811afc1c597a523a3b8d7ae8cb42fd3c26ca1e`/
+`14db7f5b3418c665cfda8388f569a7fe7062ee9754faa1fd0d1b171c1dbdb59b`/
+`fa7edeb12c95d14301702ff68e2c0a5d245ba8783bccda362b54ee724d42eb51`/
+`0f422482266575d790e350d6fe9abce58bde6595986da3b40819a8368c1c8b36`.
+В app-slot OTA 4 MiB остаётся 746 592 B при обязательном floor 524 288 B.
+На оригинальном board-01 boot heap равен 74 012 B; BLE достигает `ready` из
+73 360 B free/28 660 B largest block и завершает один real cycle 12 Wi-Fi/33 BLE,
+45 forwarded, zero drops, zero writes и exact cleanup. Compact
+[evidence preflight](../../tests/hil/evidence/board-01-field-survey-preflight-1.0.0-dev.261.json)
+является только regression, а не capability gate first/revisit CAP-050. Dense source
+input выше 64, routing persistence/export и runtime heap committed visits остаются открыты.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

@@ -136,6 +136,7 @@ run_opaque_evidence_check() {
 
 "$test_tmp/field_survey_tests"
 python3 "$repo_dir/tools/check_field_survey_product_contract.py"
+python3 "$repo_dir/tools/check_field_survey_preflight_acceptance.py"
 
 "${CXX:-c++}" \
     -std=c++17 \
@@ -786,6 +787,8 @@ python3 "$repo_dir/tools/test_sd_power_cut_runner.py"
 python3 "$repo_dir/tools/test_prerelease_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_hil_runner.py"
 python3 "$repo_dir/tools/test_field_survey_hil_runner.py"
+PYTHONPATH="$repo_dir/tools" python3 -m unittest \
+    "$repo_dir/tools/test_field_survey_preflight_acceptance.py"
 python3 "$repo_dir/tools/test_product_home_hil_runner.py"
 python3 "$repo_dir/tools/test_airspace_guard_hil_runner.py"
 python3 "$repo_dir/tools/test_airspace_guard_hil_acceptance.py"

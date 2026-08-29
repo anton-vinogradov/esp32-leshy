@@ -1248,6 +1248,28 @@ Static RAM/linked flash are 241,816/3,454,652 B. App/factory/ELF sizes are
 The 4 MiB OTA slot retains 739,152 B, above the mandatory 524,288 B floor.
 Runtime heap and physical cleanup remain open until focused board HIL.
 
+Offline Field Survey BLE-start regression bound `RB-M195`: exact physical
+`1.0.0-dev.261` at source `b38464f93cdb7807734a24b1e1a08f03d4bbae24`
+moves the 4,560 B CAP-049 HIL-only raw capture out of resident product RAM. It is
+created with `nothrow` only after the exact authenticated fixture is admitted and
+is released on every clear/rejection path. Static RAM is 231,624 B, exactly
+4,560 B below dev.260 and 10,192 B below the dev.257 product-slice build; the
+separate dev.260 terminal-workspace change and this allocation change must not be
+summed from source object sizes because code and alignment also changed. Linked
+image/app/factory/ELF sizes are 3,447,556/3,447,712/3,513,248/23,392,412 B.
+SHA-256 app/factory/ELF/map are
+`e5322abf49c43f8c7b561306bb811afc1c597a523a3b8d7ae8cb42fd3c26ca1e`/
+`14db7f5b3418c665cfda8388f569a7fe7062ee9754faa1fd0d1b171c1dbdb59b`/
+`fa7edeb12c95d14301702ff68e2c0a5d245ba8783bccda362b54ee724d42eb51`/
+`0f422482266575d790e350d6fe9abce58bde6595986da3b40819a8368c1c8b36`.
+The 4 MiB OTA slot retains 746,592 B, above the mandatory 524,288 B floor.
+On original board-01 the boot heap is 74,012 B; BLE reaches `ready` from
+73,360 B free/28,660 B largest block and completes one real 12-Wi-Fi/33-BLE,
+45-forwarded, zero-drop cycle with zero writes and exact cleanup. The compact
+[preflight evidence](../../tests/hil/evidence/board-01-field-survey-preflight-1.0.0-dev.261.json)
+is regression-only, not a CAP-050 first/revisit capability gate. Dense source input
+above 64, persistence/export routing and runtime heap across committed visits remain open.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
