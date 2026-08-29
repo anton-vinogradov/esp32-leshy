@@ -1356,6 +1356,22 @@ profiled GPS fixture remains required for physical located/timed acceptance. The
 compact [trusted-context evidence](../../tests/hil/evidence/board-01-field-survey-trusted-context-1.0.0-dev.267.json)
 accepts the bounded software/persistence slice and stock absence path.
 
+BLE Inspector foundation bound `RB-M200`: exact host/build `1.0.0-dev.268` at
+source `52b2d1655b486ae029ce2402317c2f270bf88c0c` keeps static RAM unchanged at
+231,736 B. The raw capture is a caller-owned 1,856 B object containing 32 fixed
+56-byte records; the GATT controller is a caller-owned 2,136 B object containing
+16 fixed 32-byte service and 48 fixed 32-byte characteristic facts. Neither is a
+resident product global in this slice. Linked flash grows only 508 B to 3,460,276 B.
+App/factory sizes are 3,460,784/3,526,320 B with SHA-256
+`af6b6a2d67308c39c469461b1b866786d5b9b892504d292c99ac891176bd5b66`/
+`a7b7eac59a4415a399a2fb7a8bade1d58552c505c2856b96bea331f293d913fe`;
+ELF/map SHA-256 are
+`502fee63a64cebac3373be98cbccdff05ac928b8de0dbff191800d7972f52b69`/
+`7f14b592d9712dbe005e2445b41176549da5e393bb5bcf702d99292d4ba346a7`.
+The 4 MiB OTA slot retains 733,520 B, 209,232 B above the mandatory floor. Product
+integration must choose explicit non-stack lifetime for these bounded objects and
+re-measure live NimBLE heap before physical admission.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

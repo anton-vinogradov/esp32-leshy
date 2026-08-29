@@ -1345,6 +1345,22 @@ writes. Поскольку stock hardware не имеет GPS source, оно ч�
 Compact [evidence trusted context](../../tests/hil/evidence/board-01-field-survey-trusted-context-1.0.0-dev.267.json)
 принимает bounded software/persistence slice и stock absence path.
 
+Bound foundation BLE Inspector `RB-M200`: exact host/build `1.0.0-dev.268` на
+source `52b2d1655b486ae029ce2402317c2f270bf88c0c` сохраняет static RAM 231 736 B.
+Raw capture — caller-owned object 1 856 B с 32 fixed records по 56 B; GATT controller
+— caller-owned object 2 136 B с 16 fixed service facts и 48 fixed characteristic
+facts по 32 B. В этом slice они не являются resident product globals. Linked flash
+растёт только на 508 B до 3 460 276 B. Размеры app/factory —
+3 460 784/3 526 320 B с SHA-256
+`af6b6a2d67308c39c469461b1b866786d5b9b892504d292c99ac891176bd5b66`/
+`a7b7eac59a4415a399a2fb7a8bade1d58552c505c2856b96bea331f293d913fe`;
+SHA-256 ELF/map —
+`502fee63a64cebac3373be98cbccdff05ac928b8de0dbff191800d7972f52b69`/
+`7f14b592d9712dbe005e2445b41176549da5e393bb5bcf702d99292d4ba346a7`.
+В OTA slot 4 MiB остаётся 733 520 B, на 209 232 B выше mandatory floor. Product
+integration обязан выбрать для bounded objects явный non-stack lifetime и повторно
+измерить live NimBLE heap до physical admission.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

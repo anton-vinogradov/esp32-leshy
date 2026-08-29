@@ -285,6 +285,16 @@ without inventing a GPS device; physical located/timed export and final CAP-050
 completion remain deferred until a separately owned non-conflicting GPS profile is
 available. Active S7 implementation proceeds to CAP-051 BLE Inspector.
 
+Exact host/build `1.0.0-dev.268` starts CAP-051 through
+`E-BUILD-189`/`E-AUTO-164`/`RB-M200`. The existing passive scanner now hands exact
+compatible legacy advertisement bytes to a bounded 32-record selected-target
+capture. A separate enumeration-only GATT state machine requires fresh target,
+permission and confirmation, owns ESP-RF independently, accepts only the exact peer
+and preserves a truthful `cleanup_pending` state until disconnect completes. It has
+no pairing, characteristic read/write or subscription operation. This does not yet
+qualify a user workflow: product UI/export, the live NimBLE adapter and focused
+physical cleanup HIL remain open.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases. Physical HIL is

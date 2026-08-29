@@ -848,3 +848,21 @@ exercised with useful bounded authentication evidence.
 All new 1.x code must sit behind 1.x contracts, build independently from 0.x, and
 have host/HIL verification. The 0.x archive is not changed to make new development
 easier.
+
+## CAP-051 BLE Inspector boundary
+
+BLE Inspector has two deliberately separate paths. The passive path reuses the
+existing receive-only scanner and copies at most 31 exact legacy advertisement bytes
+into a fixed 32-record capture for one selected address/type. Parsed names and company
+facts remain presentation data; they cannot replace the retained packet bytes and
+timestamp.
+
+The connected path is metadata-only. Its transport exposes connect, service discovery,
+disconnect and disconnect polling—no pairing, characteristic read/write or
+subscription. A fresh selected identity, reviewed enumeration permission and a
+target-bound confirmation token are required before a separate ESP-RF lease is
+acquired. Unexpected identity, malformed or over-capacity discovery, timeout and
+transport error all enter disconnect cleanup. Ownership is released only after the
+transport reports disconnected; otherwise the state and lease remain visibly
+`cleanup_pending`. Product integration must allocate the bounded capture/controller
+outside a worker stack and re-measure live NimBLE heap.

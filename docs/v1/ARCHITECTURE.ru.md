@@ -952,3 +952,21 @@ dev.248 проходит Result, Actions, оба выбора Устройств
 Правило реализации: любой новый код 1.x находится за контрактами 1.x, собирается
 независимо от 0.x и получает host/HIL-проверку. Архив 0.x не меняется ради удобства
 новой разработки.
+
+## Boundary CAP-051 BLE Inspector
+
+BLE Inspector имеет два намеренно раздельных path. Passive path переиспользует
+существующий receive-only scanner и копирует до 31 exact byte legacy advertisement в
+fixed capture на 32 records для одного выбранного address/type. Parsed names и company
+facts остаются presentation data; они не могут подменить сохранённые packet bytes и
+timestamp.
+
+Connected path работает только с metadata. Его transport предоставляет connect,
+service discovery, disconnect и polling disconnect — без pairing, characteristic
+read/write или subscription. До получения отдельного ESP-RF lease обязательны свежая
+selected identity, reviewed enumeration permission и target-bound confirmation token.
+Unexpected identity, malformed/over-capacity discovery, timeout и transport error
+всегда входят в cleanup disconnect. Ownership освобождается только после ответа
+transport `disconnected`; иначе state и lease честно остаются `cleanup_pending`.
+Product integration должна выделять bounded capture/controller вне worker stack и
+повторно измерить live NimBLE heap.

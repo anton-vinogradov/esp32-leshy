@@ -284,6 +284,16 @@ software-complete без выдуманного GPS device; physical located/tim
 финальное completion CAP-050 отложены до появления отдельно принадлежащего
 non-conflicting GPS profile. Активная реализация S7 переходит к CAP-051 BLE Inspector.
 
+Exact host/build `1.0.0-dev.268` начинает CAP-051 через
+`E-BUILD-189`/`E-AUTO-164`/`RB-M200`. Existing passive scanner теперь передаёт exact
+compatible legacy advertisement bytes в bounded selected-target capture на 32 records.
+Отдельная enumeration-only state machine GATT требует fresh target, permission и
+confirmation, независимо владеет ESP-RF, принимает только exact peer и сохраняет
+честное состояние `cleanup_pending` до завершения disconnect. Operations pairing,
+characteristic read/write или subscription отсутствуют. User workflow ещё не
+квалифицирован: product UI/export, live NimBLE adapter и focused physical cleanup HIL
+остаются открыты.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases. Physical
