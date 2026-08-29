@@ -261,6 +261,17 @@ Home/none/lease 0. Это принимает только routing и честн�
 station capture и optional trusted GPS/UTC всё ещё удерживают CAP-050 и `DEMO-S7`
 открытыми.
 
+Exact `1.0.0-dev.266` принимает slice live stations CAP-050 по
+`E-BUILD-187`/`E-AUTO-162`/`E-HIL-201`/`RB-M198`. Bounded receive-only observer
+выполняет три complete sweep 1–13 до BLE, captures 2 live stations в каждом visit
+и коммитит exact generations 174/175 с 51 observation и zero drops. Cold recovery
+открывает generation 175/51 read-only на attempt 1. Native export сохраняет 15 AP,
+2 station и 34 BLE rows; WiGLE выдаёт 49 representable AP/BLE rows, сообщает ровно
+2 skipped stations и остаётся `untimed_unlocated` и not upload-ready. Export delta
+переиспользует exact installed image с zero scans, commits или writes и выходит
+Home/none/lease 0. Optional trusted GPS/UTC всё ещё удерживает CAP-050 и `DEMO-S7`
+открытыми.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases. Physical

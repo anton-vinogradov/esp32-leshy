@@ -142,6 +142,7 @@ python3 "$repo_dir/tools/check_field_survey_product_contract.py"
 python3 "$repo_dir/tools/check_field_survey_preflight_acceptance.py"
 python3 "$repo_dir/tools/check_field_survey_visits_acceptance.py"
 python3 "$repo_dir/tools/check_field_survey_export_acceptance.py"
+python3 "$repo_dir/tools/check_field_survey_station_acceptance.py"
 
 "${CXX:-c++}" \
     -std=c++17 \

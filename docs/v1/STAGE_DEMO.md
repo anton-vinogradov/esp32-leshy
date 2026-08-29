@@ -262,6 +262,17 @@ pins the Export Ready frame, performs zero scans/commits/writes and exits
 Home/none/lease 0. This accepts export routing and truthfulness only: live passive
 station capture and optional trusted GPS/UTC still hold CAP-050 and `DEMO-S7` open.
 
+Exact `1.0.0-dev.266` accepts the live-station CAP-050 slice through
+`E-BUILD-187`/`E-AUTO-162`/`E-HIL-201`/`RB-M198`. A bounded receive-only observer
+runs three complete 1–13 sweeps before BLE, captures 2 live stations in each visit,
+and commits exact generations 174/175 with 51 observations and zero drops. Cold
+recovery reopens generation 175/51 read-only on attempt 1. Native export preserves
+15 AP, 2 station and 34 BLE rows; WiGLE emits the 49 representable AP/BLE rows,
+reports exactly 2 skipped stations and remains `untimed_unlocated` and not
+upload-ready. The export delta reuses the exact installed image with zero scans,
+commits or writes and exits Home/none/lease 0. Optional trusted GPS/UTC still holds
+CAP-050 and `DEMO-S7` open.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases. Physical HIL is

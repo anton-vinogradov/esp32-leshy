@@ -1306,6 +1306,25 @@ Home/none/lease 0. WiGLE остаётся `untimed_unlocated` и not upload-read
 [evidence export](../../tests/hil/evidence/board-01-field-survey-export-1.0.0-dev.263.json)
 принимает routing/truthfulness, но не live station capture или trusted GPS/UTC.
 
+Bound stations Offline Field Survey `RB-M198`: exact physical `1.0.0-dev.266` на
+source `ffd8f8f23cd3153a5de415049fc2665544af66c1` сохраняет static RAM 231 624 B.
+Receive-only observer stations не добавляет persistent heap allocation и ограничен
+тремя complete sweep 1–13, после чего удаляет promiscuous callback и освобождает
+Wi-Fi для BLE. Linked flash — 3 458 056 B. Размеры app/factory —
+3 458 560/3 524 096 B с SHA-256
+`c3638e1c0266eacf88cef69e275152bf6589e5f5cfcecb941501b82709026447`/
+`cf2f69d5482bd5da5c966af8518156a96548462b6bf44d3b56d33791718bc27e`;
+SHA-256 ELF/map —
+`1066d57bcc0cb4fd4dce311a6db6e72a87be83e1513c93be26f2c434da4112aa`/
+`376a659a1da05132e50e4fd8671e5e50c42c719ca49ff6ec3cb25887cf1730ab`.
+В app-slot OTA 4 MiB остаётся 735 744 B — на 211 456 B выше обязательного floor.
+Physical first/revisit сохраняют по 51 bounded record с 2 stations и zero drops,
+затем cold-recover-ят exact generation 175/51 read-only. No-reflash export delta
+сохраняет обе station rows в 51 native rows/4 593 B и исключает ровно их из
+49 WiGLE rows/3 362 B с zero scans/commits/writes и final Home/none/lease 0. Compact
+[evidence stations](../../tests/hil/evidence/board-01-field-survey-stations-1.0.0-dev.266.json)
+принимает live station capture и его export boundary, но не trusted GPS/UTC.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты
