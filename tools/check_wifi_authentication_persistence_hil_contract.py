@@ -53,6 +53,7 @@ def contract_failures(entry: str, fixture_h: str,
     session_end = require_function(entry, "emitHilSessionEnd", failures)
     state = require_function(
         entry, "emitWifiAuthenticationCaptureState", failures)
+    ui_action = require_function(entry, "applyUiAction", failures)
     clear = require_function(
         entry, "clearWifiAuthenticationSyntheticHilState", failures)
     load = require_function(fixture_cpp, "loadOnce", failures)
@@ -137,6 +138,11 @@ def contract_failures(entry: str, fixture_h: str,
             r'\"synthetic_persistence_allowed\":%s',
         "synthetic export field":
             r'\"synthetic_export_allowed\":%s',
+    }, failures)
+    require_all("authentication save dialog", ui_action, {
+        "authentication store kind before confirmation":
+            "wifiCaptureStoreKind = "
+            "WifiCaptureStoreKind::Authentication",
     }, failures)
     require_all("session begin", session_begin, {
         "fixture reset":

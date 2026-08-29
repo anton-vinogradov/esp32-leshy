@@ -23419,6 +23419,8 @@ bool applyUiAction(UiAction action, bool render = true) {
                         wifiAuthenticationPersistGeneration = 0U;
                         wifiAuthenticationPcapReady = false;
                         wifiAuthenticationStandardReady = false;
+                        wifiCaptureStoreKind =
+                            WifiCaptureStoreKind::Authentication;
                         lastRuntimeEvent = "authentication_store_confirm";
                         changed = true;
                     }

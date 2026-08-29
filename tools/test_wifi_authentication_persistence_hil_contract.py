@@ -70,6 +70,19 @@ class WifiAuthenticationPersistenceHilContractTests(unittest.TestCase):
         )
         self.assertTrue(self.failures(entry=mutated))
 
+    def test_save_dialog_declares_authentication_store_kind(self) -> None:
+        action = MODULE.cpp_function(self.entry, "applyUiAction")
+        self.assertIsNotNone(action)
+        assert action is not None
+        changed = self.mutate_once(
+            action,
+            "wifiCaptureStoreKind =\n"
+            "                            WifiCaptureStoreKind::Authentication;",
+            "wifiCaptureStoreKind = WifiCaptureStoreKind::Generic;",
+        )
+        mutated = self.mutate_once(self.entry, action, changed)
+        self.assertTrue(self.failures(entry=mutated))
+
     def test_command_ack_must_not_claim_rf_or_tx(self) -> None:
         for old, new in (
             (r'\"rf_hardware_touched\":false',
