@@ -173,8 +173,14 @@ selected by default, and only an exact complete `field-visit-live` record may be
 the automatic baseline. Result shows unique or New/Seen/Missing plus Wi-Fi/BLE totals;
 incomplete input shows `Result incomplete` and publishes no comparison. The existing
 strongest-first live observation browser remains the Running view for this slice.
-The richer live New/Seen rollup, result Actions, native/WiGLE routing, station capture,
-optional GPS adapter and focused physical pixels remain open.
+The richer live New/Seen rollup, station capture and optional GPS adapter remain open.
+
+Exact physical dev.263 accepts the result-export presentation and route. Right/OK on
+a stopped complete Field Survey opens Library Export Ready without reacquiring radio
+ownership. The screen states that native CSV is ready, and that WiGLE has no GPS/UTC
+instead of claiming upload readiness; USB is named as the transfer path. Only the
+Export Ready content is changed and its exact pixels are retained. Native and WiGLE
+payloads are parsed by automation in memory and are not written to host evidence.
 
 Exact physical dev.248 accepts the original UX-S30 result hierarchy on the original
 DIV. Exact host/build dev.249 extends its production Actions to Details, Save and

@@ -1287,6 +1287,25 @@ Compact [evidence визитов](../../tests/hil/evidence/board-01-field-survey
 принимает lifecycle визита, но не native/WiGLE export, live station capture или
 trusted GPS/UTC.
 
+Bound export Offline Field Survey `RB-M197`: exact physical `1.0.0-dev.263` на
+product source `0f46b4db840bf38e3beac6424623c33fca8e749e` сохраняет static RAM
+231 624 B. Formatting native CSV Field Survey allocation-free и использует bounded
+caller storage; serial path Library потоково выдаёт native или WiGLE без
+запуска receivers и mutation storage. Linked flash — 3 455 384 B. Размеры
+app/factory — 3 455 888/3 521 424 B с SHA-256
+`be9a5061a59db614e804e36bf1f08b325dff31da93075c92a1eace4b2f3a8d35`/
+`82d4a023769178714aeaecd243a05a01e101bdbce5d40cb21e7fe3c7e05c13d5`;
+SHA-256 ELF/map —
+`9906543f7f541778f7ba5969a7b74e2de81f83b66a30ff1caebc0f509fd0571f`/
+`47edfc75a3d18222b6ea68e4c2f0b59b3d5b21a1d47ba2fab5b20d9f6645239b`.
+В app-slot OTA 4 MiB остаётся 738 416 B при обязательном floor 524 288 B.
+Physical HIL read-only открывает exact generation 172/52 с attempt 1 и выдаёт
+52 native rows/4 650 B плюс 52 WiGLE rows/3 573 B. Он выполняет zero scans,
+commits, physical/blocked writes, не пишет raw CSV в host evidence и завершается
+Home/none/lease 0. WiGLE остаётся `untimed_unlocated` и not upload-ready. Compact
+[evidence export](../../tests/hil/evidence/board-01-field-survey-export-1.0.0-dev.263.json)
+принимает routing/truthfulness, но не live station capture или trusted GPS/UTC.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

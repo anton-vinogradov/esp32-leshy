@@ -252,6 +252,16 @@ missing post-commit reopen and the correction that prevents future false eligibi
 This accepts only the visit lifecycle: native/WiGLE export, live station capture and
 optional trusted GPS/UTC still hold CAP-050 and `DEMO-S7` open.
 
+Exact `1.0.0-dev.263` accepts the next CAP-050 slice through
+`E-BUILD-186`/`E-AUTO-161`/`E-HIL-200`/`RB-M197`. The retained exact generation
+172/52 opens in Library read-only and emits 52 deduplicated native rows plus 52
+WiGLE 1.6 rows. With no trusted UTC or location, WiGLE remains visibly
+`untimed_unlocated` and not upload-ready; no placeholder facts are invented.
+The automated delta parses both payloads in memory, retains only counts/hashes,
+pins the Export Ready frame, performs zero scans/commits/writes and exits
+Home/none/lease 0. This accepts export routing and truthfulness only: live passive
+station capture and optional trusted GPS/UTC still hold CAP-050 and `DEMO-S7` open.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases. Physical HIL is

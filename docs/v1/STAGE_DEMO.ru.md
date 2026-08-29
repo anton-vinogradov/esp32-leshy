@@ -250,6 +250,17 @@ acceptance явно фиксирует отсутствие post-commit reopen �
 native/WiGLE export, live station capture и optional trusted GPS/UTC всё ещё удерживают
 CAP-050 и `DEMO-S7` открытыми.
 
+Exact `1.0.0-dev.263` принимает следующий slice CAP-050 по
+`E-BUILD-186`/`E-AUTO-161`/`E-HIL-200`/`RB-M197`. Retained exact generation
+172/52 открывается в Library read-only и выдаёт 52 deduplicated native rows плюс
+52 rows WiGLE 1.6. Без trusted UTC и location WiGLE остаётся явно
+`untimed_unlocated` и not upload-ready; placeholder facts не выдумываются.
+Automated delta парсит оба payload в memory, сохраняет только counts/hashes,
+фиксирует frame «Экспорт готов», выполняет zero scans/commits/writes и выходит
+Home/none/lease 0. Это принимает только routing и честность export: live passive
+station capture и optional trusted GPS/UTC всё ещё удерживают CAP-050 и `DEMO-S7`
+открытыми.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases. Physical

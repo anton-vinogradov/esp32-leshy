@@ -174,8 +174,15 @@ comparison Wi-Fi+Bluetooth, Setup заменяет не относящийся �
 `field-visit-live`. Result показывает unique либо Новые/Снова/Не найдено и totals
 Wi-Fi/BLE; incomplete input выводит `Результат неполный` и не публикует comparison.
 Для Running в этом slice остаётся существующий strongest-first browser observations.
-Более богатые live Новые/Снова, Actions результата, routing native/WiGLE, station
-capture, optional adapter GPS и focused physical pixels остаются открыты.
+Более богатые live Новые/Снова, station capture и optional adapter GPS остаются
+открыты.
+
+Exact physical dev.263 принимает presentation и route export результата. Right/OK
+на stopped complete Field Survey открывает Library «Экспорт готов» без
+повторного radio ownership. Экран сообщает, что native CSV готов, а WiGLE не имеет
+GPS/UTC, вместо ложного claims upload readiness; USB назван transfer path. Меняется
+только content «Экспорт готов», exact pixels сохранены. Payload native и WiGLE
+парсятся автоматикой в memory и не пишутся в host evidence.
 
 Exact physical dev.248 принимает исходную иерархию результата UX-S30 на оригинальном
 DIV. Exact host/build dev.249 расширяет production Actions до Детали, Сохранить и

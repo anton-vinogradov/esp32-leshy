@@ -1,0 +1,110 @@
+{
+  "schema": "leshy.field_survey_export.acceptance.v1",
+  "status": "pass_export_slice_not_capability_complete",
+  "board": "board-01",
+  "cid": "FE343253440000002000000055019CB7",
+  "evidence_ids": ["E-BUILD-186", "E-AUTO-161", "E-HIL-200", "RB-M197"],
+  "scope": {
+    "receive_only": true,
+    "cap_050_complete": false,
+    "result_to_library_route_source_accepted": true,
+    "native_export_accepted": true,
+    "wigle_export_accepted": true,
+    "live_station_capture_accepted": false,
+    "trusted_location_time_accepted": false
+  },
+  "candidate": {
+    "version": "1.0.0-dev.263",
+    "source_commit": "0f46b4db840bf38e3beac6424623c33fca8e749e",
+    "firmware_bytes": 3455888,
+    "firmware_sha256": "be9a5061a59db614e804e36bf1f08b325dff31da93075c92a1eace4b2f3a8d35",
+    "factory_bytes": 3521424,
+    "factory_sha256": "82d4a023769178714aeaecd243a05a01e101bdbce5d40cb21e7fe3c7e05c13d5",
+    "app_elf_sha256": "9906543f7f541778f7ba5969a7b74e2de81f83b66a30ff1caebc0f509fd0571f",
+    "map_sha256": "47edfc75a3d18222b6ea68e4c2f0b59b3d5b21a1d47ba2fab5b20d9f6645239b",
+    "static_ram_bytes": 231624,
+    "linked_flash_bytes": 3455384,
+    "ota_slot_free_bytes": 738416
+  },
+  "automation": {
+    "runner_source_commit": "648a17a33236390558fdaf47712b23ccdf838130",
+    "runner_sha256": "365c36224ee4ec02a5daa923d59cb8df059b89c46da538e9b6f1f6f661a1053b",
+    "runner_tests_sha256": "9541c1796f28403a0dca1d6278074ee25647d2851fa587f7aa3da20035904356",
+    "product_contract_sha256": "90ec5d14945c5a1838d2120d13d3d703ad2134b74f219c402a7dc80ef7e33397",
+    "mode": "export",
+    "fresh_flashes": 1,
+    "accepted_run_reused_exact_flash": true,
+    "radio_scans": 0,
+    "storage_commits": 0,
+    "raw_csv_written_to_host": false
+  },
+  "oracle_correction": {
+    "failed_run_sha256": "141ab8f16bd7caa3e2958c355a011c6b6362062aef400349ab3c1aefa3cbc4fc",
+    "firmware_and_exports_were_valid": true,
+    "only_failures": [
+      "runner expected Home ownership while Library correctly owned lease 5",
+      "runner expected a non-canonical Field Survey session id"
+    ],
+    "failed_run_cleanup_complete": true,
+    "failed_run_final_page": "home",
+    "failed_run_final_owner": "none",
+    "failed_run_final_lease_mask": 0,
+    "accepted_after_oracle_only_fix": true
+  },
+  "physical": {
+    "run_id": "25dd1614d78051ed5482207bfb1e6339",
+    "run_sha256": "93d6e7facc8fd715133d6ce5fbf2d4446cdf804658b6b51b27fae47044684fe2",
+    "artifact_manifest_sha256": "f7edbaabf371ba947c6983ed4bc644f2279cf20df0ec25b4edeab9676de68ee3",
+    "generation": 172,
+    "observations": 52,
+    "recovery_status": "admitted",
+    "recovery_attempts": 1,
+    "recovery_transient_retries": 0,
+    "recovery_timeout_restarts": 0,
+    "mounted_read_only": true,
+    "read_only_guaranteed": true,
+    "write_enabled": false,
+    "physical_write_calls": 0,
+    "blocked_write_attempts": 0,
+    "recovery_cleanup_complete": true,
+    "recovery_owned_after": 0,
+    "native": {
+      "records": 52,
+      "observations": 52,
+      "bytes": 4650,
+      "payload_sha256": "9e73afcdb6b496ec865d5fbca6cffe121beaa8bfc424446e7b90ab5843fe7844",
+      "wifi_access_points": 16,
+      "wifi_stations": 0,
+      "ble_devices": 36,
+      "deduplicated": true
+    },
+    "wigle": {
+      "format": "wigle_wifi_1.6",
+      "records": 52,
+      "bytes": 3573,
+      "payload_sha256": "0823225da8733b7f63bdf2e412b1553060ed6a8d1cf486094be3a3575ca34195",
+      "wifi_access_points": 16,
+      "ble_devices": 36,
+      "readiness": "untimed_unlocated",
+      "trusted_utc": false,
+      "trusted_location": false,
+      "upload_ready": false
+    },
+    "export_ready_png_sha256": "0c31c83a19c11bb58444080a290a085e3ad8a43e171e22c94a92c70b77608b88",
+    "export_ready_rgb565_sha256": "7905f0ad463e5df74e2945c43726301859db8f5206fe24727e84c3d73a1ad30f",
+    "final_page": "home",
+    "final_owner": "none",
+    "final_lease_mask": 0,
+    "hil_active_after": false
+  },
+  "privacy": {
+    "ambient_identifiers_retained": false,
+    "raw_radio_payloads_retained": false,
+    "raw_export_payloads_retained": false,
+    "retained_data": "counts, artifact hashes, truthful readiness and rendered-frame hashes only"
+  },
+  "open_gates": [
+    "capture passive Wi-Fi station observations",
+    "admit optional trusted GPS and UTC"
+  ]
+}
