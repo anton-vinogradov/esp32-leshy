@@ -64,7 +64,7 @@ class FieldSurveyHilRunnerTests(unittest.TestCase):
         ).encode("utf-8")
         native_begin = {
             "status": "valid", "generation": 172,
-            "session_id": "product-field-visit", "records": 2,
+            "session_id": RUNNER.FIELD_SESSION_ID, "records": 2,
             "columns": 14, "line_endings": "crlf",
             "deduplicated": True, "persistent": True,
             "radio_touched": False,
@@ -88,7 +88,7 @@ class FieldSurveyHilRunnerTests(unittest.TestCase):
         ).encode("utf-8")
         wigle_begin = {
             "status": "valid", "generation": 172,
-            "session_id": "product-field-visit",
+            "session_id": RUNNER.FIELD_SESSION_ID,
             "format": "wigle_wifi_1.6", "records": 2,
             "skipped_wifi_stations": 0,
             "readiness": "untimed_unlocated", "trusted_utc": False,
@@ -242,6 +242,8 @@ class FieldSurveyHilRunnerTests(unittest.TestCase):
         self.assertNotIn("write_bytes", source)
         self.assertIn("ambient_identifiers_retained", inspect.getsource(
             RUNNER.native_export_failures))
+        self.assertIn('"runtime_owner": "library"', source)
+        self.assertIn('"lease_mask": 5', source)
 
 
 if __name__ == "__main__":

@@ -41,6 +41,7 @@ FIELD_SCHEMA = "leshy.survey.field_visit.v1"
 HIL_SCHEMA = "leshy.hil.session.v1"
 NATIVE_SCHEMA = "leshy.field_survey.native_csv.v1"
 WIGLE_SCHEMA = "leshy.field_survey.wigle_csv.v1"
+FIELD_SESSION_ID = "field-visit-live"
 MAC_PATTERN = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
 NATIVE_COLUMNS = [
     "entity_kind", "identity", "label", "first_seen_monotonic_us",
@@ -192,7 +193,7 @@ def native_export_failures(begin: dict[str, Any], payload: bytes,
                            ) -> tuple[list[str], dict[str, Any]]:
     failures = expect(begin, {
         "status": "valid", "generation": generation,
-        "session_id": "product-field-visit", "records": records,
+        "session_id": FIELD_SESSION_ID, "records": records,
         "columns": len(NATIVE_COLUMNS), "line_endings": "crlf",
         "deduplicated": True, "persistent": True,
         "radio_touched": False,
@@ -252,7 +253,7 @@ def wigle_export_failures(begin: dict[str, Any], payload: bytes,
                           ) -> tuple[list[str], dict[str, Any]]:
     failures = expect(begin, {
         "status": "valid", "generation": generation,
-        "session_id": "product-field-visit", "format": "wigle_wifi_1.6",
+        "session_id": FIELD_SESSION_ID, "format": "wigle_wifi_1.6",
         "records": records, "skipped_wifi_stations": 0,
         "readiness": "untimed_unlocated", "trusted_utc": False,
         "trusted_location": False, "upload_ready": False,
@@ -313,22 +314,22 @@ def run_exports(device: Any, frames: Path, trace: list[dict[str, Any]],
     failures.extend(expect(library, {
         "page": "library", "library_view": "list",
         "library_entries": 1, "library_generation": generation,
-        "library_persistent": True, "runtime_owner": "none",
-        "lease_mask": 0,
+        "library_persistent": True, "runtime_owner": "library",
+        "lease_mask": 5,
     }, "export.library"))
     detail = action(device, "right")
     trace.append(detail)
     failures.extend(expect(detail, {
         "page": "library", "library_view": "detail",
-        "library_generation": generation, "runtime_owner": "none",
-        "lease_mask": 0,
+        "library_generation": generation, "runtime_owner": "library",
+        "lease_mask": 5,
     }, "export.detail"))
     export_ready = action(device, "right")
     trace.append(export_ready)
     failures.extend(expect(export_ready, {
         "page": "library", "library_view": "export_ready",
-        "library_generation": generation, "runtime_owner": "none",
-        "lease_mask": 0,
+        "library_generation": generation, "runtime_owner": "library",
+        "lease_mask": 5,
     }, "export.ready"))
     screenshot = capture(device, frames, "field-survey-export-ready")
 
