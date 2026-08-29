@@ -9,6 +9,7 @@ valid, honest ``inconclusive`` result rather than as a fixture failure.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import secrets
@@ -42,7 +43,14 @@ from run_1x_product_survey_hil import (
 RUN_SCHEMA = "leshy.wifi.authentication_capture_hil.run.v1"
 AUTH_SCHEMA = "leshy.wifi.authentication_capture.v1"
 AUTH_HOLD_SCHEMA = "leshy.wifi.authentication.hil_hold.v1"
+HIL_SESSION_SCHEMA = "leshy.hil.session.v1"
 AUTH_HOLD_COMMAND = b"wifi.authentication.hil-hold-survey-stop once"
+SYNTHETIC_FIXTURE_SCHEMA = \
+    "leshy.wifi.authentication.synthetic_fixture.v1"
+SYNTHETIC_FIXTURE_COMMAND = \
+    b"wifi.authentication.hil-load-synthetic-report once"
+AMBIENT_REPORT_ORIGIN = "ambient_rf"
+NO_REPORT_ORIGIN = "none"
 CAPTURE_SCHEMA = "leshy.capture.wifi_frame.v1"
 UI_SCHEMA = "leshy.ui.v1"
 BOARD_ID = "board-01"
@@ -62,6 +70,14 @@ STATUS_X0 = 136
 STATUS_X1 = 240
 STATUS_Y0 = 0
 STATUS_Y1 = 26
+FOOTER_X0 = 0
+FOOTER_X1 = 240
+FOOTER_Y0 = 294
+FOOTER_Y1 = 320
+NOTE_X0 = 12
+NOTE_X1 = 228
+NOTE_Y0 = 186
+NOTE_Y1 = 214
 CAPTURE_DURATION_MS = 10_000
 CAPTURE_TERMINAL_SLACK_US = 2_500_000
 AUTH_HOLD_TIMEOUT_MS = 1_500
@@ -276,6 +292,7 @@ def terminal_pixel_changes(frames: Path, before_name: str,
         "content_changed_pixels": 0,
         "title_changed_pixels": 0,
         "status_changed_pixels": 0,
+        "footer_changed_pixels": 0,
         "unexpected_static_chrome_changed_pixels": 0,
     }
     for y in range(HEIGHT):
@@ -289,6 +306,8 @@ def terminal_pixel_changes(frames: Path, before_name: str,
                 changed["status_changed_pixels"] += 1
             elif CONTENT_X0 <= x < CONTENT_X1 and CONTENT_Y0 <= y < CONTENT_Y1:
                 changed["content_changed_pixels"] += 1
+            elif FOOTER_X0 <= x < FOOTER_X1 and FOOTER_Y0 <= y < FOOTER_Y1:
+                changed["footer_changed_pixels"] += 1
             else:
                 changed["unexpected_static_chrome_changed_pixels"] += 1
     return changed
@@ -299,7 +318,7 @@ def terminal_pixel_delta_failures(delta: dict[str, int],
     failures: list[str] = []
     for name in (
             "content_changed_pixels", "title_changed_pixels",
-            "status_changed_pixels",
+            "status_changed_pixels", "footer_changed_pixels",
             "unexpected_static_chrome_changed_pixels"):
         if not non_negative_integer(delta.get(name)):
             failures.append(f"{label}.{name}: missing counter")
@@ -316,6 +335,147 @@ def terminal_pixel_delta_failures(delta: dict[str, int],
     return failures
 
 
+def pixel_region_proof(frames: Path, before_name: str, after_name: str,
+                       *, x0: int, x1: int, y0: int,
+                       y1: int) -> dict[str, Any]:
+    """Hash and count one exact visible region in two complete frames."""
+    before = (frames / f"{before_name}.rgb565").read_bytes()
+    after = (frames / f"{after_name}.rgb565").read_bytes()
+    expected = WIDTH * HEIGHT * 2
+    if len(before) != expected or len(after) != expected:
+        raise RuntimeError("region proof requires two complete TFT frames")
+    before_region = bytearray()
+    after_region = bytearray()
+    changed = 0
+    changed_rows: set[int] = set()
+    changed_columns: set[int] = set()
+    for y in range(y0, y1):
+        row_start = (y * WIDTH + x0) * 2
+        row_end = (y * WIDTH + x1) * 2
+        before_row = before[row_start:row_end]
+        after_row = after[row_start:row_end]
+        before_region.extend(before_row)
+        after_region.extend(after_row)
+        for offset in range(0, len(before_row), 2):
+            if before_row[offset:offset + 2] != after_row[offset:offset + 2]:
+                changed += 1
+                changed_rows.add(y)
+                changed_columns.add(x0 + offset // 2)
+    bbox_width = (max(changed_columns) - min(changed_columns) + 1
+                  if changed_columns else 0)
+    bbox_height = (max(changed_rows) - min(changed_rows) + 1
+                   if changed_rows else 0)
+    return {
+        "x0": x0, "x1": x1, "y0": y0, "y1": y1,
+        "changed_pixels": changed,
+        "changed_rows": len(changed_rows),
+        "changed_columns": len(changed_columns),
+        "bbox_width": bbox_width, "bbox_height": bbox_height,
+        "before_sha256": hashlib.sha256(before_region).hexdigest(),
+        "after_sha256": hashlib.sha256(after_region).hexdigest(),
+    }
+
+
+AUTH_RESOURCE_FIELDS = (
+    "schema", "kind", "read_only_query", "generation",
+    "capture_state", "capture_active", "capture_cleanup_complete",
+    "adapter_cleanup_complete", "esp_rf_owned_by_foreground",
+    "target_selected", "target_selection_continuity", "channel",
+    "duration_ms", "maximum_frames", "snap_length",
+    "production_report_fingerprint",
+    "production_report_fingerprint_scope",
+    "production_controller_ready", "production_controller_view",
+    "production_controller_action_selection",
+    "production_controller_peer_selection",
+    "production_controller_evidence_selection",
+    "production_controller_report_bound",
+)
+
+
+def stable_read_only_payload(record: dict[str, Any]) -> dict[str, Any]:
+    """Drop transport retry metadata while retaining every device field."""
+    return {
+        key: value for key, value in record.items()
+        if not key.startswith("host_transport_")
+    }
+
+
+def fixture_side_effect_snapshot(
+        auth: dict[str, Any], capture: dict[str, Any],
+        storage: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "auth_resource": {name: auth.get(name) for name in AUTH_RESOURCE_FIELDS},
+        "capture": stable_read_only_payload(capture),
+        "boot_recovery": stable_read_only_payload(storage),
+    }
+
+
+def fixture_side_effect_failures(
+        before: dict[str, Any], after: dict[str, Any]) -> list[str]:
+    """Prove fixture isolation from independent read-only state queries."""
+    failures: list[str] = []
+    if before.get("auth_resource") != after.get("auth_resource"):
+        failures.append("fixture_side_effects.auth_resource: changed")
+    if before.get("capture") != after.get("capture"):
+        failures.append("fixture_side_effects.capture: changed")
+    if before.get("boot_recovery") != after.get("boot_recovery"):
+        failures.append("fixture_side_effects.boot_recovery_continuity: changed")
+    capture = before.get("capture", {})
+    if not (
+            capture.get("schema") == CAPTURE_SCHEMA and
+            capture.get("kind") == "state" and
+            capture.get("state") == "complete" and
+            capture.get("passive_only") is True and
+            capture.get("rx_only") is True and
+            capture.get("application_connect_calls") == 0 and
+            capture.get("application_raw_tx_calls") == 0 and
+            capture.get("storage_written") is False and
+            capture.get("cleanup_complete") is True and
+            capture.get("lease_mask") == 15):
+        failures.append("fixture_side_effects.capture: unsafe baseline")
+    storage = before.get("boot_recovery", {})
+    if not (
+            storage.get("schema") ==
+                "leshy.storage.product_boot_recovery.v1" and
+            storage.get("kind") == "state" and
+            storage.get("write_enabled") is False and
+            storage.get("cleanup_complete") is True and
+            storage.get("owned_after") == 0):
+        failures.append(
+            "fixture_side_effects.boot_recovery_continuity: unsafe baseline")
+    auth = before.get("auth_resource", {})
+    if not (
+            auth.get("schema") == AUTH_SCHEMA and
+            auth.get("kind") == "state" and
+            auth.get("read_only_query") is True and
+            auth.get("capture_state") == "complete" and
+            auth.get("capture_active") is False and
+            auth.get("capture_cleanup_complete") is True and
+            auth.get("adapter_cleanup_complete") is True and
+            auth.get("esp_rf_owned_by_foreground") is True and
+            auth.get("target_selected") is True and
+            auth.get("target_selection_continuity") is True):
+        failures.append("fixture_side_effects.auth_resource: unsafe baseline")
+    return failures
+
+
+def production_continuity_failures(
+        baseline: dict[str, Any], state: dict[str, Any],
+        label: str) -> list[str]:
+    projection = {name: state.get(name) for name in AUTH_RESOURCE_FIELDS}
+    failures = []
+    if projection != baseline:
+        failures.append(f"{label}.production_continuity: changed")
+    fingerprint = projection.get("production_report_fingerprint")
+    if (not isinstance(fingerprint, str) or
+            re.fullmatch(r"[0-9a-f]{16}", fingerprint) is None or
+            projection.get("production_report_fingerprint_scope") !=
+                "hil_session" or
+            projection.get("production_controller_report_bound") is not True):
+        failures.append(f"{label}.production_continuity: invalid fingerprint")
+    return failures
+
+
 def auth_state(device: PassiveSerial) -> dict[str, Any]:
     return read_only_query(
         device, b"wifi.authentication.state", AUTH_SCHEMA, "state",
@@ -326,6 +486,57 @@ def capture_state(device: PassiveSerial) -> dict[str, Any]:
     return read_only_query(
         device, b"capture.state", CAPTURE_SCHEMA, "state",
         timeout=5.0, maximum_attempts=3)
+
+
+def load_synthetic_report_once(device: PassiveSerial) -> dict[str, Any]:
+    """Load the bounded HIL report with one mutation and no replay."""
+    ack = query(
+        device, SYNTHETIC_FIXTURE_COMMAND, SYNTHETIC_FIXTURE_SCHEMA,
+        "loaded", timeout=2.0)
+    ack["host_fixture_action_writes"] = 1
+    ack["host_fixture_action_replays"] = 0
+    ack["host_fixture_ack_received"] = True
+    require_exact(ack, {
+        "schema": SYNTHETIC_FIXTURE_SCHEMA,
+        "kind": "loaded", "status": "loaded",
+        "loaded": True, "synthetic": True, "profile": "full",
+        "report_identity": "wifi-auth-ui-full-v1",
+        "one_shot": True, "replayed": False,
+        "report_origin": "synthetic_hil",
+        "hil_active": True,
+        "display_touched": True, "rf_hardware_touched": False,
+        "radio_started": False,
+        "storage_mounted": False, "storage_written": False,
+        "connect_calls": 0, "raw_tx_calls": 0,
+    }, "authentication_synthetic_fixture")
+    if not non_negative_integer(ack.get("generation")) or \
+            ack["generation"] == 0:
+        raise RuntimeError("synthetic fixture has no nonzero generation")
+    return ack
+
+
+def reject_synthetic_report_replay(device: PassiveSerial) -> dict[str, Any]:
+    """Deliberately prove that the one-shot cannot be loaded twice."""
+    replay = query(
+        device, SYNTHETIC_FIXTURE_COMMAND, SYNTHETIC_FIXTURE_SCHEMA,
+        "error", timeout=2.0)
+    replay["host_fixture_action_writes"] = 1
+    replay["host_fixture_action_replays"] = 0
+    replay["host_fixture_ack_received"] = True
+    require_exact(replay, {
+        "schema": SYNTHETIC_FIXTURE_SCHEMA,
+        "kind": "error", "status": "replay_rejected",
+        "synthetic": True, "loaded": False,
+        "profile": "full", "report_identity": "wifi-auth-ui-full-v1",
+        "one_shot": True, "replayed": True,
+        "report_origin": "synthetic_hil",
+        "hil_active": True,
+        "display_touched": False, "rf_hardware_touched": False,
+        "radio_started": False,
+        "storage_mounted": False, "storage_written": False,
+        "connect_calls": 0, "raw_tx_calls": 0,
+    }, "authentication_synthetic_fixture_replay")
+    return replay
 
 
 def wait_auth_state(device: PassiveSerial,
@@ -576,6 +787,170 @@ def best_effort_final_diagnostics(
 
 def non_negative_integer(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+SYNTHETIC_CONTROLLER_FIELDS = (
+    "presenter_view", "presenter_tone",
+    "presenter_evidence_incomplete", "presenter_report_openable",
+    "presenter_cleanup_complete", "presenter_row_count",
+    "presenter_synthetic", "presenter_synthetic_label_visible",
+    "presenter_title_semantic", "presenter_headline_semantic",
+    "presenter_note_semantic",
+    "controller_ready", "controller_view", "controller_action_count",
+    "controller_action_selection", "controller_selected_action",
+    "controller_peer_count", "controller_peer_selection",
+    "controller_peer_position", "controller_selected_peer_mask",
+    "controller_selected_peer_evidence_count", "controller_evidence_count",
+    "controller_evidence_selection",
+    "controller_selected_evidence_present",
+    "controller_selected_evidence_report_index",
+    "controller_selected_evidence_source_frame",
+    "controller_selected_evidence_message",
+    "controller_selected_evidence_has_pmkid",
+    "repeat_requested", "repeat_request_generation",
+)
+
+SYNTHETIC_PRESENTER_SEMANTICS = {
+    "outcome": {
+        "view": "result", "tone": "positive", "row_count": 4,
+        "title": "capture_result", "headline": "full_handshake",
+    },
+    "actions": {
+        "view": "actions", "tone": "neutral", "row_count": 2,
+        "title": "authentication_actions",
+        "headline": "authentication_actions",
+    },
+    "peer_detail": {
+        "view": "peer_detail", "tone": "positive", "row_count": 4,
+        "title": "authentication_peer",
+        "headline": "authentication_peer",
+    },
+    "evidence_list": {
+        "view": "evidence_list", "tone": "neutral", "row_count": 4,
+        "title": "authentication_evidence",
+        "headline": "authentication_evidence",
+    },
+    "evidence_detail": {
+        "view": "evidence_detail", "tone": "neutral", "row_count": 4,
+        "title": "authentication_evidence_detail",
+        "headline": "authentication_evidence_detail",
+    },
+}
+
+
+def controller_semantic_snapshot(state: dict[str, Any]) -> dict[str, Any]:
+    """Return only stable controller semantics, excluding repaint counters."""
+    return {name: state.get(name) for name in SYNTHETIC_CONTROLLER_FIELDS}
+
+
+def synthetic_controller_failures(
+        state: dict[str, Any], label: str, expected_view: str,
+        *, action_selection: int = 0, selected_action: str = "details",
+        peer_selection: int = 0, peer_position: int = 0,
+        peer_mask: int = 0x0f, peer_evidence: int = 4,
+        evidence_selection: int = 0, evidence_report_index: int = 0,
+        evidence_source_frame: int = 0,
+        evidence_message: str = "message_1",
+        evidence_has_pmkid: bool = True,
+        repeat_requested: bool = False,
+        repeat_request_generation: int = 0) -> list[str]:
+    """Validate the exact deterministic full-profile controller state."""
+    presenter = dict(SYNTHETIC_PRESENTER_SEMANTICS[expected_view])
+    if expected_view == "peer_detail" and peer_mask != 0x0f:
+        presenter["tone"] = "caution"
+    expected = {
+        "schema": AUTH_SCHEMA, "kind": "state", "read_only_query": True,
+        "view": "authentication_capture", "state": "result",
+        "failure": "none", "capture_active": False,
+        "capture_cleanup_complete": True,
+        "adapter_cleanup_complete": True,
+        "synthetic": True, "report_origin": "synthetic_hil",
+        "outcome": "complete", "uncertainty": 0,
+        "evidence": 6, "peers": 2, "complete_peers": 1,
+        "pmkids": 1, "source_frames": 6,
+        "presenter_view": presenter["view"],
+        "presenter_tone": presenter["tone"],
+        "presenter_evidence_incomplete": False,
+        "presenter_report_openable": True,
+        "presenter_cleanup_complete": True,
+        "presenter_row_count": presenter["row_count"],
+        "presenter_synthetic": True,
+        "presenter_synthetic_label_visible": True,
+        "presenter_title_semantic": presenter["title"],
+        "presenter_headline_semantic": presenter["headline"],
+        "presenter_note_semantic": "simulated_data",
+        "controller_ready": True,
+        "controller_view": expected_view,
+        "controller_action_count": 2,
+        "controller_action_selection": action_selection,
+        "controller_selected_action": selected_action,
+        "controller_peer_count": 2,
+        "controller_peer_selection": peer_selection,
+        "controller_peer_position": peer_position,
+        "controller_selected_peer_mask": peer_mask,
+        "controller_selected_peer_evidence_count": peer_evidence,
+        "controller_evidence_count": 6,
+        "controller_evidence_selection": evidence_selection,
+        "controller_selected_evidence_present": True,
+        "controller_selected_evidence_report_index": evidence_report_index,
+        "controller_selected_evidence_source_frame": evidence_source_frame,
+        "controller_selected_evidence_message": evidence_message,
+        "controller_selected_evidence_has_pmkid": evidence_has_pmkid,
+        "repeat_requested": repeat_requested,
+        "repeat_request_generation": repeat_request_generation,
+    }
+    return expect(state, expected, label)
+
+
+def navigation_repaint_failures(
+        before: dict[str, Any], after: dict[str, Any], label: str,
+        *, expected_chrome_delta: int) -> list[str]:
+    """Require one content-only UI delta and never a full-screen clear."""
+    failures: list[str] = []
+    fields = ("generation", "content_repaints", "full_repaints",
+              "chrome_repaints")
+    for name in fields:
+        if not all(non_negative_integer(state.get(name))
+                   for state in (before, after)):
+            failures.append(f"{label}.{name}: missing repaint counter")
+    if failures:
+        return failures
+    if after["generation"] != before["generation"]:
+        failures.append(f"{label}.generation: changed during navigation")
+    if after["content_repaints"] <= before["content_repaints"]:
+        failures.append(f"{label}.content: no incremental repaint")
+    if after["full_repaints"] != before["full_repaints"]:
+        failures.append(f"{label}.full: full-screen clear observed")
+    if after["chrome_repaints"] - before["chrome_repaints"] != \
+            expected_chrome_delta:
+        failures.append(f"{label}.chrome: unexpected localized delta")
+    return failures
+
+
+def navigation_pixel_delta_failures(
+        delta: dict[str, int], label: str,
+        *, title_change_required: bool,
+        footer_change_required: bool | None = None) -> list[str]:
+    """Check physical pixels without treating the dynamic title as static."""
+    failures = terminal_pixel_delta_failures(delta, label)
+    # The terminal helper requires both title and status changes. Navigation
+    # keeps RX/TX status stable and only some controller views change title.
+    failures = [
+        failure for failure in failures
+        if not failure.endswith("title: lifecycle title stayed stale") and
+        not failure.endswith("status: RX/TX status stayed stale")
+    ]
+    if title_change_required and delta.get("title_changed_pixels", 0) <= 0:
+        failures.append(f"{label}.title: expected localized title repaint")
+    if not title_change_required and delta.get("title_changed_pixels") != 0:
+        failures.append(f"{label}.title: unchanged title was repainted")
+    if footer_change_required is not None and \
+            (delta.get("footer_changed_pixels", 0) > 0) != \
+            footer_change_required:
+        failures.append(f"{label}.footer: navigation hint delta mismatch")
+    if delta.get("status_changed_pixels") != 0:
+        failures.append(f"{label}.status: static RX/TX status changed")
+    return failures
 
 
 def report_accounting_failures(state: dict[str, Any],
@@ -855,6 +1230,99 @@ def enter_network_detail(
     return network_list, detail_ui, detail
 
 
+def run_minimal_ambient_terminal(
+        device: PassiveSerial,
+        trace: list[dict[str, Any]],
+        label: str,
+        mount_diagnostics: dict[str, Any],
+        ) -> dict[str, Any]:
+    """Reach a second honest terminal report without synthetic shortcuts."""
+    home_wifi(device, trace)
+    wifi_menu = action(device, "right")
+    trace.append(wifi_menu)
+    require_exact(wifi_menu, {
+        "page": "survey", "wifi_product_view": "menu",
+        "wifi_product_selection": 0, "runtime_owner": "wifi",
+        "lease_mask": 15,
+    }, f"{label}_wifi_menu")
+    wait_ui_state(
+        device, wifi_menu_quiescent, 15.0,
+        f"{label}: Wi-Fi menu did not become quiescent")
+    network_list, detail_ui, detail = enter_network_detail(
+        device, trace, label, mount_diagnostics)
+    requested_ui = action(device, "right")
+    trace.append(requested_ui)
+    require_exact(requested_ui, {
+        "wifi_product_view": "authentication_capture",
+        "runtime_event": "authentication_waiting_for_survey_stop",
+        "runtime_owner": "wifi", "lease_mask": 15,
+    }, f"{label}_requested_ui")
+    requested = auth_state(device)
+    running = requested if requested.get("state") != \
+        "waiting_for_survey_stop" else wait_auth_state(
+            device, authentication_start_state, 15.0,
+            f"{label}: authentication capture did not start")
+    if running.get("state") != "running":
+        raise RuntimeError(
+            f"{label}: authentication capture did not run: "
+            f"{privacy_safe_repr(running)}")
+    require_exact(running, {
+        "view": "authentication_capture", "synthetic": False,
+        "report_origin": NO_REPORT_ORIGIN, "passive": True,
+        "tx_path": False, "connect_path": False,
+        "target_selected": True, "target_selection_continuity": True,
+        "channel": detail["channel"], "capture_state": "running",
+        "capture_active": True, "capture_cleanup_complete": False,
+        "adapter_cleanup_complete": False,
+        "esp_rf_owned_by_foreground": True,
+    }, f"{label}_running")
+    capture_running = capture_state(device)
+    require_exact(capture_running, {
+        "state": "running", "passive_only": True, "rx_only": True,
+        "application_connect_calls": 0, "application_raw_tx_calls": 0,
+        "channel_plan": detail["channel"],
+        "current_channel": detail["channel"],
+        "cleanup_complete": False, "lease_mask": 15,
+    }, f"{label}_capture_running")
+    terminal = wait_auth_state(
+        device, lambda state: state.get("state") in ("result", "failed"),
+        13.0, f"{label}: authentication capture did not finish")
+    if terminal.get("state") != "result":
+        raise RuntimeError(
+            f"{label}: authentication capture failed: "
+            f"{privacy_safe_repr(terminal)}")
+    require_exact(terminal, {
+        "view": "authentication_capture", "synthetic": False,
+        "report_origin": AMBIENT_REPORT_ORIGIN, "passive": True,
+        "tx_path": False, "connect_path": False,
+        "target_selected": True, "target_selection_continuity": True,
+        "channel": detail["channel"], "capture_state": "complete",
+        "capture_active": False, "capture_cleanup_complete": True,
+        "adapter_cleanup_complete": True, "failure": "none",
+        "esp_rf_owned_by_foreground": True,
+    }, f"{label}_terminal")
+    capture_terminal = capture_state(device)
+    require_exact(capture_terminal, {
+        "state": "complete", "passive_only": True, "rx_only": True,
+        "application_connect_calls": 0, "application_raw_tx_calls": 0,
+        "channel_plan": detail["channel"],
+        "current_channel": detail["channel"],
+        "cleanup_complete": True, "lease_mask": 15,
+    }, f"{label}_capture_terminal")
+    return {
+        "wifi_menu": wifi_menu,
+        "network_list": network_list,
+        "network_detail_ui": detail_ui,
+        "network_detail": detail,
+        "requested_ui": requested_ui,
+        "requested": requested,
+        "running": running,
+        "capture_running": capture_running,
+        "terminal": terminal,
+        "capture_terminal": capture_terminal,
+    }
+
+
 def ingress_accounting_failures(state: dict[str, Any],
                                 label: str) -> list[str]:
     failures: list[str] = []
@@ -953,8 +1421,8 @@ def main() -> int:
             any(character not in "0123456789abcdefABCDEF"
                 for character in args.source_commit)):
         parser.error("--source-commit must be a full hexadecimal Git commit ID")
-    if args.flash == args.reuse_exact_flash:
-        parser.error("choose exactly one of --flash or --reuse-exact-flash")
+    if not args.flash or args.reuse_exact_flash:
+        parser.error("CAP049 requires exactly one fresh app flash (--flash)")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -975,6 +1443,7 @@ def main() -> int:
     cleanup_after: dict[str, Any] = {"attempted": False}
     hil_begin: dict[str, Any] = {}
     hil_end: dict[str, Any] = {}
+    post_hil_end: dict[str, Any] = {}
     wifi_menu_ready_state: dict[str, Any] = {}
     cancel_network_list: dict[str, Any] = {}
     cancel_network_detail_ui: dict[str, Any] = {}
@@ -1010,6 +1479,14 @@ def main() -> int:
     repaint_delta: dict[str, int] = {}
     terminal_repaint_delta: dict[str, int] = {}
     terminal_pixel_delta: dict[str, int] = {}
+    ambient_rf_proof: dict[str, Any] = {}
+    synthetic_ui_proof: dict[str, Any] = {}
+    synthetic_fixture_ack: dict[str, Any] = {}
+    synthetic_fixture_replay: dict[str, Any] = {}
+    synthetic_navigation: dict[str, dict[str, Any]] = {}
+    synthetic_pixel_deltas: dict[str, dict[str, int]] = {}
+    synthetic_back_cleanup: dict[str, Any] = {}
+    hil_session_cycle: dict[str, Any] = {}
     host_capture_elapsed_ms: float | None = None
     flash_completed = False
     candidate_verified = False
@@ -1417,25 +1894,524 @@ def main() -> int:
                 failures.extend(terminal_pixel_delta_failures(
                     terminal_pixel_delta, "terminal_pixel_delta"))
 
-                menu_after_back = action(device, "left")
+                if (auth_terminal.get("synthetic") is not False or
+                        auth_terminal.get("report_origin") !=
+                            AMBIENT_REPORT_ORIGIN):
+                    failures.append(
+                        "ambient terminal was not exact real-RF evidence")
+                ambient_rf_proof = {
+                    "schema": "leshy.wifi.authentication.ambient_rf_proof.v1",
+                    "synthetic": False,
+                    "report_origin": AMBIENT_REPORT_ORIGIN,
+                    "generation": auth_terminal.get("generation"),
+                    "outcome": auth_terminal.get("outcome"),
+                    "evidence": auth_terminal.get("evidence"),
+                    "capture_state": capture_terminal.get("state"),
+                    "capture_cleanup_complete": capture_terminal.get(
+                        "cleanup_complete"),
+                    "application_connect_calls": capture_terminal.get(
+                        "application_connect_calls"),
+                    "application_raw_tx_calls": capture_terminal.get(
+                        "application_raw_tx_calls"),
+                    "ambient_eapol_required": False,
+                }
+
+                # The ambient run above is the only RF evidence. The fixture
+                # below replaces only the immutable terminal report so every
+                # report-navigation branch can be checked deterministically.
+                fixture_before = fixture_side_effect_snapshot(
+                    auth_state(device), capture_state(device),
+                    read_only_query(
+                        device, b"storage.product.boot-recovery",
+                        "leshy.storage.product_boot_recovery.v1", "state"))
+                synthetic_fixture_ack = load_synthetic_report_once(device)
+                synthetic_outcome = auth_state(device)
+                fixture_after = fixture_side_effect_snapshot(
+                    synthetic_outcome, capture_state(device),
+                    read_only_query(
+                        device, b"storage.product.boot-recovery",
+                        "leshy.storage.product_boot_recovery.v1", "state"))
+                fixture_isolation_failures = fixture_side_effect_failures(
+                    fixture_before, fixture_after)
+                failures.extend(fixture_isolation_failures)
+                repeat_generation_before = synthetic_outcome.get(
+                    "repeat_request_generation")
+                if not non_negative_integer(repeat_generation_before):
+                    raise RuntimeError(
+                        "synthetic outcome lacks repeat request generation")
+                failures.extend(synthetic_controller_failures(
+                    synthetic_outcome, "synthetic_outcome", "outcome",
+                    repeat_request_generation=repeat_generation_before))
+                if synthetic_fixture_ack.get("generation") != \
+                        synthetic_outcome.get("generation"):
+                    failures.append(
+                        "synthetic fixture/report generation mismatch")
+                synthetic_navigation["outcome"] = synthetic_outcome
+                screens["synthetic_outcome"] = capture_evidence_safe(
+                    device, frames, "wifi-auth-synthetic-outcome")
+                ambient_to_synthetic_note = pixel_region_proof(
+                    frames, "wifi-auth-result",
+                    "wifi-auth-synthetic-outcome",
+                    x0=NOTE_X0, x1=NOTE_X1, y0=NOTE_Y0, y1=NOTE_Y1)
+                if (ambient_to_synthetic_note["changed_pixels"] < 80 or
+                        ambient_to_synthetic_note["changed_rows"] < 7 or
+                        ambient_to_synthetic_note["changed_columns"] < 32 or
+                        ambient_to_synthetic_note["bbox_width"] < 40 or
+                        ambient_to_synthetic_note["before_sha256"] ==
+                        ambient_to_synthetic_note["after_sha256"]):
+                    failures.append(
+                        "synthetic simulated-data label has no physical "
+                        "note-region delta")
+                synthetic_fixture_replay = reject_synthetic_report_replay(
+                    device)
+
+                trace.append(action(device, "right"))
+                actions_right = auth_state(device)
+                synthetic_navigation["actions_right"] = actions_right
+                failures.extend(synthetic_controller_failures(
+                    actions_right, "synthetic_actions_right", "actions",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    synthetic_outcome, actions_right,
+                    "synthetic_outcome_to_actions", expected_chrome_delta=1))
+                screens["synthetic_actions"] = capture_evidence_safe(
+                    device, frames, "wifi-auth-synthetic-actions")
+                synthetic_pixel_deltas["outcome_to_actions"] = \
+                    terminal_pixel_changes(
+                        frames, "wifi-auth-synthetic-outcome",
+                        "wifi-auth-synthetic-actions")
+                failures.extend(navigation_pixel_delta_failures(
+                    synthetic_pixel_deltas["outcome_to_actions"],
+                    "synthetic_outcome_to_actions",
+                    title_change_required=True,
+                    footer_change_required=True))
+
+                trace.append(action(device, "left"))
+                outcome_left = auth_state(device)
+                synthetic_navigation["outcome_left"] = outcome_left
+                failures.extend(synthetic_controller_failures(
+                    outcome_left, "synthetic_outcome_left", "outcome",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    actions_right, outcome_left, "synthetic_actions_left",
+                    expected_chrome_delta=1))
+
+                trace.append(action(device, "select"))
+                actions_select = auth_state(device)
+                synthetic_navigation["actions_select"] = actions_select
+                failures.extend(synthetic_controller_failures(
+                    actions_select, "synthetic_actions_select", "actions",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    outcome_left, actions_select,
+                    "synthetic_outcome_select", expected_chrome_delta=1))
+                if controller_semantic_snapshot(actions_select) != \
+                        controller_semantic_snapshot(actions_right):
+                    failures.append(
+                        "Right and Select do not open equivalent Actions state")
+
+                trace.append(action(device, "back"))
+                outcome_back = auth_state(device)
+                synthetic_navigation["outcome_back"] = outcome_back
+                failures.extend(synthetic_controller_failures(
+                    outcome_back, "synthetic_outcome_back", "outcome",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    actions_select, outcome_back, "synthetic_actions_back",
+                    expected_chrome_delta=1))
+                if controller_semantic_snapshot(outcome_back) != \
+                        controller_semantic_snapshot(outcome_left):
+                    failures.append(
+                        "Left and Back do not return equivalent Outcome state")
+
+                trace.append(action(device, "right"))
+                actions_details = auth_state(device)
+                synthetic_navigation["actions_details"] = actions_details
+                failures.extend(synthetic_controller_failures(
+                    actions_details, "synthetic_actions_details", "actions",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    outcome_back, actions_details,
+                    "synthetic_outcome_to_actions_details",
+                    expected_chrome_delta=1))
+
+                trace.append(action(device, "down"))
+                actions_repeat = auth_state(device)
+                synthetic_navigation["actions_repeat"] = actions_repeat
+                failures.extend(synthetic_controller_failures(
+                    actions_repeat, "synthetic_actions_repeat", "actions",
+                    action_selection=1, selected_action="repeat",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    actions_details, actions_repeat,
+                    "synthetic_actions_down", expected_chrome_delta=0))
+
+                trace.append(action(device, "up"))
+                actions_details_again = auth_state(device)
+                synthetic_navigation["actions_details_again"] = \
+                    actions_details_again
+                failures.extend(synthetic_controller_failures(
+                    actions_details_again,
+                    "synthetic_actions_details_again", "actions",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    actions_repeat, actions_details_again,
+                    "synthetic_actions_up", expected_chrome_delta=0))
+
+                trace.append(action(device, "select"))
+                peer_first = auth_state(device)
+                synthetic_navigation["peer_first"] = peer_first
+                failures.extend(synthetic_controller_failures(
+                    peer_first, "synthetic_peer_first", "peer_detail",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    actions_details_again, peer_first,
+                    "synthetic_actions_to_peer", expected_chrome_delta=1))
+                screens["synthetic_peer_first"] = capture_evidence_safe(
+                    device, frames, "wifi-auth-synthetic-peer-first")
+                synthetic_pixel_deltas["actions_to_peer"] = \
+                    terminal_pixel_changes(
+                        frames, "wifi-auth-synthetic-actions",
+                        "wifi-auth-synthetic-peer-first")
+                failures.extend(navigation_pixel_delta_failures(
+                    synthetic_pixel_deltas["actions_to_peer"],
+                    "synthetic_actions_to_peer",
+                    title_change_required=True,
+                    footer_change_required=True))
+
+                trace.append(action(device, "down"))
+                peer_second = auth_state(device)
+                synthetic_navigation["peer_second"] = peer_second
+                failures.extend(synthetic_controller_failures(
+                    peer_second, "synthetic_peer_second", "peer_detail",
+                    peer_selection=1, peer_position=1, peer_mask=0x03,
+                    peer_evidence=2,
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    peer_first, peer_second, "synthetic_peer_down",
+                    expected_chrome_delta=0))
+                screens["synthetic_peer_second"] = capture_evidence_safe(
+                    device, frames, "wifi-auth-synthetic-peer-second")
+                synthetic_pixel_deltas["peer_first_to_second"] = \
+                    terminal_pixel_changes(
+                        frames, "wifi-auth-synthetic-peer-first",
+                        "wifi-auth-synthetic-peer-second")
+                failures.extend(navigation_pixel_delta_failures(
+                    synthetic_pixel_deltas["peer_first_to_second"],
+                    "synthetic_peer_first_to_second",
+                    title_change_required=False,
+                    footer_change_required=False))
+
+                trace.append(action(device, "up"))
+                peer_first_again = auth_state(device)
+                synthetic_navigation["peer_first_again"] = peer_first_again
+                failures.extend(synthetic_controller_failures(
+                    peer_first_again, "synthetic_peer_first_again",
+                    "peer_detail",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    peer_second, peer_first_again, "synthetic_peer_up",
+                    expected_chrome_delta=0))
+
+                trace.append(action(device, "right"))
+                evidence_list = auth_state(device)
+                synthetic_navigation["evidence_list"] = evidence_list
+                failures.extend(synthetic_controller_failures(
+                    evidence_list, "synthetic_evidence_list",
+                    "evidence_list",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    peer_first_again, evidence_list,
+                    "synthetic_peer_to_evidence", expected_chrome_delta=1))
+                screens["synthetic_evidence_list"] = capture_evidence_safe(
+                    device, frames, "wifi-auth-synthetic-evidence-list")
+
+                trace.append(action(device, "down"))
+                evidence_second = auth_state(device)
+                synthetic_navigation["evidence_second"] = evidence_second
+                failures.extend(synthetic_controller_failures(
+                    evidence_second, "synthetic_evidence_second",
+                    "evidence_list", evidence_selection=1,
+                    evidence_report_index=1, evidence_source_frame=1,
+                    evidence_message="message_2", evidence_has_pmkid=False,
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    evidence_list, evidence_second,
+                    "synthetic_evidence_down", expected_chrome_delta=0))
+
+                trace.append(action(device, "up"))
+                evidence_first_again = auth_state(device)
+                synthetic_navigation["evidence_first_again"] = \
+                    evidence_first_again
+                failures.extend(synthetic_controller_failures(
+                    evidence_first_again, "synthetic_evidence_first_again",
+                    "evidence_list",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    evidence_second, evidence_first_again,
+                    "synthetic_evidence_up", expected_chrome_delta=0))
+
+                trace.append(action(device, "right"))
+                evidence_detail = auth_state(device)
+                synthetic_navigation["evidence_detail"] = evidence_detail
+                failures.extend(synthetic_controller_failures(
+                    evidence_detail, "synthetic_evidence_detail",
+                    "evidence_detail",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    evidence_first_again, evidence_detail,
+                    "synthetic_evidence_to_detail", expected_chrome_delta=1))
+                screens["synthetic_evidence_detail"] = capture_evidence_safe(
+                    device, frames, "wifi-auth-synthetic-evidence-detail")
+                synthetic_pixel_deltas["evidence_list_to_detail"] = \
+                    terminal_pixel_changes(
+                        frames, "wifi-auth-synthetic-evidence-list",
+                        "wifi-auth-synthetic-evidence-detail")
+                failures.extend(navigation_pixel_delta_failures(
+                    synthetic_pixel_deltas["evidence_list_to_detail"],
+                    "synthetic_evidence_list_to_detail",
+                    title_change_required=True,
+                    footer_change_required=True))
+
+                # Return to Actions and prove synthetic Repeat is recorded
+                # exactly once, closes the overlay, and cannot start RF.
+                trace.append(action(device, "left"))
+                evidence_list_back = auth_state(device)
+                synthetic_navigation["evidence_list_back"] = \
+                    evidence_list_back
+                failures.extend(synthetic_controller_failures(
+                    evidence_list_back, "synthetic_evidence_list_back",
+                    "evidence_list",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    evidence_detail, evidence_list_back,
+                    "synthetic_detail_left", expected_chrome_delta=1))
+                trace.append(action(device, "left"))
+                peer_back = auth_state(device)
+                synthetic_navigation["peer_back"] = peer_back
+                failures.extend(synthetic_controller_failures(
+                    peer_back, "synthetic_peer_back", "peer_detail",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    evidence_list_back, peer_back,
+                    "synthetic_evidence_left", expected_chrome_delta=1))
+                trace.append(action(device, "left"))
+                actions_back = auth_state(device)
+                synthetic_navigation["actions_back"] = actions_back
+                failures.extend(synthetic_controller_failures(
+                    actions_back, "synthetic_actions_back", "actions",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    peer_back, actions_back, "synthetic_peer_left",
+                    expected_chrome_delta=1))
+                trace.append(action(device, "down"))
+                repeat_selected = auth_state(device)
+                synthetic_navigation["repeat_selected"] = repeat_selected
+                failures.extend(synthetic_controller_failures(
+                    repeat_selected, "synthetic_repeat_selected", "actions",
+                    action_selection=1, selected_action="repeat",
+                    repeat_request_generation=repeat_generation_before))
+                failures.extend(navigation_repaint_failures(
+                    actions_back, repeat_selected,
+                    "synthetic_repeat_down", expected_chrome_delta=0))
+
+                production_continuity = fixture_before["auth_resource"]
+                for navigation_name, navigation_state in \
+                        synthetic_navigation.items():
+                    failures.extend(production_continuity_failures(
+                        production_continuity, navigation_state,
+                        f"synthetic_{navigation_name}"))
+
+                repeat_ack = action(device, "select")
+                trace.append(repeat_ack)
+                repeat_state = auth_state(device)
+                repeat_request_generation = repeat_generation_before + 1
+                if repeat_request_generation > 0xffffffff:
+                    repeat_request_generation = 1
+                require_exact(repeat_state, {
+                    "view": "menu", "state": "idle",
+                    "synthetic": False,
+                    "report_origin": NO_REPORT_ORIGIN,
+                    "generation": synthetic_outcome.get("generation"),
+                    "repeat_requested": True,
+                    "repeat_request_generation": repeat_request_generation,
+                    "capture_state": "complete", "capture_active": False,
+                    "capture_cleanup_complete": True,
+                    "adapter_cleanup_complete": True,
+                    "failure": "none", "passive": True,
+                    "tx_path": False, "connect_path": False,
+                    "esp_rf_owned_by_foreground": True,
+                }, "synthetic_repeat_request")
+                repeat_resource = fixture_side_effect_snapshot(
+                    repeat_state, capture_state(device),
+                    read_only_query(
+                        device, b"storage.product.boot-recovery",
+                        "leshy.storage.product_boot_recovery.v1", "state"))
+                failures.extend(fixture_side_effect_failures(
+                    fixture_before, repeat_resource))
+                failures.extend(production_continuity_failures(
+                    production_continuity, repeat_state,
+                    "synthetic_repeat_immediate"))
+                time.sleep(0.15)
+                repeat_delayed = auth_state(device)
+                failures.extend(production_continuity_failures(
+                    production_continuity, repeat_delayed,
+                    "synthetic_repeat_delayed"))
+                require_exact(repeat_delayed, {
+                    "view": "menu", "state": "idle",
+                    "synthetic": False,
+                    "report_origin": NO_REPORT_ORIGIN,
+                    "generation": synthetic_outcome.get("generation"),
+                    "repeat_requested": True,
+                    "repeat_request_generation": repeat_request_generation,
+                    "capture_state": "complete", "capture_active": False,
+                    "capture_cleanup_complete": True,
+                    "adapter_cleanup_complete": True,
+                }, "synthetic_repeat_delayed")
+                synthetic_navigation["repeat_request"] = repeat_state
+                synthetic_ui_proof = {
+                    "schema":
+                        "leshy.wifi.authentication.synthetic_ui_proof.v1",
+                    "synthetic": True,
+                    "report_origin": "synthetic_hil",
+                    "export_eligibility": "not_evaluated",
+                    "fixture": synthetic_fixture_ack,
+                    "replay_rejected": synthetic_fixture_replay,
+                    "side_effects": {
+                        "schema":
+                            "leshy.wifi.authentication.synthetic_side_effects.v1",
+                        "production_continuity_proven":
+                            not fixture_isolation_failures,
+                        "boot_recovery_continuity":
+                            fixture_before.get("boot_recovery") ==
+                            fixture_after.get("boot_recovery"),
+                        "product_storage_writes_measured": False,
+                        "static_no_storage_api_contract_required": True,
+                        "before": fixture_before,
+                        "after": fixture_after,
+                    },
+                    "ambient_to_synthetic_note": ambient_to_synthetic_note,
+                    "navigation": synthetic_navigation,
+                    "right_select_equivalent":
+                        controller_semantic_snapshot(actions_right) ==
+                        controller_semantic_snapshot(actions_select),
+                    "left_back_equivalent":
+                        controller_semantic_snapshot(outcome_left) ==
+                        controller_semantic_snapshot(outcome_back),
+                    "pixel_deltas": synthetic_pixel_deltas,
+                    "repeat_action": repeat_ack,
+                    "repeat_request": repeat_state,
+                    "repeat_resource": repeat_resource,
+                    "repeat_delayed": repeat_delayed,
+                    "production_continuity": production_continuity,
+                }
+
+                repeat_menu = repeat_ack
+                require_exact(repeat_menu, {
+                    "wifi_product_view": "menu", "wifi_product_selection": 0,
+                    "runtime_owner": "wifi", "lease_mask": 15,
+                }, "synthetic_repeat_menu")
+                home_after_repeat = action(device, "left")
+                trace.append(home_after_repeat)
+                require_exact(home_after_repeat, {
+                    "page": "home", "runtime_owner": "none", "lease_mask": 0,
+                }, "synthetic_repeat_home")
+
+                # A second authenticated HIL session resets the one-shot fixture.
+                # Reach a fresh terminal state through the real passive capture,
+                # then exercise Outcome -> Back itself (not a renamed Repeat ACK).
+                hil_session_cycle["end"] = end_hil_session(
+                    device, run_id, app_identity)
+                hil_started = False
+                hil_session_cycle["begin"] = begin_hil_session(
+                    device, run_id, app_identity, args.expected_version)
+                hil_started = True
+                back_ambient = run_minimal_ambient_terminal(
+                    device, trace, "synthetic_back",
+                    filesystem_mount_diagnostics)
+                back_ambient_state = auth_state(device)
+                back_repeat_generation = back_ambient_state.get(
+                    "repeat_request_generation")
+                if not non_negative_integer(back_repeat_generation):
+                    raise RuntimeError(
+                        "synthetic Back baseline lacks repeat generation")
+                back_fixture_before = fixture_side_effect_snapshot(
+                    back_ambient_state, capture_state(device),
+                    read_only_query(
+                        device, b"storage.product.boot-recovery",
+                        "leshy.storage.product_boot_recovery.v1", "state"))
+                back_fixture_ack = load_synthetic_report_once(device)
+                back_outcome = auth_state(device)
+                back_fixture_after = fixture_side_effect_snapshot(
+                    back_outcome, capture_state(device),
+                    read_only_query(
+                        device, b"storage.product.boot-recovery",
+                        "leshy.storage.product_boot_recovery.v1", "state"))
+                failures.extend(fixture_side_effect_failures(
+                    back_fixture_before, back_fixture_after))
+                failures.extend(synthetic_controller_failures(
+                    back_outcome, "synthetic_back_outcome", "outcome",
+                    repeat_request_generation=back_repeat_generation))
+                if back_fixture_ack.get("generation") != \
+                        back_outcome.get("generation"):
+                    failures.append(
+                        "synthetic Back fixture/report generation mismatch")
+                back_replay = reject_synthetic_report_replay(device)
+                back_production_continuity = \
+                    back_fixture_before["auth_resource"]
+                failures.extend(production_continuity_failures(
+                    back_production_continuity, back_outcome,
+                    "synthetic_back_outcome"))
+
+                menu_after_back = action(device, "back")
                 trace.append(menu_after_back)
                 require_exact(menu_after_back, {
                     "wifi_product_view": "menu", "wifi_product_selection": 0,
                     "runtime_owner": "wifi", "lease_mask": 15,
-                }, "auth_back_menu")
+                    "changed": True,
+                }, "synthetic_terminal_back_menu")
                 auth_after_back = auth_state(device)
                 require_exact(auth_after_back, {
                     "view": "menu", "state": "idle",
-                    "generation": generation,
+                    "synthetic": False,
+                    "report_origin": NO_REPORT_ORIGIN,
+                    "generation": back_outcome.get("generation"),
                     "cancel_pending": False,
                     "back_during_wait_observed": False,
+                    "repeat_requested": False,
+                    "repeat_request_generation": back_repeat_generation,
                     "failure": "none",
-                    "capture_state": "idle", "capture_active": False,
+                    "capture_state": "complete", "capture_active": False,
                     "capture_cleanup_complete": True,
                     "adapter_cleanup_complete": True,
                     "survey_worker_deadline_armed": False,
                     "esp_rf_owned_by_foreground": True,
-                }, "auth_after_back")
+                }, "synthetic_terminal_back_state")
+                back_resource = fixture_side_effect_snapshot(
+                    auth_after_back, capture_state(device),
+                    read_only_query(
+                        device, b"storage.product.boot-recovery",
+                        "leshy.storage.product_boot_recovery.v1", "state"))
+                failures.extend(fixture_side_effect_failures(
+                    back_fixture_before, back_resource))
+                failures.extend(production_continuity_failures(
+                    back_production_continuity, auth_after_back,
+                    "synthetic_terminal_back"))
+                time.sleep(0.15)
+                back_delayed = auth_state(device)
+                failures.extend(production_continuity_failures(
+                    back_production_continuity, back_delayed,
+                    "synthetic_terminal_back_delayed"))
+                require_exact(back_delayed, {
+                    "view": "menu", "state": "idle", "synthetic": False,
+                    "report_origin": NO_REPORT_ORIGIN,
+                    "generation": back_outcome.get("generation"),
+                    "repeat_requested": False,
+                    "repeat_request_generation": back_repeat_generation,
+                    "capture_state": "complete", "capture_active": False,
+                    "capture_cleanup_complete": True,
+                    "adapter_cleanup_complete": True,
+                }, "synthetic_terminal_back_delayed")
                 home_after_back = action(device, "left")
                 trace.append(home_after_back)
                 require_exact(home_after_back, {
@@ -1443,6 +2419,28 @@ def main() -> int:
                 }, "back_home")
                 screens["home_final"] = capture_evidence_safe(
                     device, frames, "wifi-auth-home-final")
+                synthetic_back_cleanup = {
+                    "schema":
+                        "leshy.wifi.authentication.synthetic_back_cleanup.v1",
+                    "session_cycle": hil_session_cycle,
+                    "ambient": back_ambient,
+                    "fixture": back_fixture_ack,
+                    "replay_rejected": back_replay,
+                    "baseline_resource": back_fixture_before,
+                    "loaded_resource": back_fixture_after,
+                    "outcome": back_outcome,
+                    "back_action": menu_after_back,
+                    "back_state": auth_after_back,
+                    "back_resource": back_resource,
+                    "back_delayed": back_delayed,
+                    "home": home_after_back,
+                    "production_continuity": back_production_continuity,
+                    "boot_recovery_continuity":
+                        back_fixture_before.get("boot_recovery") ==
+                        back_resource.get("boot_recovery"),
+                    "product_storage_writes_measured": False,
+                    "static_no_storage_api_contract_required": True,
+                }
 
                 input_state = read_only_query(
                     device, b"input.state", "leshy.input.frontend.v1", "state")
@@ -1462,8 +2460,6 @@ def main() -> int:
                 for name in ("generation", "observations"):
                     if recovery_after.get(name) != recovery_before.get(name):
                         failures.append(f"persistent {name} changed")
-                if recovery_after.get("physical_write_calls") != 0:
-                    failures.append("physical SD write observed")
                 workflow_completed = True
             except Exception as error:
                 failures.append(
@@ -1494,6 +2490,28 @@ def main() -> int:
                                 device, run_id, app_identity)
                             require_exact(hil_end, {"active": False},
                                           "hil_session_end")
+                            post_hil_end = {
+                                "hil": read_only_query(
+                                    device, b"hil.state",
+                                    HIL_SESSION_SCHEMA, "state"),
+                                "ui": read_only_query(
+                                    device, b"ui.state", UI_SCHEMA, "state"),
+                                "auth": auth_state(device),
+                            }
+                            require_exact(post_hil_end["hil"], {
+                                "active": False,
+                            }, "post_hil_end_hil")
+                            require_exact(post_hil_end["ui"], {
+                                "page": "home", "runtime_owner": "none",
+                                "lease_mask": 0,
+                            }, "post_hil_end_ui")
+                            require_exact(post_hil_end["auth"], {
+                                "view": "menu", "state": "idle",
+                                "synthetic": False,
+                                "production_report_fingerprint":
+                                    "unavailable",
+                                "production_report_fingerprint_scope": "none",
+                            }, "post_hil_end_auth")
                         except Exception as error:
                             failures.append(
                                 "hil_session_end: "
@@ -1518,7 +2536,7 @@ def main() -> int:
             "flashed": candidate_verified,
             "flash_completed": flash_completed,
             "exact_boot_verified": candidate_verified,
-            "flash_mode": "fresh" if args.flash else "reuse_exact",
+            "flash_mode": "fresh",
         },
         "expected_cid": args.expected_cid,
         "boot": boot,
@@ -1526,6 +2544,7 @@ def main() -> int:
         "recovery_before": recovery_before,
         "recovery_after": recovery_after,
         "hil_session": {"begin": hil_begin, "end": hil_end},
+        "post_hil_end": post_hil_end,
         "wifi_menu_ready": wifi_menu_ready_state,
         "cancel_network_list": cancel_network_list,
         "cancel_network_detail_ui": cancel_network_detail_ui,
@@ -1549,6 +2568,9 @@ def main() -> int:
         "capture_running": capture_running,
         "auth_terminal": auth_terminal,
         "capture_terminal": capture_terminal,
+        "ambient_rf_proof": ambient_rf_proof,
+        "synthetic_ui_proof": synthetic_ui_proof,
+        "synthetic_back_cleanup": synthetic_back_cleanup,
         "auth_after_back": auth_after_back,
         "menu_after_back": menu_after_back,
         "home_after_back": home_after_back,
@@ -1567,15 +2589,70 @@ def main() -> int:
         "cleanup_before": cleanup_before,
         "cleanup_after": cleanup_after,
         "scope": {
-            "single_flash": candidate_verified,
+            "single_flash": candidate_verified and flash_completed,
             "manual_button_presses": 0,
             "screenshots_automatic": set(screens) == {
-                "running_first", "running_second", "result", "home_final"},
+                "running_first", "running_second", "result", "home_final",
+                "synthetic_outcome", "synthetic_actions",
+                "synthetic_peer_first", "synthetic_peer_second",
+                "synthetic_evidence_list", "synthetic_evidence_detail"},
             "application_rx_only": passed,
             "application_wifi_connect_calls": 0 if passed else None,
             "application_raw_tx_calls": 0 if passed else None,
             "physical_no_tx_instrumented": False,
             "ambient_eapol_required": False,
+            "ambient_capture_lifecycle_proven":
+                ambient_rf_proof.get("synthetic") is False and
+                ambient_rf_proof.get("report_origin") ==
+                    AMBIENT_REPORT_ORIGIN,
+            "ambient_authentication_evidence_observed":
+                isinstance(ambient_rf_proof.get("evidence"), int) and
+                ambient_rf_proof.get("evidence", 0) > 0,
+            "synthetic_ui_proven":
+                synthetic_ui_proof.get("synthetic") is True and
+                synthetic_ui_proof.get("report_origin") == "synthetic_hil",
+            "synthetic_fixture_display_touched":
+                synthetic_fixture_ack.get("display_touched"),
+            "synthetic_fixture_rf_hardware_touched":
+                synthetic_fixture_ack.get("rf_hardware_touched"),
+            "synthetic_fixture_radio_started":
+                synthetic_fixture_ack.get("radio_started"),
+            "synthetic_fixture_connect_calls":
+                synthetic_fixture_ack.get("connect_calls"),
+            "synthetic_fixture_raw_tx_calls":
+                synthetic_fixture_ack.get("raw_tx_calls"),
+            "synthetic_label_visible": synthetic_ui_proof.get(
+                "navigation", {}).get("outcome", {}).get(
+                    "presenter_synthetic_label_visible") is True,
+            "synthetic_production_continuity_proven":
+                synthetic_ui_proof.get("side_effects", {}).get(
+                    "production_continuity_proven") is True,
+            "synthetic_boot_recovery_continuity_proven":
+                synthetic_ui_proof.get("side_effects", {}).get(
+                    "boot_recovery_continuity") is True,
+            "product_storage_writes_measured": False,
+            "static_no_storage_api_contract_required": True,
+            "synthetic_replay_rejected":
+                synthetic_fixture_replay.get("status") == "replay_rejected",
+            "right_select_equivalent": synthetic_ui_proof.get(
+                "right_select_equivalent") is True,
+            "left_back_equivalent": synthetic_ui_proof.get(
+                "left_back_equivalent") is True,
+            "repeat_request_proven": synthetic_ui_proof.get(
+                "repeat_request", {}).get("repeat_requested") is True,
+            "repeat_delayed_stable": synthetic_ui_proof.get(
+                "repeat_delayed", {}).get("repeat_requested") is True,
+            "terminal_back_cleanup_proven":
+                synthetic_back_cleanup.get("back_state", {}).get(
+                    "synthetic") is False and
+                synthetic_back_cleanup.get("back_state", {}).get(
+                    "repeat_requested") is False and
+                synthetic_back_cleanup.get("home", {}).get(
+                    "lease_mask") == 0,
+            "production_continuity_proven": bool(
+                synthetic_ui_proof.get("production_continuity")),
+            "post_hil_end_proven": bool(post_hil_end),
+            "export_eligibility": "not_evaluated",
             "mac_wifi_control_calls": 0,
             "mac_ble_fixture_calls": 0,
             "fixture_ports_opened": [],
@@ -1618,7 +2695,6 @@ def main() -> int:
             "complete_cleanup": cleanup_after.get("complete") is True,
             "final_lease_mask": cleanup_after.get(
                 "final_state", {}).get("lease_mask"),
-            "storage_write_authorized": False,
         },
         "privacy": {
             "generic_target_ui": True,

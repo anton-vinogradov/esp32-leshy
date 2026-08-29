@@ -15,7 +15,13 @@ from esp_app_identity import app_elf_sha256
 
 SCHEMA = "leshy.wifi.authentication_capture_hil.run.v1"
 AUTH_SCHEMA = "leshy.wifi.authentication_capture.v1"
+CAPTURE_SCHEMA = "leshy.capture.wifi_frame.v1"
+RECOVERY_SCHEMA = "leshy.storage.product_boot_recovery.v1"
 AUTH_HOLD_SCHEMA = "leshy.wifi.authentication.hil_hold.v1"
+SYNTHETIC_FIXTURE_SCHEMA = \
+    "leshy.wifi.authentication.synthetic_fixture.v1"
+AMBIENT_REPORT_ORIGIN = "ambient_rf"
+NO_REPORT_ORIGIN = "none"
 RUNNER = Path(__file__).with_name("run_1x_wifi_authentication_capture_hil.py")
 BOARD_ID = "board-01"
 BOARD_PORT = "/dev/cu.usbmodem2101"
@@ -34,6 +40,14 @@ STATUS_X0 = 136
 STATUS_X1 = 240
 STATUS_Y0 = 0
 STATUS_Y1 = 26
+FOOTER_X0 = 0
+FOOTER_X1 = 240
+FOOTER_Y0 = 294
+FOOTER_Y1 = 320
+NOTE_X0 = 12
+NOTE_X1 = 228
+NOTE_Y0 = 186
+NOTE_Y1 = 214
 CAPTURE_DURATION_MS = 10_000
 CAPTURE_TERMINAL_SLACK_US = 2_500_000
 AUTH_HOLD_TIMEOUT_MS = 1_500
@@ -77,11 +91,62 @@ SCREEN_NAMES = {
     "running_second": "wifi-auth-running-second",
     "result": "wifi-auth-result",
     "home_final": "wifi-auth-home-final",
+    "synthetic_outcome": "wifi-auth-synthetic-outcome",
+    "synthetic_actions": "wifi-auth-synthetic-actions",
+    "synthetic_peer_first": "wifi-auth-synthetic-peer-first",
+    "synthetic_peer_second": "wifi-auth-synthetic-peer-second",
+    "synthetic_evidence_list": "wifi-auth-synthetic-evidence-list",
+    "synthetic_evidence_detail": "wifi-auth-synthetic-evidence-detail",
 }
 
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def pixel_region_proof(frames: Path, before_name: str, after_name: str,
+                       *, x0: int, x1: int, y0: int,
+                       y1: int) -> dict[str, Any] | None:
+    before_path = frames / f"{before_name}.rgb565"
+    after_path = frames / f"{after_name}.rgb565"
+    if not before_path.is_file() or not after_path.is_file():
+        return None
+    before = before_path.read_bytes()
+    after = after_path.read_bytes()
+    if len(before) != WIDTH * HEIGHT * 2 or len(after) != len(before):
+        return None
+    before_region = bytearray()
+    after_region = bytearray()
+    changed = 0
+    changed_rows: set[int] = set()
+    changed_columns: set[int] = set()
+    for y in range(y0, y1):
+        start = (y * WIDTH + x0) * 2
+        end = (y * WIDTH + x1) * 2
+        before_row = before[start:end]
+        after_row = after[start:end]
+        before_region.extend(before_row)
+        after_region.extend(after_row)
+        changed += sum(
+            before_row[offset:offset + 2] != after_row[offset:offset + 2]
+            for offset in range(0, len(before_row), 2))
+        for offset in range(0, len(before_row), 2):
+            if before_row[offset:offset + 2] != after_row[offset:offset + 2]:
+                changed_rows.add(y)
+                changed_columns.add(x0 + offset // 2)
+    bbox_width = (max(changed_columns) - min(changed_columns) + 1
+                  if changed_columns else 0)
+    bbox_height = (max(changed_rows) - min(changed_rows) + 1
+                   if changed_rows else 0)
+    return {
+        "x0": x0, "x1": x1, "y0": y0, "y1": y1,
+        "changed_pixels": changed,
+        "changed_rows": len(changed_rows),
+        "changed_columns": len(changed_columns),
+        "bbox_width": bbox_width, "bbox_height": bbox_height,
+        "before_sha256": hashlib.sha256(before_region).hexdigest(),
+        "after_sha256": hashlib.sha256(after_region).hexdigest(),
+    }
 
 
 def require(failures: list[str], condition: bool, message: str) -> None:
@@ -132,6 +197,672 @@ def verify_product_mount(failures: list[str], state: dict[str, Any],
 
 def non_negative_integer(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+SYNTHETIC_CONTROLLER_FIELDS = (
+    "presenter_view", "presenter_tone",
+    "presenter_evidence_incomplete", "presenter_report_openable",
+    "presenter_cleanup_complete", "presenter_row_count",
+    "presenter_synthetic", "presenter_synthetic_label_visible",
+    "presenter_title_semantic", "presenter_headline_semantic",
+    "presenter_note_semantic",
+    "controller_ready", "controller_view", "controller_action_count",
+    "controller_action_selection", "controller_selected_action",
+    "controller_peer_count", "controller_peer_selection",
+    "controller_peer_position", "controller_selected_peer_mask",
+    "controller_selected_peer_evidence_count", "controller_evidence_count",
+    "controller_evidence_selection",
+    "controller_selected_evidence_present",
+    "controller_selected_evidence_report_index",
+    "controller_selected_evidence_source_frame",
+    "controller_selected_evidence_message",
+    "controller_selected_evidence_has_pmkid",
+    "repeat_requested", "repeat_request_generation",
+)
+
+SYNTHETIC_PRESENTER_SEMANTICS = {
+    "outcome": {
+        "view": "result", "tone": "positive", "row_count": 4,
+        "title": "capture_result", "headline": "full_handshake",
+    },
+    "actions": {
+        "view": "actions", "tone": "neutral", "row_count": 2,
+        "title": "authentication_actions",
+        "headline": "authentication_actions",
+    },
+    "peer_detail": {
+        "view": "peer_detail", "tone": "positive", "row_count": 4,
+        "title": "authentication_peer",
+        "headline": "authentication_peer",
+    },
+    "evidence_list": {
+        "view": "evidence_list", "tone": "neutral", "row_count": 4,
+        "title": "authentication_evidence",
+        "headline": "authentication_evidence",
+    },
+    "evidence_detail": {
+        "view": "evidence_detail", "tone": "neutral", "row_count": 4,
+        "title": "authentication_evidence_detail",
+        "headline": "authentication_evidence_detail",
+    },
+}
+
+AUTH_RESOURCE_FIELDS = (
+    "schema", "kind", "read_only_query", "generation",
+    "capture_state", "capture_active", "capture_cleanup_complete",
+    "adapter_cleanup_complete", "esp_rf_owned_by_foreground",
+    "target_selected", "target_selection_continuity", "channel",
+    "duration_ms", "maximum_frames", "snap_length",
+    "production_report_fingerprint",
+    "production_report_fingerprint_scope",
+    "production_controller_ready", "production_controller_view",
+    "production_controller_action_selection",
+    "production_controller_peer_selection",
+    "production_controller_evidence_selection",
+    "production_controller_report_bound",
+)
+
+
+def controller_semantic_snapshot(state: dict[str, Any]) -> dict[str, Any]:
+    return {name: state.get(name) for name in SYNTHETIC_CONTROLLER_FIELDS}
+
+
+def verify_synthetic_fixture_ack(
+        failures: list[str], ack: dict[str, Any]) -> None:
+    require(failures,
+            ack.get("schema") == SYNTHETIC_FIXTURE_SCHEMA and
+            ack.get("kind") == "loaded" and
+            ack.get("status") == "loaded" and
+            ack.get("loaded") is True and
+            ack.get("synthetic") is True and
+            ack.get("profile") == "full" and
+            ack.get("report_identity") == "wifi-auth-ui-full-v1" and
+            ack.get("one_shot") is True and
+            ack.get("replayed") is False and
+            ack.get("report_origin") == "synthetic_hil" and
+            ack.get("hil_active") is True and
+            ack.get("display_touched") is True and
+            ack.get("rf_hardware_touched") is False and
+            ack.get("radio_started") is False and
+            ack.get("storage_mounted") is False and
+            ack.get("storage_written") is False and
+            ack.get("connect_calls") == 0 and
+            ack.get("raw_tx_calls") == 0 and
+            non_negative_integer(ack.get("generation")) and
+            ack.get("generation", 0) > 0 and
+            ack.get("host_fixture_action_writes") == 1 and
+            ack.get("host_fixture_action_replays") == 0 and
+            ack.get("host_fixture_ack_received") is True,
+            "synthetic fixture load ACK contract mismatch")
+
+
+def verify_synthetic_replay_rejected(
+        failures: list[str], replay: dict[str, Any]) -> None:
+    require(failures,
+            replay.get("schema") == SYNTHETIC_FIXTURE_SCHEMA and
+            replay.get("kind") == "error" and
+            replay.get("status") == "replay_rejected" and
+            replay.get("synthetic") is True and
+            replay.get("loaded") is False and
+            replay.get("profile") == "full" and
+            replay.get("report_identity") == "wifi-auth-ui-full-v1" and
+            replay.get("one_shot") is True and
+            replay.get("replayed") is True and
+            replay.get("report_origin") == "synthetic_hil" and
+            replay.get("hil_active") is True and
+            replay.get("display_touched") is False and
+            replay.get("rf_hardware_touched") is False and
+            replay.get("radio_started") is False and
+            replay.get("storage_mounted") is False and
+            replay.get("storage_written") is False and
+            replay.get("connect_calls") == 0 and
+            replay.get("raw_tx_calls") == 0 and
+            replay.get("host_fixture_action_writes") == 1 and
+            replay.get("host_fixture_action_replays") == 0 and
+            replay.get("host_fixture_ack_received") is True,
+            "synthetic fixture replay was not exactly rejected")
+
+
+def verify_synthetic_controller_state(
+        failures: list[str], state: dict[str, Any], label: str,
+        expected_view: str, *, action_selection: int = 0,
+        selected_action: str = "details", peer_selection: int = 0,
+        peer_position: int = 0, peer_mask: int = 0x0f,
+        peer_evidence: int = 4, evidence_selection: int = 0,
+        evidence_report_index: int = 0, evidence_source_frame: int = 0,
+        evidence_message: str = "message_1",
+        evidence_has_pmkid: bool = True,
+        repeat_requested: bool = False,
+        repeat_request_generation: int = 0) -> None:
+    presenter = dict(SYNTHETIC_PRESENTER_SEMANTICS[expected_view])
+    if expected_view == "peer_detail" and peer_mask != 0x0f:
+        presenter["tone"] = "caution"
+    expected = {
+        "schema": AUTH_SCHEMA, "kind": "state", "read_only_query": True,
+        "view": "authentication_capture", "state": "result",
+        "failure": "none", "capture_active": False,
+        "capture_cleanup_complete": True,
+        "adapter_cleanup_complete": True,
+        "synthetic": True, "report_origin": "synthetic_hil",
+        "outcome": "complete", "uncertainty": 0,
+        "evidence": 6, "peers": 2, "complete_peers": 1,
+        "pmkids": 1, "source_frames": 6,
+        "presenter_view": presenter["view"],
+        "presenter_tone": presenter["tone"],
+        "presenter_evidence_incomplete": False,
+        "presenter_report_openable": True,
+        "presenter_cleanup_complete": True,
+        "presenter_row_count": presenter["row_count"],
+        "presenter_synthetic": True,
+        "presenter_synthetic_label_visible": True,
+        "presenter_title_semantic": presenter["title"],
+        "presenter_headline_semantic": presenter["headline"],
+        "presenter_note_semantic": "simulated_data",
+        "controller_ready": True, "controller_view": expected_view,
+        "controller_action_count": 2,
+        "controller_action_selection": action_selection,
+        "controller_selected_action": selected_action,
+        "controller_peer_count": 2,
+        "controller_peer_selection": peer_selection,
+        "controller_peer_position": peer_position,
+        "controller_selected_peer_mask": peer_mask,
+        "controller_selected_peer_evidence_count": peer_evidence,
+        "controller_evidence_count": 6,
+        "controller_evidence_selection": evidence_selection,
+        "controller_selected_evidence_present": True,
+        "controller_selected_evidence_report_index": evidence_report_index,
+        "controller_selected_evidence_source_frame": evidence_source_frame,
+        "controller_selected_evidence_message": evidence_message,
+        "controller_selected_evidence_has_pmkid": evidence_has_pmkid,
+        "repeat_requested": repeat_requested,
+        "repeat_request_generation": repeat_request_generation,
+    }
+    for name, value in expected.items():
+        require(failures, state.get(name) == value,
+                f"{label}.{name}: {state.get(name)!r} != {value!r}")
+
+
+def verify_fixture_side_effects(
+        failures: list[str], proof: dict[str, Any]) -> None:
+    require(failures,
+            proof.get("schema") ==
+                "leshy.wifi.authentication.synthetic_side_effects.v1" and
+            proof.get("production_continuity_proven") is True and
+            proof.get("boot_recovery_continuity") is True and
+            proof.get("product_storage_writes_measured") is False and
+            proof.get("static_no_storage_api_contract_required") is True,
+            "synthetic fixture continuity/scope declaration mismatch")
+    before = proof.get("before", {})
+    after = proof.get("after", {})
+    require(failures, isinstance(before, dict) and before == after,
+            "synthetic fixture changed a read-only resource snapshot")
+    if not isinstance(before, dict):
+        return
+    auth = before.get("auth_resource", {})
+    capture = before.get("capture", {})
+    storage = before.get("boot_recovery", {})
+    require(failures,
+            set(auth) == set(AUTH_RESOURCE_FIELDS) and
+            auth.get("schema") == AUTH_SCHEMA and
+            auth.get("kind") == "state" and
+            auth.get("read_only_query") is True and
+            auth.get("capture_state") == "complete" and
+            auth.get("capture_active") is False and
+            auth.get("capture_cleanup_complete") is True and
+            auth.get("adapter_cleanup_complete") is True and
+            auth.get("esp_rf_owned_by_foreground") is True and
+            isinstance(auth.get("production_report_fingerprint"), str) and
+            re.fullmatch(
+                r"[0-9a-f]{16}",
+                auth.get("production_report_fingerprint", "")) is not None and
+            auth.get("production_report_fingerprint_scope") == "hil_session" and
+            auth.get("production_controller_report_bound") is True,
+            "synthetic fixture auth resource baseline is unsafe")
+    require(failures,
+            capture.get("schema") == CAPTURE_SCHEMA and
+            capture.get("kind") == "state" and
+            capture.get("state") == "complete" and
+            capture.get("passive_only") is True and
+            capture.get("rx_only") is True and
+            capture.get("application_connect_calls") == 0 and
+            capture.get("application_raw_tx_calls") == 0 and
+            capture.get("storage_written") is False and
+            capture.get("cleanup_complete") is True and
+            capture.get("lease_mask") == 15,
+            "synthetic fixture capture baseline is unsafe")
+    require(failures,
+            storage.get("schema") == RECOVERY_SCHEMA and
+            storage.get("kind") == "state" and
+            storage.get("write_enabled") is False and
+            storage.get("cleanup_complete") is True and
+            storage.get("owned_after") == 0,
+            "synthetic fixture boot-recovery baseline is unsafe")
+
+
+def verify_navigation_repaint(
+        failures: list[str], before: dict[str, Any], after: dict[str, Any],
+        label: str, expected_chrome_delta: int) -> None:
+    fields = ("generation", "content_repaints", "full_repaints",
+              "chrome_repaints")
+    if not all(non_negative_integer(state.get(name))
+               for state in (before, after) for name in fields):
+        failures.append(f"{label}: missing repaint counter")
+        return
+    require(failures, after["generation"] == before["generation"],
+            f"{label}: report generation changed")
+    require(failures,
+            after["content_repaints"] > before["content_repaints"],
+            f"{label}: content was not incrementally repainted")
+    require(failures, after["full_repaints"] == before["full_repaints"],
+            f"{label}: full-screen clear observed")
+    require(failures,
+            after["chrome_repaints"] - before["chrome_repaints"] ==
+                expected_chrome_delta,
+            f"{label}: unexpected localized chrome delta")
+
+
+def verify_navigation_pixel_delta(
+        failures: list[str], delta: dict[str, Any], label: str,
+        title_change_required: bool,
+        footer_change_required: bool | None = None) -> None:
+    for name in (
+            "content_changed_pixels", "title_changed_pixels",
+            "status_changed_pixels", "footer_changed_pixels",
+            "unexpected_static_chrome_changed_pixels"):
+        require(failures, non_negative_integer(delta.get(name)),
+                f"{label}.{name}: missing counter")
+    if not all(non_negative_integer(delta.get(name)) for name in (
+            "content_changed_pixels", "title_changed_pixels",
+            "status_changed_pixels", "footer_changed_pixels",
+            "unexpected_static_chrome_changed_pixels")):
+        return
+    require(failures, delta["content_changed_pixels"] > 0,
+            f"{label}: content stayed stale")
+    require(failures,
+            (delta["title_changed_pixels"] > 0) == title_change_required,
+            f"{label}: title delta mismatch")
+    require(failures, delta["status_changed_pixels"] == 0,
+            f"{label}: static status changed")
+    if footer_change_required is not None:
+        require(failures,
+                (delta["footer_changed_pixels"] > 0) ==
+                    footer_change_required,
+                f"{label}: navigation footer delta mismatch")
+    require(failures,
+            delta["unexpected_static_chrome_changed_pixels"] == 0,
+            f"{label}: static pixels changed")
+
+
+def verify_ambient_and_synthetic_proofs(
+        failures: list[str], run: dict[str, Any], root: Path) -> None:
+    """Keep real RF evidence and deterministic UI evidence disjoint."""
+    terminal = run.get("auth_terminal", {})
+    capture_terminal = run.get("capture_terminal", {})
+    ambient = run.get("ambient_rf_proof", {})
+    require(failures,
+            ambient.get("schema") ==
+                "leshy.wifi.authentication.ambient_rf_proof.v1" and
+            ambient.get("synthetic") is False and
+            ambient.get("report_origin") == AMBIENT_REPORT_ORIGIN and
+            terminal.get("synthetic") is False and
+            terminal.get("report_origin") == AMBIENT_REPORT_ORIGIN and
+            terminal.get("state") == "result" and
+            ambient.get("generation") == terminal.get("generation") and
+            ambient.get("outcome") == terminal.get("outcome") and
+            ambient.get("evidence") == terminal.get("evidence") and
+            ambient.get("capture_state") == capture_terminal.get("state") ==
+                "complete" and
+            ambient.get("capture_cleanup_complete") is True and
+            capture_terminal.get("cleanup_complete") is True and
+            ambient.get("application_connect_calls") == 0 and
+            ambient.get("application_raw_tx_calls") == 0 and
+            ambient.get("ambient_eapol_required") is False,
+            "ambient RF proof is missing, synthetic, or not pre-injection")
+
+    proof = run.get("synthetic_ui_proof", {})
+    require(failures,
+            proof.get("schema") ==
+                "leshy.wifi.authentication.synthetic_ui_proof.v1" and
+            proof.get("synthetic") is True and
+            proof.get("report_origin") == "synthetic_hil" and
+            proof.get("export_eligibility") == "not_evaluated" and
+            proof.get("right_select_equivalent") is True and
+            proof.get("left_back_equivalent") is True,
+            "synthetic UI proof declaration mismatch")
+    fixture = proof.get("fixture", {})
+    replay = proof.get("replay_rejected", {})
+    verify_synthetic_fixture_ack(failures, fixture)
+    verify_synthetic_replay_rejected(failures, replay)
+    verify_fixture_side_effects(failures, proof.get("side_effects", {}))
+
+    note = pixel_region_proof(
+        root / "frames", "wifi-auth-result",
+        "wifi-auth-synthetic-outcome",
+        x0=NOTE_X0, x1=NOTE_X1, y0=NOTE_Y0, y1=NOTE_Y1)
+    require(failures,
+            note is not None and
+            note == proof.get("ambient_to_synthetic_note") and
+            note.get("changed_pixels", 0) >= 80 and
+            note.get("changed_rows", 0) >= 7 and
+            note.get("changed_columns", 0) >= 32 and
+            note.get("bbox_width", 0) >= 40 and
+            note.get("before_sha256") != note.get("after_sha256"),
+            "synthetic label lacks reproducible physical note-region delta")
+
+    navigation = proof.get("navigation", {})
+    require(failures, isinstance(navigation, dict),
+            "synthetic navigation is not an exact state map")
+    if not isinstance(navigation, dict):
+        return
+    repeat_before = navigation.get("outcome", {}).get(
+        "repeat_request_generation")
+    require(failures, non_negative_integer(repeat_before),
+            "synthetic baseline repeat generation missing")
+    if not non_negative_integer(repeat_before):
+        return
+    specs: dict[str, tuple[str, dict[str, Any]]] = {
+        "outcome": ("outcome", {}),
+        "actions_right": ("actions", {}),
+        "outcome_left": ("outcome", {}),
+        "actions_select": ("actions", {}),
+        "outcome_back": ("outcome", {}),
+        "actions_details": ("actions", {}),
+        "actions_repeat": ("actions", {
+            "action_selection": 1, "selected_action": "repeat"}),
+        "actions_details_again": ("actions", {}),
+        "peer_first": ("peer_detail", {}),
+        "peer_second": ("peer_detail", {
+            "peer_selection": 1, "peer_position": 1,
+            "peer_mask": 0x03, "peer_evidence": 2}),
+        "peer_first_again": ("peer_detail", {}),
+        "evidence_list": ("evidence_list", {}),
+        "evidence_second": ("evidence_list", {
+            "evidence_selection": 1, "evidence_report_index": 1,
+            "evidence_source_frame": 1,
+            "evidence_message": "message_2",
+            "evidence_has_pmkid": False}),
+        "evidence_first_again": ("evidence_list", {}),
+        "evidence_detail": ("evidence_detail", {}),
+        "evidence_list_back": ("evidence_list", {}),
+        "peer_back": ("peer_detail", {}),
+        "actions_back": ("actions", {}),
+        "repeat_selected": ("actions", {
+            "action_selection": 1, "selected_action": "repeat"}),
+    }
+    require(failures, set(navigation) == set(specs) | {"repeat_request"},
+            "synthetic navigation inventory mismatch")
+    for name, (view, keyword) in specs.items():
+        state = navigation.get(name, {})
+        verify_synthetic_controller_state(
+            failures, state, f"synthetic.navigation.{name}", view,
+            repeat_request_generation=repeat_before, **keyword)
+
+    continuity = proof.get("production_continuity", {})
+    require(failures,
+            isinstance(continuity, dict) and
+            set(continuity) == set(AUTH_RESOURCE_FIELDS),
+            "production continuity baseline is incomplete")
+    if isinstance(continuity, dict):
+        for name, state in navigation.items():
+            if name == "repeat_request":
+                continue
+            projection = {
+                field: state.get(field) for field in AUTH_RESOURCE_FIELDS}
+            changed_fields = [
+                field for field in AUTH_RESOURCE_FIELDS
+                if projection.get(field) != continuity.get(field)]
+            require(failures, projection == continuity,
+                    f"production continuity changed at {name}: "
+                    f"{changed_fields}")
+
+    require(failures,
+            controller_semantic_snapshot(navigation.get("actions_right", {})) ==
+            controller_semantic_snapshot(navigation.get("actions_select", {})),
+            "Right and Select are not semantically equivalent")
+    require(failures,
+            controller_semantic_snapshot(navigation.get("outcome_left", {})) ==
+            controller_semantic_snapshot(navigation.get("outcome_back", {})),
+            "Left and Back are not semantically equivalent")
+
+    repaint_edges = (
+        ("outcome", "actions_right", 1),
+        ("actions_right", "outcome_left", 1),
+        ("outcome_left", "actions_select", 1),
+        ("actions_select", "outcome_back", 1),
+        ("outcome_back", "actions_details", 1),
+        ("actions_details", "actions_repeat", 0),
+        ("actions_repeat", "actions_details_again", 0),
+        ("actions_details_again", "peer_first", 1),
+        ("peer_first", "peer_second", 0),
+        ("peer_second", "peer_first_again", 0),
+        ("peer_first_again", "evidence_list", 1),
+        ("evidence_list", "evidence_second", 0),
+        ("evidence_second", "evidence_first_again", 0),
+        ("evidence_first_again", "evidence_detail", 1),
+        ("evidence_detail", "evidence_list_back", 1),
+        ("evidence_list_back", "peer_back", 1),
+        ("peer_back", "actions_back", 1),
+        ("actions_back", "repeat_selected", 0),
+    )
+    for before, after, chrome in repaint_edges:
+        verify_navigation_repaint(
+            failures, navigation.get(before, {}),
+            navigation.get(after, {}),
+            f"synthetic.repaint.{before}_to_{after}", chrome)
+
+    repeat = navigation.get("repeat_request", {})
+    expected_repeat_request = repeat_before + 1
+    if expected_repeat_request > 0xffffffff:
+        expected_repeat_request = 1
+    require(failures,
+            repeat.get("schema") == AUTH_SCHEMA and
+            repeat.get("kind") == "state" and
+            repeat.get("read_only_query") is True and
+            repeat.get("view") == "menu" and
+            repeat.get("state") == "idle" and
+            repeat.get("synthetic") is False and
+            repeat.get("report_origin") == NO_REPORT_ORIGIN and
+            repeat.get("generation") == fixture.get("generation") and
+            repeat.get("repeat_requested") is True and
+            repeat.get("repeat_request_generation") ==
+                expected_repeat_request and
+            repeat.get("capture_state") == "complete" and
+            repeat.get("capture_active") is False and
+            repeat.get("capture_cleanup_complete") is True and
+            repeat.get("adapter_cleanup_complete") is True and
+            repeat.get("failure") == "none" and
+            repeat.get("passive") is True and
+            repeat.get("tx_path") is False and
+            repeat.get("connect_path") is False and
+            repeat.get("esp_rf_owned_by_foreground") is True,
+            "synthetic Repeat was not safely suppressed")
+    repeat_resource = proof.get("repeat_resource", {})
+    side_effects = proof.get("side_effects", {})
+    require(failures,
+            repeat_resource == side_effects.get("before"),
+            "synthetic Repeat changed production RF/storage resources")
+    delayed = proof.get("repeat_delayed", {})
+    require(failures,
+            delayed.get("view") == "menu" and
+            delayed.get("state") == "idle" and
+            delayed.get("generation") == repeat.get("generation") and
+            delayed.get("repeat_requested") is True and
+            delayed.get("repeat_request_generation") ==
+                repeat.get("repeat_request_generation") and
+            delayed.get("capture_state") == "complete" and
+            delayed.get("capture_active") is False and
+            delayed.get("capture_cleanup_complete") is True and
+            delayed.get("adapter_cleanup_complete") is True and
+            {field: delayed.get(field) for field in AUTH_RESOURCE_FIELDS} ==
+                continuity,
+            "suppressed Repeat was not stable after delay")
+    require(failures, proof.get("repeat_request") == repeat,
+            "Repeat request proof is not the retained navigation state")
+    repeat_action = proof.get("repeat_action", {})
+    require(failures,
+            repeat_action.get("host_navigation_action_writes") == 1 and
+            repeat_action.get("host_navigation_action_replays") == 0 and
+            isinstance(repeat_action.get(
+                "host_navigation_ack_received"), bool) and
+            (repeat_action.get("host_navigation_ack_received") is False or
+             (repeat_action.get("action") == "select" and
+              repeat_action.get("changed") is True)),
+            "Repeat Select action accounting mismatch")
+
+    pixel_specs = {
+        "outcome_to_actions": (
+            "wifi-auth-synthetic-outcome",
+            "wifi-auth-synthetic-actions", True, True),
+        "actions_to_peer": (
+            "wifi-auth-synthetic-actions",
+            "wifi-auth-synthetic-peer-first", True, True),
+        "peer_first_to_second": (
+            "wifi-auth-synthetic-peer-first",
+            "wifi-auth-synthetic-peer-second", False, False),
+        "evidence_list_to_detail": (
+            "wifi-auth-synthetic-evidence-list",
+            "wifi-auth-synthetic-evidence-detail", True, True),
+    }
+    retained_deltas = proof.get("pixel_deltas", {})
+    require(failures, set(retained_deltas) == set(pixel_specs),
+            "synthetic pixel-delta inventory mismatch")
+    for name, (before, after, title_change,
+               footer_change) in pixel_specs.items():
+        actual = screen_pixel_changes(root / "frames", before, after)
+        require(failures, actual is not None and
+                actual == retained_deltas.get(name),
+                f"synthetic pixel delta cannot be reproduced: {name}")
+        if actual is not None:
+            verify_navigation_pixel_delta(
+                failures, actual, f"synthetic.pixel.{name}", title_change,
+                footer_change)
+
+
+def verify_synthetic_terminal_back_cleanup(
+        failures: list[str], run: dict[str, Any], app_identity: object,
+        version: str) -> None:
+    proof = run.get("synthetic_back_cleanup", {})
+    require(failures,
+            proof.get("schema") ==
+                "leshy.wifi.authentication.synthetic_back_cleanup.v1" and
+            proof.get("boot_recovery_continuity") is True and
+            proof.get("product_storage_writes_measured") is False and
+            proof.get("static_no_storage_api_contract_required") is True,
+            "synthetic terminal Back proof scope mismatch")
+
+    run_id = run.get("run_id")
+    cycle = proof.get("session_cycle", {})
+    ended = cycle.get("end", {})
+    begun = cycle.get("begin", {})
+    require(failures,
+            ended.get("schema") == "leshy.hil.session.v1" and
+            ended.get("active") is False and
+            ended.get("app_elf_sha256") == app_identity and
+            ended.get("host_end_requested_session_id") == run_id and
+            non_negative_integer(ended.get("host_end_action_writes")) and
+            1 <= ended.get("host_end_action_writes", 0) <= 2 and
+            ended.get("host_end_action_replays") ==
+                ended.get("host_end_action_writes") - 1,
+            "synthetic Back intermediate HIL end mismatch")
+    require(failures,
+            begun.get("schema") == "leshy.hil.session.v1" and
+            begun.get("active") is True and begun.get("session_id") == run_id and
+            begun.get("app_elf_sha256") == app_identity and
+            begun.get("firmware_version") == version and
+            begun.get("host_begin_action_writes") == 1 and
+            begun.get("host_begin_action_replays") == 0,
+            "synthetic Back intermediate HIL begin mismatch")
+
+    ambient = proof.get("ambient", {})
+    ambient_terminal = ambient.get("terminal", {})
+    ambient_capture = ambient.get("capture_terminal", {})
+    require(failures,
+            ambient_terminal.get("state") == "result" and
+            ambient_terminal.get("synthetic") is False and
+            ambient_terminal.get("report_origin") == AMBIENT_REPORT_ORIGIN and
+            ambient_terminal.get("passive") is True and
+            ambient_terminal.get("tx_path") is False and
+            ambient_terminal.get("connect_path") is False and
+            ambient_terminal.get("capture_cleanup_complete") is True and
+            ambient_terminal.get("adapter_cleanup_complete") is True and
+            ambient_capture.get("state") == "complete" and
+            ambient_capture.get("passive_only") is True and
+            ambient_capture.get("rx_only") is True and
+            ambient_capture.get("application_connect_calls") == 0 and
+            ambient_capture.get("application_raw_tx_calls") == 0 and
+            ambient_capture.get("cleanup_complete") is True,
+            "synthetic Back preflight was not an honest ambient terminal")
+
+    fixture = proof.get("fixture", {})
+    replay = proof.get("replay_rejected", {})
+    verify_synthetic_fixture_ack(failures, fixture)
+    verify_synthetic_replay_rejected(failures, replay)
+    baseline = proof.get("baseline_resource", {})
+    loaded = proof.get("loaded_resource", {})
+    back_resource = proof.get("back_resource", {})
+    require(failures,
+            isinstance(baseline, dict) and baseline == loaded and
+            baseline == back_resource,
+            "synthetic terminal Back changed production/capture/boot recovery")
+    continuity = proof.get("production_continuity", {})
+    require(failures,
+            isinstance(continuity, dict) and
+            set(continuity) == set(AUTH_RESOURCE_FIELDS),
+            "synthetic terminal Back continuity baseline is incomplete")
+    outcome = proof.get("outcome", {})
+    repeat_generation = outcome.get("repeat_request_generation")
+    require(failures, non_negative_integer(repeat_generation),
+            "synthetic terminal Back repeat generation missing")
+    if non_negative_integer(repeat_generation):
+        verify_synthetic_controller_state(
+            failures, outcome, "synthetic_back.outcome", "outcome",
+            repeat_request_generation=repeat_generation)
+
+    back_action = proof.get("back_action", {})
+    back_state = proof.get("back_state", {})
+    delayed = proof.get("back_delayed", {})
+    home = proof.get("home", {})
+    require(failures,
+            back_action.get("host_navigation_action_writes") == 1 and
+            back_action.get("host_navigation_action_replays") == 0 and
+            back_action.get("wifi_product_view") == "menu" and
+            back_action.get("runtime_owner") == "wifi" and
+            back_action.get("lease_mask") == 15 and
+            back_action.get("changed") is True,
+            "terminal Outcome -> Back action was not directly observed")
+    require(failures,
+            back_state.get("schema") == AUTH_SCHEMA and
+            back_state.get("kind") == "state" and
+            back_state.get("read_only_query") is True and
+            back_state.get("view") == "menu" and
+            back_state.get("state") == "idle" and
+            back_state.get("synthetic") is False and
+            back_state.get("report_origin") == NO_REPORT_ORIGIN and
+            back_state.get("generation") == outcome.get("generation") and
+            back_state.get("repeat_requested") is False and
+            back_state.get("repeat_request_generation") == repeat_generation and
+            back_state.get("capture_state") == "complete" and
+            back_state.get("capture_active") is False and
+            back_state.get("capture_cleanup_complete") is True and
+            back_state.get("adapter_cleanup_complete") is True,
+            "terminal Outcome -> Back did not clear synthetic state safely")
+    require(failures,
+            delayed.get("view") == "menu" and delayed.get("state") == "idle" and
+            delayed.get("synthetic") is False and
+            delayed.get("repeat_requested") is False and
+            delayed.get("generation") == back_state.get("generation") and
+            delayed.get("repeat_request_generation") == repeat_generation,
+            "terminal Outcome -> Back cleanup was not delayed-stable")
+    for label, state in (("outcome", outcome), ("back", back_state),
+                         ("delayed", delayed)):
+        projection = {name: state.get(name) for name in AUTH_RESOURCE_FIELDS}
+        require(failures, projection == continuity,
+                f"synthetic terminal Back production continuity changed: {label}")
+    require(failures,
+            home.get("page") == "home" and
+            home.get("runtime_owner") == "none" and
+            home.get("lease_mask") == 0,
+            "synthetic terminal Back did not release Home lease")
 
 
 def verify_wifi_menu_quiescent(failures: list[str],
@@ -345,9 +1076,10 @@ def pixel_changes(frames: Path) -> dict[str, int] | None:
     }
 
 
-def terminal_pixel_changes(frames: Path) -> dict[str, int] | None:
-    before_path = frames / "wifi-auth-running-second.rgb565"
-    after_path = frames / "wifi-auth-result.rgb565"
+def screen_pixel_changes(frames: Path, before_name: str,
+                         after_name: str) -> dict[str, int] | None:
+    before_path = frames / f"{before_name}.rgb565"
+    after_path = frames / f"{after_name}.rgb565"
     if not before_path.is_file() or not after_path.is_file():
         return None
     before = before_path.read_bytes()
@@ -358,6 +1090,7 @@ def terminal_pixel_changes(frames: Path) -> dict[str, int] | None:
         "content_changed_pixels": 0,
         "title_changed_pixels": 0,
         "status_changed_pixels": 0,
+        "footer_changed_pixels": 0,
         "unexpected_static_chrome_changed_pixels": 0,
     }
     for y in range(HEIGHT):
@@ -371,9 +1104,16 @@ def terminal_pixel_changes(frames: Path) -> dict[str, int] | None:
                 changed["status_changed_pixels"] += 1
             elif CONTENT_X0 <= x < CONTENT_X1 and CONTENT_Y0 <= y < CONTENT_Y1:
                 changed["content_changed_pixels"] += 1
+            elif FOOTER_X0 <= x < FOOTER_X1 and FOOTER_Y0 <= y < FOOTER_Y1:
+                changed["footer_changed_pixels"] += 1
             else:
                 changed["unexpected_static_chrome_changed_pixels"] += 1
     return changed
+
+
+def terminal_pixel_changes(frames: Path) -> dict[str, int] | None:
+    return screen_pixel_changes(
+        frames, "wifi-auth-running-second", "wifi-auth-result")
 
 
 def verify_terminal_pixel_delta(failures: list[str],
@@ -680,6 +1420,31 @@ def verify_hil_session(failures: list[str], run: dict[str, Any],
             "HIL session UI revision continuity mismatch")
 
 
+def verify_post_hil_end(failures: list[str], run: dict[str, Any]) -> None:
+    proof = run.get("post_hil_end", {})
+    hil = proof.get("hil", {})
+    ui = proof.get("ui", {})
+    auth = proof.get("auth", {})
+    require(failures,
+            hil.get("schema") == "leshy.hil.session.v1" and
+            hil.get("kind") == "state" and hil.get("active") is False,
+            "post-HIL session is not read-only inactive")
+    require(failures,
+            ui.get("schema") == "leshy.ui.v1" and
+            ui.get("kind") == "state" and ui.get("page") == "home" and
+            ui.get("runtime_owner") == "none" and ui.get("lease_mask") == 0,
+            "post-HIL UI is not Home/zero lease")
+    require(failures,
+            auth.get("schema") == AUTH_SCHEMA and
+            auth.get("kind") == "state" and
+            auth.get("read_only_query") is True and
+            auth.get("view") == "menu" and auth.get("state") == "idle" and
+            auth.get("synthetic") is False and
+            auth.get("production_report_fingerprint") == "unavailable" and
+            auth.get("production_report_fingerprint_scope") == "none",
+            "post-HIL auth state leaked session-scoped evidence")
+
+
 def verify_boot_and_recovery(failures: list[str], run: dict[str, Any],
                              app_identity: object, version: str,
                              expected_cid: str) -> None:
@@ -733,9 +1498,8 @@ def verify_boot_and_recovery(failures: list[str], run: dict[str, Any],
                 recovery.get("write_enabled") is False and
                 recovery.get("blocked_write_attempts") == 0 and
                 recovery.get("catalog_admitted") is True and
-                recovery.get("cleanup_complete") is True and
-                recovery.get("physical_write_calls") == 0,
-                f"read-only recovery {label} proof mismatch")
+                recovery.get("cleanup_complete") is True,
+                f"read-only boot-recovery {label} policy mismatch")
         recovery_attempts = recovery.get("attempts")
         recovery_retries = recovery.get("transient_retries")
         require(failures,
@@ -809,14 +1573,9 @@ def main() -> int:
             "candidate source commit mismatch")
     require(failures, candidate.get("flashed") is True and
             candidate.get("exact_boot_verified") is True and
-            candidate.get("flash_mode") in ("fresh", "reuse_exact"),
+            candidate.get("flash_mode") == "fresh" and
+            candidate.get("flash_completed") is True,
             "exact candidate verification missing")
-    if candidate.get("flash_mode") == "fresh":
-        require(failures, candidate.get("flash_completed") is True,
-                "fresh mode did not complete flash")
-    else:
-        require(failures, candidate.get("flash_completed") is False,
-                "reuse-exact mode falsely claims a fresh flash")
     require(failures, run.get("expected_cid") == args.expected_cid,
             "exact SD CID mismatch")
     require(failures, firmware.is_file(), "retained firmware missing")
@@ -828,6 +1587,7 @@ def main() -> int:
                 "retained app identity mismatch")
     verify_hil_session(
         failures, run, candidate.get("app_elf_sha256"), args.expected_version)
+    verify_post_hil_end(failures, run)
     verify_boot_and_recovery(
         failures, run, candidate.get("app_elf_sha256"),
         args.expected_version, args.expected_cid)
@@ -1048,6 +1808,9 @@ def main() -> int:
                 running.get("adapter_heap_largest_before_init"),
             "adapter pre-init heap snapshot changed during capture")
     verify_ingress(failures, terminal)
+    verify_ambient_and_synthetic_proofs(failures, run, root)
+    verify_synthetic_terminal_back_cleanup(
+        failures, run, candidate.get("app_elf_sha256"), args.expected_version)
 
     for name, state, expected_state, cleanup in (
             ("running", capture_running, "running", False),
@@ -1119,6 +1882,8 @@ def main() -> int:
     after_back = run.get("auth_after_back", {})
     menu = run.get("menu_after_back", {})
     home = run.get("home_after_back", {})
+    back_proof = run.get("synthetic_back_cleanup", {})
+    back_state = back_proof.get("back_state", {})
     require(failures,
             menu.get("wifi_product_view") == "menu" and
             menu.get("runtime_owner") == "wifi" and menu.get("lease_mask") == 15,
@@ -1126,16 +1891,19 @@ def main() -> int:
     require(failures,
             after_back.get("view") == "menu" and
             after_back.get("state") == "idle" and
-            after_back.get("generation") == generation and
+            after_back.get("generation") == back_state.get("generation") and
+            after_back.get("synthetic") is False and
+            after_back.get("report_origin") == NO_REPORT_ORIGIN and
+            after_back.get("repeat_requested") is False and
             after_back.get("cancel_pending") is False and
             after_back.get("back_during_wait_observed") is False and
             after_back.get("failure") == "none" and
-            after_back.get("capture_state") == "idle" and
+            after_back.get("capture_state") == "complete" and
             after_back.get("capture_active") is False and
             after_back.get("capture_cleanup_complete") is True and
             after_back.get("adapter_cleanup_complete") is True and
             after_back.get("survey_worker_deadline_armed") is False,
-            "capture reset/cleanup after Back mismatch")
+            "direct synthetic terminal Back cleanup mismatch")
     require(failures, home.get("page") == "home" and
             home.get("runtime_owner") == "none" and home.get("lease_mask") == 0,
             "second Back did not release the foreground lease")
@@ -1188,6 +1956,29 @@ def main() -> int:
             scope.get("application_raw_tx_calls") == 0 and
             scope.get("physical_no_tx_instrumented") is False and
             scope.get("ambient_eapol_required") is False and
+            scope.get("ambient_capture_lifecycle_proven") is True and
+            isinstance(scope.get(
+                "ambient_authentication_evidence_observed"), bool) and
+            scope.get("synthetic_ui_proven") is True and
+            scope.get("synthetic_fixture_display_touched") is True and
+            scope.get("synthetic_fixture_rf_hardware_touched") is False and
+            scope.get("synthetic_fixture_radio_started") is False and
+            scope.get("synthetic_fixture_connect_calls") == 0 and
+            scope.get("synthetic_fixture_raw_tx_calls") == 0 and
+            scope.get("synthetic_label_visible") is True and
+            scope.get("synthetic_production_continuity_proven") is True and
+            scope.get("synthetic_boot_recovery_continuity_proven") is True and
+            scope.get("product_storage_writes_measured") is False and
+            scope.get("static_no_storage_api_contract_required") is True and
+            scope.get("synthetic_replay_rejected") is True and
+            scope.get("right_select_equivalent") is True and
+            scope.get("left_back_equivalent") is True and
+            scope.get("repeat_request_proven") is True and
+            scope.get("repeat_delayed_stable") is True and
+            scope.get("terminal_back_cleanup_proven") is True and
+            scope.get("production_continuity_proven") is True and
+            scope.get("post_hil_end_proven") is True and
+            scope.get("export_eligibility") == "not_evaluated" and
             scope.get("mac_wifi_control_calls") == 0 and
             scope.get("mac_ble_fixture_calls") == 0 and
             scope.get("fixture_ports_opened") == [] and
@@ -1213,9 +2004,10 @@ def main() -> int:
             scope.get(
                 "terminal_unexpected_static_chrome_changed_pixels") == 0 and
             scope.get("complete_cleanup") is True and
-            scope.get("final_lease_mask") == 0 and
-            scope.get("storage_write_authorized") is False,
+            scope.get("final_lease_mask") == 0,
             "CAP049 HIL scope mismatch")
+    require(failures, "storage_write_authorized" not in scope,
+            "CAP049 scope retains global storage-write overclaim")
     require(failures, run.get("privacy") == {
         "generic_target_ui": True,
         "private_target_identifiers_retained": False,

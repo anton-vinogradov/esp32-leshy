@@ -45,9 +45,19 @@ public:
                    services::survey::SurveySession& reopened,
                    apps::library::LibraryController& library,
                    bool persistent, bool simulated)
-        : survey_(survey), store_(store), workspace_(workspace),
+        : survey_(survey), store_(store), workspace_(&workspace),
           reopened_(reopened), library_(library), persistent_(persistent),
           simulated_(simulated) {}
+
+    // Arduino shares the large codec backing store with other foreground-only
+    // workspaces.  Keep the workflow object stable, but explicitly detach its
+    // non-owning pointer before that union member's lifetime ends and rebind it
+    // after reconstruction.  State/telemetry remain readable while detached;
+    // persistence fails closed.
+    void bindWorkspace(storage::SessionStoreWorkspace* workspace) {
+        workspace_ = workspace;
+    }
+    bool workspaceBound() const { return workspace_ != nullptr; }
 
     SurveyWorkflowStatus resetToSetup();
     SurveyWorkflowStatus configure(bool persistent, bool simulated);
@@ -72,7 +82,7 @@ private:
 
     SurveyController& survey_;
     storage::SessionStoreIo& store_;
-    storage::SessionStoreWorkspace& workspace_;
+    storage::SessionStoreWorkspace* workspace_ = nullptr;
     services::survey::SurveySession& reopened_;
     apps::library::LibraryController& library_;
     bool persistent_ = false;

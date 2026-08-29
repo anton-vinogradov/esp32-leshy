@@ -102,6 +102,9 @@ struct WifiAuthenticationCaptureUiInput final {
     WifiAuthenticationCaptureUiFailure failure =
         WifiAuthenticationCaptureUiFailure::None;
     bool cleanupComplete = false;
+    // True only for the deterministic HIL UI fixture.  Ambient RF reports
+    // always leave this false.
+    bool synthetic = false;
 };
 
 struct WifiAuthenticationCaptureUiRow final {
@@ -137,6 +140,7 @@ struct WifiAuthenticationCaptureUiModel final {
     bool evidenceIncomplete = true;
     bool reportOpenable = false;
     bool cleanupComplete = false;
+    bool synthetic = false;
 };
 
 // A renderer consumes this delta by repainting only changed fixed regions. There

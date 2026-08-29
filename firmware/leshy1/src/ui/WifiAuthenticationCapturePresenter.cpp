@@ -475,7 +475,7 @@ WifiAuthenticationCaptureUiModel outcomeModel(
 WifiAuthenticationCaptureUiModel actionsModel(
     const WifiAuthenticationCaptureController& controller) {
     WifiAuthenticationCaptureUiModel model = baseReportModel(controller);
-    model.title = UiTextId::CaptureResult;
+    model.title = UiTextId::WifiAuthActionsHeadline;
     model.headline = UiTextId::WifiAuthActionsHeadline;
     model.note = UiTextId::WifiAuthVolatileNote;
     model.view = WifiAuthenticationCaptureUiView::Actions;
@@ -654,6 +654,7 @@ WifiAuthenticationCaptureUiModel presentWifiAuthenticationCapture(
         case WifiAuthenticationCaptureUiPhase::Cancelling:
             if (input.report != nullptr || input.controller != nullptr ||
                 input.cleanupComplete ||
+                input.synthetic ||
                 input.failure != WifiAuthenticationCaptureUiFailure::None ||
                 !liveProgressEmpty(input.progress)) {
                 return failedModel(
@@ -665,6 +666,7 @@ WifiAuthenticationCaptureUiModel presentWifiAuthenticationCapture(
         case WifiAuthenticationCaptureUiPhase::Running:
             if (input.report != nullptr || input.controller != nullptr ||
                 input.cleanupComplete ||
+                input.synthetic ||
                 input.failure != WifiAuthenticationCaptureUiFailure::None ||
                 !liveProgressValid(input.progress)) {
                 return failedModel(
@@ -688,9 +690,16 @@ WifiAuthenticationCaptureUiModel presentWifiAuthenticationCapture(
                     WifiAuthenticationCaptureUiFailure::ReportRejected,
                     true);
             }
-            return reportModel(*input.report, *input.controller);
+            {
+                WifiAuthenticationCaptureUiModel model =
+                    reportModel(*input.report, *input.controller);
+                model.synthetic = input.synthetic;
+                if (input.synthetic) model.note = UiTextId::SimulatedData;
+                return model;
+            }
         case WifiAuthenticationCaptureUiPhase::Failed:
             if (input.report != nullptr || input.controller != nullptr ||
+                input.synthetic ||
                 input.failure == WifiAuthenticationCaptureUiFailure::None) {
                 return failedModel(
                     WifiAuthenticationCaptureUiFailure::
@@ -724,7 +733,8 @@ WifiAuthenticationCaptureUiDelta diffWifiAuthenticationCaptureUi(
     }
     if (previous.note != current.note ||
         previous.cleanupComplete != current.cleanupComplete ||
-        previous.failure != current.failure) {
+        previous.failure != current.failure ||
+        previous.synthetic != current.synthetic) {
         delta.fixedRegionMask = static_cast<std::uint8_t>(
             delta.fixedRegionMask | kWifiAuthenticationNoteRegion);
     }

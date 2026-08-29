@@ -35,7 +35,8 @@ WifiAuthenticationCaptureReport reportFixture() {
     const std::array<std::uint16_t, 6> sourceOrder{4U, 1U, 5U, 2U, 0U, 3U};
     for (std::size_t index = 0U; index < report.evidenceCount; ++index) {
         WifiAuthenticationEvidence& evidence = report.evidence[index];
-        evidence.sourceFrameIndex = sourceOrder[index];
+        evidence.sourceFrameIndex =
+            static_cast<std::uint8_t>(sourceOrder[index]);
         evidence.monotonicUs = 1000000ULL +
             static_cast<std::uint64_t>(sourceOrder[index]) * 100000ULL;
         evidence.channel = 6U;

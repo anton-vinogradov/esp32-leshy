@@ -9,6 +9,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ble_nearby_entry_gate import ble_entry_stability_evidence_failure
+from ble_nearby_run_policy import (
+    boot_recovery_continuity,
+    storage_measurement_scope_valid,
+)
 from esp_app_identity import app_elf_sha256
 
 
@@ -113,6 +118,11 @@ def main() -> int:
 
     first = run.get("live_first", {})
     second = run.get("live_second", {})
+    entry_stability = run.get("entry_stability", {})
+    require(failures,
+            isinstance(entry_stability, dict) and
+            ble_entry_stability_evidence_failure(entry_stability) is None,
+            "delayed BLE entry lifecycle was not stable")
     require(failures,
             first.get("ble_product_view") == "devices" and
             first.get("survey_product_status") == "running" and
@@ -124,8 +134,21 @@ def main() -> int:
             first.get("survey_ble_scan_accepted") ==
                 first.get("survey_ble_scan_read") and
             first.get("survey_ble_scan_dropped") == 0 and
-            first.get("survey_dropped") == 0,
+            first.get("survey_dropped") == 0 and
+            isinstance(
+                first.get("survey_product_store_bytes_written"), int) and
+            not isinstance(
+                first.get("survey_product_store_bytes_written"), bool) and
+            first.get("survey_product_store_bytes_written") >= 0,
             "first live BLE scan mismatch")
+    require(failures,
+            first.get("ble_begin_stage") in ("ready", "reused_ready") and
+            first.get("ble_begin_error") == 0 and
+            first.get("ble_begin_heap_free_before", 0) > 0 and
+            first.get("ble_begin_heap_free_after", 0) > 0 and
+            first.get("ble_begin_heap_largest_before", 0) > 0 and
+            first.get("ble_begin_heap_largest_after", 0) > 0,
+            "BLE begin stage/error/heap evidence missing")
     require(failures,
             second.get("survey_product_ble_scan_cycles", 0) >
                 first.get("survey_product_ble_scan_cycles", 0) and
@@ -185,21 +208,21 @@ def main() -> int:
             "BLE heap plateau changed")
     require(failures,
             scope.get("manual_button_presses") == 0 and
+            scope.get("delayed_entry_stability_gate") is True and
             scope.get("screenshots_automatic") is True and
             scope.get("passive_ble_only") is True and
             scope.get("active_scan") is False and
             scope.get("detail_live_radar_only") is True and
             scope.get("advertisement_facts_visible") is True and
             scope.get("offline_company_database") is True and
-            scope.get("storage_write_authorized") is False,
-            "automation/passive scope mismatch")
+            storage_measurement_scope_valid(scope),
+            "automation/passive/measurement scope mismatch")
     before = run.get("recovery_before", {})
     after = run.get("recovery_after", {})
     require(failures,
-            before.get("generation") == after.get("generation") and
-            before.get("observations") == after.get("observations") and
-            after.get("physical_write_calls") == 0,
-            "read-only product continuity mismatch")
+            boot_recovery_continuity(before, after) and
+            scope.get("boot_recovery_continuity") is True,
+            "boot-recovery continuity mismatch")
     require(failures,
             run.get("input", {}).get("queue_drops") == 0 and
             run.get("input", {}).get("read_errors") == 0,

@@ -106,6 +106,10 @@ SurveyWorkflowStatus SurveyWorkflow::stopAndCommit(
     if (state_ != SurveyWorkflowState::Running) {
         return finish(SurveyWorkflowStatus::InvalidState, state_);
     }
+    if (workspace_ == nullptr) {
+        return finish(SurveyWorkflowStatus::StoreRejected,
+                      SurveyWorkflowState::Error);
+    }
     state_ = SurveyWorkflowState::Committing;
     if (survey_.stop(monotonicUs) !=
         services::survey::SessionStatus::Stopped) {
@@ -114,16 +118,16 @@ SurveyWorkflowStatus SurveyWorkflow::stopAndCommit(
     }
 
     const storage::SessionStoreCommitResult committed =
-        storage::commitNextSession(store_, workspace_, survey_.session());
+        storage::commitNextSession(store_, *workspace_, survey_.session());
     lastStoreStatus_ = committed.status;
     if (!committed.complete()) {
         return finish(SurveyWorkflowStatus::StoreRejected,
                       SurveyWorkflowState::Error);
     }
 
-    services::survey::SurveySession& staged = workspace_.validationSession;
+    services::survey::SurveySession& staged = workspace_->validationSession;
     const storage::SessionStoreRecoveryResult recovered =
-        storage::recoverSession(store_, workspace_, &staged);
+        storage::recoverSession(store_, *workspace_, &staged);
     lastStoreStatus_ = recovered.status;
     if (!recovered.valid() || recovered.generation != committed.generation ||
         staged.id() == nullptr || survey_.session().id() == nullptr ||

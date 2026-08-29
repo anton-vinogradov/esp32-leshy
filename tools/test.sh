@@ -191,6 +191,20 @@ run_opaque_evidence_check() {
 "${CXX:-c++}" \
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
+    -Wconversion -Wsign-conversion -Wshadow \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/wifi_authentication_synthetic_hil_fixture_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/auth/WifiAuthenticationSyntheticHilFixture.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/auth/WifiAuthenticationArtifactPolicy.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/auth/WifiAuthenticationCaptureController.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/auth/WifiAuthenticationFrameDecoder.cpp" \
+    -o "$test_tmp/wifi_authentication_synthetic_hil_fixture_tests"
+
+"$test_tmp/wifi_authentication_synthetic_hil_fixture_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/airspace_guard_controller_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/guard/AirspaceGuardController.cpp" \
@@ -492,6 +506,7 @@ python3 "$repo_dir/tools/check_airspace_guard_contract.py"
 python3 "$repo_dir/tools/check_wifi_authentication_capture_contract.py"
 python3 "$repo_dir/tools/check_wifi_authentication_capture_presenter_contract.py"
 python3 "$repo_dir/tools/check_wifi_authentication_transition_contract.py"
+python3 "$repo_dir/tools/check_wifi_authentication_synthetic_hil_contract.py"
 wifi_auth_capture_version="$(python3 "$repo_dir/tools/read_1x_version.py")"
 wifi_auth_capture_positive="$repo_dir/tests/hil/evidence/board-01-wifi-authentication-capture-$wifi_auth_capture_version"
 wifi_auth_capture_expectations="$repo_dir/tests/hil/evidence/board-01-wifi-authentication-capture-$wifi_auth_capture_version-acceptance.json"
@@ -665,6 +680,9 @@ run_opaque_evidence_check tools/check_compact_ui_waterfall_acceptance.py
 run_opaque_evidence_check tools/check_receiver_paced_waterfall_acceptance.py
 run_opaque_evidence_check tools/check_source_history_waterfall_acceptance.py
 python3 "$repo_dir/tools/check_live_render_contract.py"
+python3 "$repo_dir/tools/check_spectrum_workspace_contract.py"
+PYTHONPATH="$repo_dir/tools" python3 -m unittest \
+    "$repo_dir/tools/test_spectrum_workspace_contract.py"
 run_opaque_evidence_check tools/check_subghz_raw_acceptance.py
 python3 "$repo_dir/tools/check_subghz_fsk_contract.py"
 python3 "$repo_dir/tools/check_subghz_fsk_delta_acceptance.py"
@@ -704,6 +722,7 @@ python3 "$repo_dir/tools/test_airspace_guard_hil_runner.py"
 python3 "$repo_dir/tools/test_airspace_guard_hil_acceptance.py"
 python3 "$repo_dir/tools/test_retain_1x_airspace_guard_hil.py"
 python3 "$repo_dir/tools/test_wifi_authentication_capture_hil.py"
+python3 "$repo_dir/tools/test_wifi_authentication_synthetic_hil_contract.py"
 python3 "$repo_dir/tools/test_wifi_authentication_transition_contract.py"
 python3 "$repo_dir/tools/test_retain_1x_wifi_authentication_capture_hil.py"
 python3 "$repo_dir/tools/test_targets_merge_split_hil_runner.py"
@@ -713,6 +732,9 @@ python3 "$repo_dir/tools/test_companion_web_delta_runner.py"
 python3 "$repo_dir/tools/test_companion_web_http_hil.py"
 python3 "$repo_dir/tools/test_source_timeline_hil_runner.py"
 python3 "$repo_dir/tools/test_passive_ble_hil_runner.py"
+python3 "$repo_dir/tools/test_ble_nearby_entry_gate.py"
+python3 "$repo_dir/tools/test_ble_nearby_run_policy.py"
+python3 "$repo_dir/tools/test_top_level_menu_smoke_hil.py"
 python3 "$repo_dir/tools/test_runtime_degradation_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_cancel_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_missing_source_hil_runner.py"

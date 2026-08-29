@@ -11,6 +11,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ble_nearby_entry_gate import (
+    BLE_ENTRY_STABILITY_SECONDS,
+    ble_entry_failure,
+)
+from ble_nearby_run_policy import boot_recovery_continuity
 from capture_1x_ui import PassiveSerial, synchronize_console
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
@@ -33,6 +38,8 @@ CONTENT_X0 = 12
 CONTENT_X1 = 228
 CONTENT_Y0 = 32
 CONTENT_Y1 = 293
+ENTRY_STABILITY_SECONDS = BLE_ENTRY_STABILITY_SECONDS
+ENTRY_STABILITY_POLL_SECONDS = 0.25
 
 
 def require_exact(record: dict[str, Any], expected: dict[str, Any],
@@ -140,6 +147,29 @@ def wait_live(device: PassiveSerial, minimum_cycle: int = 1,
         ), 60.0, "nearby Bluetooth devices did not appear")
 
 
+def wait_stable_ble_entry(
+        device: PassiveSerial,
+        duration_seconds: float = ENTRY_STABILITY_SECONDS) -> dict[str, Any]:
+    """Observe past NimBLE's bounded sync window and fail on any route bounce."""
+    started = time.monotonic()
+    samples = 0
+    final_state: dict[str, Any] = {}
+    while True:
+        final_state = query(device, b"ui.state", "leshy.ui.v1", "state")
+        samples += 1
+        failure = ble_entry_failure(final_state)
+        if failure is not None:
+            raise RuntimeError(f"BLE entry stability failed: {failure}")
+        elapsed = time.monotonic() - started
+        if elapsed >= duration_seconds:
+            return {
+                "duration_ms": int(elapsed * 1000.0),
+                "samples": samples,
+                "final_state": final_state,
+            }
+        time.sleep(ENTRY_STABILITY_POLL_SECONDS)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
@@ -191,6 +221,7 @@ def main() -> int:
     detail_second: dict[str, Any] = {}
     detail_oracle_first: dict[str, Any] = {}
     detail_oracle_second: dict[str, Any] = {}
+    entry_stability: dict[str, Any] = {}
 
     try:
         if args.flash:
@@ -222,6 +253,8 @@ def main() -> int:
                     "ble_product_view": "devices",
                     "survey_product_selected_source_mask": 2,
                 }, "ble_nearby_preparing")
+                entry_stability = wait_stable_ble_entry(device)
+                trace.append(entry_stability["final_state"])
                 live_first = wait_live(device)
                 trace.append(live_first)
                 require_exact(live_first, {
@@ -231,7 +264,6 @@ def main() -> int:
                     "survey_ble_scan_status": "valid",
                     "survey_ble_scan_dropped": 0,
                     "survey_product_store_open_attempted": True,
-                    "survey_product_store_bytes_written": 0,
                 }, "ble_nearby_live")
                 first_attempts = int(live_first.get(
                     "survey_ble_scan_attempts", 0))
@@ -380,11 +412,9 @@ def main() -> int:
                 failures.extend(expect(safe_outputs, {
                     "buzzer_inactive": True, "buzzer_level": "low",
                 }, "safe_outputs"))
-                for key in ("generation", "observations"):
-                    if recovery_after.get(key) != recovery_before.get(key):
-                        failures.append(f"persistent {key} changed")
-                if recovery_after.get("physical_write_calls") != 0:
-                    failures.append("physical SD write observed")
+                if not boot_recovery_continuity(
+                        recovery_before, recovery_after):
+                    failures.append("boot-recovery continuity changed")
                 if metrics_after.get("heap_total") != \
                         metrics_after_first.get("heap_total") or \
                         metrics_after.get("heap_free") != \
@@ -430,6 +460,7 @@ def main() -> int:
         "detail_second": detail_second,
         "detail_oracle_first": detail_oracle_first,
         "detail_oracle_second": detail_oracle_second,
+        "entry_stability": entry_stability,
         "list_pixel_changes": list_pixel_changes,
         "detail_pixel_changes": detail_pixel_changes,
         "screens": screens,
@@ -438,6 +469,7 @@ def main() -> int:
         "cleanup_after": cleanup_after,
         "scope": {
             "single_flash": True,
+            "delayed_entry_stability_gate": True,
             "manual_button_presses": 0,
             "screenshots_automatic": True,
             "passive_ble_only": True,
@@ -452,7 +484,12 @@ def main() -> int:
                 metrics_after.get("heap_free") ==
                 metrics_after_first.get("heap_free")
             ),
-            "storage_write_authorized": False,
+            "boot_recovery_continuity": boot_recovery_continuity(
+                recovery_before, recovery_after),
+            # This focused gate retains the store-write telemetry reported by
+            # each live UI state, but it does not observe all product storage
+            # paths and therefore makes no global no-write claim.
+            "product_storage_writes_measured": False,
         },
     }
     write_json(args.output / "run.json", result)

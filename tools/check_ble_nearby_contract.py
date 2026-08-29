@@ -31,6 +31,21 @@ def main() -> int:
     ).read_text(encoding="utf-8") + (
         ROOT / "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.h"
     ).read_text(encoding="utf-8")
+    runner = (
+        ROOT / "tools/run_1x_ble_nearby_hil.py"
+    ).read_text(encoding="utf-8")
+    checker = (
+        ROOT / "tools/check_ble_nearby_run.py"
+    ).read_text(encoding="utf-8")
+    run_policy = (
+        ROOT / "tools/ble_nearby_run_policy.py"
+    ).read_text(encoding="utf-8")
+    entry_gate = (
+        ROOT / "tools/ble_nearby_entry_gate.py"
+    ).read_text(encoding="utf-8")
+    top_level_runner = (
+        ROOT / "tools/run_1x_top_level_menu_smoke_hil.py"
+    ).read_text(encoding="utf-8")
     strings = (
         ROOT / "firmware/leshy1/src/ui/UiStrings.def"
     ).read_text(encoding="utf-8")
@@ -61,7 +76,7 @@ def main() -> int:
         "bleDeviceVisibleSize()",
         "bleDeviceAt(bleDeviceSelection)",
         "renderRadioSignalCard(",
-        "if (bleScanner.begin())",
+        "const bool bleReady = bleScanner.begin();",
         ": bleScanner.end();",
         "BoardBlePassiveScanner::cancelActiveScan();",
         "Each radio therefore owns a disjoint scan",
@@ -69,6 +84,22 @@ def main() -> int:
         "if (!report.scannerCleanupComplete)",
         'report.status = "scanner_cleanup_failed";',
         "bounded BLE observer is initialized only after this storage release",
+        "report.admissionStatus =",
+        "ProductSurveyAdmissionStatus::SourceUnavailable",
+        "releaseProductSurveyAfterTerminal(event.report.status, !keepVisible);",
+        "Do not queue a",
+        "second incremental repaint here",
+        "only this explicit user Back action closes it",
+        "ble_begin_stage",
+        "ble_begin_error",
+        "ble_begin_heap_free_before",
+        "ble_begin_heap_largest_after",
+        "publishProductSurveyBleBeginDiagnostic",
+        "productSurveyBleBeginDiagnosticSnapshot",
+        "const bool terminalSourceUnavailable =",
+        "event.report.activeSourceMask == 0",
+        "render = !terminalSourceUnavailable;",
+        "Multi-source degradation remains incremental",
     )
     forbidden_entry = (
         "const bool bleStackPrepared =",
@@ -125,6 +156,54 @@ def main() -> int:
         "knownServiceMask",
         "kMaximumScanAttempts = 2U",
         "result.transientRetries",
+        "BoardBleBeginDiagnostic",
+        "processNimbleSyncError",
+        "BoardBleBeginStage::ControllerInit",
+        "BoardBleBeginStage::HostSync",
+        "heap_caps_get_free_size",
+        "heap_caps_get_largest_free_block",
+    )
+    required_runner = (
+        "ENTRY_STABILITY_SECONDS = BLE_ENTRY_STABILITY_SECONDS",
+        "wait_stable_ble_entry(device)",
+        "BLE entry stability failed",
+        '"delayed_entry_stability_gate": True',
+        '"boot_recovery_continuity": boot_recovery_continuity(',
+        '"product_storage_writes_measured": False',
+    )
+    forbidden_runner = (
+        '"survey_product_store_bytes_written": 0',
+        'recovery_after.get("physical_write_calls") != 0',
+        '"storage_write_authorized": False',
+    )
+    required_checker = (
+        "ble_entry_stability_evidence_failure(entry_stability) is None",
+        "storage_measurement_scope_valid(scope)",
+        "boot_recovery_continuity(before, after)",
+        'scope.get("boot_recovery_continuity") is True',
+        'first.get("survey_product_store_bytes_written") >= 0',
+    )
+    required_entry_gate = (
+        "NIMBLE_SYNC_TIMEOUT_MS = 5000",
+        "BLE_HOST_SHUTDOWN_TIMEOUT_MS = 2000",
+        "BLE_SCAN_RETRY_BUDGET_MS = 6100",
+        "BLE_ENTRY_STABILITY_MARGIN_MS = 1900",
+        "BLE_ENTRY_STABILITY_MINIMUM_MS = (",
+        "ble_entry_stability_evidence_failure(",
+    )
+    required_top_level_runner = (
+        "BLE_MINIMUM_DWELL_SECONDS = BLE_ENTRY_STABILITY_SECONDS",
+    )
+    forbidden_checker = (
+        'after.get("physical_write_calls") == 0',
+        'scope.get("storage_write_authorized")',
+    )
+    required_run_policy = (
+        'for key in ("generation", "observations")',
+        "isinstance(before_value, int)",
+        "isinstance(after_value, int)",
+        'scope.get("product_storage_writes_measured") is False',
+        '"storage_write_authorized" not in scope',
     )
     forbidden_adapter = (
         "BLEScan",
@@ -207,6 +286,34 @@ def main() -> int:
     failures.extend(
         f"adapter contains active/TX path: {token}"
         for token in forbidden_adapter if token in adapter
+    )
+    failures.extend(
+        f"BLE HIL lifecycle token missing: {token}"
+        for token in required_runner if token not in runner
+    )
+    failures.extend(
+        f"BLE HIL overclaims unmeasured storage state: {token}"
+        for token in forbidden_runner if token in runner
+    )
+    failures.extend(
+        f"BLE HIL checker scope token missing: {token}"
+        for token in required_checker if token not in checker
+    )
+    failures.extend(
+        f"BLE HIL entry-gate budget token missing: {token}"
+        for token in required_entry_gate if token not in entry_gate
+    )
+    failures.extend(
+        f"top-level BLE dwell token missing: {token}"
+        for token in required_top_level_runner if token not in top_level_runner
+    )
+    failures.extend(
+        f"BLE HIL checker overclaims unmeasured storage state: {token}"
+        for token in forbidden_checker if token in checker
+    )
+    failures.extend(
+        f"BLE HIL evidence-policy token missing: {token}"
+        for token in required_run_policy if token not in run_policy
     )
     failures.extend(
         f"user copy token missing: {token}"

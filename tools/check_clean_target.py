@@ -849,7 +849,8 @@ def main() -> int:
             "const std::array<RadioKind, 2> schedule{",
             "RadioKind::Wifi, RadioKind::Ble",
             "if (wifiScanner.begin())",
-            "if (bleScanner.begin())",
+            "const bool bleReady = bleScanner.begin();",
+            "if (bleReady)",
             "? wifiScanner.end()",
             ": bleScanner.end();",
             "No radio stack survives into the other source's",
@@ -1158,7 +1159,7 @@ def main() -> int:
         "commitNextWifiFrameCapture(",
         "CapturePersistState::Confirm",
         "RAW 802.11",
-        "sessionStoreWorkspace.generation",
+        "sessionStoreWorkspace().generation",
     ):
         if marker not in sources:
             errors.append(f"persistent frame capture integration is missing: {marker}")
@@ -1549,7 +1550,7 @@ def main() -> int:
             '\\"user_identifiers_emitted\\":false',
             '\\"user_identifiers_retained\\":false',
             "measurementSession.reset()",
-            "sessionStoreWorkspace.segment.fill(0)",
+            "sessionStoreWorkspace().segment.fill(0)",
         ):
             if marker not in entry:
                 errors.append(f"passive Wi-Fi command is missing safety evidence: {marker}")

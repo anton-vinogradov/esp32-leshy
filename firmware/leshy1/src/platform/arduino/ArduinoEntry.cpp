@@ -36,6 +36,7 @@
 #include "apps/library/SessionCatalog.h"
 #include "apps/guard/AirspaceGuardController.h"
 #include "apps/auth/WifiAuthenticationCaptureController.h"
+#include "apps/auth/WifiAuthenticationSyntheticHilFixture.h"
 #include "apps/capture/RadiotapPcap.h"
 #include "apps/capture/InfraredCapture.h"
 #include "apps/capture/InfraredCsv.h"
@@ -168,6 +169,9 @@ using leshy1::apps::auth::WifiAuthenticationCaptureAction;
 using leshy1::apps::auth::WifiAuthenticationCaptureController;
 using leshy1::apps::auth::WifiAuthenticationCaptureLoadStatus;
 using leshy1::apps::auth::WifiAuthenticationCaptureView;
+using leshy1::apps::auth::WifiAuthenticationSyntheticHilContext;
+using leshy1::apps::auth::WifiAuthenticationSyntheticHilFixture;
+using leshy1::apps::auth::WifiAuthenticationSyntheticHilStatus;
 using leshy1::apps::capture::PcapExportResult;
 using leshy1::apps::capture::InfraredCapture;
 using leshy1::apps::capture::InfraredCapturePlan;
@@ -328,6 +332,7 @@ using leshy1::platform::arduino::BoardTouchInput;
 using leshy1::platform::arduino::TouchCalibrationSource;
 using leshy1::platform::arduino::BoardBlePassiveScanner;
 using leshy1::platform::arduino::BoardBlePassiveScanResult;
+using leshy1::platform::arduino::BoardBleBeginDiagnostic;
 using leshy1::platform::arduino::BleRecordDisposition;
 using leshy1::platform::arduino::BoardSdSpiTransport;
 using leshy1::platform::arduino::BoardWifiPassiveScanner;
@@ -714,6 +719,7 @@ union TargetsStoreCodecWorkspace final {
     leshy1::storage::SessionStoreWorkspace session;
     leshy1::storage::TargetDecisionStateStoreWorkspace targetDecision;
     TargetCatalog admissionScratch;
+    SpectrumViewport spectrum;
 
     TargetsStoreCodecWorkspace() : session{} {}
     ~TargetsStoreCodecWorkspace() {}
@@ -727,51 +733,88 @@ static_assert(
     "shared store codec workspace must add only the larger member");
 static_assert(sizeof(TargetCatalog) <= sizeof(TargetsStoreCodecWorkspace),
               "admission scratch must fit the shared store workspace");
+static_assert(sizeof(SpectrumViewport) <= sizeof(TargetsStoreCodecWorkspace),
+              "spectrum history must fit the shared store workspace");
+static_assert(
+    sizeof(SpectrumViewport) <=
+        sizeof(leshy1::storage::TargetDecisionStateStoreWorkspace),
+    "spectrum history must not grow the pre-existing largest workspace");
+enum class TargetsStoreCodecWorkspaceOwner : std::uint8_t {
+    Session,
+    TargetDecision,
+    AdmissionScratch,
+    Spectrum,
+};
 TargetsStoreCodecWorkspace targetsStoreCodecWorkspace;
-bool targetsStoreCodecWorkspaceInUse = false;
-leshy1::storage::SessionStoreWorkspace& sessionStoreWorkspace =
-    targetsStoreCodecWorkspace.session;
+TargetsStoreCodecWorkspaceOwner targetsStoreCodecWorkspaceOwner =
+    TargetsStoreCodecWorkspaceOwner::Session;
+extern SurveyWorkflow surveyWorkflow;
+
+bool sessionStoreWorkspaceAvailable() {
+    return targetsStoreCodecWorkspaceOwner ==
+        TargetsStoreCodecWorkspaceOwner::Session;
+}
+
+leshy1::storage::SessionStoreWorkspace& sessionStoreWorkspace() {
+    // All asynchronous and console callers are serialized by the single owner
+    // guard below.  This accessor creates a fresh, short-lived reference only
+    // while the Session union member is active; no reference survives a
+    // placement-new lifetime transition.
+    return targetsStoreCodecWorkspace.session;
+}
 
 leshy1::storage::TargetDecisionStateStoreWorkspace*
 acquireTargetsStoreCodecWorkspace() {
-    if (targetsStoreCodecWorkspaceInUse) return nullptr;
-    sessionStoreWorkspace.~SessionStoreWorkspace();
+    if (targetsStoreCodecWorkspaceOwner !=
+        TargetsStoreCodecWorkspaceOwner::Session) return nullptr;
+    surveyWorkflow.bindWorkspace(nullptr);
+    targetsStoreCodecWorkspace.session.~SessionStoreWorkspace();
     auto* workspace = new (&targetsStoreCodecWorkspace.targetDecision)
         leshy1::storage::TargetDecisionStateStoreWorkspace();
-    targetsStoreCodecWorkspaceInUse = true;
+    targetsStoreCodecWorkspaceOwner =
+        TargetsStoreCodecWorkspaceOwner::TargetDecision;
     return workspace;
 }
 
 void releaseTargetsStoreCodecWorkspace(
     leshy1::storage::TargetDecisionStateStoreWorkspace* workspace) {
-    if (!targetsStoreCodecWorkspaceInUse ||
+    if (targetsStoreCodecWorkspaceOwner !=
+            TargetsStoreCodecWorkspaceOwner::TargetDecision ||
         workspace != &targetsStoreCodecWorkspace.targetDecision) {
         return;
     }
     workspace->~TargetDecisionStateStoreWorkspace();
     new (&targetsStoreCodecWorkspace.session)
         leshy1::storage::SessionStoreWorkspace();
-    targetsStoreCodecWorkspaceInUse = false;
+    targetsStoreCodecWorkspaceOwner =
+        TargetsStoreCodecWorkspaceOwner::Session;
+    surveyWorkflow.bindWorkspace(&targetsStoreCodecWorkspace.session);
 }
 
 TargetCatalog* acquireTargetsAdmissionScratch() {
-    if (targetsStoreCodecWorkspaceInUse) return nullptr;
-    sessionStoreWorkspace.~SessionStoreWorkspace();
+    if (targetsStoreCodecWorkspaceOwner !=
+        TargetsStoreCodecWorkspaceOwner::Session) return nullptr;
+    surveyWorkflow.bindWorkspace(nullptr);
+    targetsStoreCodecWorkspace.session.~SessionStoreWorkspace();
     auto* scratch = new (&targetsStoreCodecWorkspace.admissionScratch)
         TargetCatalog();
-    targetsStoreCodecWorkspaceInUse = true;
+    targetsStoreCodecWorkspaceOwner =
+        TargetsStoreCodecWorkspaceOwner::AdmissionScratch;
     return scratch;
 }
 
 void releaseTargetsAdmissionScratch(TargetCatalog* scratch) {
-    if (!targetsStoreCodecWorkspaceInUse ||
+    if (targetsStoreCodecWorkspaceOwner !=
+            TargetsStoreCodecWorkspaceOwner::AdmissionScratch ||
         scratch != &targetsStoreCodecWorkspace.admissionScratch) {
         return;
     }
     scratch->~TargetCatalog();
     new (&targetsStoreCodecWorkspace.session)
         leshy1::storage::SessionStoreWorkspace();
-    targetsStoreCodecWorkspaceInUse = false;
+    targetsStoreCodecWorkspaceOwner =
+        TargetsStoreCodecWorkspaceOwner::Session;
+    surveyWorkflow.bindWorkspace(&targetsStoreCodecWorkspace.session);
 }
 ArduinoFsSessionStoreWorkspace sdSessionStoreIoWorkspace;
 RamSessionStoreIo ramSessionStore;
@@ -782,7 +825,7 @@ leshy1::storage::SessionStoreIoRouter surveyStoreRouter(ramSessionStore);
 ArduinoFsSessionStoreIo productSurveyStore(sdSessionStoreIoWorkspace);
 BoardSdFilesystem productSurveyFilesystem;
 SurveyWorkflow surveyWorkflow(surveyController, surveyStoreRouter,
-                              sessionStoreWorkspace, librarySession,
+                              sessionStoreWorkspace(), librarySession,
                               libraryController, false, true);
 SurveyPipeline surveyPipeline(surveyWorkflow, surveyIngressQueue);
 SourceTimeline productSurveyTimeline;
@@ -851,7 +894,54 @@ Cc1101SignalFinder cc1101SignalFinder;
 Cc1101SpectrumController cc1101SpectrumController;
 Cc1101PassiveSpectrumReport cc1101SpectrumReport;
 BoardCc1101PassiveSpectrum boardCc1101Spectrum;
-SpectrumViewport spectrumViewport;
+// The 18.6-KiB waterfall history is needed only while a live spectrum owns the
+// RF foreground. Its backing object shares the larger, mutually exclusive
+// Session/Targets codec workspace above, so ordinary Wi-Fi/BLE product entry
+// retains the internal heap that NimBLE needs. This null-safe facade keeps menu
+// and telemetry reads deterministic when no live spectrum owns that storage.
+class SpectrumViewportFacade final {
+public:
+    void bind(SpectrumViewport* viewport) { viewport_ = viewport; }
+    void unbind(SpectrumViewport* viewport) {
+        if (viewport_ == viewport) viewport_ = nullptr;
+    }
+    bool bound() const { return viewport_ != nullptr; }
+    bool reset(std::size_t bins) {
+        return viewport_ != nullptr && viewport_->reset(bins);
+    }
+    bool push(const std::uint8_t* intensity, std::size_t bins) {
+        return viewport_ != nullptr && viewport_->push(intensity, bins);
+    }
+    bool setMode(SpectrumDisplayMode mode) {
+        return viewport_ != nullptr && viewport_->setMode(mode);
+    }
+    bool previousMode() {
+        return viewport_ != nullptr && viewport_->previousMode();
+    }
+    bool nextMode() {
+        return viewport_ != nullptr && viewport_->nextMode();
+    }
+    SpectrumDisplayMode mode() const {
+        return viewport_ == nullptr ? SpectrumDisplayMode::Spectrum
+                                    : viewport_->mode();
+    }
+    std::size_t rowsStored() const {
+        return viewport_ == nullptr ? 0U : viewport_->rowsStored();
+    }
+    std::size_t latestRow() const {
+        return viewport_ == nullptr ? 0U : viewport_->latestRow();
+    }
+    bool rowValid(std::size_t row) const {
+        return viewport_ != nullptr && viewport_->rowValid(row);
+    }
+    std::uint8_t intensity(std::size_t row, std::size_t column) const {
+        return viewport_ == nullptr ? 0U : viewport_->intensity(row, column);
+    }
+
+private:
+    SpectrumViewport* viewport_ = nullptr;
+};
+SpectrumViewportFacade spectrumViewport;
 std::array<std::uint8_t, SpectrumViewport::kMaxBins> spectrumIntensity{};
 std::array<std::uint16_t, Layout::ScreenWidth> spectrumScanline{};
 constexpr std::uint16_t kSpectrumRenderedIntensityInvalid = UINT16_MAX;
@@ -1124,6 +1214,12 @@ WifiAuthenticationProductState wifiAuthenticationProductState =
 WifiAuthenticationTarget wifiAuthenticationTarget{};
 WifiAuthenticationCaptureReport wifiAuthenticationReport{};
 WifiAuthenticationCaptureController wifiAuthenticationController{};
+WifiAuthenticationSyntheticHilFixture wifiAuthenticationSyntheticHilFixture{};
+WifiAuthenticationCaptureReport wifiAuthenticationSyntheticHilReport{};
+WifiAuthenticationCaptureController wifiAuthenticationSyntheticHilController{};
+bool wifiAuthenticationSynthetic = false;
+bool wifiAuthenticationRepeatRequested = false;
+std::uint32_t wifiAuthenticationRepeatRequestGeneration = 0;
 bool wifiAuthenticationReturnAfterSurveyStop = false;
 bool wifiAuthenticationBackDuringWaitObserved = false;
 bool wifiAuthenticationSafetyCleanupActive = false;
@@ -1140,6 +1236,51 @@ constexpr std::uint32_t kWifiAuthenticationSurveyTerminalHoldTimeoutMs =
     1500U;
 bool wifiAuthenticationSurveyTerminalHoldArmed = false;
 std::uint64_t wifiAuthenticationSurveyTerminalHoldDeadlineUs = 0;
+
+WifiAuthenticationCaptureController&
+activeWifiAuthenticationCaptureController() {
+    return wifiAuthenticationSynthetic
+        ? wifiAuthenticationSyntheticHilController
+        : wifiAuthenticationController;
+}
+
+const WifiAuthenticationCaptureReport& activeWifiAuthenticationCaptureReport() {
+    return wifiAuthenticationSynthetic
+        ? wifiAuthenticationSyntheticHilReport
+        : wifiAuthenticationReport;
+}
+
+void clearWifiAuthenticationSyntheticHilState() {
+    wifiAuthenticationSyntheticHilController.reset();
+    wifiAuthenticationSyntheticHilReport = {};
+    wifiAuthenticationSynthetic = false;
+    wifiAuthenticationRenderedModel = {};
+    wifiAuthenticationRenderedModelValid = false;
+}
+
+bool formatWifiAuthenticationProductionReportFingerprint(
+    char* output, std::size_t capacity) {
+    if (output == nullptr || capacity < 17U || !hilSession.active()) {
+        return false;
+    }
+    std::uint64_t hash = 14695981039346656037ULL;
+    const char* sessionId = hilSession.id();
+    for (std::size_t index = 0U; sessionId[index] != '\0'; ++index) {
+        hash ^= static_cast<std::uint8_t>(sessionId[index]);
+        hash *= 1099511628211ULL;
+    }
+    const auto* bytes = reinterpret_cast<const std::uint8_t*>(
+        &wifiAuthenticationReport);
+    for (std::size_t index = 0U; index < sizeof(wifiAuthenticationReport);
+        ++index) {
+        hash ^= bytes[index];
+        hash *= 1099511628211ULL;
+    }
+    const int formatted = std::snprintf(
+        output, capacity, "%016llx",
+        static_cast<unsigned long long>(hash));
+    return formatted == 16;
+}
 
 void clearWifiAuthenticationSurveyTerminalHold() {
     wifiAuthenticationSurveyTerminalHoldArmed = false;
@@ -1712,6 +1853,7 @@ struct ProductSurveyRuntimeState final {
         leshy1::apps::survey::ProductSurveyAdmissionStatus::ExplicitStartRequired;
     BoardWifiPassiveScanResult scan{};
     BoardBlePassiveScanResult bleScan{};
+    BoardBleBeginDiagnostic bleBegin{};
     bool workerReady = false;
     bool sourceActive = false;
     bool sourceStartAttempted = false;
@@ -1903,6 +2045,23 @@ StaticSemaphore_t productSurveyScanStartGateStorage{};
 SemaphoreHandle_t productSurveyScanStartGate = nullptr;
 TaskHandle_t productSurveyWorkerTaskHandle = nullptr;
 portMUX_TYPE productSurveyWorkerMux = portMUX_INITIALIZER_UNLOCKED;
+BoardBleBeginDiagnostic productSurveyBleBeginDiagnostic{};
+
+void publishProductSurveyBleBeginDiagnostic(
+    const BoardBleBeginDiagnostic& diagnostic) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    productSurveyBleBeginDiagnostic = diagnostic;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+}
+
+BoardBleBeginDiagnostic productSurveyBleBeginDiagnosticSnapshot() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const BoardBleBeginDiagnostic diagnostic =
+        productSurveyBleBeginDiagnostic;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return diagnostic;
+}
+
 std::uint32_t productSurveyFilesystemMountAttemptsTotal = 0;
 std::uint32_t productSurveyFilesystemMountSuccessesTotal = 0;
 struct ProductSurveyMountTotals final {
@@ -2094,12 +2253,12 @@ bool prepareLibraryDemo() {
     }
     ramSessionStore.reset();
     const leshy1::storage::SessionStoreCommitResult committed =
-        leshy1::storage::commitNextSession(ramSessionStore, sessionStoreWorkspace,
+        leshy1::storage::commitNextSession(ramSessionStore, sessionStoreWorkspace(),
                                            librarySession);
     if (!committed.complete()) return false;
     libraryController.clear();
     const leshy1::apps::library::SessionCatalogResult cataloged =
-        sessionCatalog.recoverLatest(ramSessionStore, sessionStoreWorkspace,
+        sessionCatalog.recoverLatest(ramSessionStore, sessionStoreWorkspace(),
                                      librarySession, libraryController, false,
                                      true);
     return cataloged.admitted() && cataloged.generation == 1 &&
@@ -3510,6 +3669,7 @@ void runProductSurveyWorker(void*) {
             xQueueReset(productSurveyObservations);
         }
         setProductSurveyScanActive(false);
+        publishProductSurveyBleBeginDiagnostic({});
         BoardWifiPassiveScanner wifiScanner;
         BoardBlePassiveScanner bleScanner;
         std::uint64_t preparationStartedUs =
@@ -3660,7 +3820,10 @@ void runProductSurveyWorker(void*) {
                         wifiScan.driverError = wifiScanner.lastError();
                     }
                 } else {
-                    if (bleScanner.begin()) {
+                    const bool bleReady = bleScanner.begin();
+                    publishProductSurveyBleBeginDiagnostic(
+                        bleScanner.beginDiagnostic());
+                    if (bleReady) {
                         heartbeatProductSurveyWorker();
                         bleScan = bleScanner.scan(
                             leshy1::drivers::ble::defaultPassivePlan(),
@@ -3672,6 +3835,10 @@ void runProductSurveyWorker(void*) {
                 const bool sourceCleanup = source == RadioKind::Wifi
                     ? wifiScanner.end()
                     : bleScanner.end();
+                if (source == RadioKind::Ble) {
+                    publishProductSurveyBleBeginDiagnostic(
+                        bleScanner.beginDiagnostic());
+                }
                 report.scannerCleanupComplete = sourceCleanup &&
                     wifiScanner.cleanupComplete() &&
                     bleScanner.cleanupComplete();
@@ -3714,6 +3881,17 @@ void runProductSurveyWorker(void*) {
                     report.unavailableSourceMask =
                         degradation.unavailableSourceMask;
                     report.status = degradation.status;
+                    if (!degradation.continueSession &&
+                        source == RadioKind::Ble) {
+                        // Runtime loss of the sole selected source is the same
+                        // user-visible admission result as a source rejected
+                        // before startup. Preserve it through the terminal
+                        // event so the BLE page remains an honest unavailable
+                        // state instead of bouncing back to Home.
+                        report.admissionStatus =
+                            leshy1::apps::survey::
+                                ProductSurveyAdmissionStatus::SourceUnavailable;
+                    }
                     sendProductSurveyWorkerEvent(
                         ProductSurveyWorkerEventKind::SourceUnavailable,
                         report, source, wifiAggregate, bleAggregate,
@@ -4772,7 +4950,7 @@ void runCaptureStoreWorker(void*) {
         }
         const leshy1::storage::SessionStoreCommitResult commit =
             leshy1::storage::commitNextWifiFrameCapture(
-                productSurveyStore, sessionStoreWorkspace, surveySession,
+                productSurveyStore, sessionStoreWorkspace(), surveySession,
                 wifiFrameCapture.capture());
         if (!supervisedCheckpoint()) break;
         event.storeStatus = commit.status;
@@ -4782,8 +4960,8 @@ void runCaptureStoreWorker(void*) {
         }
         const leshy1::storage::SessionStoreRecoveryResult recovered =
             leshy1::storage::recoverSession(
-                productSurveyStore, sessionStoreWorkspace,
-                &sessionStoreWorkspace.validationSession);
+                productSurveyStore, sessionStoreWorkspace(),
+                &sessionStoreWorkspace().validationSession);
         if (!supervisedCheckpoint()) break;
         if (!recovered.valid() || recovered.generation != commit.generation) {
             event.status = "reopen_failed";
@@ -4877,7 +5055,7 @@ void serviceWifiFrameCapturePersist() {
     resourceBroker.release(AppRuntime::kForegroundOwner, storageResources);
     const bool admitted = event.valid && event.cleanupComplete &&
         libraryController.replaceWithOwnedCopy(
-            sessionStoreWorkspace.validationSession, librarySession,
+            sessionStoreWorkspace().validationSession, librarySession,
             event.generation, SessionIntegrity::Valid, true, false);
     capturePersistState = admitted ? CapturePersistState::Saved
                                    : CapturePersistState::Failed;
@@ -5077,7 +5255,7 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
                 break;
             }
             commit = leshy1::storage::commitNextInfraredRawCapture(
-                productSurveyStore, sessionStoreWorkspace, surveySession,
+                productSurveyStore, sessionStoreWorkspace(), surveySession,
                 infraredCapture);
         } else {
             const auto& stats = subGhzRawCapture.stats();
@@ -5097,7 +5275,7 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
                 break;
             }
             commit = leshy1::storage::commitNextSubGhzRawCapture(
-                productSurveyStore, sessionStoreWorkspace, surveySession,
+                productSurveyStore, sessionStoreWorkspace(), surveySession,
                 subGhzRawCapture);
         }
         if (!supervisedCheckpoint()) break;
@@ -5109,8 +5287,8 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
         }
         const leshy1::storage::SessionStoreRecoveryResult recovered =
             leshy1::storage::recoverSession(
-                productSurveyStore, sessionStoreWorkspace,
-                &sessionStoreWorkspace.validationSession);
+                productSurveyStore, sessionStoreWorkspace(),
+                &sessionStoreWorkspace().validationSession);
         if (!supervisedCheckpoint()) break;
         if (!recovered.valid() || recovered.generation != commit.generation) {
             event.status = "reopen_failed";
@@ -5121,17 +5299,17 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
         if (infrared) {
             leshy1::storage::PersistedInfraredRawCaptureView reopened;
             pulseReopened = leshy1::storage::openPersistedInfraredRawCapture(
-                sessionStoreWorkspace.validationSession,
-                sessionStoreWorkspace.segment.data(),
-                sessionStoreWorkspace.segmentSize, &reopened) ==
+                sessionStoreWorkspace().validationSession,
+                sessionStoreWorkspace().segment.data(),
+                sessionStoreWorkspace().segmentSize, &reopened) ==
                     leshy1::storage::SessionCodecStatus::Valid &&
                 reopened.pulseCount() == expectedPulses;
         } else {
             leshy1::storage::PersistedSubGhzRawCaptureView reopened;
             pulseReopened = leshy1::storage::openPersistedSubGhzRawCapture(
-                sessionStoreWorkspace.validationSession,
-                sessionStoreWorkspace.segment.data(),
-                sessionStoreWorkspace.segmentSize, &reopened) ==
+                sessionStoreWorkspace().validationSession,
+                sessionStoreWorkspace().segment.data(),
+                sessionStoreWorkspace().segmentSize, &reopened) ==
                     leshy1::storage::SessionCodecStatus::Valid &&
                 reopened.pulseCount() == expectedPulses;
         }
@@ -5236,7 +5414,7 @@ void serviceSubGhzRawCapturePersist() {
         leshy1::kernel::runtime::resourceMask(Resource::Storage));
     const bool admitted = event.valid && event.cleanupComplete &&
         libraryController.replaceWithOwnedCopy(
-            sessionStoreWorkspace.validationSession, librarySession,
+            sessionStoreWorkspace().validationSession, librarySession,
             event.generation, SessionIntegrity::Valid, true, false);
     subGhzCapturePersistState = admitted ? CapturePersistState::Saved
                                         : CapturePersistState::Failed;
@@ -5309,7 +5487,7 @@ void serviceInfraredRawCapturePersist() {
         leshy1::kernel::runtime::resourceMask(Resource::Storage));
     const bool admitted = event.valid && event.cleanupComplete &&
         libraryController.replaceWithOwnedCopy(
-            sessionStoreWorkspace.validationSession, librarySession,
+            sessionStoreWorkspace().validationSession, librarySession,
             event.generation, SessionIntegrity::Valid, true, false);
     infraredCapturePersistState = admitted ? CapturePersistState::Saved
                                           : CapturePersistState::Failed;
@@ -5388,6 +5566,8 @@ void serviceProductSurveyWorker() {
             break;
         }
         applyProductSurveyWorkerReport(event.report);
+        productSurveyRuntime.bleBegin =
+            productSurveyBleBeginDiagnosticSnapshot();
         if (event.kind != ProductSurveyWorkerEventKind::ScanStarted) {
             productSurveyRuntime.scan = event.scan;
             productSurveyRuntime.bleScan = event.bleScan;
@@ -5499,6 +5679,11 @@ void serviceProductSurveyWorker() {
             render = true;
         } else if (event.kind ==
                    ProductSurveyWorkerEventKind::SourceUnavailable) {
+            const bool terminalSourceUnavailable =
+                event.report.activeSourceMask == 0 &&
+                event.report.admissionStatus ==
+                    leshy1::apps::survey::ProductSurveyAdmissionStatus::
+                        SourceUnavailable;
             if (closeProductSurveyScanWindow(
                     event, event.failureState, event.failureReason)) {
                 productSurveyRuntime.status = "running_degraded";
@@ -5510,7 +5695,11 @@ void serviceProductSurveyWorker() {
                 lastRuntimeEvent = productSurveyRuntime.status;
                 requestProductSurveyWorkerStop(true);
             }
-            render = true;
+            // A sole-source failure is followed by its terminal Failed event.
+            // Keep the current page but skip this transient running_degraded
+            // frame; terminal release renders the honest unavailable state
+            // exactly once. Multi-source degradation remains incremental.
+            render = !terminalSourceUnavailable;
         } else if (event.kind == ProductSurveyWorkerEventKind::Paused) {
             const bool windowClosed = closeProductSurveyScanWindow(event);
             productSurveyRuntime.sourceActive = false;
@@ -5680,6 +5869,10 @@ void serviceProductSurveyWorker() {
             const bool keepVisible = event.report.admissionStatus ==
                 leshy1::apps::survey::ProductSurveyAdmissionStatus::SourceUnavailable;
             releaseProductSurveyAfterTerminal(event.report.status, !keepVisible);
+            // releaseProductSurveyAfterTerminal() renders exactly once after
+            // applying the terminal status and route decision. Do not queue a
+            // second incremental repaint here: it adds flicker and can obscure
+            // the unavailable-state transition with stale content.
             render = false;
         }
     }
@@ -5776,7 +5969,7 @@ void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
         productBootRecovery.opened = io.openExistingReadOnly(permit);
         if (productBootRecovery.opened) {
             productBootRecovery.catalog = sessionCatalog.recoverLatest(
-                io, sessionStoreWorkspace, librarySession, libraryController,
+                io, sessionStoreWorkspace(), librarySession, libraryController,
                 true, false);
             productBootRecovery.catalogAdmitted =
                 productBootRecovery.catalog.admitted();
@@ -6779,7 +6972,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                 leshy1::apps::targets::targetsLoadStatusName(
                     TargetsLoadStatus::SessionUnavailable);
             const auto pair = leshy1::storage::recoverSessionPair(
-                io, sessionStoreWorkspace, &librarySession,
+                io, sessionStoreWorkspace(), &librarySession,
                 &surveySession);
             loadWatchdog.checkpoint();
             if (pair.valid()) {
@@ -6789,7 +6982,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
             } else {
                 surveySession.reset();
                 const auto latest = leshy1::storage::recoverSession(
-                    io, sessionStoreWorkspace, &surveySession);
+                    io, sessionStoreWorkspace(), &surveySession);
                 loadWatchdog.checkpoint();
                 if (latest.valid()) {
                     latestRecovered = true;
@@ -8826,8 +9019,8 @@ bool prepareBatchThroughputSession(std::size_t* encodedBytes) {
     }
     if (librarySession.stop(3000) != SessionStatus::Stopped) return false;
     return leshy1::storage::encodeObservationSegment(
-               librarySession, sessionStoreWorkspace.segment.data(),
-               sessionStoreWorkspace.segment.size(), encodedBytes) ==
+               librarySession, sessionStoreWorkspace().segment.data(),
+               sessionStoreWorkspace().segment.size(), encodedBytes) ==
                leshy1::storage::SessionCodecStatus::Valid &&
            *encodedBytes >=
                leshy1::services::survey::SessionBatchPolicy{}.targetEncodedBytes;
@@ -9210,7 +9403,7 @@ void emitLittleFsParity(Stream& reply, const char* expectedFingerprint,
                     static_cast<std::uint64_t>(esp_timer_get_time());
                 const leshy1::storage::SessionStoreCommitResult committed =
                     leshy1::storage::commitNextSession(
-                        io, sessionStoreWorkspace, librarySession);
+                        io, sessionStoreWorkspace(), librarySession);
                 commitUs[sample] =
                     static_cast<std::uint64_t>(esp_timer_get_time()) - started;
                 if (!committed.complete() ||
@@ -9222,8 +9415,8 @@ void emitLittleFsParity(Stream& reply, const char* expectedFingerprint,
             }
             if (commitsCompleted == kSdThroughputSamples) {
                 recoveryBeforeRemount = leshy1::storage::recoverSession(
-                    io, sessionStoreWorkspace,
-                    &sessionStoreWorkspace.validationSession);
+                    io, sessionStoreWorkspace(),
+                    &sessionStoreWorkspace().validationSession);
                 status = recoveryBeforeRemount.valid() &&
                                  recoveryBeforeRemount.generation ==
                                      kSdThroughputSamples &&
@@ -9252,8 +9445,8 @@ void emitLittleFsParity(Stream& reply, const char* expectedFingerprint,
             reopenedReadOnly = readOnlyIo.openExistingReadOnly(permit);
             if (reopenedReadOnly) {
                 recoveryAfterRemount = leshy1::storage::recoverSession(
-                    readOnlyIo, sessionStoreWorkspace,
-                    &sessionStoreWorkspace.validationSession);
+                    readOnlyIo, sessionStoreWorkspace(),
+                    &sessionStoreWorkspace().validationSession);
             }
             readOnlyIo.end();
         }
@@ -9483,16 +9676,16 @@ void emitLittleFsResetArm(Stream& reply, const char* expectedFingerprint,
             status = "scratch_prepare_failed";
         } else {
             initialCommit = leshy1::storage::commitNextSession(
-                io, sessionStoreWorkspace, littleFsResetSession);
+                io, sessionStoreWorkspace(), littleFsResetSession);
             initialRecovery = leshy1::storage::recoverSession(
-                io, sessionStoreWorkspace,
-                &sessionStoreWorkspace.validationSession);
+                io, sessionStoreWorkspace(),
+                &sessionStoreWorkspace().validationSession);
             priorUnchanged = initialCommit.complete() &&
                 initialCommit.generation == 1 && initialRecovery.valid() &&
                 initialRecovery.generation == 1 &&
                 initialRecovery.observations == 3 &&
                 inspectStoredGeneration(
-                    io, sessionStoreWorkspace, littleFsResetSession, 1,
+                    io, sessionStoreWorkspace(), littleFsResetSession, 1,
                     &priorEvidence);
             if (!priorUnchanged) {
                 status = "initial_generation_failed";
@@ -9547,7 +9740,7 @@ void emitLittleFsResetArm(Stream& reply, const char* expectedFingerprint,
                         io, boundary, restartAtLittleFsSessionStoreBoundary,
                         &hookContext);
                     static_cast<void>(leshy1::storage::commitNextSession(
-                        injecting, sessionStoreWorkspace,
+                        injecting, sessionStoreWorkspace(),
                         littleFsResetSession));
                     status = "reset_not_triggered";
                 }
@@ -9667,11 +9860,11 @@ void emitLittleFsResetRecovery(Stream& reply,
         openedReadOnly = io.openExistingReadOnly(permit);
         if (openedReadOnly) {
             priorUnchanged = inspectStoredGeneration(
-                io, sessionStoreWorkspace, littleFsResetSession, 1,
+                io, sessionStoreWorkspace(), littleFsResetSession, 1,
                 &priorEvidence);
             recovery = leshy1::storage::recoverSession(
-                io, sessionStoreWorkspace,
-                &sessionStoreWorkspace.validationSession);
+                io, sessionStoreWorkspace(),
+                &sessionStoreWorkspace().validationSession);
         }
         bytesWritten = io.bytesWritten();
         fileSyncs = io.fileSyncs();
@@ -10459,12 +10652,16 @@ NavigationFooter navigationFooterForCurrentState() {
             return {{NavigationKey::Left, UiTextId::NavList}, {}, enter};
         }
         if (wifiProductView == WifiProductView::AuthenticationCapture) {
+            const WifiAuthenticationCaptureController& controller =
+                activeWifiAuthenticationCaptureController();
+            const WifiAuthenticationCaptureReport& report =
+                activeWifiAuthenticationCaptureReport();
             if (wifiAuthenticationProductState !=
                     WifiAuthenticationProductState::Result ||
-                !wifiAuthenticationController.ready()) {
+                !controller.ready()) {
                 return {back, {}, {}};
             }
-            switch (wifiAuthenticationController.view()) {
+            switch (controller.view()) {
                 case WifiAuthenticationCaptureView::Outcome:
                     return {back, {}, enter};
                 case WifiAuthenticationCaptureView::Actions:
@@ -10472,9 +10669,9 @@ NavigationFooter navigationFooterForCurrentState() {
                 case WifiAuthenticationCaptureView::PeerDetail:
                     return {
                         back,
-                        wifiAuthenticationController.peerCount() > 1U
+                        controller.peerCount() > 1U
                             ? choose : NavigationCell{},
-                        wifiAuthenticationReport.evidenceCount != 0U
+                        report.evidenceCount != 0U
                             ? enter : NavigationCell{}};
                 case WifiAuthenticationCaptureView::EvidenceList:
                     return {back, choose, enter};
@@ -14455,6 +14652,7 @@ void renderCc1101SpectrumPage(bool clearContent) {
 
 WifiAuthenticationCaptureUiInput wifiAuthenticationCaptureUiInput() {
     WifiAuthenticationCaptureUiInput input{};
+    input.synthetic = wifiAuthenticationSynthetic;
     const auto capture = wifiFrameCapture.stats();
     const auto ingress = wifiFrameCapture.authenticationCaptureStats();
     if (wifiAuthenticationProductState ==
@@ -14490,8 +14688,8 @@ WifiAuthenticationCaptureUiInput wifiAuthenticationCaptureUiInput() {
     } else if (wifiAuthenticationProductState ==
                WifiAuthenticationProductState::Result) {
         input.phase = WifiAuthenticationCaptureUiPhase::Report;
-        input.report = &wifiAuthenticationReport;
-        input.controller = &wifiAuthenticationController;
+        input.report = &activeWifiAuthenticationCaptureReport();
+        input.controller = &activeWifiAuthenticationCaptureController();
         input.cleanupComplete = wifiFrameCapture.cleanupComplete() &&
             ingress.cleanupComplete && !ingress.active;
     } else {
@@ -14547,6 +14745,40 @@ const char* wifiAuthenticationUiToneName(
         case WifiAuthenticationCaptureUiTone::Error: return "error";
     }
     return "error";
+}
+
+const char* wifiAuthenticationPresenterTitleSemantic(UiTextId title) {
+    switch (title) {
+        case UiTextId::CaptureResult: return "capture_result";
+        case UiTextId::WifiAuthActionsHeadline:
+            return "authentication_actions";
+        case UiTextId::WifiAuthPeerTitle: return "authentication_peer";
+        case UiTextId::WifiAuthEvidenceTitle:
+            return "authentication_evidence";
+        case UiTextId::WifiAuthEvidenceDetailTitle:
+            return "authentication_evidence_detail";
+        default: return "unknown";
+    }
+}
+
+const char* wifiAuthenticationPresenterHeadlineSemantic(UiTextId headline) {
+    switch (headline) {
+        case UiTextId::WifiAuthFullHandshakeHeadline:
+            return "full_handshake";
+        case UiTextId::WifiAuthActionsHeadline:
+            return "authentication_actions";
+        case UiTextId::WifiAuthPeerHeadline:
+            return "authentication_peer";
+        case UiTextId::WifiAuthEvidenceHeadline:
+            return "authentication_evidence";
+        case UiTextId::WifiAuthEvidenceDetailHeadline:
+            return "authentication_evidence_detail";
+        default: return "unknown";
+    }
+}
+
+const char* wifiAuthenticationPresenterNoteSemantic(UiTextId note) {
+    return note == UiTextId::SimulatedData ? "simulated_data" : "unknown";
 }
 
 const char* wifiAuthenticationUiFailureName(
@@ -16894,10 +17126,72 @@ void renderInteractiveScreen(bool clearContent) {
     lastUiRenderUs = finishedUs >= startedUs ? finishedUs - startedUs : 0;
 }
 
+bool spectrumViewportWorkspaceAvailable() {
+    // The Session member may be referenced by persistent controllers, but it
+    // is touched only while one of these bounded workers is active. Refuse the
+    // spectrum before acquiring RF instead of overlapping union lifetimes.
+    return targetsStoreCodecWorkspaceOwner ==
+               TargetsStoreCodecWorkspaceOwner::Session &&
+        productSurveyControl() == ProductSurveyWorkerControl::Idle &&
+        !productSurveyScanActive() &&
+        surveyWorkflow.state() != SurveyWorkflowState::Running &&
+        targetsMutationTaskHandle == nullptr &&
+        captureStoreTaskHandle == nullptr &&
+        subGhzCaptureStoreTaskHandle == nullptr &&
+        infraredCaptureStoreTaskHandle == nullptr;
+}
+
+SpectrumViewport* acquireSpectrumViewportWorkspace() {
+    if (!spectrumViewportWorkspaceAvailable() || spectrumViewport.bound()) {
+        return nullptr;
+    }
+    surveyWorkflow.bindWorkspace(nullptr);
+    targetsStoreCodecWorkspace.session.~SessionStoreWorkspace();
+    auto* viewport = new (&targetsStoreCodecWorkspace.spectrum)
+        SpectrumViewport();
+    targetsStoreCodecWorkspaceOwner =
+        TargetsStoreCodecWorkspaceOwner::Spectrum;
+    spectrumViewport.bind(viewport);
+    return viewport;
+}
+
+void releaseSpectrumViewportWorkspace(SpectrumViewport* viewport) {
+    if (targetsStoreCodecWorkspaceOwner !=
+            TargetsStoreCodecWorkspaceOwner::Spectrum ||
+        viewport != &targetsStoreCodecWorkspace.spectrum) {
+        return;
+    }
+    spectrumViewport.unbind(viewport);
+    viewport->~SpectrumViewport();
+    new (&targetsStoreCodecWorkspace.session)
+        leshy1::storage::SessionStoreWorkspace();
+    targetsStoreCodecWorkspaceOwner =
+        TargetsStoreCodecWorkspaceOwner::Session;
+    surveyWorkflow.bindWorkspace(&targetsStoreCodecWorkspace.session);
+}
+
+void releaseSpectrumViewportWorkspace() {
+    releaseSpectrumViewportWorkspace(&targetsStoreCodecWorkspace.spectrum);
+}
+
 bool startNrf24Receiver(bool finder) {
     nrf24SpectrumController.reset();
     nrf24SignalFinder.reset();
-    spectrumViewport.reset(Nrf24SpectrumController::kChannelCount);
+    if (!finder) {
+        SpectrumViewport* viewport = acquireSpectrumViewportWorkspace();
+        if (viewport == nullptr ||
+            !spectrumViewport.reset(Nrf24SpectrumController::kChannelCount)) {
+            releaseSpectrumViewportWorkspace(viewport);
+            nrf24SpectrumController.fail();
+            nrf24SpectrumReport = {};
+            rfSpectrumKind = RfSpectrumKind::Nrf24;
+            rfSpectrumView = RfSpectrumView::Live;
+            nextSpectrumUiRefreshUs = 0;
+            resetSpectrumWaterfallTiming();
+            lastRuntimeEvent = "nrf24_spectrum_workspace_unavailable";
+            return true;
+        }
+    }
     spectrumRenderedIntensity.fill(kSpectrumRenderedIntensityInvalid);
     nrf24SpectrumReport = {};
     std::uint64_t startedUs =
@@ -16917,6 +17211,7 @@ bool startNrf24Receiver(bool finder) {
         boardNrf24Spectrum.end();
         nrf24SpectrumController.fail();
         if (finder) nrf24SignalFinder.fail();
+        if (!finder) releaseSpectrumViewportWorkspace();
     }
     rfSpectrumKind = RfSpectrumKind::Nrf24;
     rfSpectrumView = finder ? RfSpectrumView::Nrf24Finder
@@ -16949,6 +17244,7 @@ bool stopNrf24Spectrum(bool returnToSourceMenu) {
     if (nrf24SignalFinder.state() != Nrf24SignalFinderState::Idle) {
         nrf24SignalFinder.stop();
     }
+    releaseSpectrumViewportWorkspace();
     const bool direct = std::strcmp(appRuntime.activeApp(), "spectrum24") == 0;
     rfSpectrumView = returnToSourceMenu
         ? RfSpectrumView::SourceMenu
@@ -16976,6 +17272,7 @@ void serviceNrf24Spectrum() {
         boardNrf24Spectrum.end();
         nrf24SpectrumController.fail();
         if (finder) nrf24SignalFinder.fail();
+        if (!finder) releaseSpectrumViewportWorkspace();
         lastRuntimeEvent = finder ? "nrf24_finder_runtime_fault"
                                   : "nrf24_spectrum_runtime_fault";
         renderInteractiveScreen(true);
@@ -17015,7 +17312,19 @@ void serviceNrf24Spectrum() {
 bool startCc1101Spectrum(
     leshy1::drivers::radio::Cc1101SpectrumBand band) {
     cc1101SpectrumController.reset();
-    spectrumViewport.reset(Cc1101SpectrumController::kBinCount);
+    SpectrumViewport* viewport = acquireSpectrumViewportWorkspace();
+    if (viewport == nullptr ||
+        !spectrumViewport.reset(Cc1101SpectrumController::kBinCount)) {
+        releaseSpectrumViewportWorkspace(viewport);
+        cc1101SpectrumController.fail();
+        cc1101SpectrumReport = {};
+        rfSpectrumKind = RfSpectrumKind::Cc1101;
+        rfSpectrumView = RfSpectrumView::Live;
+        nextSpectrumUiRefreshUs = 0;
+        resetSpectrumWaterfallTiming();
+        lastRuntimeEvent = "cc1101_spectrum_workspace_unavailable";
+        return true;
+    }
     spectrumRenderedIntensity.fill(kSpectrumRenderedIntensityInvalid);
     cc1101SpectrumReport = {};
     std::uint64_t startedUs =
@@ -17030,6 +17339,7 @@ bool startCc1101Spectrum(
     if (!started) {
         boardCc1101Spectrum.end();
         cc1101SpectrumController.fail();
+        releaseSpectrumViewportWorkspace();
     }
     rfSpectrumKind = RfSpectrumKind::Cc1101;
     rfSpectrumView = RfSpectrumView::Live;
@@ -17090,6 +17400,7 @@ bool stopCc1101Spectrum(bool returnToSourceMenu) {
     if (cc1101SignalFinder.state() != Cc1101SignalFinderState::Idle) {
         cc1101SignalFinder.stop();
     }
+    releaseSpectrumViewportWorkspace();
     rfSpectrumView = returnToSourceMenu ? RfSpectrumView::CcBandMenu
                                         : RfSpectrumView::None;
     nextSpectrumUiRefreshUs = 0;
@@ -17119,6 +17430,7 @@ void serviceCc1101Spectrum() {
     if (!valid) {
         boardCc1101Spectrum.end();
         cc1101SpectrumController.fail();
+        releaseSpectrumViewportWorkspace();
         lastRuntimeEvent = "cc1101_spectrum_runtime_fault";
         renderInteractiveScreen(true);
         return;
@@ -17570,6 +17882,7 @@ void serviceSpectrumWaterfallCadence() {
             boardNrf24Spectrum.end();
             nrf24SpectrumController.fail();
         }
+        releaseSpectrumViewportWorkspace();
         lastRuntimeEvent = "spectrum_history_fault";
         if (renderRows) display.endWrite();
         renderInteractiveScreen(true);
@@ -17626,6 +17939,48 @@ void restoreFullGuidedLibraryView() {
     if (libraryController.view() == LibraryView::SessionDetail) {
         libraryController.back();
     }
+}
+
+void quiesceSpectrumOnSafetyStop() {
+    // Finders deliberately do not own the waterfall workspace.  Safety must
+    // therefore key off every active RF/controller state, not viewport
+    // ownership, and quiesce both board types independently.
+    const auto nrfState = nrf24SpectrumController.state();
+    const auto nrfFinderState = nrf24SignalFinder.state();
+    const auto ccState = cc1101SpectrumController.state();
+    const auto ccFinderState = cc1101SignalFinder.state();
+    const bool nrfControllerActive =
+        nrfState == Nrf24SpectrumViewState::Running ||
+        nrfState == Nrf24SpectrumViewState::Paused;
+    const bool nrfFinderActive =
+        nrfFinderState == Nrf24SignalFinderState::Calibrating ||
+        nrfFinderState == Nrf24SignalFinderState::Searching;
+    const bool ccControllerActive =
+        ccState == Cc1101SpectrumViewState::Running ||
+        ccState == Cc1101SpectrumViewState::Paused;
+    const bool ccFinderActive =
+        ccFinderState == Cc1101SignalFinderState::Calibrating ||
+        ccFinderState == Cc1101SignalFinderState::Searching;
+    const bool nrfActive = boardNrf24Spectrum.active() ||
+        nrfControllerActive || nrfFinderActive;
+    const bool ccActive = boardCc1101Spectrum.active() ||
+        ccControllerActive || ccFinderActive;
+    const bool workspaceOwned = spectrumViewport.bound();
+    if (!nrfActive && !ccActive && !workspaceOwned) return;
+    bool cleanup = true;
+    if (nrfActive) {
+        cleanup = boardNrf24Spectrum.end() && cleanup;
+        if (nrfControllerActive) nrf24SpectrumController.fail();
+        if (nrfFinderActive) nrf24SignalFinder.fail();
+    }
+    if (ccActive) {
+        cleanup = boardCc1101Spectrum.end() && cleanup;
+        if (ccControllerActive) cc1101SpectrumController.fail();
+        if (ccFinderActive) cc1101SignalFinder.fail();
+    }
+    if (workspaceOwned) releaseSpectrumViewportWorkspace();
+    lastRuntimeEvent = cleanup ? "spectrum_safety_stop"
+                               : "spectrum_safety_cleanup_failed";
 }
 
 void finishFullGuidedActiveChecks(bool success);
@@ -17799,12 +18154,12 @@ void runFullGuidedDisposableCommit() {
                     leshy1::storage::SessionStoreRecoveryResult recovery;
                     if (fullGuidedArtifactState.scratchCreated) {
                         commit = leshy1::storage::commitNextSession(
-                            io, sessionStoreWorkspace,
+                            io, sessionStoreWorkspace(),
                             littleFsResetSession);
                         if (commit.complete()) {
                             recovery = leshy1::storage::recoverSession(
-                                io, sessionStoreWorkspace,
-                                &sessionStoreWorkspace.validationSession);
+                                io, sessionStoreWorkspace(),
+                                &sessionStoreWorkspace().validationSession);
                         }
                     }
                     fullGuidedArtifactState.disposableStorageWriteBytes +=
@@ -17879,8 +18234,8 @@ void runFullGuidedDisposableRemountExport() {
                 leshy1::storage::SessionStoreRecoveryResult recovery;
                 if (opened) {
                     recovery = leshy1::storage::recoverSession(
-                        io, sessionStoreWorkspace,
-                        &sessionStoreWorkspace.validationSession);
+                        io, sessionStoreWorkspace(),
+                        &sessionStoreWorkspace().validationSession);
                 }
                 remountPassed = opened && recovery.valid() &&
                     recovery.generation == 1 && recovery.observations == 3 &&
@@ -17889,7 +18244,7 @@ void runFullGuidedDisposableRemountExport() {
                 if (remountPassed) {
                     LibraryController disposableLibrary;
                     exportPassed = disposableLibrary.add(
-                        sessionStoreWorkspace.validationSession,
+                        sessionStoreWorkspace().validationSession,
                         recovery.generation, SessionIntegrity::Valid, true,
                         false) && disposableLibrary.openSelected() &&
                         disposableLibrary.requestExport();
@@ -18301,8 +18656,8 @@ void serviceFullGuidedArtifactChecks() {
         }
         leshy1::storage::PersistedWifiFrameCaptureView persisted;
         const auto opened = leshy1::storage::openPersistedWifiFrameCapture(
-            *entry->session, sessionStoreWorkspace.segment.data(),
-            sessionStoreWorkspace.segmentSize, &persisted);
+            *entry->session, sessionStoreWorkspace().segment.data(),
+            sessionStoreWorkspace().segmentSize, &persisted);
         const auto& source = static_cast<
             const leshy1::domain::captures::WifiFrameSource&>(persisted);
         const std::size_t expectedBytes = opened ==
@@ -18579,10 +18934,12 @@ void serviceFullGuidedRfChecks() {
 }
 
 void resetWifiAuthenticationCaptureProduct() {
+    clearWifiAuthenticationSyntheticHilState();
     wifiAuthenticationController.reset();
     std::memset(&wifiAuthenticationReport, 0,
                 sizeof(wifiAuthenticationReport));
     wifiAuthenticationTarget = {};
+    wifiAuthenticationRepeatRequested = false;
     wifiAuthenticationReturnAfterSurveyStop = false;
     wifiAuthenticationBackDuringWaitObserved = false;
     wifiAuthenticationFailure = WifiAuthenticationCaptureUiFailure::None;
@@ -18631,6 +18988,8 @@ bool requestWifiAuthenticationCaptureFromDetail() {
                 target.accessPoint.begin());
     target.channel = static_cast<std::uint8_t>(network->channel);
     wifiAuthenticationTarget = target;
+    clearWifiAuthenticationSyntheticHilState();
+    wifiAuthenticationRepeatRequested = false;
     wifiAuthenticationController.reset();
     std::memset(&wifiAuthenticationReport, 0,
                 sizeof(wifiAuthenticationReport));
@@ -18697,6 +19056,7 @@ bool beginWifiAuthenticationCaptureAfterSurvey() {
 bool repeatWifiAuthenticationCapture() {
     if (wifiAuthenticationProductState !=
             WifiAuthenticationProductState::Result ||
+        wifiAuthenticationSynthetic ||
         !wifiAuthenticationController.ready() ||
         !wifiAuthenticationTargetValid() ||
         !wifiFrameCapture.cleanupComplete()) {
@@ -18705,6 +19065,11 @@ bool repeatWifiAuthenticationCapture() {
     wifiAuthenticationController.reset();
     std::memset(&wifiAuthenticationReport, 0,
                 sizeof(wifiAuthenticationReport));
+    wifiAuthenticationRepeatRequested = true;
+    ++wifiAuthenticationRepeatRequestGeneration;
+    if (wifiAuthenticationRepeatRequestGeneration == 0U) {
+        ++wifiAuthenticationRepeatRequestGeneration;
+    }
     wifiAuthenticationFailure = WifiAuthenticationCaptureUiFailure::None;
     wifiAuthenticationProductState =
         WifiAuthenticationProductState::WaitingForSurveyStop;
@@ -18716,7 +19081,35 @@ bool repeatWifiAuthenticationCapture() {
     return beginWifiAuthenticationCaptureAfterSurvey();
 }
 
+bool leaveWifiAuthenticationSyntheticHilView(bool repeatRequested) {
+    if (!wifiAuthenticationSynthetic ||
+        !wifiAuthenticationSyntheticHilController.ready()) {
+        return false;
+    }
+    clearWifiAuthenticationSyntheticHilState();
+    wifiAuthenticationRepeatRequested = repeatRequested;
+    if (repeatRequested) {
+        ++wifiAuthenticationRepeatRequestGeneration;
+        if (wifiAuthenticationRepeatRequestGeneration == 0U) {
+            ++wifiAuthenticationRepeatRequestGeneration;
+        }
+    }
+    // The ambient report, controller, target, raw capture and generation stay
+    // immutable.  The synthetic overlay closes into an idle Wi-Fi menu so it
+    // cannot remain product-routable after its bounded HIL request.
+    wifiAuthenticationProductState = WifiAuthenticationProductState::Idle;
+    wifiProductView = WifiProductView::Menu;
+    wifiProductSelection = 0U;
+    lastRuntimeEvent = repeatRequested
+        ? "authentication_synthetic_repeat_requested"
+        : "authentication_synthetic_closed";
+    return true;
+}
+
 bool leaveWifiAuthenticationCapture() {
+    if (wifiAuthenticationSynthetic) {
+        return leaveWifiAuthenticationSyntheticHilView(false);
+    }
     if (wifiAuthenticationProductState ==
         WifiAuthenticationProductState::WaitingForSurveyStop) {
         wifiAuthenticationReturnAfterSurveyStop = true;
@@ -18786,6 +19179,17 @@ bool leaveWifiAuthenticationCapture() {
     wifiProductSelection = 0;
     lastRuntimeEvent = "wifi_menu";
     return true;
+}
+
+void serviceWifiAuthenticationSyntheticHilExpiry() {
+    if (!wifiAuthenticationSynthetic ||
+        !wifiAuthenticationSyntheticHilFixture.expired(millis())) {
+        return;
+    }
+    if (leaveWifiAuthenticationSyntheticHilView(false)) {
+        lastRuntimeEvent = "authentication_synthetic_expired";
+        renderInteractiveScreen(true);
+    }
 }
 
 void serviceWifiAuthenticationCapture() {
@@ -19204,6 +19608,12 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_ble_scan_accepted\":%u,"
                       "\"survey_ble_scan_rejected\":%u,"
                       "\"survey_ble_scan_dropped\":%u,"
+                      "\"ble_begin_stage\":\"%s\","
+                      "\"ble_begin_error\":%d,"
+                      "\"ble_begin_heap_free_before\":%lu,"
+                      "\"ble_begin_heap_largest_before\":%lu,"
+                      "\"ble_begin_heap_free_after\":%lu,"
+                      "\"ble_begin_heap_largest_after\":%lu,"
                       "\"survey_product_cleanup_complete\":%s,"
                       "\"survey_product_worker_ready\":%s,"
                       "\"survey_product_source_active\":%s,"
@@ -19466,6 +19876,17 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           productSurveyRuntime.bleScan.rejected),
                       static_cast<unsigned>(
                           productSurveyRuntime.bleScan.dropped),
+                      leshy1::platform::arduino::boardBleBeginStageName(
+                          productSurveyRuntime.bleBegin.stage),
+                      productSurveyRuntime.bleBegin.error,
+                      static_cast<unsigned long>(
+                          productSurveyRuntime.bleBegin.heapFreeBefore),
+                      static_cast<unsigned long>(
+                          productSurveyRuntime.bleBegin.heapLargestBefore),
+                      static_cast<unsigned long>(
+                          productSurveyRuntime.bleBegin.heapFreeAfter),
+                      static_cast<unsigned long>(
+                          productSurveyRuntime.bleBegin.heapLargestAfter),
                       productSurveyRuntime.cleanupComplete ? "true" : "false",
                       productSurveyRuntime.workerReady ? "true" : "false",
                       productSurveyRuntime.sourceActive ? "true" : "false",
@@ -21872,6 +22293,8 @@ bool applyUiAction(UiAction action, bool render = true) {
                     control == ProductSurveyWorkerControl::Running) {
                     changed = requestProductSurveyWorkerStop(true);
                 } else {
+                    // A terminal unavailable BLE view owns no worker or lease;
+                    // only this explicit user Back action closes it.
                     bleProductView = BleProductView::None;
                     surveyPipeline.resetToSetup();
                     changed = uiController.apply(
@@ -22206,6 +22629,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                         if (!boardCc1101Spectrum.idle()) {
                             boardCc1101Spectrum.end();
                             cc1101SpectrumController.fail();
+                            releaseSpectrumViewportWorkspace();
                             lastRuntimeEvent =
                                 "cc1101_spectrum_pause_failed";
                         } else {
@@ -22248,27 +22672,31 @@ bool applyUiAction(UiAction action, bool render = true) {
         } else if (wifiProductView ==
                    WifiProductView::AuthenticationCapture) {
             handled = true;
+            WifiAuthenticationCaptureController& controller =
+                activeWifiAuthenticationCaptureController();
             const bool terminal = wifiAuthenticationProductState ==
                 WifiAuthenticationProductState::Result &&
-                wifiAuthenticationController.ready();
+                controller.ready();
             if (terminal && action == UiAction::Up) {
-                changed = wifiAuthenticationController.previous();
+                changed = controller.previous();
             } else if (terminal && action == UiAction::Down) {
-                changed = wifiAuthenticationController.next();
+                changed = controller.next();
             } else if (terminal &&
                        (action == UiAction::Select ||
                         action == UiAction::Right)) {
-                if (wifiAuthenticationController.view() ==
+                if (controller.view() ==
                         WifiAuthenticationCaptureView::Actions &&
-                    wifiAuthenticationController.selectedAction() ==
+                    controller.selectedAction() ==
                         WifiAuthenticationCaptureAction::Repeat) {
-                    changed = repeatWifiAuthenticationCapture();
+                    changed = wifiAuthenticationSynthetic
+                        ? leaveWifiAuthenticationSyntheticHilView(true)
+                        : repeatWifiAuthenticationCapture();
                 } else {
-                    changed = wifiAuthenticationController.openSelected();
+                    changed = controller.openSelected();
                 }
             } else if (action == UiAction::Back ||
                        action == UiAction::Left) {
-                changed = terminal && wifiAuthenticationController.back()
+                changed = terminal && controller.back()
                     ? true : leaveWifiAuthenticationCapture();
             }
         } else if (wifiProductView == WifiProductView::NetworkDetail) {
@@ -23338,19 +23766,21 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
         if (wifiProductView == WifiProductView::AuthenticationCapture &&
             wifiAuthenticationProductState ==
                 WifiAuthenticationProductState::Result &&
-            wifiAuthenticationController.ready() &&
-            (wifiAuthenticationController.view() ==
+            activeWifiAuthenticationCaptureController().ready() &&
+            (activeWifiAuthenticationCaptureController().view() ==
                  WifiAuthenticationCaptureView::Actions ||
-             wifiAuthenticationController.view() ==
+             activeWifiAuthenticationCaptureController().view() ==
                  WifiAuthenticationCaptureView::EvidenceList)) {
-            const bool actions = wifiAuthenticationController.view() ==
+            const WifiAuthenticationCaptureController& controller =
+                activeWifiAuthenticationCaptureController();
+            const bool actions = controller.view() ==
                 WifiAuthenticationCaptureView::Actions;
             const std::size_t selection = actions
-                ? wifiAuthenticationController.actionSelection()
-                : wifiAuthenticationController.evidenceSelection();
+                ? controller.actionSelection()
+                : controller.evidenceSelection();
             const std::size_t count = actions
-                ? wifiAuthenticationController.actionCount()
-                : wifiAuthenticationController.evidenceCount();
+                ? controller.actionCount()
+                : controller.evidenceCount();
             const std::size_t first =
                 selection < WifiAuthenticationCaptureUiModel::
                                 kVisibleRowCapacity
@@ -25535,14 +25965,14 @@ void emitPhysicalSdSessionResetArm(Stream& reply,
             status = "scratch_prepare_failed";
         } else {
             initialCommit = leshy1::storage::commitNextSession(
-                io, sessionStoreWorkspace, littleFsResetSession);
+                io, sessionStoreWorkspace(), littleFsResetSession);
             initialRecovery = leshy1::storage::recoverSession(
-                io, sessionStoreWorkspace,
-                &sessionStoreWorkspace.validationSession);
+                io, sessionStoreWorkspace(),
+                &sessionStoreWorkspace().validationSession);
             priorUnchanged = initialCommit.complete() &&
                 initialCommit.generation == 1 && initialRecovery.valid() &&
                 initialRecovery.generation == 1 &&
-                inspectStoredGeneration(io, sessionStoreWorkspace,
+                inspectStoredGeneration(io, sessionStoreWorkspace(),
                                         littleFsResetSession, 1, &priorEvidence);
             if (!priorUnchanged) {
                 status = "initial_generation_failed";
@@ -25587,7 +26017,7 @@ void emitPhysicalSdSessionResetArm(Stream& reply,
                 leshy1::storage::SessionStoreBoundaryIo injecting(
                     io, boundary, boundaryHook, &hookContext);
                 interruptedCommit = leshy1::storage::commitNextSession(
-                    injecting, sessionStoreWorkspace, littleFsResetSession);
+                    injecting, sessionStoreWorkspace(), littleFsResetSession);
                 boundaryStopped = injecting.stopped();
                 sequenceValid = injecting.sequenceValid();
                 boundariesReached = injecting.boundariesReached();
@@ -25757,11 +26187,11 @@ void emitPhysicalSdSessionResetRecovery(Stream& reply,
         openedReadOnly = io.openExistingReadOnly(permit);
         if (openedReadOnly) {
             priorUnchanged = inspectStoredGeneration(
-                io, sessionStoreWorkspace, littleFsResetSession, 1,
+                io, sessionStoreWorkspace(), littleFsResetSession, 1,
                 &priorEvidence);
             recovery = leshy1::storage::recoverSession(
-                io, sessionStoreWorkspace,
-                &sessionStoreWorkspace.validationSession);
+                io, sessionStoreWorkspace(),
+                &sessionStoreWorkspace().validationSession);
         }
         bytesWritten = io.bytesWritten();
         fileSyncs = io.fileSyncs();
@@ -25991,10 +26421,10 @@ void emitProductStoreBootstrap(Stream& reply,
     leshy1::apps::library::SessionCatalogResult cataloged;
     if (stopped && scannerCleanup && queueDropped == 0) {
         commit = leshy1::storage::commitNextSession(
-            io, sessionStoreWorkspace, surveySession);
+            io, sessionStoreWorkspace(), surveySession);
         if (commit.complete()) {
             cataloged = sessionCatalog.recoverLatest(
-                io, sessionStoreWorkspace, librarySession, libraryController,
+                io, sessionStoreWorkspace(), librarySession, libraryController,
                 true, false);
         }
     }
@@ -26301,8 +26731,8 @@ void emitPhysicalSdSessionStore(Stream& reply, const char* expectedFingerprint,
                 }
                 std::size_t segmentBytes = 0;
                 if (leshy1::storage::encodeObservationSegment(
-                        surveySession, sessionStoreWorkspace.segment.data(),
-                        sessionStoreWorkspace.segment.size(), &segmentBytes) !=
+                        surveySession, sessionStoreWorkspace().segment.data(),
+                        sessionStoreWorkspace().segment.size(), &segmentBytes) !=
                     leshy1::storage::SessionCodecStatus::Valid) {
                     status = "pipeline_snapshot_encode_failed";
                     break;
@@ -26328,7 +26758,7 @@ void emitPhysicalSdSessionStore(Stream& reply, const char* expectedFingerprint,
                 const std::uint64_t commitStarted =
                     static_cast<std::uint64_t>(esp_timer_get_time());
                 commitOne = leshy1::storage::commitNextSession(
-                    io, sessionStoreWorkspace, surveySession);
+                    io, sessionStoreWorkspace(), surveySession);
                 commitOneUs =
                     static_cast<std::uint64_t>(esp_timer_get_time()) -
                     commitStarted;
@@ -26354,8 +26784,8 @@ void emitPhysicalSdSessionStore(Stream& reply, const char* expectedFingerprint,
                 wifiRecordsDropped == 0 && queueDropped == 0 &&
                 sessionAppendDropped == 0 && fixtureObservations != 0) {
                 recoveryBeforeRemount = leshy1::storage::recoverSession(
-                    io, sessionStoreWorkspace,
-                    &sessionStoreWorkspace.validationSession);
+                    io, sessionStoreWorkspace(),
+                    &sessionStoreWorkspace().validationSession);
                 status = recoveryBeforeRemount.valid() &&
                                  recoveryBeforeRemount.generation == 1 &&
                                  recoveryBeforeRemount.observations ==
@@ -26376,7 +26806,7 @@ void emitPhysicalSdSessionStore(Stream& reply, const char* expectedFingerprint,
             const std::uint64_t commitOneStarted =
                 static_cast<std::uint64_t>(esp_timer_get_time());
             commitOne = leshy1::storage::commitNextSession(
-                io, sessionStoreWorkspace, librarySession);
+                io, sessionStoreWorkspace(), librarySession);
             commitOneUs = static_cast<std::uint64_t>(esp_timer_get_time()) -
                           commitOneStarted;
             commitUs[0] = commitOneUs;
@@ -26387,7 +26817,7 @@ void emitPhysicalSdSessionStore(Stream& reply, const char* expectedFingerprint,
                 const std::uint64_t commitTwoStarted =
                     static_cast<std::uint64_t>(esp_timer_get_time());
                 commitTwo = leshy1::storage::commitNextSession(
-                    io, sessionStoreWorkspace, librarySession);
+                    io, sessionStoreWorkspace(), librarySession);
                 commitTwoUs = static_cast<std::uint64_t>(esp_timer_get_time()) -
                               commitTwoStarted;
                 commitUs[1] = commitTwoUs;
@@ -26400,7 +26830,7 @@ void emitPhysicalSdSessionStore(Stream& reply, const char* expectedFingerprint,
                             static_cast<std::uint64_t>(esp_timer_get_time());
                         const leshy1::storage::SessionStoreCommitResult next =
                             leshy1::storage::commitNextSession(
-                                io, sessionStoreWorkspace, librarySession);
+                                io, sessionStoreWorkspace(), librarySession);
                         commitUs[commitsCompleted] =
                             static_cast<std::uint64_t>(esp_timer_get_time()) -
                             commitStarted;
@@ -26412,8 +26842,8 @@ void emitPhysicalSdSessionStore(Stream& reply, const char* expectedFingerprint,
                     }
                     if (commitsCompleted == commitsRequested) {
                         recoveryBeforeRemount = leshy1::storage::recoverSession(
-                            io, sessionStoreWorkspace,
-                            &sessionStoreWorkspace.validationSession);
+                            io, sessionStoreWorkspace(),
+                            &sessionStoreWorkspace().validationSession);
                         status = recoveryBeforeRemount.valid() &&
                                          recoveryBeforeRemount.generation ==
                                              commitsRequested
@@ -26449,8 +26879,8 @@ void emitPhysicalSdSessionStore(Stream& reply, const char* expectedFingerprint,
             reopenedReadOnly = readOnlyIo.openExistingReadOnly(permit);
             if (reopenedReadOnly) {
                 recoveryAfterRemount = leshy1::storage::recoverSession(
-                    readOnlyIo, sessionStoreWorkspace,
-                    &sessionStoreWorkspace.validationSession);
+                    readOnlyIo, sessionStoreWorkspace(),
+                    &sessionStoreWorkspace().validationSession);
             }
             readOnlyIo.end();
         }
@@ -26494,7 +26924,7 @@ void emitPhysicalSdSessionStore(Stream& reply, const char* expectedFingerprint,
             previousLibrary->persistent;
         if (std::strcmp(status, "valid") == 0 &&
             recoveryAfterRemount.valid()) {
-            librarySession = sessionStoreWorkspace.validationSession;
+            librarySession = sessionStoreWorkspace().validationSession;
             libraryController.clear();
             const leshy1::apps::library::SessionCatalogResult cataloged =
                 sessionCatalog.admitRecovered(
@@ -26792,7 +27222,7 @@ void emitPhysicalWifiPassiveIngress(Stream& reply, unsigned samplesRequested) {
     std::uint64_t storageWireBytes = 0;
     std::uint64_t totalScanUs = 0;
     SurveySession& measurementSession =
-        sessionStoreWorkspace.validationSession;
+        sessionStoreWorkspace().validationSession;
     WifiIngressSinkContext sink{&measurementSession};
 
     if (scannerBegun) {
@@ -26815,8 +27245,8 @@ void emitPhysicalWifiPassiveIngress(Stream& reply, unsigned samplesRequested) {
             }
             std::size_t segmentSize = 0;
             if (leshy1::storage::encodeObservationSegment(
-                    measurementSession, sessionStoreWorkspace.segment.data(),
-                    sessionStoreWorkspace.segment.size(), &segmentSize) !=
+                    measurementSession, sessionStoreWorkspace().segment.data(),
+                    sessionStoreWorkspace().segment.size(), &segmentSize) !=
                     leshy1::storage::SessionCodecStatus::Valid ||
                 segmentSize == 0) {
                 break;
@@ -26840,7 +27270,7 @@ void emitPhysicalWifiPassiveIngress(Stream& reply, unsigned samplesRequested) {
         leshy1::services::survey::summarizeIngressRates(
             rates.data(), samplesCompleted);
     measurementSession.reset();
-    sessionStoreWorkspace.segment.fill(0);
+    sessionStoreWorkspace().segment.fill(0);
     const bool scannerEnded = scanner.end();
     resourceBroker.releaseAll(kWifiIngressOwner);
     const std::uint32_t ownedAfter = resourceBroker.ownedBy(kWifiIngressOwner);
@@ -26949,9 +27379,9 @@ void emitSessionFixture(Stream& reply) {
         return;
     }
     auto& summary = sdPhysicalEvidence.summaryA;
-    auto& segment = sessionStoreWorkspace.segment;
-    auto& manifest = sessionStoreWorkspace.manifest;
-    SurveySession& reopened = sessionStoreWorkspace.validationSession;
+    auto& segment = sessionStoreWorkspace().segment;
+    auto& manifest = sessionStoreWorkspace().manifest;
+    SurveySession& reopened = sessionStoreWorkspace().validationSession;
     std::size_t segmentSize = 0;
     std::size_t manifestSize = 0;
     leshy1::storage::SessionCodecStatus status = leshy1::storage::encodeObservationSegment(
@@ -27021,21 +27451,21 @@ void emitSessionStoreFixture(Stream& reply) {
     }
     ramSessionStore.reset();
     const leshy1::storage::SessionStoreCommitResult first =
-        leshy1::storage::commitNextSession(ramSessionStore, sessionStoreWorkspace,
+        leshy1::storage::commitNextSession(ramSessionStore, sessionStoreWorkspace(),
                                            surveySession);
     const leshy1::storage::SessionStoreCommitResult second =
-        leshy1::storage::commitNextSession(ramSessionStore, sessionStoreWorkspace,
+        leshy1::storage::commitNextSession(ramSessionStore, sessionStoreWorkspace(),
                                            surveySession);
-    SurveySession& reopened = sessionStoreWorkspace.validationSession;
+    SurveySession& reopened = sessionStoreWorkspace().validationSession;
     const leshy1::storage::SessionStoreRecoveryResult newest =
-        leshy1::storage::recoverSession(ramSessionStore, sessionStoreWorkspace, &reopened);
+        leshy1::storage::recoverSession(ramSessionStore, sessionStoreWorkspace(), &reopened);
     auto& summary = sdPhysicalEvidence.summaryA;
     const bool summaryReady = newest.valid() &&
                               leshy1::storage::formatSessionJsonSummary(
                                   reopened, summary, sizeof(summary));
     const bool corrupted = ramSessionStore.flipSegmentByte(2, 0);
     const leshy1::storage::SessionStoreRecoveryResult fallback =
-        leshy1::storage::recoverSession(ramSessionStore, sessionStoreWorkspace, &reopened);
+        leshy1::storage::recoverSession(ramSessionStore, sessionStoreWorkspace(), &reopened);
     const bool restored = ramSessionStore.flipSegmentByte(2, 0);
     const bool valid = first.complete() && first.generation == 1 &&
                        first.publishedSlot == leshy1::storage::HeadSlot::A &&
@@ -27173,7 +27603,7 @@ void emitLibraryCsvExport(Stream& reply) {
     }
     const auto& capture = entry->session->captureMetadata();
     if (capture.subGhzRawCaptured) {
-        if (entry->generation != sessionStoreWorkspace.generation) {
+        if (entry->generation != sessionStoreWorkspace().generation) {
             reply.println(
                 "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"error\","
                 "\"reason\":\"generation_not_loaded\","
@@ -27183,8 +27613,8 @@ void emitLibraryCsvExport(Stream& reply) {
         leshy1::storage::PersistedSubGhzRawCaptureView persisted;
         const auto opened =
             leshy1::storage::openPersistedSubGhzRawCapture(
-                *entry->session, sessionStoreWorkspace.segment.data(),
-                sessionStoreWorkspace.segmentSize, &persisted);
+                *entry->session, sessionStoreWorkspace().segment.data(),
+                sessionStoreWorkspace().segmentSize, &persisted);
         if (opened != leshy1::storage::SessionCodecStatus::Valid) {
             std::snprintf(
                 diagnosticJson, sizeof(diagnosticJson),
@@ -27243,7 +27673,7 @@ void emitLibraryCsvExport(Stream& reply) {
         return;
     }
     if (capture.infraredRawCaptured) {
-        if (entry->generation != sessionStoreWorkspace.generation) {
+        if (entry->generation != sessionStoreWorkspace().generation) {
             reply.println(
                 "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"error\","
                 "\"reason\":\"generation_not_loaded\","
@@ -27252,8 +27682,8 @@ void emitLibraryCsvExport(Stream& reply) {
         }
         leshy1::storage::PersistedInfraredRawCaptureView persisted;
         const auto opened = leshy1::storage::openPersistedInfraredRawCapture(
-            *entry->session, sessionStoreWorkspace.segment.data(),
-            sessionStoreWorkspace.segmentSize, &persisted);
+            *entry->session, sessionStoreWorkspace().segment.data(),
+            sessionStoreWorkspace().segmentSize, &persisted);
         if (opened != leshy1::storage::SessionCodecStatus::Valid) {
             std::snprintf(
                 diagnosticJson, sizeof(diagnosticJson),
@@ -27385,7 +27815,7 @@ void emitLibraryPcapStatus(Stream& reply) {
         }
         return;
     }
-    if (entry->generation != sessionStoreWorkspace.generation) {
+    if (entry->generation != sessionStoreWorkspace().generation) {
         reply.println(
             "{\"schema\":\"leshy.library.pcap.v1\",\"kind\":\"error\","
             "\"reason\":\"generation_not_loaded\",\"radio_touched\":false}");
@@ -27393,8 +27823,8 @@ void emitLibraryPcapStatus(Stream& reply) {
     }
     leshy1::storage::PersistedWifiFrameCaptureView persisted;
     const auto opened = leshy1::storage::openPersistedWifiFrameCapture(
-        *entry->session, sessionStoreWorkspace.segment.data(),
-        sessionStoreWorkspace.segmentSize, &persisted);
+        *entry->session, sessionStoreWorkspace().segment.data(),
+        sessionStoreWorkspace().segmentSize, &persisted);
     if (opened != leshy1::storage::SessionCodecStatus::Valid) {
         std::snprintf(
             diagnosticJson, sizeof(diagnosticJson),
@@ -27454,6 +27884,9 @@ void emitHilSessionBegin(Stream& reply, const char* command) {
     }
     char line[384] = {};
     if (status == HilSessionStatus::Begun) {
+        wifiAuthenticationSyntheticHilFixture.resetForSession();
+        clearWifiAuthenticationSyntheticHilState();
+        wifiAuthenticationRepeatRequested = false;
         std::snprintf(
             line, sizeof(line),
             "{\"schema\":\"leshy.hil.session.v1\",\"kind\":\"begun\","
@@ -27496,6 +27929,20 @@ void emitHilSessionEnd(Stream& reply, const char* command) {
         clearWebCompanionHilEntropy();
         setAirspaceGuardBleCapacityDropInjection(false);
         clearWifiAuthenticationSurveyTerminalHold();
+        wifiAuthenticationSyntheticHilFixture.resetForSession();
+        const bool syntheticWasActive = wifiAuthenticationSynthetic;
+        clearWifiAuthenticationSyntheticHilState();
+        wifiAuthenticationRepeatRequested = false;
+        if (syntheticWasActive) {
+            if (wifiProductView ==
+                WifiProductView::AuthenticationCapture) {
+                wifiProductView = WifiProductView::Menu;
+                wifiProductSelection = 0U;
+            }
+            wifiAuthenticationProductState =
+                WifiAuthenticationProductState::Idle;
+            renderInteractiveScreen(true);
+        }
     }
     char line[256] = {};
     if (status == HilSessionStatus::Ended) {
@@ -28539,6 +28986,75 @@ void emitWifiAuthenticationHilHold(Stream& reply) {
     reply.println(line);
 }
 
+void emitWifiAuthenticationSyntheticHilReport(Stream& reply) {
+    const auto ingress = wifiFrameCapture.authenticationCaptureStats();
+    const WifiAuthenticationSyntheticHilContext context{
+        hilSession.active(),
+        wifiProductView == WifiProductView::AuthenticationCapture,
+        wifiAuthenticationProductState ==
+            WifiAuthenticationProductState::Result,
+        wifiFrameCapture.cleanupComplete() && ingress.cleanupComplete &&
+            !ingress.active,
+        !ingress.active,
+        resourceBroker.ownerOf(Resource::EspRf) ==
+                AppRuntime::kForegroundOwner &&
+            std::strcmp(appRuntime.activeApp(), "wifi") == 0,
+        wifiAuthenticationTarget.channel,
+        millis(),
+    };
+    const WifiAuthenticationSyntheticHilStatus status =
+        wifiAuthenticationSyntheticHilFixture.loadOnce(
+            context, &wifiAuthenticationSyntheticHilReport,
+            &wifiAuthenticationSyntheticHilController);
+    const bool loaded =
+        status == WifiAuthenticationSyntheticHilStatus::Loaded;
+    const bool displayTouched = loaded;
+    if (loaded) {
+        wifiAuthenticationSynthetic = true;
+        wifiAuthenticationRepeatRequested = false;
+        wifiAuthenticationRenderedModelValid = false;
+        display.startWrite();
+        renderWifiAuthenticationCapture(false);
+        renderNavigationFooter();
+        display.endWrite();
+        lastRuntimeEvent = "authentication_synthetic_hil_loaded";
+    }
+    const bool replayed = status ==
+        WifiAuthenticationSyntheticHilStatus::ReplayRejected;
+    char line[768] = {};
+    const int formatted = std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.wifi.authentication.synthetic_fixture.v1\","
+        "\"kind\":\"%s\",\"status\":\"%s\",\"loaded\":%s,"
+        "\"synthetic\":true,\"profile\":\"%s\","
+        "\"report_identity\":\"%s\",\"report_origin\":\"synthetic_hil\","
+        "\"one_shot\":true,\"replayed\":%s,\"hil_active\":%s,"
+        "\"display_touched\":%s,\"rf_hardware_touched\":false,"
+        "\"radio_started\":false,"
+        "\"persistence_allowed\":false,\"export_allowed\":false,"
+        "\"storage_mounted\":false,\"storage_written\":false,"
+        "\"connect_calls\":0,\"raw_tx_calls\":0,\"generation\":%lu,"
+        "\"response_complete\":true}",
+        loaded ? "loaded" : "error",
+        leshy1::apps::auth::wifiAuthenticationSyntheticHilStatusName(
+            status),
+        loaded ? "true" : "false",
+        WifiAuthenticationSyntheticHilFixture::kProfile,
+        WifiAuthenticationSyntheticHilFixture::kReportIdentity,
+        replayed ? "true" : "false",
+        hilSession.active() ? "true" : "false",
+        displayTouched ? "true" : "false",
+        static_cast<unsigned long>(wifiAuthenticationGeneration));
+    if (formatted < 0 ||
+        static_cast<std::size_t>(formatted) >= sizeof(line)) {
+        reply.println(loaded
+            ? "{\"schema\":\"leshy.wifi.authentication.synthetic_fixture.v1\",\"kind\":\"error\",\"status\":\"response_truncated\",\"loaded\":true,\"synthetic\":true,\"display_touched\":true,\"rf_hardware_touched\":false,\"radio_started\":false,\"persistence_allowed\":false,\"export_allowed\":false,\"response_complete\":false}"
+            : "{\"schema\":\"leshy.wifi.authentication.synthetic_fixture.v1\",\"kind\":\"error\",\"status\":\"response_truncated\",\"loaded\":false,\"synthetic\":true,\"display_touched\":false,\"rf_hardware_touched\":false,\"radio_started\":false,\"persistence_allowed\":false,\"export_allowed\":false,\"response_complete\":false}");
+        return;
+    }
+    reply.println(line);
+}
+
 void emitWifiAuthenticationCaptureState(Stream& reply) {
     const auto capture = wifiFrameCapture.stats();
     const auto ingress = wifiFrameCapture.authenticationCaptureStats();
@@ -28546,14 +29062,35 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
     const WifiAuthenticationCaptureUiModel presenter =
         leshy1::ui::presentWifiAuthenticationCapture(
             wifiAuthenticationCaptureUiInput());
-    const auto& counters = wifiAuthenticationReport.counters;
+    const WifiAuthenticationCaptureReport& report =
+        activeWifiAuthenticationCaptureReport();
+    const WifiAuthenticationCaptureController& controller =
+        activeWifiAuthenticationCaptureController();
+    const auto& counters = report.counters;
     std::size_t completePeers = 0;
+    std::size_t partialPeers = 0;
     for (std::size_t index = 0;
-         index < wifiAuthenticationReport.peerCount; ++index) {
-        if (wifiAuthenticationReport.peers[index].complete) {
+         index < report.peerCount; ++index) {
+        if (report.peers[index].complete) {
             ++completePeers;
+        } else if (report.peers[index].messageMask != 0U) {
+            ++partialPeers;
         }
     }
+    const bool controllerReady = controller.ready();
+    const char* reportOrigin = wifiAuthenticationSynthetic
+        ? "synthetic_hil"
+        : (controllerReady && wifiAuthenticationProductState ==
+                    WifiAuthenticationProductState::Result
+               ? "ambient_rf" : "none");
+    const auto* selectedPeer = controllerReady
+        ? controller.selectedPeer() : nullptr;
+    const auto* selectedEvidence = controllerReady
+        ? controller.selectedEvidence() : nullptr;
+    const std::size_t selectedEvidenceReportIndex = controllerReady
+        ? controller.selectedEvidenceReportIndex() : 0U;
+    const bool presenterSyntheticLabelVisible = presenter.synthetic &&
+        presenter.note == UiTextId::SimulatedData;
     const std::uint64_t analysisReported =
         static_cast<std::uint64_t>(ingress.candidates) +
         ingress.framesInvalid;
@@ -28565,13 +29102,27 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
         analysisAccounted == analysisReported &&
         capture.framesReported == ingress.candidates &&
         capture.framesAccepted == ingress.candidatesAccepted;
+    char productionReportFingerprint[17] = {};
+    const bool productionReportFingerprintAvailable =
+        formatWifiAuthenticationProductionReportFingerprint(
+            productionReportFingerprint,
+            sizeof(productionReportFingerprint));
     auto& line = diagnosticJson;
     line[0] = '\0';
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.wifi.authentication_capture.v1\","
         "\"kind\":\"state\",\"view\":\"%s\",\"state\":\"%s\","
+        "\"synthetic\":%s,\"report_origin\":\"%s\","
         "\"generation\":%lu,\"cancel_pending\":%s,"
+        "\"production_report_fingerprint\":\"%s\","
+        "\"production_report_fingerprint_scope\":\"%s\","
+        "\"production_controller_ready\":%s,"
+        "\"production_controller_view\":\"%s\","
+        "\"production_controller_action_selection\":%u,"
+        "\"production_controller_peer_selection\":%u,"
+        "\"production_controller_evidence_selection\":%u,"
+        "\"production_controller_report_bound\":%s,"
         "\"back_during_wait_observed\":%s,\"failure\":\"%s\","
         "\"survey_terminal_hold_armed\":%s,"
         "\"adapter_driver_error\":%ld,"
@@ -28599,7 +29150,33 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
         "\"presenter_evidence_incomplete\":%s,"
         "\"presenter_report_openable\":%s,"
         "\"presenter_cleanup_complete\":%s,"
-        "\"presenter_row_count\":%u,"
+        "\"presenter_row_count\":%u,\"presenter_title\":%u,"
+        "\"presenter_headline\":%u,\"presenter_note\":%u,"
+        "\"presenter_synthetic\":%s,"
+        "\"presenter_synthetic_label_visible\":%s,"
+        "\"presenter_title_semantic\":\"%s\","
+        "\"presenter_headline_semantic\":\"%s\","
+        "\"presenter_note_semantic\":\"%s\","
+        "\"synthetic_persistence_allowed\":false,"
+        "\"synthetic_export_allowed\":false,"
+        "\"controller_ready\":%s,\"controller_view\":\"%s\","
+        "\"controller_action_count\":%u,"
+        "\"controller_action_selection\":%u,"
+        "\"controller_selected_action\":\"%s\","
+        "\"controller_peer_count\":%u,"
+        "\"controller_peer_selection\":%u,"
+        "\"controller_peer_position\":%u,"
+        "\"controller_selected_peer_mask\":%u,"
+        "\"controller_selected_peer_evidence_count\":%u,"
+        "\"controller_evidence_count\":%u,"
+        "\"controller_evidence_selection\":%u,"
+        "\"controller_selected_evidence_present\":%s,"
+        "\"controller_selected_evidence_report_index\":%u,"
+        "\"controller_selected_evidence_source_frame\":%u,"
+        "\"controller_selected_evidence_message\":\"%s\","
+        "\"controller_selected_evidence_has_pmkid\":%s,"
+        "\"repeat_requested\":%s,"
+        "\"repeat_request_generation\":%lu,"
         "\"source_frames\":%lu,\"frames_read\":%lu,"
         "\"data_frames\":%lu,\"analysis_frames_ignored\":%lu,"
         "\"eapol_frames\":%lu,\"eapol_key_frames\":%lu,"
@@ -28616,6 +29193,7 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
         "\"report_capture_frames_dropped_invalid\":%lu,"
         "\"outcome\":\"%s\",\"uncertainty\":%u,"
         "\"evidence\":%u,\"peers\":%u,\"complete_peers\":%u,"
+        "\"partial_peers\":%u,"
         "\"pmkids\":%u,"
         "\"content_repaints\":%lu,\"full_repaints\":%lu,"
         "\"chrome_repaints\":%lu,"
@@ -28625,8 +29203,24 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
         wifiProductViewName(wifiProductView),
         wifiAuthenticationProductStateName(
             wifiAuthenticationProductState),
+        wifiAuthenticationSynthetic ? "true" : "false",
+        reportOrigin,
         static_cast<unsigned long>(wifiAuthenticationGeneration),
         wifiAuthenticationReturnAfterSurveyStop ? "true" : "false",
+        productionReportFingerprintAvailable
+            ? productionReportFingerprint : "unavailable",
+        productionReportFingerprintAvailable ? "hil_session" : "none",
+        wifiAuthenticationController.ready() ? "true" : "false",
+        wifiAuthenticationController.ready()
+            ? leshy1::apps::auth::wifiAuthenticationCaptureViewName(
+                  wifiAuthenticationController.view())
+            : "unavailable",
+        static_cast<unsigned>(wifiAuthenticationController.actionSelection()),
+        static_cast<unsigned>(wifiAuthenticationController.peerSelection()),
+        static_cast<unsigned>(
+            wifiAuthenticationController.evidenceSelection()),
+        wifiAuthenticationController.report() == &wifiAuthenticationReport
+            ? "true" : "false",
         wifiAuthenticationBackDuringWaitObserved ? "true" : "false",
         wifiAuthenticationUiFailureName(wifiAuthenticationFailure),
         wifiAuthenticationSurveyTerminalHoldArmed ? "true" : "false",
@@ -28666,6 +29260,57 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
         presenter.reportOpenable ? "true" : "false",
         presenter.cleanupComplete ? "true" : "false",
         static_cast<unsigned>(presenter.rowCount),
+        static_cast<unsigned>(presenter.title),
+        static_cast<unsigned>(presenter.headline),
+        static_cast<unsigned>(presenter.note),
+        presenter.synthetic ? "true" : "false",
+        presenterSyntheticLabelVisible ? "true" : "false",
+        wifiAuthenticationPresenterTitleSemantic(presenter.title),
+        wifiAuthenticationPresenterHeadlineSemantic(presenter.headline),
+        wifiAuthenticationPresenterNoteSemantic(presenter.note),
+        controllerReady ? "true" : "false",
+        controllerReady
+            ? leshy1::apps::auth::wifiAuthenticationCaptureViewName(
+                  controller.view())
+            : "unavailable",
+        static_cast<unsigned>(controllerReady
+            ? controller.actionCount() : 0U),
+        static_cast<unsigned>(controllerReady
+            ? controller.actionSelection() : 0U),
+        controllerReady
+            ? leshy1::apps::auth::wifiAuthenticationCaptureActionName(
+                  controller.selectedAction())
+            : "none",
+        static_cast<unsigned>(controllerReady
+            ? controller.peerCount() : 0U),
+        static_cast<unsigned>(controllerReady
+            ? controller.peerSelection() : 0U),
+        static_cast<unsigned>(controllerReady
+            ? controller.selectedPeerPosition() : 0U),
+        static_cast<unsigned>(selectedPeer != nullptr
+            ? selectedPeer->messageMask : 0U),
+        static_cast<unsigned>(controllerReady
+            ? controller.selectedPeerEvidenceCount()
+            : 0U),
+        static_cast<unsigned>(controllerReady
+            ? controller.evidenceCount() : 0U),
+        static_cast<unsigned>(controllerReady
+            ? controller.evidenceSelection() : 0U),
+        selectedEvidence != nullptr ? "true" : "false",
+        static_cast<unsigned>(selectedEvidence != nullptr
+            ? selectedEvidenceReportIndex : 0U),
+        static_cast<unsigned>(selectedEvidence != nullptr
+            ? selectedEvidence->sourceFrameIndex : 0U),
+        selectedEvidence != nullptr
+            ? leshy1::services::auth::wifiEapolKeyMessageName(
+                  selectedEvidence->message)
+            : "unknown",
+        controllerReady &&
+                controller.selectedEvidenceHasPmkid()
+            ? "true" : "false",
+        wifiAuthenticationRepeatRequested ? "true" : "false",
+        static_cast<unsigned long>(
+            wifiAuthenticationRepeatRequestGeneration),
         static_cast<unsigned long>(counters.sourceFrames),
         static_cast<unsigned long>(counters.framesRead),
         static_cast<unsigned long>(counters.dataFrames),
@@ -28688,12 +29333,13 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
             counters.captureFramesDroppedCapacity),
         static_cast<unsigned long>(counters.captureFramesDroppedInvalid),
         leshy1::services::auth::wifiAuthenticationCaptureOutcomeName(
-            wifiAuthenticationReport.outcome),
-        static_cast<unsigned>(wifiAuthenticationReport.uncertainty),
-        static_cast<unsigned>(wifiAuthenticationReport.evidenceCount),
-        static_cast<unsigned>(wifiAuthenticationReport.peerCount),
+            report.outcome),
+        static_cast<unsigned>(report.uncertainty),
+        static_cast<unsigned>(report.evidenceCount),
+        static_cast<unsigned>(report.peerCount),
         static_cast<unsigned>(completePeers),
-        static_cast<unsigned>(wifiAuthenticationReport.pmkidCount),
+        static_cast<unsigned>(partialPeers),
+        static_cast<unsigned>(report.pmkidCount),
         static_cast<unsigned long>(wifiAuthenticationContentRepaints),
         static_cast<unsigned long>(wifiAuthenticationFullRepaints),
         static_cast<unsigned long>(wifiAuthenticationChromeRepaints),
@@ -28813,6 +29459,44 @@ bool commandAllowedDuringSafetyStop(const char* command) {
            std::strcmp(command, "input.state") == 0 ||
            std::strcmp(command, "touch.state") == 0 ||
            std::strcmp(command, "storage.product.boot-recovery") == 0;
+}
+
+const char* targetsStoreCodecWorkspaceOwnerName() {
+    switch (targetsStoreCodecWorkspaceOwner) {
+        case TargetsStoreCodecWorkspaceOwner::Session: return "session";
+        case TargetsStoreCodecWorkspaceOwner::TargetDecision:
+            return "target_decision";
+        case TargetsStoreCodecWorkspaceOwner::AdmissionScratch:
+            return "admission_scratch";
+        case TargetsStoreCodecWorkspaceOwner::Spectrum: return "spectrum";
+    }
+    return "unknown";
+}
+
+bool commandAllowedWhileSessionWorkspaceBorrowed(const char* command) {
+    if (command == nullptr) return false;
+    const bool spectrumOwner = targetsStoreCodecWorkspaceOwner ==
+        TargetsStoreCodecWorkspaceOwner::Spectrum;
+    return std::strncmp(command, "hil.begin ", 10) == 0 ||
+           std::strcmp(command, "hil.state") == 0 ||
+           std::strncmp(command, "hil.end ", 8) == 0 ||
+           std::strcmp(command, "metrics") == 0 ||
+           std::strcmp(command, "inventory") == 0 ||
+           std::strcmp(command, "hardware.safe-outputs") == 0 ||
+           std::strcmp(command, "hardware.nrf24.spectrum") == 0 ||
+           std::strcmp(command, "hardware.nrf24.finder") == 0 ||
+           std::strcmp(command, "hardware.cc1101.spectrum") == 0 ||
+           std::strcmp(command, "hardware.cc1101.finder") == 0 ||
+           std::strcmp(command, "safety.state") == 0 ||
+           std::strcmp(command, "ping") == 0 ||
+           std::strcmp(command, "ui.state") == 0 ||
+           std::strcmp(command, "ui.capture") == 0 ||
+           std::strcmp(command, "input.state") == 0 ||
+           std::strcmp(command, "touch.state") == 0 ||
+           std::strcmp(command, "self-test.report") == 0 ||
+           std::strcmp(command, "self-test.active-rf") == 0 ||
+           (spectrumOwner && std::strncmp(command, "ui.key ", 7) == 0) ||
+           (spectrumOwner && std::strncmp(command, "ui.touch ", 9) == 0);
 }
 
 void addCompanionSessionBinding(
@@ -29254,6 +29938,18 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
             "\"reason\":\"safety_latched\"}");
         return;
     }
+    if (!sessionStoreWorkspaceAvailable() &&
+        !commandAllowedWhileSessionWorkspaceBorrowed(command)) {
+        char line[160] = {};
+        std::snprintf(
+            line, sizeof(line),
+            "{\"schema\":\"leshy.shared_workspace.v1\","
+            "\"kind\":\"blocked\",\"reason\":\"session_workspace_borrowed\","
+            "\"owner\":\"%s\"}",
+            targetsStoreCodecWorkspaceOwnerName());
+        reply.println(line);
+        return;
+    }
     if (companionAllowed && command[0] == '{') {
         handleUsbCompanionFrame(reply, command, capacity);
         return;
@@ -29374,6 +30070,11 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
                    command,
                    "wifi.authentication.hil-hold-survey-stop once") == 0) {
         emitWifiAuthenticationHilHold(reply);
+    } else if (std::strcmp(
+                   command,
+                   "wifi.authentication.hil-load-synthetic-report once") ==
+               0) {
+        emitWifiAuthenticationSyntheticHilReport(reply);
     } else if (std::strcmp(command, "wifi.authentication.state") == 0) {
         emitWifiAuthenticationCaptureState(reply);
     } else if (std::strcmp(command, "ble.device.detail") == 0) {
@@ -30060,6 +30761,7 @@ void setup() {
               "\"hil.state\","
               "\"hil.end <session-id>\","
               "\"wifi.authentication.hil-hold-survey-stop once\","
+              "\"wifi.authentication.hil-load-synthetic-report once\","
               "\"metrics\",\"inventory\",\"hardware.safe-outputs\",\"ping\","
               "\"power.state\",\"power.low-voltage-test confirm\","
               "\"power.sleep-test confirm\",\"power.sleep-test state\","
@@ -30146,7 +30848,9 @@ void loop() {
         ++spectrumLoopCount;
     }
     serviceWorkerDeadlineSupervisor();
+    serviceWifiAuthenticationSyntheticHilExpiry();
     if (safetySupervisor.latched()) {
+        quiesceSpectrumOnSafetyStop();
         quiesceAirspaceGuardOnSafetyStop();
         quiesceWifiAuthenticationOnSafetyStop();
     }

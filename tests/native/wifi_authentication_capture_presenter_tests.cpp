@@ -46,7 +46,7 @@ void setEvidence(WifiAuthenticationCaptureReport& report, std::size_t index,
     auto& evidence = report.evidence[index];
     evidence.monotonicUs = 1000000ULL +
         static_cast<std::uint64_t>(sourceFrame) * 100000ULL;
-    evidence.sourceFrameIndex = sourceFrame;
+    evidence.sourceFrameIndex = static_cast<std::uint8_t>(sourceFrame);
     evidence.channel = 6U;
     evidence.rssiDbm = static_cast<std::int16_t>(
         -42 - static_cast<std::int16_t>(index));
@@ -268,10 +268,18 @@ void testResultActionsPeerAndEvidenceDrilldown() {
     WifiAuthenticationCaptureController controller;
     CHECK(controller.load(report) ==
           WifiAuthenticationCaptureLoadStatus::Ready);
+    const auto outcome = presentWifiAuthenticationCapture(
+        reportInput(report, controller));
     CHECK(controller.openSelected());
     const auto actions = presentWifiAuthenticationCapture(
         reportInput(report, controller));
     CHECK(actions.view == WifiAuthenticationCaptureUiView::Actions);
+    CHECK(actions.title == UiTextId::WifiAuthActionsHeadline);
+    const auto outcomeToActions = diffWifiAuthenticationCaptureUi(
+        outcome, actions);
+    CHECK((outcomeToActions.fixedRegionMask &
+           kWifiAuthenticationTitleRegion) != 0U);
+    CHECK(!outcomeToActions.fullScreenClear);
     CHECK(actions.rowCount == 2U);
     CHECK(actions.rows[0].selected);
     CHECK(actions.rows[0].metric ==
@@ -330,6 +338,30 @@ void testPeerToneChangeRepaintsColoredRegionsWithoutClearing() {
     CHECK(!delta.fullScreenClear);
 }
 
+void testSyntheticHilReportIsVisiblyAndStructurallyDistinct() {
+    WifiAuthenticationCaptureReport report = completeReport();
+    WifiAuthenticationCaptureController controller;
+    CHECK(controller.load(report) ==
+          WifiAuthenticationCaptureLoadStatus::Ready);
+    const auto ambient = presentWifiAuthenticationCapture(
+        reportInput(report, controller));
+    auto syntheticInput = reportInput(report, controller);
+    syntheticInput.synthetic = true;
+    const auto synthetic = presentWifiAuthenticationCapture(syntheticInput);
+    CHECK(!ambient.synthetic);
+    CHECK(synthetic.synthetic);
+    CHECK(ambient.note == UiTextId::WifiAuthVolatileNote);
+    CHECK(synthetic.note == UiTextId::SimulatedData);
+    const auto delta = diffWifiAuthenticationCaptureUi(ambient, synthetic);
+    CHECK((delta.fixedRegionMask & kWifiAuthenticationNoteRegion) != 0U);
+    CHECK(!delta.fullScreenClear);
+
+    auto invalidRunning = runningInput();
+    invalidRunning.synthetic = true;
+    CHECK(presentWifiAuthenticationCapture(invalidRunning).failure ==
+          WifiAuthenticationCaptureUiFailure::InvalidPresentationInput);
+}
+
 void testFailClosedInputs() {
     auto invalidRunning = runningInput();
     invalidRunning.progress.framesReported = 8U;
@@ -364,6 +396,7 @@ int main() {
     testInconclusiveShowsExactReason();
     testResultActionsPeerAndEvidenceDrilldown();
     testPeerToneChangeRepaintsColoredRegionsWithoutClearing();
+    testSyntheticHilReportIsVisiblyAndStructurallyDistinct();
     testFailClosedInputs();
     std::puts("Wi-Fi authentication capture presenter tests passed");
     return 0;

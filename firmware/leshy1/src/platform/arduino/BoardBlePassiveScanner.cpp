@@ -8,6 +8,7 @@
 
 #include <esp_err.h>
 #include <esp32-hal-alloc-ble-mem.h>
+#include <esp_heap_caps.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
@@ -56,6 +57,7 @@ std::atomic_bool processControllerAvailable{false};
 std::atomic_bool processNimbleSynced{false};
 std::atomic_bool processNimbleHostRunning{false};
 std::atomic<std::uint8_t> processOwnAddressType{BLE_OWN_ADDR_PUBLIC};
+std::atomic_int processNimbleSyncError{0};
 
 struct RawScanContext final {
     std::array<std::array<std::uint8_t, 6>, 128> seenAddresses{};
@@ -490,7 +492,8 @@ void drainReports(RawScanContext* context) {
     }
 }
 
-void handleNimbleReset(int) {
+void handleNimbleReset(int reason) {
+    processNimbleSyncError.store(reason, std::memory_order_release);
     processNimbleSynced = false;
     processControllerAvailable = false;
 }
@@ -507,12 +510,14 @@ void handleNimbleSync() {
         ? ble_hs_id_infer_auto(0, &ownAddressType)
         : ensured;
     if (inferred != 0) {
+        processNimbleSyncError.store(inferred, std::memory_order_release);
         processControllerAvailable.store(false, std::memory_order_release);
         processNimbleSynced.store(false, std::memory_order_release);
         return;
     }
     processOwnAddressType.store(
         ownAddressType, std::memory_order_release);
+    processNimbleSyncError.store(0, std::memory_order_release);
     processNimbleSynced.store(true, std::memory_order_release);
 }
 
@@ -555,13 +560,31 @@ bool shutdownProcessControllerObserver() {
     return stopRequested && deinitialized;
 }
 
-bool initializeProcessControllerObserver() {
+bool initializeProcessControllerObserver(
+    BoardBleBeginDiagnostic* diagnostic) {
     if (processControllerInitialized) {
-        return processControllerAvailable && processNimbleSynced &&
+        const bool ready = processControllerAvailable && processNimbleSynced &&
             ble_hs_synced();
+        if (diagnostic != nullptr) {
+            diagnostic->stage = ready ? BoardBleBeginStage::ReusedReady
+                                      : BoardBleBeginStage::HostSync;
+            diagnostic->error = ready
+                ? 0 : processNimbleSyncError.load(std::memory_order_acquire);
+            if (!ready && diagnostic->error == 0) {
+                diagnostic->error = ESP_ERR_INVALID_STATE;
+            }
+        }
+        if (!ready) {
+            const bool cleanupComplete = shutdownProcessControllerObserver();
+            if (diagnostic != nullptr) {
+                diagnostic->cleanupComplete = cleanupComplete;
+            }
+        }
+        return ready;
     }
     clearReportQueue();
     setAcceptingReports(false);
+    processNimbleSyncError.store(0, std::memory_order_release);
 
     // esp32-hal-alloc-ble-mem.h registers this low-level adapter as a BLE
     // consumer before initArduino(). Without that constructor marker the core
@@ -575,7 +598,12 @@ bool initializeProcessControllerObserver() {
     // competing for the same internal heap. This adapter never calls
     // advertising, initiating, connecting or active-scan APIs, so no RF-TX operation
     // is reachable from the product observer.
-    if (nimble_port_init() != ESP_OK) {
+    if (diagnostic != nullptr) {
+        diagnostic->stage = BoardBleBeginStage::ControllerInit;
+    }
+    const int initError = nimble_port_init();
+    if (initError != ESP_OK) {
+        if (diagnostic != nullptr) diagnostic->error = initError;
         return false;
     }
     processControllerInitialized = true;
@@ -588,6 +616,9 @@ bool initializeProcessControllerObserver() {
     ble_hs_cfg.sm_sc = 0U;
     processNimbleSynced = false;
     processNimbleHostRunning = false;
+    if (diagnostic != nullptr) {
+        diagnostic->stage = BoardBleBeginStage::HostSync;
+    }
     nimble_port_freertos_init(runProcessNimbleHost);
 
     const std::uint64_t deadlineUs =
@@ -598,10 +629,21 @@ bool initializeProcessControllerObserver() {
         vTaskDelay(pdMS_TO_TICKS(1U));
     }
     if (!processNimbleSynced || !ble_hs_synced()) {
-        shutdownProcessControllerObserver();
+        int syncError =
+            processNimbleSyncError.load(std::memory_order_acquire);
+        if (syncError == 0) syncError = ESP_ERR_TIMEOUT;
+        if (diagnostic != nullptr) diagnostic->error = syncError;
+        const bool cleanupComplete = shutdownProcessControllerObserver();
+        if (diagnostic != nullptr) {
+            diagnostic->cleanupComplete = cleanupComplete;
+        }
         return false;
     }
     processControllerAvailable = true;
+    if (diagnostic != nullptr) {
+        diagnostic->stage = BoardBleBeginStage::Ready;
+        diagnostic->error = 0;
+    }
     return true;
 }
 
@@ -623,8 +665,31 @@ const char* boardBleScanStatusName(BoardBleScanStatus status) {
     return "unknown";
 }
 
+const char* boardBleBeginStageName(BoardBleBeginStage stage) {
+    switch (stage) {
+        case BoardBleBeginStage::NotAttempted: return "not_attempted";
+        case BoardBleBeginStage::ReusedReady: return "reused_ready";
+        case BoardBleBeginStage::ControllerInit: return "controller_init";
+        case BoardBleBeginStage::HostSync: return "host_sync";
+        case BoardBleBeginStage::Ready: return "ready";
+    }
+    return "unknown";
+}
+
 bool BoardBlePassiveScanner::begin() {
-    if (initialized_) return true;
+    beginDiagnostic_ = {};
+    beginDiagnostic_.heapFreeBefore = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    beginDiagnostic_.heapLargestBefore = static_cast<std::uint32_t>(
+        heap_caps_get_largest_free_block(
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    if (initialized_) {
+        beginDiagnostic_.stage = BoardBleBeginStage::ReusedReady;
+        beginDiagnostic_.heapFreeAfter = beginDiagnostic_.heapFreeBefore;
+        beginDiagnostic_.heapLargestAfter = beginDiagnostic_.heapLargestBefore;
+        beginDiagnostic_.cleanupComplete = false;
+        return true;
+    }
     cancelRequested_.store(false, std::memory_order_release);
     cleanupComplete_ = false;
     passiveOnly_ = true;
@@ -634,11 +699,18 @@ bool BoardBlePassiveScanner::begin() {
     // Storage admission and its FAT mount have already completed and released
     // their heap. Only passive ble_gap_disc() is exposed by this adapter; no
     // advertising, initiating, connecting or active scanning is representable.
-    if (!initializeProcessControllerObserver()) {
-        cleanupComplete_ = true;
+    const bool ready = initializeProcessControllerObserver(&beginDiagnostic_);
+    beginDiagnostic_.heapFreeAfter = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    beginDiagnostic_.heapLargestAfter = static_cast<std::uint32_t>(
+        heap_caps_get_largest_free_block(
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    if (!ready) {
+        cleanupComplete_ = beginDiagnostic_.cleanupComplete;
         return false;
     }
     initialized_ = true;
+    beginDiagnostic_.cleanupComplete = false;
     return true;
 }
 
@@ -731,6 +803,7 @@ bool BoardBlePassiveScanner::end() {
     complete = shutdownProcessControllerObserver() && complete;
     cleanupComplete_ = complete && !processControllerReady() &&
         !processNimbleHostRunning && !processControllerInitialized;
+    beginDiagnostic_.cleanupComplete = cleanupComplete_;
     return cleanupComplete_;
 }
 

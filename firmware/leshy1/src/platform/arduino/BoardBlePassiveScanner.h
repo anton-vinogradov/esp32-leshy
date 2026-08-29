@@ -28,6 +28,29 @@ enum class BoardBleScanStatus : std::uint8_t {
 
 const char* boardBleScanStatusName(BoardBleScanStatus status);
 
+enum class BoardBleBeginStage : std::uint8_t {
+    NotAttempted,
+    ReusedReady,
+    ControllerInit,
+    HostSync,
+    Ready,
+};
+
+const char* boardBleBeginStageName(BoardBleBeginStage stage);
+
+// Bounded, PII-free evidence for the most recent controller/host bootstrap.
+// The exact native error and internal-heap snapshots make an unavailable BLE
+// receiver diagnosable without exposing any observed radio identity.
+struct BoardBleBeginDiagnostic final {
+    BoardBleBeginStage stage = BoardBleBeginStage::NotAttempted;
+    int error = 0;
+    std::uint32_t heapFreeBefore = 0;
+    std::uint32_t heapLargestBefore = 0;
+    std::uint32_t heapFreeAfter = 0;
+    std::uint32_t heapLargestAfter = 0;
+    bool cleanupComplete = true;
+};
+
 struct BoardBlePassiveScanResult final {
     BoardBleScanStatus status = BoardBleScanStatus::NotStarted;
     std::uint64_t durationUs = 0;
@@ -72,11 +95,15 @@ public:
     bool initialized() const { return initialized_; }
     bool passiveOnly() const { return passiveOnly_; }
     bool cleanupComplete() const { return cleanupComplete_; }
+    const BoardBleBeginDiagnostic& beginDiagnostic() const {
+        return beginDiagnostic_;
+    }
 
 private:
     bool initialized_ = false;
     bool passiveOnly_ = true;
     bool cleanupComplete_ = true;
+    BoardBleBeginDiagnostic beginDiagnostic_{};
     static volatile bool activeScan_;
     static std::atomic_bool cancelRequested_;
 };
