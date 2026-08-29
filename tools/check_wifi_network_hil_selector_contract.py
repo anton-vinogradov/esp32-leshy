@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fail-closed source contract for the authorized Wi-Fi HIL selector."""
 
+import re
 from pathlib import Path
 
 
@@ -91,9 +92,11 @@ def main() -> None:
         runner_tests,
         "missing runner privacy regression",
     )
+    version = re.search(
+        r'LESHY1_VERSION=\\"1\.0\.0-dev\.(\d+)\\"', platformio)
     require(
-        'LESHY1_VERSION=\\"1.0.0-dev.253\\"' in platformio,
-        "selector firmware version is not dev.253",
+        version is not None and int(version.group(1)) >= 253,
+        "selector firmware predates its dev.253 introduction",
     )
     print("wifi network HIL selector contract: PASS")
 

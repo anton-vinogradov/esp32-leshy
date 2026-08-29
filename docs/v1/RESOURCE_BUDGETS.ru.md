@@ -1169,7 +1169,22 @@ sprite 216×24 1-bpp, 648 B, а не full-card framebuffer RGB565. Physical HIL
 один delta repaint радара без нового full repaint/content clear, invariant
 post-cleanup heap 73 936 B и final Home/none/lease 0. Это принимает оставшийся
 runtime bound мерцания Bluetooth-card и двигает cadence до 14/15; persistence/export
-CAP-049 остаётся открыта.
+CAP-049 остаётся открыта на этом anchor dev.252.
+
+Physical bound persistence/export authentication `RB-M192`: exact
+`1.0.0-dev.255` на source `e6d3243104a5849d750176962b083949df792b82`
+сохраняет app image 3 445 824 B с SHA-256
+`b03e61c0b954a686fe9c7478c9c55ab36eb78c23a5ddd4a4e3d996c597ddbf16`
+и embedded app identity
+`dee3deef1c7467a355e4b83abc7de13c4d66d74f38de7a3809d4e289de90f2bb`.
+Deterministic fixture ограничен двумя raw frames/284 bytes при snap length
+256 bytes, одним peer/двумя evidence references, radiotap PCAP 370 bytes/два
+records и одной canonical записью `WPA*02` 408 bytes. Boot heap invariant до и
+после cold recovery: total/free/min 143 180/70 012/69 740 B; admission analyzer
+фиксирует 63 316 B free и largest block 31 732 B. HIL runner не сохраняет raw
+artifacts в Git и доказывает zero radio/connect/TX calls, generation 169→170,
+read-only recovery с zero writes и final Home/none/lease 0. Это принимает runtime/
+storage/export bound CAP-049 и двигает focused cadence до 1/15.
 
 Physical bound стабильной scan-card Bluetooth `RB-M191`: exact
 `1.0.0-dev.252` на source `30530812efe045aadd112d8b1b0961a48a48b89b`

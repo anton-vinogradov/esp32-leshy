@@ -560,7 +560,26 @@ if [[ -e "$wifi_auth_capture_positive" || -L "$wifi_auth_capture_positive" || \
         --expected-app-elf-sha256 "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["app_elf_sha256"])' "$wifi_auth_capture_expectations")" \
         --expected-runner-sha256 "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["runner_source_sha256"])' "$wifi_auth_capture_expectations")"
 else
-    echo "PENDING: no retained CAP049 HIL evidence for $wifi_auth_capture_version; CAP049 HIL acceptance is skipped and remains open"
+    echo "INFO: no same-version legacy CAP049 capture-navigation bundle for $wifi_auth_capture_version; the authoritative persistence gate is checked below"
+fi
+wifi_auth_persistence_positive="$repo_dir/tests/hil/evidence/board-01-wifi-authentication-persistence-$wifi_auth_capture_version"
+wifi_auth_persistence_expectations="$repo_dir/tests/hil/evidence/board-01-wifi-authentication-persistence-$wifi_auth_capture_version-acceptance.json"
+if [[ -e "$wifi_auth_persistence_positive" || -L "$wifi_auth_persistence_positive" || \
+      -e "$wifi_auth_persistence_expectations" || -L "$wifi_auth_persistence_expectations" ]]; then
+    if [[ -L "$wifi_auth_persistence_positive" || \
+          -L "$wifi_auth_persistence_expectations" || \
+          ! -d "$wifi_auth_persistence_positive" || \
+          ! -f "$wifi_auth_persistence_expectations" ]]; then
+        echo "FAIL: CAP049 persistence evidence is partial, symlinked, or has the wrong type; a regular bundle directory and acceptance JSON are required" >&2
+        exit 1
+    fi
+    PYTHONPATH="$repo_dir/tools" python3 \
+        "$repo_dir/tools/check_wifi_authentication_persistence_hil_run.py" \
+        --version "$wifi_auth_capture_version" \
+        --positive "$wifi_auth_persistence_positive" \
+        --expectations "$wifi_auth_persistence_expectations"
+else
+    echo "PENDING: no retained CAP049 persistence evidence for $wifi_auth_capture_version; persistence acceptance is skipped and remains open"
 fi
 airspace_guard_positive="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.242"
 airspace_guard_negative_dev239="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.239-failed.json"
@@ -758,6 +777,8 @@ python3 "$repo_dir/tools/test_wifi_authentication_capture_hil.py"
 python3 "$repo_dir/tools/test_wifi_authentication_synthetic_hil_contract.py"
 python3 "$repo_dir/tools/test_wifi_authentication_persistence_hil_contract.py"
 python3 "$repo_dir/tools/test_wifi_authentication_persistence_hil_runner.py"
+PYTHONPATH="$repo_dir/tools" python3 -m unittest \
+    "$repo_dir/tools/test_wifi_authentication_persistence_hil_evidence.py"
 python3 "$repo_dir/tools/test_wifi_authentication_transition_contract.py"
 python3 "$repo_dir/tools/test_retain_1x_wifi_authentication_capture_hil.py"
 python3 "$repo_dir/tools/test_targets_merge_split_hil_runner.py"

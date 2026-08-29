@@ -72,6 +72,15 @@ connect или TX. Ambient capture не содержит EAPOL/PMKID, поэто
 pending; текущая mixed-source попытка `running_degraded` очистилась до commit и не
 является gate evidence.
 
+Exact `1.0.0-dev.255` теперь **физически принимает FUNC-49/CAP-049** через
+`E-BUILD-181`/`E-AUTO-156`/`E-HIL-197`/`RB-M192`. Публичный one-shot fixture
+M1→M2 использует production analyzer/store/export path без radio, connect или TX;
+явный Save двигает generation 169→170, cold recovery по exact CID работает read-only
+с zero writes, а Library выдаёт parsed radiotap PCAP из двух records и одну canonical
+запись `WPA*02`. Retained evidence содержит только exact firmware, санитизированные
+counts/hashes и machine-checked pins. `DEMO-S7` остаётся открыт для CAP-050…CAP-055,
+их negative/cleanup evidence и каждой применимой boundary physical stop/protected tool.
+
 `DEMO-S2` принят evidence `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 выполнил 29 public Action/query steps и совпал с
 девятью отдельно записанными real-TFT goldens без расхождений; Quick прошёл 8/8,

@@ -242,7 +242,13 @@ on-device CAP-049 result remains volatile/RAM-only/not saved with
 `exportEligibility=NotEvaluated`. At this historical checkpoint no device was
 flashed; dev.246 `E-HIL-191` was the physical baseline and cadence was 11/15. Exact
 physical dev.248 `E-HIL-192` later accepts result navigation and advances cadence to
-12/15, while serializer and persistence/export remain open.
+12/15. Host/build dev.249 adds the canonical PCAP/hc22000 serializer and explicit
+Save boundary. Exact physical dev.255 `E-BUILD-181`/`E-AUTO-156`/`E-HIL-197` then
+closes the remaining gap: a public one-shot M1→M2 fixture takes the production
+analyzer/store path, atomically advances generation 169→170, verifies exact-generation
+reopen, cold-recovers the enrolled CID read-only with zero writes, and Library streams
+a parsed two-record radiotap PCAP plus one canonical `WPA*02` record. Repository
+evidence retains hashes/counts only and finishes Home/none/lease 0.
 
 ## Physical fixture safety
 

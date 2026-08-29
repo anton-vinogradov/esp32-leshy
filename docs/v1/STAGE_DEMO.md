@@ -73,6 +73,16 @@ Wi-Fi-only Product Survey terminal commit and cold exact-CID recovery remains pe
 the current mixed-source `running_degraded` attempt cleaned up before commit and is
 not gate evidence.
 
+Exact `1.0.0-dev.255` now **physically accepts FUNC-49/CAP-049** through
+`E-BUILD-181`/`E-AUTO-156`/`E-HIL-197`/`RB-M192`. A public one-shot M1→M2 fixture
+uses the production analyzer/store/export path without radio, connect or TX; explicit
+Save advances generation 169→170, cold exact-CID recovery is read-only with zero
+writes, and Library emits a parsed two-record radiotap PCAP plus one canonical
+`WPA*02` record. Retained evidence contains only the exact firmware, sanitized
+counts/hashes and machine-checked pins. `DEMO-S7` remains open for CAP-050…CAP-055,
+their negative/cleanup evidence, and every applicable physical-stop/protected-tool
+boundary.
+
 `DEMO-S2` is accepted by `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 completed 29 public Action/query steps and matched nine
 separately recorded real-TFT goldens with zero mismatches; Quick passed 8/8, safe

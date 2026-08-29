@@ -1199,7 +1199,22 @@ events, drains the latest pending state and records zero full/content clears,
 sprite failures or direct fallbacks. The same image then passes the periodic
 Home/RF/Targets/companion matrix with invariant 147,748/73,608 B heap and zero
 writes/TX, accepting the runtime/build bound and resetting cadence to 0/15.
-CAP-049 persistence/export remains open.
+CAP-049 persistence/export remains open at this dev.252 anchor.
+
+Authentication persistence/export physical bound `RB-M192`: exact
+`1.0.0-dev.255` at source `e6d3243104a5849d750176962b083949df792b82`
+retains an app image of 3,445,824 B with SHA-256
+`b03e61c0b954a686fe9c7478c9c55ab36eb78c23a5ddd4a4e3d996c597ddbf16`
+and embedded app identity
+`dee3deef1c7467a355e4b83abc7de13c4d66d74f38de7a3809d4e289de90f2bb`.
+The deterministic fixture is bounded to two raw frames/284 bytes at 256-byte
+snap length, one peer/two evidence references, a 370-byte/two-record radiotap
+PCAP, and one 408-byte canonical `WPA*02` record. Boot heap is invariant across
+the cold recovery at total/free/min 143,180/70,012/69,740 B; analyzer admission
+records 63,316 B free and a 31,732 B largest block. The HIL runner retains neither
+raw artifact in Git and proves zero radio/connect/TX calls, generation 169→170,
+read-only recovery with zero writes, and final Home/none/lease 0. This accepts
+the CAP-049 runtime/storage/export bound and advances focused cadence to 1/15.
 
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while

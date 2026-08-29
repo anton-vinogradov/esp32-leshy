@@ -340,7 +340,13 @@ on-device result CAP-049 остаётся volatile/RAM-only/not saved с
 `exportEligibility=NotEvaluated`. В этом историческом checkpoint device не
 прошивался; dev.246 `E-HIL-191` был physical baseline, cadence была 11/15. Позже
 exact physical dev.248 `E-HIL-192` принимает navigation результата и двигает cadence
-до 12/15, но serializer и persistence/export остаются открыты.
+до 12/15. Host/build dev.249 добавляет canonical serializer PCAP/hc22000 и явную
+boundary Save. Exact physical dev.255 `E-BUILD-181`/`E-AUTO-156`/`E-HIL-197` затем
+закрывает оставшийся gap: публичный one-shot fixture M1→M2 проходит production
+analyzer/store path, атомарно двигает generation 169→170, проверяет reopen exact
+generation, cold-recover-ит enrolled CID read-only с zero writes, а Library потоково
+выдаёт parsed radiotap PCAP из двух records и одну canonical запись `WPA*02`.
+Repository evidence сохраняет только hashes/counts и завершает Home/none/lease 0.
 
 ## Реализованный и физически проверенный software-reset harness
 
