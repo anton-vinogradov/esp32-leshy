@@ -139,6 +139,33 @@ ordinary Back traverses the stack.
 | Device → Settings | PR-011, NFR-010 | EN/RU switch; immediate application and persistent selection |
 | Device → Self-Test | CAP-001…CAP-055 as applicable, PR-009 | Quick/Full use the same versioned checks as release HIL; report→Diagnostics/remedy/export |
 
+## UX-S31 Offline Field Survey baseline
+
+The user starts this job to answer three questions: what is present here, what is
+new or missing since the previous visit, and how to carry the result away. The
+product workflow therefore has three compact levels:
+
+1. **Setup** shows receive sources `Wi-Fi AP + stations` and `Bluetooth`, the
+   selected revisit baseline or `First visit`, storage readiness, and location as
+   `GPS ready`, `No GPS hardware`, or `Waiting for fix`. Stock ESP32-DIV has no
+   authoritative GPS, so `No GPS hardware` is the normal truthful state and never
+   blocks a local survey.
+2. **Running** uses the full content area for elapsed time, unique total, New,
+   Seen again and the strongest recent objects. A switch opens the strongest-first
+   AP/station/BLE list; navigation freezes identity order while signal values update.
+   Implementation counters, redraw totals and empty decorative frames are absent.
+   Stop remains explicit and Back cancels through the common bounded cleanup path.
+3. **Result** leads with `New / Seen again / Missing`, then AP/station/BLE totals.
+   Actions are Save, Compare details, Export native record and Export WiGLE. A
+   capacity/source loss produces an explicit incomplete result and disables compare
+   claims. WiGLE is marked `ready to upload` only with trusted UTC and location;
+   otherwise it is an honest local export with blank fields. Wi-Fi stations remain
+   available in the native result even though WiGLE 1.6 has no station row type.
+
+Exact host/build dev.256 accepts only the bounded catalog, comparison and row
+serializer behind this screen contract. Product state wiring, persistence/export
+routing, live station capture, optional GPS adapter and physical pixels remain open.
+
 Exact physical dev.248 accepts the original UX-S30 result hierarchy on the original
 DIV. Exact host/build dev.249 extends its production Actions to Details, Save and
 Repeat. Save first opens explicit confirmation, then shows Saving and terminal

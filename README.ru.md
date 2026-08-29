@@ -16,7 +16,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Проверенный checkpoint:** `E-BUILD-181`/`E-AUTO-156`/`E-HIL-197`/`RB-M192` физически принимают exact `1.0.0-dev.255` на оригинальном board-01, source `e6d3243104a5849d750176962b083949df792b82`. Публичный deterministic fixture M1→M2 входит в production analyzer без запуска radio или TX, явно сохраняет два raw frame в generation 170, атомарно открывает их повторно, проходит cold boot с read-only recovery по exact CID и экспортирует machine-parsed radiotap PCAP из двух records/370 bytes плюс одну canonical запись hc22000 `WPA*02`/408 bytes. Оба финальных cleanup достигают Home/none/lease 0; retained evidence содержит только exact firmware, санитизированные counts/hashes и acceptance pins.
-- **Следующий gate:** начать CAP-050 Offline Field Survey с user-first review workflow и bounded receive/export contract. Stop/commit/cold-recovery Product Survey остаётся отдельным pending после прежней попытки `running_degraded`, завершившейся fail closed до commit. Physical HTTP parity остаётся отложенным до dedicated client, не затрагивающего активный Wi-Fi Mac.
+- **Следующий gate:** подключить принятый host/build foundation CAP-050 к product workflow setup/running/result Field Survey, затем доказать один focused receive-only lifecycle повторного прохода/export на board-01. Stop/commit/cold-recovery Product Survey остаётся отдельным pending после прежней попытки `running_degraded`, завершившейся fail closed до commit. Physical HTTP parity остаётся отложенным до dedicated client, не затрагивающего активный Wi-Fi Mac.
 
 ### Фазы текущего этапа
 
@@ -80,7 +80,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | SDK, sample extension и simulator trace kit не позволяют обойти ResourceBroker, permissions или Safety Supervisor | S7 | ⬜ дальше |
 | Защита эфира пассивно обнаруживает/объясняет подозрительные Wi-Fi/BLE conditions и открывает exact evidence/uncertainty каждой находки | S7 | ✅ готово |
 | Focused Wi-Fi authentication Capture показывает EAPOL/PMKID и complete/incomplete handshakes, затем экспортирует PCAP и `hc22000` | S7 | ✅ готово |
-| Offline Field Survey объединяет Wi-Fi AP/station и BLE observations с optional GPS track, revisit comparison и WiGLE-compatible export | S7 | ⬜ дальше |
+| Offline Field Survey объединяет Wi-Fi AP/station и BLE observations с optional GPS track, revisit comparison и WiGLE-compatible export | S7 | 🟡 в работе |
 | BLE Inspector сохраняет raw compatible packets и входит в connected GATT только после explicit target/permission/lease confirmation | S7 | ⬜ дальше |
 | Device Lock защищает secrets/evidence local PIN, bounded retry и tested recovery, не блокируя Stop/panic/recovery | S7 | ⬜ дальше |
 | Устройство → Serial Console даёт bounded UART bridge и общий Actions CLI с explicit target/configuration/lease | S7 | ⬜ дальше |

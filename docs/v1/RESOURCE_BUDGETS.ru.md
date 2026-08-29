@@ -1207,6 +1207,23 @@ Home/RF/Targets/companion с invariant heap 147 748/73 608 B и zero writes/TX,
 что принимает runtime/build bound и сбрасывает cadence до 0/15. Persistence/export
 CAP-049 остаётся открыта.
 
+Host/build bound Offline Field Survey `RB-M193`: exact `1.0.0-dev.256` на source
+`dab7394b0c2fbd36857fc1088e5454da3c48cbe5` добавляет один allocation-free catalog
+5 656 B не более чем на 64 компактные записи по 88 B. Catalog не владеет второй
+Session-sized buffer, heap allocation или raw packet payload; он хранит только exact
+identity из шести bytes, bounded label, first/latest/strongest evidence и факты
+Wi-Fi/BLE для comparison/export. Потерянная source record, capacity loss, malformed
+identity/radio или out-of-order update снимает признак complete input. Serializer
+WiGLE использует fixed caller storage и честно оставляет location/time пустыми.
+Static RAM/linked flash — 235 624/3 445 368 B. Размеры app/factory/ELF —
+3 445 872/3 511 408/23 151 372 B, SHA-256 —
+`1e2095e50e12630648cdd488702f2aeb17943a658510d27cd70fee7392411e25`/
+`d405706c45cc7dc79f708bac125a9b2fbeac1d5cddb7e1f793a7907bcd64f1d2`/
+`b693220dc351d16000159abe4eac56fbdcbb8ed3b4df1e09dd2c13eeeec5eff1`.
+В app-slot OTA 4 MiB остаётся 748 432 B при обязательном floor 524 288 B. Это только
+host/build bound; runtime heap, storage routing и physical cleanup остаются открыты
+до product workflow.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

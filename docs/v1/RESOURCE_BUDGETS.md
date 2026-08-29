@@ -1216,6 +1216,23 @@ raw artifact in Git and proves zero radio/connect/TX calls, generation 169→170
 read-only recovery with zero writes, and final Home/none/lease 0. This accepts
 the CAP-049 runtime/storage/export bound and advances focused cadence to 1/15.
 
+Offline Field Survey host/build bound `RB-M193`: exact `1.0.0-dev.256` at source
+`dab7394b0c2fbd36857fc1088e5454da3c48cbe5` adds one allocation-free 5,656 B
+catalog containing at most 64 compact 88 B records. The catalog owns no second
+Session-sized buffer, heap allocation or raw packet payload; it keeps only exact
+six-byte identity, bounded label, first/latest/strongest evidence and the Wi-Fi/BLE
+facts needed by comparison/export. A dropped source record, capacity loss, malformed
+identity/radio or out-of-order update marks the complete-input contract false. WiGLE
+serialization uses fixed caller storage and truthful blank location/time fields.
+Static RAM/linked flash are 235,624/3,445,368 B. App/factory/ELF sizes are
+3,445,872/3,511,408/23,151,372 B with SHA-256
+`1e2095e50e12630648cdd488702f2aeb17943a658510d27cd70fee7392411e25`/
+`d405706c45cc7dc79f708bac125a9b2fbeac1d5cddb7e1f793a7907bcd64f1d2`/
+`b693220dc351d16000159abe4eac56fbdcbb8ed3b4df1e09dd2c13eeeec5eff1`.
+The 4 MiB OTA slot retains 748,432 B, above the mandatory 524,288 B floor. This is
+a host/build bound only; runtime heap, storage routing and physical cleanup remain
+open with the product workflow.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

@@ -16,7 +16,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Verified checkpoint:** `E-BUILD-181`/`E-AUTO-156`/`E-HIL-197`/`RB-M192` physically accept exact `1.0.0-dev.255` on original board-01 at source `e6d3243104a5849d750176962b083949df792b82`. One public deterministic M1→M2 fixture enters the production analyzer without starting radio or TX, explicitly saves two raw frames to generation 170, atomically reopens them, cold-boots through exact-CID read-only recovery, and exports a machine-parsed 2-record/370-byte radiotap PCAP plus one canonical 408-byte `WPA*02` hc22000 record. Both final cleanups reach Home/none/lease 0; retained evidence contains only the exact firmware, sanitized counts/hashes and acceptance pins.
-- **Next gate:** start CAP-050 Offline Field Survey with a user-first review of its workflow and bounded receive/export contract. Product Survey Stop/commit/cold-recovery remains separately pending after its earlier `running_degraded` attempt failed closed before commit. Physical HTTP parity remains deferred to a dedicated client that cannot touch active Mac Wi-Fi.
+- **Next gate:** connect the accepted CAP-050 host/build foundation to the product Field Survey setup/running/result workflow, then prove one focused receive-only revisit/export lifecycle on board-01. Product Survey Stop/commit/cold-recovery remains separately pending after its earlier `running_degraded` attempt failed closed before commit. Physical HTTP parity remains deferred to a dedicated client that cannot touch active Mac Wi-Fi.
 
 ### Current stage phases
 
@@ -80,7 +80,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | SDK, sample extension and simulator trace kit cannot bypass ResourceBroker, permissions or Safety Supervisor | S7 | ⬜ later |
 | Airspace Guard passively detects/explains suspicious Wi-Fi/BLE conditions and opens exact evidence/uncertainty for every finding | S7 | ✅ complete |
 | Focused Wi-Fi authentication Capture reports EAPOL/PMKID and complete/incomplete handshakes, then exports PCAP and `hc22000` | S7 | ✅ complete |
-| Offline Field Survey joins Wi-Fi AP/station and BLE observations with optional GPS track, revisit comparison and WiGLE-compatible export | S7 | ⬜ later |
+| Offline Field Survey joins Wi-Fi AP/station and BLE observations with optional GPS track, revisit comparison and WiGLE-compatible export | S7 | 🟡 in progress |
 | BLE Inspector preserves raw compatible packets and enters connected GATT only after explicit target/permission/lease confirmation | S7 | ⬜ later |
 | Device Lock protects secrets/evidence with local PIN, bounded retry and tested recovery without blocking Stop/panic/recovery | S7 | ⬜ later |
 | Device → Serial Console provides a bounded UART bridge and shared Actions CLI under explicit target/configuration/lease | S7 | ⬜ later |

@@ -139,6 +139,34 @@ action. В активном TX `Back` никогда не открывает con
 | Устройство → Настройки | PR-011, NFR-010 | переключение EN/RU; немедленное применение и persistent selection |
 | Устройство → Самопроверка | применимые CAP-001…CAP-055, PR-009 | Quick/Full выполняют те же versioned checks, что release HIL; report→Diagnostics/remedy/export |
 
+## Baseline UX-S31 «Полевой обзор»
+
+Пользователь запускает эту задачу ради трёх ответов: что находится здесь, что
+появилось или исчезло после прошлого визита и как забрать результат. Поэтому product
+workflow имеет три компактных уровня:
+
+1. **Настройка** показывает receive sources `Wi-Fi AP + устройства` и `Bluetooth`,
+   выбранный baseline повторного прохода или `Первый визит`, готовность хранилища и
+   location как `GPS готов`, `GPS отсутствует` или `Ожидание координат`. У штатного
+   ESP32-DIV нет authoritative GPS, поэтому `GPS отсутствует` — нормальное честное
+   состояние, которое не блокирует локальный обзор.
+2. **Выполняется** использует всю content area для времени, общего числа unique,
+   Новых, Уже видели и самых сильных недавних объектов. Переключение открывает общий
+   strongest-first список AP/станций/BLE; после начала navigation порядок identity
+   фиксируется, а signal обновляется на месте. Implementation counters, totals redraw
+   и пустые декоративные рамки отсутствуют. Stop остаётся явным, Back отменяет через
+   общий bounded cleanup path.
+3. **Результат** начинает с `Новые / Уже видели / Исчезли`, затем показывает totals
+   AP/станций/BLE. Actions: Сохранить, Детали сравнения, Экспорт native record и
+   Экспорт WiGLE. Потеря capacity/source создаёт явный incomplete result и запрещает
+   claims comparison. WiGLE получает статус `готов к загрузке` только с trusted UTC
+   и location; иначе это честный локальный export с пустыми полями. Wi-Fi stations
+   остаются в native result, хотя WiGLE 1.6 не имеет row type для station.
+
+Exact host/build dev.256 принимает только bounded catalog, comparison и serializer
+строк за этим screen contract. Wiring product state, routing persistence/export,
+live station capture, optional adapter GPS и physical pixels остаются открыты.
+
 Exact physical dev.248 принимает исходную иерархию результата UX-S30 на оригинальном
 DIV. Exact host/build dev.249 расширяет production Actions до Детали, Сохранить и
 Повторить. Save сначала открывает явное подтверждение, затем показывает Сохранение и
