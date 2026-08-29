@@ -132,26 +132,31 @@ action. В активном TX `Back` никогда не открывает con
 | Обзор | CAP-009…CAP-017, CAP-042, CAP-048, CAP-050 | Observation/finding→Target/Capture/Radar/evidence; stopped Session/Field Survey→Library/export |
 | Цели | CAP-018…CAP-022, CAP-044 | Evidence→Observation/Capture; Target→Compare/Radar |
 | Захват | CAP-023, CAP-024, CAP-026…CAP-031, CAP-042, CAP-043, CAP-051 | Result→Library/Export/Lab; GATT требует explicit connected mode |
-| Захват Wi-Fi-аутентификации | CAP-049 | volatile Результат→Действия→Устройство→Доказательства→Детали; Повторить перезапускает capture; persistence/export не подключён, `exportEligibility` равен `NotEvaluated` |
+| Захват Wi-Fi-аутентификации | CAP-049 | Результат→Действия→Устройство→Доказательства→Детали; production Actions — Детали/Сохранить/Повторить, Save требует явного подтверждения и атомарно сохраняет evidence schema 8, а экспорт PCAP и `hc22000` только с полезным evidence повторно открывает exact stored generation |
 | Лаборатория | CAP-032…CAP-037, CAP-054, CAP-055 | принимает только reviewed source/package/recipe; Result возвращает source/audit evidence |
 | Библиотека | CAP-025…CAP-031, CAP-038, CAP-043, CAP-047 | item→Compare/Export/Lab; import никогда не обходит parser |
 | Устройство | CAP-001…CAP-008, CAP-045…CAP-047, CAP-052, CAP-053 | Diagnostics объясняет недоступность до входа; Lock не блокирует Stop/recovery; Serial владеет одним explicit UART lease |
 | Устройство → Настройки | PR-011, NFR-010 | переключение EN/RU; немедленное применение и persistent selection |
 | Устройство → Самопроверка | применимые CAP-001…CAP-055, PR-009 | Quick/Full выполняют те же versioned checks, что release HIL; report→Diagnostics/remedy/export |
 
-Exact dev.247 определяет controller path UX-S30, а exact physical dev.248 принимает
-его на оригинальном DIV. В terminal result `inconclusive` имеет приоритет над
-evidence Full, PMKID и Partial;
-peers без valid message mask не участвуют в навигации. Up/Down меняют selection
-только внутри текущего уровня, Right/OK двигают внутрь, Left/Back возвращают ровно на
-уровень, Повторить запускает тот же bounded receive-only capture. Result явно
-сообщает volatile/RAM-only/not saved. Он не предлагает Save или Export: product
-persistence не подключён, standard artifact serializer не существует, export
-eligibility остаётся `NotEvaluated`. Live/tone/selection updates перерисовывают только
-изменённый content, а не весь экран. Title перерисовывается только при видимой смене
-tone/color; одинаковые title list/detail остаются нетронутыми, footer меняется только
-при изменении видимых hints. Автоматический physical run проходит все уровни, Повтор
-и replay rejection, затем возвращается в Home с authentication view `none` и lease 0.
+Exact physical dev.248 принимает исходную иерархию результата UX-S30 на оригинальном
+DIV. Exact host/build dev.249 расширяет production Actions до Детали, Сохранить и
+Повторить. Save сначала открывает явное подтверждение, затем показывает Сохранение и
+terminal state Сохранено/Ошибка; он атомарно коммитит authentication provenance
+schema 8 и принимает Сохранено только после exact-generation reopen, повторного
+анализа и validation artifact. Valid stored capture остаётся экспортируемым как PCAP,
+даже если полезного authentication material нет; canonical `hc22000` становится
+готовым только для valid PMKID или replay-consistent пары M1→M2. Results synthetic HIL
+остаются volatile и не могут предлагать Save или Export. В terminal result
+`inconclusive` имеет приоритет над evidence Full, PMKID и Partial; peers без valid
+message mask не участвуют в навигации. Up/Down меняют selection только внутри текущего
+уровня, Right/OK двигают внутрь, Left/Back возвращают ровно на уровень, Повторить
+запускает тот же bounded receive-only capture. Live/tone/selection updates
+перерисовывают только изменённый content, а не весь экран. Title перерисовывается
+только при видимой смене tone/color; одинаковые title list/detail остаются
+нетронутыми, footer меняется только при изменении видимых hints. Extension
+Save/reopen/export dev.249 всё ещё требует physical acceptance TFT, SD и полезного
+evidence; dev.248 остаётся physical baseline.
 
 ## Acceptance UX-01
 

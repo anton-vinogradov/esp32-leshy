@@ -1122,6 +1122,26 @@ cadence to 12/15; it does not add or claim the still-missing standard serializer
 product persistence/export, useful EAPOL/PMKID evidence or Product Survey cold
 recovery.
 
+CAP-049 standard artifact persistence/export foundation `RB-M188`: exact host/build
+`1.0.0-dev.249` at product source
+`d47b2ee5e1636981474398246c5e0c49d88db2ea` uses 230,000 B static RAM and
+3,425,112 B linked flash. App/factory sizes are 3,425,616/3,491,152 B with
+SHA-256
+`2af18b4ea99c5128282077963537ec4bd5e4fd0877895bc0d038e2b195174a9b`/
+`29013dda59a75d4c66d9c4b5c0067ee2c49ad4290ff1caa7b9675302a9dbac78`;
+ELF/app identity is
+`fb521cbe0e7c8e3fee2dbaf3765c3d101c236a9f3c0bc8cb7341f16ee63f1414`
+and map SHA-256 is
+`b5bb81217479e73a8962a98a9b9fe04480263f1881ea996ecf675d59ab2a8a0b`.
+Against `RB-M187`, static RAM grows by 40 B, linked flash by 11,348 B and both
+images by 11,344 B. The build preserves 28,544 B internal DIRAM remainder,
+fills IRAM at 16,384/16,384 B and keeps 768,688 B inside the 4 MiB OTA app slot,
+above the required 524,288 B reserve. The new bounded serializer, controller states
+and generalized background store worker add no dynamic artifact-sized buffer and
+stream exports from the exact reopened generation. This is a host/build bound only:
+dev.248 remains the accepted physical heap/cadence baseline until Save, SD commit,
+cold reopen and useful artifact export are exercised on the original DIV.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

@@ -132,26 +132,30 @@ ordinary Back traverses the stack.
 | Survey | CAP-009…CAP-017, CAP-042, CAP-048, CAP-050 | Observation/finding→Target/Capture/Radar/evidence; stopped Session/Field Survey→Library/export |
 | Targets | CAP-018…CAP-022, CAP-044 | Evidence→Observation/Capture; Target→Compare/Radar |
 | Capture | CAP-023, CAP-024, CAP-026…CAP-031, CAP-042, CAP-043, CAP-051 | Result→Library/Export/Lab; GATT requires explicit connected mode |
-| Wi-Fi Authentication Capture | CAP-049 | volatile Result→Actions→Peer→Evidence→Detail; Repeat restarts capture; persistence/export is not wired and `exportEligibility` is `NotEvaluated` |
+| Wi-Fi Authentication Capture | CAP-049 | Result→Actions→Peer→Evidence→Detail; production Actions are Details/Save/Repeat, Save requires explicit confirmation and atomically persists schema-8 evidence, while PCAP and useful-evidence-gated `hc22000` export reopen the exact stored generation |
 | Lab | CAP-032…CAP-037, CAP-054, CAP-055 | accepts only reviewed source/package/recipe; Result links back to source and audit evidence |
 | Library | CAP-025…CAP-031, CAP-038, CAP-043, CAP-047 | item→Compare/Export/Lab; import never bypasses parsers |
 | Device | CAP-001…CAP-008, CAP-045…CAP-047, CAP-052, CAP-053 | Diagnostics explains unavailability before task entry; Lock never blocks Stop/recovery; Serial owns one explicit UART lease |
 | Device → Settings | PR-011, NFR-010 | EN/RU switch; immediate application and persistent selection |
 | Device → Self-Test | CAP-001…CAP-055 as applicable, PR-009 | Quick/Full use the same versioned checks as release HIL; report→Diagnostics/remedy/export |
 
-Exact dev.247 defines the UX-S30 controller path, and exact physical dev.248 accepts
-it on the original DIV. On terminal results, `inconclusive` has priority over Full,
-PMKID and Partial evidence; peers with
-no valid message mask are not navigable. Up/Down changes selection only within the
-current level, Right/OK moves inward, Left/Back returns exactly one level, and Repeat
-starts the same bounded receive-only capture. The result explicitly says
-volatile/RAM-only/not saved. It cannot offer Save or Export: product persistence is
-not wired, no standard artifact serializer exists, and export eligibility remains
-`NotEvaluated`. Live/tone/selection updates repaint only changed content, not the
-whole screen. A title is repainted only when its visible tone/color changes;
-identical list/detail titles are left intact, and the footer changes only when its
-visible hints differ. The automatic physical run traverses every level, Repeat and
-replay rejection, then returns to Home with authentication view `none` and lease 0.
+Exact physical dev.248 accepts the original UX-S30 result hierarchy on the original
+DIV. Exact host/build dev.249 extends its production Actions to Details, Save and
+Repeat. Save first opens explicit confirmation, then shows Saving and terminal
+Saved/Failed state; it commits schema-8 authentication provenance atomically and
+accepts Saved only after exact-generation reopen, re-analysis and artifact
+validation. A valid stored capture remains exportable as PCAP even when no useful
+authentication material exists; canonical `hc22000` becomes ready only for a valid
+PMKID or replay-consistent M1→M2 pair. Synthetic HIL results remain volatile and
+cannot offer Save or Export. On terminal results, `inconclusive` has priority over
+Full, PMKID and Partial evidence; peers with no valid message mask are not navigable.
+Up/Down changes selection only within the current level, Right/OK moves inward,
+Left/Back returns exactly one level, and Repeat starts the same bounded receive-only
+capture. Live/tone/selection updates repaint only changed content, not the whole
+screen. A title is repainted only when its visible tone/color changes; identical
+list/detail titles are left intact, and the footer changes only when its visible
+hints differ. The dev.249 Save/reopen/export extension still requires physical TFT,
+SD and useful-evidence acceptance; dev.248 remains the physical baseline.
 
 ## UX-01 acceptance
 
