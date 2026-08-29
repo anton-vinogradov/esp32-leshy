@@ -357,6 +357,60 @@ def run_visit(device: Any, frames: Path, name: str,
     }
 
 
+def run_preflight(device: Any, frames: Path,
+                  trace: list[dict[str, Any]],
+                  expected_cid: str) -> dict[str, Any]:
+    """Prove one live Wi-Fi+BLE cycle without committing a field visit."""
+    setup = open_product_survey_visit(device, trace)
+    failures = setup_failures(setup, "wifi")
+    failures.extend(expect(setup, {
+        "survey_source_selected_mask": 3,
+        "survey_source_selected_count": 2,
+        "survey_source_can_start": True,
+    }, "preflight.all_receivers"))
+    if failures:
+        raise RuntimeError("; ".join(failures))
+    setup_capture = capture(device, frames, "preflight-setup")
+
+    start = focus_survey_start(device)
+    trace.append(start)
+    started = action(device, "select")
+    trace.append(started)
+    require(started, {
+        "page": "survey", "runtime_owner": "wifi", "lease_mask": 15,
+        "survey_product_status": "preparing",
+    }, "preflight.start_ack")
+    running = wait_state(
+        device,
+        lambda state: (
+            state.get("survey_product_status") == "running" and
+            state.get("survey_product_wifi_scan_cycles", 0) >= 1 and
+            state.get("survey_product_ble_scan_cycles", 0) >= 1 and
+            state.get("survey_observations", 0) >= 1
+        ), 35.0, "preflight: both receive sources did not complete one cycle",
+        trace)
+    trace.append(running)
+    failures = running_failures(running, expected_cid, "wifi")
+    failures.extend(expect(running, {
+        "survey_product_selected_source_mask": 3,
+        "survey_product_active_source_mask": 3,
+        "survey_scan_dropped": 0,
+        "survey_ble_scan_dropped": 0,
+    }, "preflight.running_sources"))
+    if failures:
+        raise RuntimeError("; ".join(failures))
+    running_capture = capture(device, frames, "preflight-running")
+    return {
+        "setup": setup,
+        "setup_capture": setup_capture,
+        "start": start,
+        "started": started,
+        "running": running,
+        "running_capture": running_capture,
+        "writes_committed": 0,
+    }
+
+
 def main() -> int:
     from capture_1x_ui import PassiveSerial
 
@@ -373,6 +427,11 @@ def main() -> int:
     parser.add_argument(
         "--reuse-exact-flash", action="store_true",
         help="reuse the already-flashed exact candidate after boot identity proof",
+    )
+    parser.add_argument(
+        "--preflight-only", action="store_true",
+        help=("run one live Wi-Fi+BLE cycle, cancel to Home, and never commit "
+              "a field visit"),
     )
     args = parser.parse_args()
     for path in (args.firmware, args.elf, args.map):
@@ -398,6 +457,7 @@ def main() -> int:
     ended: dict[str, Any] = {}
     first: dict[str, Any] = {}
     revisit: dict[str, Any] = {}
+    preflight: dict[str, Any] = {}
     cleanup: dict[str, Any] = {"attempted": False}
     boot: dict[str, Any] = {}
     recovery: dict[str, Any] = {}
@@ -441,19 +501,28 @@ def main() -> int:
                 begun = begin_hil(device, run_id, app_sha,
                                   args.expected_version)
                 generation = int(recovery["generation"])
-                first = run_visit(
-                    device, frames, "first", generation, True, trace,
-                    args.expected_cid,
-                    run_incomplete_negative=True)
-                first_result = first["result"]
-                first_unique = int(first_result["current_unique"])
-                generation += 1
-                revisit = run_visit(
-                    device, frames, "revisit", generation, False, trace,
-                    args.expected_cid, baseline_unique=first_unique)
+                if args.preflight_only:
+                    preflight = run_preflight(
+                        device, frames, trace, args.expected_cid)
+                    cleanup = best_effort_cleanup(device)
+                    if not cleanup.get("complete"):
+                        raise RuntimeError(
+                            "preflight cleanup: terminal Home/none/lease0 unproven")
+                else:
+                    first = run_visit(
+                        device, frames, "first", generation, True, trace,
+                        args.expected_cid,
+                        run_incomplete_negative=True)
+                    first_result = first["result"]
+                    first_unique = int(first_result["current_unique"])
+                    generation += 1
+                    revisit = run_visit(
+                        device, frames, "revisit", generation, False, trace,
+                        args.expected_cid, baseline_unique=first_unique)
                 ended = end_hil(device, run_id, app_sha)
             finally:
-                cleanup = best_effort_cleanup(device)
+                if not cleanup.get("complete"):
+                    cleanup = best_effort_cleanup(device)
                 if not ended:
                     try:
                         hil_state = read_only_query(
@@ -478,13 +547,19 @@ def main() -> int:
     record.update({
         "status": "pass" if not failures else "failed",
         "passed": not failures,
-        "gate_eligible": (flashed or args.reuse_exact_flash) and not failures,
+        "mode": "preflight" if args.preflight_only else "full",
+        "gate_eligible": (
+            not args.preflight_only and
+            (flashed or args.reuse_exact_flash) and
+            not failures
+        ),
         "failures": failures,
         "flashed": flashed,
         "reused_exact_flash": args.reuse_exact_flash,
         "boot": {"ready": boot, "recovery": recovery,
                  "timing": boot_timing},
         "hil_begin": begun,
+        "preflight": preflight,
         "first_visit": first,
         "revisit": revisit,
         "hil_end": ended,

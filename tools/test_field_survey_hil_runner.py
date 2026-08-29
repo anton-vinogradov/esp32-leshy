@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import unittest
 from pathlib import Path
 from typing import Any
@@ -129,6 +130,18 @@ class FieldSurveyHilRunnerTests(unittest.TestCase):
         self.assertIn('"survey_product_ble_scan_cycles"', source)
         self.assertIn('"page": "home", "runtime_owner": "none", "lease_mask": 0',
                       source)
+
+    def test_preflight_requires_both_sources_and_never_commits(self) -> None:
+        source = inspect.getsource(RUNNER.run_preflight)
+        self.assertIn('"survey_product_wifi_scan_cycles"', source)
+        self.assertIn('"survey_product_ble_scan_cycles"', source)
+        self.assertIn('"writes_committed": 0', source)
+        self.assertNotIn("field_state(", source)
+        self.assertNotIn("committed_failures(", source)
+
+    def test_preflight_is_never_gate_eligible(self) -> None:
+        source = Path(RUNNER.__file__).read_text(encoding="utf-8")
+        self.assertIn("not args.preflight_only and", source)
 
 
 if __name__ == "__main__":
