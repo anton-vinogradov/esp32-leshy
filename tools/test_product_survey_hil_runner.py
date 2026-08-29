@@ -294,6 +294,40 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
         self.assertTrue(cleanup["complete"])
         self.assertEqual(2, len(cleanup["actions"]))
 
+    def test_best_effort_cleanup_ignores_stale_survey_cancelling_for_wifi(
+            self) -> None:
+        states = [
+            {
+                "page": "survey", "runtime_owner": "wifi", "lease_mask": 3,
+                "survey_product_status": "cancelling",
+                "survey_product_backend_open": False,
+                "survey_product_storage_mounted": False,
+                "survey_product_source_active": False,
+            },
+            {
+                "page": "home", "runtime_owner": "none", "lease_mask": 0,
+                "survey_product_status": "cancelling",
+                "survey_product_backend_open": False,
+                "survey_product_storage_mounted": False,
+                "survey_product_source_active": False,
+            },
+        ]
+        current = {"index": 0}
+
+        def fake_query(*_: Any, **__: Any) -> dict[str, Any]:
+            return states[current["index"]]
+
+        def fake_action(_: Any, name: str) -> dict[str, Any]:
+            self.assertEqual("back", name)
+            current["index"] = 1
+            return states[1]
+
+        with patch.object(RUNNER, "query", side_effect=fake_query), patch.object(
+                RUNNER, "action", side_effect=fake_action):
+            cleanup = RUNNER.best_effort_cleanup(object(), timeout=0.5)
+        self.assertTrue(cleanup["complete"])
+        self.assertEqual(1, len(cleanup["actions"]))
+
     def test_return_home_after_commit_accepts_nested_result_stack(self) -> None:
         states = [
             {

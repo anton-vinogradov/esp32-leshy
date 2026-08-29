@@ -601,7 +601,7 @@ def best_effort_cleanup(device: Any, timeout: float = 20.0) -> dict[str, Any]:
             lease = state.get("lease_mask")
             if page == "home" and owner == "none" and lease == 0:
                 break
-            if page == "survey":
+            if page == "survey" and owner == "survey":
                 status = state.get("survey_product_status")
                 if status in ("stopping", "cancelling"):
                     time.sleep(0.05)
