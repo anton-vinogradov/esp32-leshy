@@ -785,6 +785,7 @@ python3 "$repo_dir/tools/retain_s5_two_board_matrix.py" --help >/dev/null
 python3 "$repo_dir/tools/test_sd_power_cut_runner.py"
 python3 "$repo_dir/tools/test_prerelease_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_hil_runner.py"
+python3 "$repo_dir/tools/test_field_survey_hil_runner.py"
 python3 "$repo_dir/tools/test_product_home_hil_runner.py"
 python3 "$repo_dir/tools/test_airspace_guard_hil_runner.py"
 python3 "$repo_dir/tools/test_airspace_guard_hil_acceptance.py"

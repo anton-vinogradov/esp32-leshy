@@ -30,9 +30,9 @@ def main() -> None:
         "? FieldSurveyTracker::kSessionId",
         "field-visit session identity",
     )
-    if entry.count("fieldSurveyTracker.completeVisit(surveySession);") != 2:
+    if entry.count("fieldSurveyTracker.completeVisit(surveySession);") != 3:
         raise SystemExit(
-            "FAIL: field survey result must be finalized by normal and paused commit"
+            "FAIL: field survey result must cover normal/paused commit and HIL negative"
         )
     require(
         entry,
@@ -43,6 +43,11 @@ def main() -> None:
         entry,
         "result.status == FieldSurveyVisitStatus::Incomplete",
         "fail-closed result",
+    )
+    require(
+        entry,
+        "survey.field-visit.test-incomplete once",
+        "physical incomplete-session negative",
     )
     require(strings, "FieldSurveyCompare", "comparison label")
     require(strings, "FieldSurveyNewSeenFormat", "revisit summary")

@@ -209,6 +209,8 @@ using leshy1::apps::spectrum::SpectrumDisplayMode;
 using leshy1::apps::spectrum::SpectrumViewport;
 using leshy1::apps::survey::FieldSurveyTracker;
 using leshy1::apps::survey::FieldSurveyVisitStatus;
+using leshy1::apps::survey::fieldSurveyBuildStatusName;
+using leshy1::apps::survey::fieldSurveyVisitStatusName;
 using leshy1::apps::survey::SurveyController;
 using leshy1::apps::survey::ObservationHistory;
 using leshy1::apps::survey::SurveyFilter;
@@ -28184,6 +28186,58 @@ void emitSurveyContract(Stream& reply) {
     reply.println(line);
 }
 
+void emitFieldSurveyState(Stream& reply) {
+    const auto& result = fieldSurveyTracker.result();
+    char line[640] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.survey.field_visit.v1\",\"kind\":\"state\","
+        "\"active\":%s,\"previous_available\":%s,"
+        "\"compare_previous\":%s,\"status\":\"%s\","
+        "\"build_status\":\"%s\",\"complete\":%s,"
+        "\"current_unique\":%u,\"baseline_unique\":%u,"
+        "\"seen_again\":%u,\"new_this_visit\":%u,"
+        "\"missing_this_visit\":%u,\"wifi_access_points\":%u,"
+        "\"wifi_stations\":%u,\"ble_devices\":%u,"
+        "\"session_id_exact\":%s,\"session_stopped\":%s,"
+        "\"radio_touched\":false,\"storage_touched\":false}",
+        wifiProductView == WifiProductView::Visit ? "true" : "false",
+        fieldSurveyTracker.previousAvailable() ? "true" : "false",
+        fieldSurveyTracker.comparePrevious() ? "true" : "false",
+        fieldSurveyVisitStatusName(result.status),
+        fieldSurveyBuildStatusName(result.buildStatus),
+        result.complete() ? "true" : "false",
+        static_cast<unsigned>(result.currentUnique),
+        static_cast<unsigned>(result.baselineUnique),
+        static_cast<unsigned>(result.seenAgain),
+        static_cast<unsigned>(result.newThisVisit),
+        static_cast<unsigned>(result.missingThisVisit),
+        static_cast<unsigned>(result.wifiAccessPoints),
+        static_cast<unsigned>(result.wifiStations),
+        static_cast<unsigned>(result.bleDevices),
+        surveySession.id() != nullptr &&
+                std::strcmp(surveySession.id(), FieldSurveyTracker::kSessionId) == 0
+            ? "true" : "false",
+        surveySession.state() == SessionState::Stopped ? "true" : "false");
+    reply.println(line);
+}
+
+void emitFieldSurveyIncompleteTest(Stream& reply) {
+    if (!hilSession.active() || wifiProductView != WifiProductView::Visit ||
+        surveySession.state() != SessionState::Running) {
+        reply.println(
+            "{\"schema\":\"leshy.survey.field_visit.v1\","
+            "\"kind\":\"error\",\"status\":\"invalid_test_state\","
+            "\"radio_touched\":false,\"storage_touched\":false}");
+        return;
+    }
+    // Exercise the same product tracker with a physically live, therefore
+    // intentionally incomplete, session. The normal Stop/commit path below
+    // recomputes the result from the stopped session and remains untouched.
+    fieldSurveyTracker.completeVisit(surveySession);
+    emitFieldSurveyState(reply);
+}
+
 void emitSessionFixture(Stream& reply) {
     if (surveySession.state() != SessionState::Stopped) {
         reply.println("{\"schema\":\"leshy.session.fixture.v1\",\"kind\":\"result\","
@@ -30619,6 +30673,7 @@ bool commandAllowedDuringSafetyStop(const char* command) {
            std::strcmp(command, "safety.restart-test confirm") == 0 ||
            std::strcmp(command, "safety.clear confirm") == 0 ||
            std::strcmp(command, "ui.state") == 0 ||
+           std::strcmp(command, "survey.field-visit") == 0 ||
            std::strncmp(command, "ui.key ", 7) == 0 ||
            std::strcmp(command, "ui.capture") == 0 ||
            std::strcmp(command, "input.state") == 0 ||
@@ -30655,6 +30710,7 @@ bool commandAllowedWhileSessionWorkspaceBorrowed(const char* command) {
            std::strcmp(command, "safety.state") == 0 ||
            std::strcmp(command, "ping") == 0 ||
            std::strcmp(command, "ui.state") == 0 ||
+           std::strcmp(command, "survey.field-visit") == 0 ||
            std::strcmp(command, "ui.capture") == 0 ||
            std::strcmp(command, "input.state") == 0 ||
            std::strcmp(command, "touch.state") == 0 ||
@@ -31276,6 +31332,11 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitBleDeviceDetailState(reply);
     } else if (std::strcmp(command, "survey.browser") == 0) {
         emitSurveyBrowser(reply);
+    } else if (std::strcmp(command, "survey.field-visit") == 0) {
+        emitFieldSurveyState(reply);
+    } else if (std::strcmp(
+                   command, "survey.field-visit.test-incomplete once") == 0) {
+        emitFieldSurveyIncompleteTest(reply);
     } else if (std::strcmp(command, "capture.state") == 0) {
         emitWifiFrameCaptureState(reply);
     } else if (std::strcmp(command, "airspace.guard.state") == 0) {
@@ -31978,6 +32039,8 @@ void setup() {
               "\"hardware.cc1101.spectrum\","
               "\"capture.subghz.test-fixture fixed-rx-only\","
               "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
+              "\"survey.field-visit\","
+              "\"survey.field-visit.test-incomplete once\","
               "\"wifi.network.detail\","
               "\"wifi.network.hil-select-label-fnv1a64 <16-hex-hash>\","
               "\"wifi.authentication.state\","
