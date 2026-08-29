@@ -24,6 +24,9 @@ constexpr std::uint16_t kEnrichedSessionSchemaVersion = 7;
 // Version 8 persists bounded authentication-capture provenance alongside the
 // existing immutable raw Wi-Fi frame block. Versions 1..7 remain readable.
 constexpr std::uint16_t kAuthenticationCaptureSessionSchemaVersion = 8;
+// Version 9 adds one checksummed immutable trusted survey UTC/location record
+// to observation Sessions. Versions 1..8 remain byte-for-byte readable.
+constexpr std::uint16_t kTrustedSurveySessionSchemaVersion = 9;
 constexpr std::uint16_t kLegacySegmentSchemaVersion = 1;
 constexpr std::uint16_t kTimelineSegmentSchemaVersion = 2;
 constexpr std::uint16_t kSegmentSchemaVersion = 3;
@@ -32,6 +35,7 @@ constexpr std::uint16_t kSubGhzRawSegmentSchemaVersion = 5;
 constexpr std::uint16_t kInfraredRawSegmentSchemaVersion = 6;
 constexpr std::uint16_t kEnrichedSegmentSchemaVersion = 7;
 constexpr std::uint16_t kAuthenticationCaptureSegmentSchemaVersion = 8;
+constexpr std::uint16_t kTrustedSurveySegmentSchemaVersion = 9;
 constexpr std::size_t kSessionManifestMaxBytes = 256;
 constexpr std::size_t kObservationRecordMaxBytes = 128;
 constexpr std::size_t kTimelineRecordMaxBytes = 1024;

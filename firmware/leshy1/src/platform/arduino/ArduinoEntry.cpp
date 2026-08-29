@@ -29197,6 +29197,26 @@ void emitLibraryFieldSurveyWigle(Stream& reply) {
         }
     }
     const std::size_t wigleRecords = catalog->size() - wifiStations;
+    const auto& trusted = entry->session->trustedSurveyContext();
+    leshy1::apps::survey::FieldSurveyWigleContext context;
+    context.firstSeenUtc = trusted.utcPresent
+        ? trusted.firstSeenUtc.data() : nullptr;
+    context.location.present = trusted.locationPresent;
+    context.location.latitudeE7 = trusted.latitudeE7;
+    context.location.longitudeE7 = trusted.longitudeE7;
+    context.location.altitudeCentimeters = trusted.altitudeCentimeters;
+    context.location.accuracyCentimeters = trusted.accuracyCentimeters;
+    const auto expectedReadiness = trusted.utcPresent
+        ? trusted.locationPresent
+            ? leshy1::apps::survey::FieldSurveyWigleReadiness::Located
+            : leshy1::apps::survey::FieldSurveyWigleReadiness::Unlocated
+        : trusted.locationPresent
+            ? leshy1::apps::survey::FieldSurveyWigleReadiness::UntimedLocated
+            : leshy1::apps::survey::FieldSurveyWigleReadiness::UntimedUnlocated;
+    const bool uploadReady = expectedReadiness ==
+        leshy1::apps::survey::FieldSurveyWigleReadiness::Located;
+    const char* readinessName = leshy1::apps::survey::
+        fieldSurveyWigleReadinessName(expectedReadiness);
     char row[512] = {};
     const auto metadata = leshy1::apps::survey::
         formatFieldSurveyWigleMetadata(LESHY1_VERSION, row, sizeof(row));
@@ -29214,13 +29234,19 @@ void emitLibraryFieldSurveyWigle(Stream& reply) {
         "\"kind\":\"begin\",\"status\":\"valid\","
         "\"generation\":%lu,\"session_id\":\"%s\","
         "\"format\":\"wigle_wifi_1.6\",\"records\":%u,"
-        "\"skipped_wifi_stations\":%u,\"readiness\":\"untimed_unlocated\","
-        "\"trusted_utc\":false,\"trusted_location\":false,"
-        "\"upload_ready\":false,\"persistent\":%s,"
+        "\"skipped_wifi_stations\":%u,\"readiness\":\"%s\","
+        "\"trusted_utc\":%s,\"trusted_location\":%s,"
+        "\"trusted_source\":\"%s\",\"fix_age_ms\":%lu,"
+        "\"upload_ready\":%s,\"persistent\":%s,"
         "\"radio_touched\":false}",
         static_cast<unsigned long>(entry->generation), entry->session->id(),
         static_cast<unsigned>(wigleRecords),
         static_cast<unsigned>(wifiStations),
+        readinessName, trusted.utcPresent ? "true" : "false",
+        trusted.locationPresent ? "true" : "false",
+        trusted.present ? "gps_nmea" : "none",
+        static_cast<unsigned long>(trusted.ageMs),
+        uploadReady ? "true" : "false",
         entry->persistent ? "true" : "false");
     reply.println(diagnosticJson);
     reply.flush();
@@ -29234,7 +29260,6 @@ void emitLibraryFieldSurveyWigle(Stream& reply) {
         reply.write(reinterpret_cast<const std::uint8_t*>(row),
                     columns.bytes) == columns.bytes;
     if (valid) bytes += columns.bytes;
-    const leshy1::apps::survey::FieldSurveyWigleContext context{};
     const char* failure = valid ? "valid" : "stream_failed";
     for (std::size_t index = 0U;
          valid && index < catalog->size(); ++index) {
@@ -29248,9 +29273,8 @@ void emitLibraryFieldSurveyWigle(Stream& reply) {
             ? leshy1::apps::survey::FieldSurveyWigleResult{}
             : leshy1::apps::survey::formatFieldSurveyWigleRow(
                   *record, context, row, sizeof(row));
-        if (!formatted.valid() || formatted.uploadReady ||
-            formatted.readiness != leshy1::apps::survey::
-                FieldSurveyWigleReadiness::UntimedUnlocated) {
+        if (!formatted.valid() || formatted.uploadReady != uploadReady ||
+            formatted.readiness != expectedReadiness) {
             valid = false;
             failure = leshy1::apps::survey::fieldSurveyWigleStatusName(
                 formatted.status);
@@ -29270,10 +29294,11 @@ void emitLibraryFieldSurveyWigle(Stream& reply) {
         "\"kind\":\"end\",\"status\":\"%s\","
         "\"records\":%u,\"bytes\":%u,"
         "\"skipped_wifi_stations\":%u,"
-        "\"readiness\":\"untimed_unlocated\",\"upload_ready\":false,"
+        "\"readiness\":\"%s\",\"upload_ready\":%s,"
         "\"radio_touched\":false}",
         valid ? "complete" : failure, static_cast<unsigned>(records),
-        static_cast<unsigned>(bytes), static_cast<unsigned>(wifiStations));
+        static_cast<unsigned>(bytes), static_cast<unsigned>(wifiStations),
+        readinessName, uploadReady ? "true" : "false");
     reply.println(diagnosticJson);
     reply.flush();
 }

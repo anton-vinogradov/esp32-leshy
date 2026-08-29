@@ -62,6 +62,40 @@ enum class FramePayloadFormat : std::uint8_t {
     Ieee80211,
 };
 
+enum class TrustedSurveySource : std::uint8_t {
+    None = 0,
+    GpsNmea = 1,
+};
+
+enum class TrustedSurveyContextStatus : std::uint8_t {
+    Configured,
+    InvalidState,
+    InvalidContext,
+    AlreadyConfigured,
+};
+
+const char* trustedSurveyContextStatusName(TrustedSurveyContextStatus status);
+
+// Optional, immutable time/location evidence captured from an explicitly
+// admitted hardware source. Absence remains a valid stock-board state and must
+// never be replaced with fabricated coordinates or wall-clock time.
+struct TrustedSurveyContext final {
+    static constexpr std::size_t kUtcBytes = 19;
+    static constexpr std::uint32_t kMaximumAgeMs = 10000;
+
+    bool present = false;
+    TrustedSurveySource source = TrustedSurveySource::None;
+    bool utcPresent = false;
+    bool locationPresent = false;
+    std::uint64_t observedMonotonicUs = 0;
+    std::uint32_t ageMs = 0;
+    std::array<char, kUtcBytes + 1> firstSeenUtc{};
+    std::int32_t latitudeE7 = 0;
+    std::int32_t longitudeE7 = 0;
+    std::int32_t altitudeCentimeters = 0;
+    std::uint32_t accuracyCentimeters = 0;
+};
+
 // Immutable acquisition provenance for schema-v3+ Sessions. It records the exact
 // passive receive plans and build identity that produced the normalized records.
 // Frame payload and location flags are explicit so exports cannot invent PCAP or
@@ -128,6 +162,8 @@ public:
     SessionStatus stop(std::uint64_t monotonicUs);
     CaptureMetadataStatus configureCaptureMetadata(
         const CaptureMetadata& metadata);
+    TrustedSurveyContextStatus configureTrustedSurveyContext(
+        const TrustedSurveyContext& context);
     SessionTimelineStatus startTimeline(std::uint8_t selectedMask,
                                         std::uint64_t monotonicUs);
     SessionTimelineStatus appendTimelineWindow(const SourceWindow& window);
@@ -145,6 +181,9 @@ public:
     std::size_t size() const { return size_; }
     std::uint32_t dropped() const { return dropped_; }
     const CaptureMetadata& captureMetadata() const { return captureMetadata_; }
+    const TrustedSurveyContext& trustedSurveyContext() const {
+        return trustedSurveyContext_;
+    }
     const domain::observations::Observation* get(std::size_t index) const;
     const SessionTimelineSummary& timeline() const { return timeline_; }
     std::size_t timelineWindowCount() const { return timelineWindowSize_; }
@@ -159,6 +198,7 @@ private:
     std::size_t size_ = 0;
     std::uint32_t dropped_ = 0;
     CaptureMetadata captureMetadata_{};
+    TrustedSurveyContext trustedSurveyContext_{};
     SessionTimelineSummary timeline_{};
     std::array<SourceWindow, kTimelineWindowCapacity> timelineWindows_{};
     std::size_t timelineWindowHead_ = 0;

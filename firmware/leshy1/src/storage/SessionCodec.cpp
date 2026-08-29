@@ -25,6 +25,13 @@ constexpr std::uint8_t kInfraredRawCaptureWireVersion = 4;
 constexpr std::size_t kInfraredRawCaptureRecordBytes = 96;
 constexpr std::uint8_t kAuthenticationCaptureWireVersion = 5;
 constexpr std::size_t kAuthenticationCaptureRecordBytes = 132;
+constexpr std::uint8_t kTrustedSurveyMagic[4] = {'L', 'T', 'G', 'C'};
+constexpr std::uint8_t kTrustedSurveyWireVersion = 1;
+constexpr std::size_t kTrustedSurveyRecordBytes = 64;
+constexpr std::uint8_t kTrustedSurveyFlagUtc = 1U << 0U;
+constexpr std::uint8_t kTrustedSurveyFlagLocation = 1U << 1U;
+constexpr std::uint8_t kTrustedSurveyKnownFlags =
+    kTrustedSurveyFlagUtc | kTrustedSurveyFlagLocation;
 constexpr std::uint8_t kWifiFrameMagic[4] = {'L', 'W', 'F', 'C'};
 constexpr std::uint8_t kWifiFrameWireVersion = 1;
 constexpr std::size_t kWifiFrameHeaderBytes = 16;
@@ -996,6 +1003,63 @@ SessionCodecStatus decodeCaptureRecord(
     return SessionCodecStatus::Valid;
 }
 
+SessionCodecStatus encodeTrustedSurveyRecord(
+    const services::survey::TrustedSurveyContext& context,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
+    if (output == nullptr || outputSize == nullptr ||
+        capacity < kTrustedSurveyRecordBytes || !context.present) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    std::memset(output, 0, kTrustedSurveyRecordBytes);
+    std::memcpy(output, kTrustedSurveyMagic, sizeof(kTrustedSurveyMagic));
+    output[4] = kTrustedSurveyWireVersion;
+    output[5] = (context.utcPresent ? kTrustedSurveyFlagUtc : 0U) |
+        (context.locationPresent ? kTrustedSurveyFlagLocation : 0U);
+    output[6] = static_cast<std::uint8_t>(context.source);
+    put64(output + 8, context.observedMonotonicUs);
+    put32(output + 16, context.ageMs);
+    std::memcpy(output + 20, context.firstSeenUtc.data(),
+                services::survey::TrustedSurveyContext::kUtcBytes);
+    put32(output + 40, static_cast<std::uint32_t>(context.latitudeE7));
+    put32(output + 44, static_cast<std::uint32_t>(context.longitudeE7));
+    put32(output + 48,
+          static_cast<std::uint32_t>(context.altitudeCentimeters));
+    put32(output + 52, context.accuracyCentimeters);
+    *outputSize = kTrustedSurveyRecordBytes;
+    return SessionCodecStatus::Valid;
+}
+
+SessionCodecStatus decodeTrustedSurveyRecord(
+    const std::uint8_t* input, std::size_t size,
+    services::survey::SurveySession* output) {
+    if (input == nullptr || output == nullptr ||
+        size != kTrustedSurveyRecordBytes ||
+        std::memcmp(input, kTrustedSurveyMagic, sizeof(kTrustedSurveyMagic)) != 0 ||
+        input[4] != kTrustedSurveyWireVersion ||
+        (input[5] & static_cast<std::uint8_t>(~kTrustedSurveyKnownFlags)) != 0 ||
+        input[7] != 0 || input[39] != 0 || !allZero(input + 56, 8)) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    services::survey::TrustedSurveyContext context;
+    context.present = true;
+    context.utcPresent = (input[5] & kTrustedSurveyFlagUtc) != 0;
+    context.locationPresent =
+        (input[5] & kTrustedSurveyFlagLocation) != 0;
+    context.source = static_cast<services::survey::TrustedSurveySource>(input[6]);
+    context.observedMonotonicUs = get64(input + 8);
+    context.ageMs = get32(input + 16);
+    std::memcpy(context.firstSeenUtc.data(), input + 20,
+                services::survey::TrustedSurveyContext::kUtcBytes);
+    context.firstSeenUtc[services::survey::TrustedSurveyContext::kUtcBytes] = '\0';
+    context.latitudeE7 = static_cast<std::int32_t>(get32(input + 40));
+    context.longitudeE7 = static_cast<std::int32_t>(get32(input + 44));
+    context.altitudeCentimeters = static_cast<std::int32_t>(get32(input + 48));
+    context.accuracyCentimeters = get32(input + 52);
+    return output->configureTrustedSurveyContext(context) ==
+            services::survey::TrustedSurveyContextStatus::Configured
+        ? SessionCodecStatus::Valid : SessionCodecStatus::CaptureInvalid;
+}
+
 SessionCodecStatus encodeWifiFrameBlock(
     const services::survey::SurveySession& session,
     const domain::captures::WifiFrameSource& frames,
@@ -1286,7 +1350,8 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
         version != kSubGhzRawSegmentSchemaVersion &&
         version != kInfraredRawSegmentSchemaVersion &&
         version != kEnrichedSegmentSchemaVersion &&
-        version != kAuthenticationCaptureSegmentSchemaVersion) {
+        version != kAuthenticationCaptureSegmentSchemaVersion &&
+        version != kTrustedSurveySegmentSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
     }
     if ((version == kLegacySegmentSchemaVersion &&
@@ -1303,7 +1368,9 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
         (version == kEnrichedSegmentSchemaVersion &&
          decodedAdditionalRecords != 2) ||
         (version == kAuthenticationCaptureSegmentSchemaVersion &&
-         decodedAdditionalRecords != 2)) {
+         decodedAdditionalRecords != 2) ||
+        (version == kTrustedSurveySegmentSchemaVersion &&
+         decodedAdditionalRecords != 3)) {
         return SessionCodecStatus::Malformed;
     }
     const std::uint32_t decodedCount = get32(footer + 8);
@@ -1618,6 +1685,7 @@ SessionCodecStatus encodeObservationSegment(const services::survey::SurveySessio
     }
     const bool hasTimeline = session.timeline().present;
     const bool hasCapture = session.captureMetadata().present;
+    const bool hasTrustedSurvey = session.trustedSurveyContext().present;
     if (hasCapture && session.captureMetadata().framePayloadCaptured) {
         return SessionCodecStatus::CaptureInvalid;
     }
@@ -1626,12 +1694,26 @@ SessionCodecStatus encodeObservationSegment(const services::survey::SurveySessio
             session.timeline().selectedMask)) {
         return SessionCodecStatus::CaptureInvalid;
     }
+    if (hasTrustedSurvey && (!hasCapture || !hasTimeline)) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
     CborWriter writer(output, capacity);
     if (hasCapture) {
         std::uint8_t record[kCaptureRecordBytes] = {};
         std::size_t recordSize = 0;
         const SessionCodecStatus status = encodeCaptureRecord(
             session.captureMetadata(), record, sizeof(record), &recordSize);
+        if (status != SessionCodecStatus::Valid) return status;
+        writer.be32(static_cast<std::uint32_t>(recordSize));
+        writer.be32(crc32c(record, recordSize));
+        writer.raw(record, recordSize);
+    }
+    if (hasTrustedSurvey) {
+        std::uint8_t record[kTrustedSurveyRecordBytes] = {};
+        std::size_t recordSize = 0;
+        const SessionCodecStatus status = encodeTrustedSurveyRecord(
+            session.trustedSurveyContext(), record, sizeof(record),
+            &recordSize);
         if (status != SessionCodecStatus::Valid) return status;
         writer.be32(static_cast<std::uint32_t>(recordSize));
         writer.be32(crc32c(record, recordSize));
@@ -1666,10 +1748,12 @@ SessionCodecStatus encodeObservationSegment(const services::survey::SurveySessio
     const std::size_t bodySize = writer.size();
     std::uint8_t footer[kSegmentFooterBytes] = {};
     std::memcpy(footer, kSegmentMagic, sizeof(kSegmentMagic));
-    put16(footer + 4, hasCapture ? kEnrichedSegmentSchemaVersion
+    put16(footer + 4, hasTrustedSurvey ? kTrustedSurveySegmentSchemaVersion
+                                : hasCapture ? kEnrichedSegmentSchemaVersion
                                 : hasTimeline ? kTimelineSegmentSchemaVersion
                                               : kLegacySegmentSchemaVersion);
-    put16(footer + 6, hasCapture ? 2 : hasTimeline ? 1 : 0);
+    put16(footer + 6, hasTrustedSurvey ? 3 : hasCapture ? 2
+                                                  : hasTimeline ? 1 : 0);
     put32(footer + 8, static_cast<std::uint32_t>(session.size()));
     put32(footer + 12, static_cast<std::uint32_t>(bodySize));
     put32(footer + 16, crc32c(output, bodySize));
@@ -1918,6 +2002,8 @@ SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& 
                          segmentVersion ==
                                  kAuthenticationCaptureSegmentSchemaVersion
                              ? kAuthenticationCaptureSessionSchemaVersion
+                         : segmentVersion == kTrustedSurveySegmentSchemaVersion
+                             ? kTrustedSurveySessionSchemaVersion
                          : segmentVersion == kEnrichedSegmentSchemaVersion
                              ? kEnrichedSessionSchemaVersion
                          : segmentVersion == kInfraredRawSegmentSchemaVersion
@@ -1970,7 +2056,8 @@ SessionCodecStatus decodeSessionManifest(const std::uint8_t* input, std::size_t 
         value != kSubGhzRawSessionSchemaVersion &&
         value != kInfraredRawSessionSchemaVersion &&
         value != kEnrichedSessionSchemaVersion &&
-        value != kAuthenticationCaptureSessionSchemaVersion) {
+        value != kAuthenticationCaptureSessionSchemaVersion &&
+        value != kTrustedSurveySessionSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
     }
     const std::uint16_t decodedSchemaVersion =
@@ -2036,6 +2123,8 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
     const std::uint16_t expectedSegmentVersion =
         manifest.schemaVersion == kAuthenticationCaptureSessionSchemaVersion
             ? kAuthenticationCaptureSegmentSchemaVersion
+        : manifest.schemaVersion == kTrustedSurveySessionSchemaVersion
+            ? kTrustedSurveySegmentSchemaVersion
         : manifest.schemaVersion == kEnrichedSessionSchemaVersion
             ? kEnrichedSegmentSchemaVersion
         : manifest.schemaVersion == kInfraredRawSessionSchemaVersion
@@ -2052,6 +2141,8 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
     const std::uint16_t expectedAdditionalRecords =
         manifest.schemaVersion == kAuthenticationCaptureSessionSchemaVersion
             ? 2
+        : manifest.schemaVersion == kTrustedSurveySessionSchemaVersion
+            ? 3
         : manifest.schemaVersion == kEnrichedSessionSchemaVersion
             ? 2
         : manifest.schemaVersion == kInfraredRawSessionSchemaVersion
@@ -2077,6 +2168,7 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
     std::size_t position = 0;
     AuthenticationCaptureProvenance authenticationProvenance;
     if (manifest.schemaVersion == kAuthenticationCaptureSessionSchemaVersion ||
+        manifest.schemaVersion == kTrustedSurveySessionSchemaVersion ||
         manifest.schemaVersion == kEnrichedSessionSchemaVersion ||
         manifest.schemaVersion == kSessionSchemaVersion ||
         manifest.schemaVersion == kInfraredRawSessionSchemaVersion ||
@@ -2117,6 +2209,31 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         }
         position += recordLength;
     }
+    if (manifest.schemaVersion == kTrustedSurveySessionSchemaVersion) {
+        if (bodyLength - position < 8) {
+            output->reset();
+            return SessionCodecStatus::BoundsExceeded;
+        }
+        const std::uint32_t recordLength = get32(segment + position);
+        const std::uint32_t recordCrc = get32(segment + position + 4);
+        position += 8;
+        if (recordLength != kTrustedSurveyRecordBytes ||
+            recordLength > bodyLength - position) {
+            output->reset();
+            return SessionCodecStatus::BoundsExceeded;
+        }
+        if (recordCrc != crc32c(segment + position, recordLength)) {
+            output->reset();
+            return SessionCodecStatus::ChecksumMismatch;
+        }
+        status = decodeTrustedSurveyRecord(
+            segment + position, recordLength, output);
+        if (status != SessionCodecStatus::Valid) {
+            output->reset();
+            return status;
+        }
+        position += recordLength;
+    }
     for (std::uint32_t index = 0; index < recordCount; ++index) {
         if (bodyLength - position < 8) {
             output->reset();
@@ -2137,7 +2254,8 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         domain::observations::Observation observation;
         status = decodeObservation(
             segment + position, recordLength,
-            manifest.schemaVersion == kEnrichedSessionSchemaVersion,
+            manifest.schemaVersion == kEnrichedSessionSchemaVersion ||
+                manifest.schemaVersion == kTrustedSurveySessionSchemaVersion,
             &observation);
         if (status != SessionCodecStatus::Valid) {
             output->reset();
@@ -2227,6 +2345,7 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         position += recordLength;
     }
     if ((manifest.schemaVersion == kSessionSchemaVersion ||
+         manifest.schemaVersion == kTrustedSurveySessionSchemaVersion ||
          manifest.schemaVersion == kEnrichedSessionSchemaVersion) &&
         (!output->captureMetadata().present || !output->timeline().present ||
          output->captureMetadata().selectedSourceMask !=

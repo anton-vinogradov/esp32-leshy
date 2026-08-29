@@ -3984,7 +3984,7 @@ void testSessionCodecCommitsCanonicalDataAndReopensOffline() {
 
     std::array<std::uint8_t, kSessionManifestMaxBytes> futureManifest = manifest;
     CHECK(manifestSize > 2);
-    futureManifest[2] = kAuthenticationCaptureSessionSchemaVersion + 1U;
+    futureManifest[2] = kTrustedSurveySessionSchemaVersion + 1U;
     CHECK(decodeSessionManifest(futureManifest.data(), manifestSize, &decodedManifest) ==
           SessionCodecStatus::UnsupportedSchema);
     futureManifest = manifest;
@@ -4235,6 +4235,144 @@ void testCaptureMetadataV3AndCsvExportAreCanonical() {
     CHECK(std::strcmp(captureMetadataStatusName(
                           CaptureMetadataStatus::Configured),
                       "configured") == 0);
+}
+
+void testTrustedSurveyContextPersistsWithoutInventingGps() {
+    const std::uint8_t wifiMask = sourceMask(RadioKind::Wifi);
+    SurveySession original;
+    CHECK(original.start("trusted-field", 1000U) == SessionStatus::Started);
+    CaptureMetadata metadata;
+    metadata.present = true;
+    metadata.passive = true;
+    metadata.wifiShowHidden = true;
+    metadata.selectedSourceMask = wifiMask;
+    metadata.wifiMaxMsPerChannel = 120U;
+    metadata.appIdentityLength = metadata.appIdentity.size();
+    for (std::size_t index = 0; index < metadata.appIdentity.size(); ++index) {
+        metadata.appIdentity[index] = static_cast<std::uint8_t>(index + 1U);
+    }
+    CHECK(original.configureCaptureMetadata(metadata) ==
+          CaptureMetadataStatus::Configured);
+
+    TrustedSurveyContext trusted;
+    trusted.present = true;
+    trusted.source = TrustedSurveySource::GpsNmea;
+    trusted.utcPresent = true;
+    trusted.locationPresent = true;
+    trusted.observedMonotonicUs = 1050U;
+    trusted.ageMs = 250U;
+    std::memcpy(trusted.firstSeenUtc.data(), "2026-08-30 12:34:56", 20U);
+    trusted.latitudeE7 = 557558260;
+    trusted.longitudeE7 = 376173000;
+    trusted.altitudeCentimeters = 12345;
+    trusted.accuracyCentimeters = 678U;
+    CHECK(original.configureTrustedSurveyContext(trusted) ==
+          TrustedSurveyContextStatus::Configured);
+    CHECK(original.configureTrustedSurveyContext(trusted) ==
+          TrustedSurveyContextStatus::AlreadyConfigured);
+    CHECK(original.startTimeline(wifiMask, 1000U) ==
+          SessionTimelineStatus::Started);
+
+    Observation wifi;
+    wifi.monotonicUs = 1200U;
+    wifi.radio = RadioKind::Wifi;
+    wifi.frequencyKhz = 2437000U;
+    wifi.channel = 6U;
+    wifi.rssiDbm = -51;
+    wifi.identity = {1U, 2U, 3U, 4U, 5U, 6U};
+    wifi.identityLength = 6U;
+    wifi.wifiNetwork.present = true;
+    wifi.wifiKind = WifiObservationKind::AccessPoint;
+    CHECK(original.append(wifi) == SessionStatus::Appended);
+    const SourceWindow window{
+        RadioKind::Wifi, SourceWindowState::Active, SourceWindowReason::None,
+        1000U, 1300U, 1U, 0U};
+    CHECK(original.appendTimelineWindow(window) ==
+          SessionTimelineStatus::Appended);
+    SourceRuntimeSummary wifiSummary;
+    wifiSummary.selected = true;
+    wifiSummary.state = SourceWindowState::Stopped;
+    wifiSummary.activeUs = 300U;
+    wifiSummary.accepted = 1U;
+    wifiSummary.windows = 1U;
+    CHECK(original.finalizeTimeline(1300U, wifiSummary, {}, 0U) ==
+          SessionTimelineStatus::Finalized);
+    CHECK(original.stop(1400U) == SessionStatus::Stopped);
+
+    std::array<std::uint8_t, kSessionSegmentMaxBytes> segment{};
+    std::array<std::uint8_t, kSessionManifestMaxBytes> manifest{};
+    std::size_t segmentSize = 0U;
+    std::size_t manifestSize = 0U;
+    CHECK(encodeObservationSegment(original, segment.data(), segment.size(),
+                                   &segmentSize) == SessionCodecStatus::Valid);
+    CHECK(encodeSessionManifest(original, segment.data(), segmentSize,
+                                manifest.data(), manifest.size(),
+                                &manifestSize) == SessionCodecStatus::Valid);
+    SessionManifest decodedManifest;
+    CHECK(decodeSessionManifest(manifest.data(), manifestSize,
+                                &decodedManifest) == SessionCodecStatus::Valid);
+    CHECK(decodedManifest.schemaVersion == kTrustedSurveySessionSchemaVersion);
+
+    SurveySession reopened;
+    CHECK(reopenSession(manifest.data(), manifestSize, segment.data(),
+                        segmentSize, &reopened) == SessionCodecStatus::Valid);
+    const auto& restored = reopened.trustedSurveyContext();
+    CHECK(restored.present);
+    CHECK(restored.source == TrustedSurveySource::GpsNmea);
+    CHECK(restored.utcPresent && restored.locationPresent);
+    CHECK(restored.observedMonotonicUs == trusted.observedMonotonicUs);
+    CHECK(restored.ageMs == trusted.ageMs);
+    CHECK(restored.firstSeenUtc == trusted.firstSeenUtc);
+    CHECK(restored.latitudeE7 == trusted.latitudeE7);
+    CHECK(restored.longitudeE7 == trusted.longitudeE7);
+    CHECK(restored.altitudeCentimeters == trusted.altitudeCentimeters);
+    CHECK(restored.accuracyCentimeters == trusted.accuracyCentimeters);
+
+    SurveySession absent;
+    CHECK(absent.start("no-gps", 1000U) == SessionStatus::Started);
+    CHECK(!absent.trustedSurveyContext().present);
+    TrustedSurveyContext invalid = trusted;
+    invalid.source = TrustedSurveySource::None;
+    CHECK(absent.configureTrustedSurveyContext(invalid) ==
+          TrustedSurveyContextStatus::InvalidContext);
+    invalid = trusted;
+    invalid.ageMs = TrustedSurveyContext::kMaximumAgeMs + 1U;
+    CHECK(absent.configureTrustedSurveyContext(invalid) ==
+          TrustedSurveyContextStatus::InvalidContext);
+    invalid = trusted;
+    std::memcpy(invalid.firstSeenUtc.data(), "2026-08-30T12:34:56", 20U);
+    CHECK(absent.configureTrustedSurveyContext(invalid) ==
+          TrustedSurveyContextStatus::InvalidContext);
+    invalid = trusted;
+    std::memcpy(invalid.firstSeenUtc.data(), "2026-02-31 12:34:56", 20U);
+    CHECK(absent.configureTrustedSurveyContext(invalid) ==
+          TrustedSurveyContextStatus::InvalidContext);
+
+    TrustedSurveyContext utcOnly = trusted;
+    utcOnly.locationPresent = false;
+    utcOnly.latitudeE7 = 0;
+    utcOnly.longitudeE7 = 0;
+    utcOnly.altitudeCentimeters = 0;
+    utcOnly.accuracyCentimeters = 0U;
+    CHECK(absent.configureTrustedSurveyContext(utcOnly) ==
+          TrustedSurveyContextStatus::Configured);
+    CHECK(std::strcmp(trustedSurveyContextStatusName(
+                          TrustedSurveyContextStatus::Configured),
+                      "configured") == 0);
+
+    SurveySession tooLate;
+    CHECK(tooLate.start("late-gps", 1000U) == SessionStatus::Started);
+    Observation observation;
+    observation.monotonicUs = 1100U;
+    observation.radio = RadioKind::Wifi;
+    observation.frequencyKhz = 2412000U;
+    observation.channel = 1U;
+    observation.rssiDbm = -60;
+    observation.identity = {6U, 5U, 4U, 3U, 2U, 1U};
+    observation.identityLength = 6U;
+    CHECK(tooLate.append(observation) == SessionStatus::Appended);
+    CHECK(tooLate.configureTrustedSurveyContext(trusted) ==
+          TrustedSurveyContextStatus::InvalidState);
 }
 
 struct PcapMemorySink final {
@@ -6460,6 +6598,7 @@ int main() {
     testSessionCodecCommitsCanonicalDataAndReopensOffline();
     testSessionCodecRoundTripsBleWithoutInventingWifiFields();
     testCaptureMetadataV3AndCsvExportAreCanonical();
+    testTrustedSurveyContextPersistsWithoutInventingGps();
     testWifiFrameCaptureExportsByteExactRadiotapPcap();
     testOfflineLibraryControllerIsBoundedAndPreservesProvenance();
     testSessionCatalogRecoversReadOnlyAndMarksFallbackIntegrity();

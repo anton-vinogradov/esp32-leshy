@@ -18,6 +18,55 @@ bool validSessionId(const char* value) {
     return true;
 }
 
+bool allZero(const char* value, std::size_t size) {
+    if (value == nullptr) return false;
+    for (std::size_t index = 0; index < size; ++index) {
+        if (value[index] != '\0') return false;
+    }
+    return true;
+}
+
+bool validUtc(const std::array<char, TrustedSurveyContext::kUtcBytes + 1>& utc) {
+    if (utc[TrustedSurveyContext::kUtcBytes] != '\0') return false;
+    for (std::size_t index = 0; index < TrustedSurveyContext::kUtcBytes; ++index) {
+        if (index == 4U || index == 7U) {
+            if (utc[index] != '-') return false;
+        } else if (index == 10U) {
+            if (utc[index] != ' ') return false;
+        } else if (index == 13U || index == 16U) {
+            if (utc[index] != ':') return false;
+        } else if (utc[index] < '0' || utc[index] > '9') {
+            return false;
+        }
+    }
+    const auto decimal = [&utc](std::size_t offset, std::size_t length) {
+        std::uint32_t value = 0;
+        for (std::size_t index = 0; index < length; ++index) {
+            value = value * 10U + static_cast<std::uint32_t>(
+                utc[offset + index] - '0');
+        }
+        return value;
+    };
+    const std::uint32_t year = decimal(0, 4);
+    const std::uint32_t month = decimal(5, 2);
+    const std::uint32_t day = decimal(8, 2);
+    const std::uint32_t hour = decimal(11, 2);
+    const std::uint32_t minute = decimal(14, 2);
+    const std::uint32_t second = decimal(17, 2);
+    if (year < 2020U || year > 2099U || month < 1U || month > 12U ||
+        hour > 23U || minute > 59U || second > 59U) {
+        return false;
+    }
+    static constexpr std::array<std::uint8_t, 12> kDaysPerMonth{
+        31U, 28U, 31U, 30U, 31U, 30U,
+        31U, 31U, 30U, 31U, 30U, 31U};
+    std::uint32_t maximumDay = kDaysPerMonth[month - 1U];
+    const bool leap = (year % 4U == 0U && year % 100U != 0U) ||
+        year % 400U == 0U;
+    if (month == 2U && leap) ++maximumDay;
+    return day >= 1U && day <= maximumDay;
+}
+
 }  // namespace
 
 const char* sessionStatusName(SessionStatus status) {
@@ -61,6 +110,17 @@ const char* captureMetadataStatusName(CaptureMetadataStatus status) {
         case CaptureMetadataStatus::AlreadyConfigured: return "already_configured";
     }
     return "invalid_metadata";
+}
+
+const char* trustedSurveyContextStatusName(TrustedSurveyContextStatus status) {
+    switch (status) {
+        case TrustedSurveyContextStatus::Configured: return "configured";
+        case TrustedSurveyContextStatus::InvalidState: return "invalid_state";
+        case TrustedSurveyContextStatus::InvalidContext: return "invalid_context";
+        case TrustedSurveyContextStatus::AlreadyConfigured:
+            return "already_configured";
+    }
+    return "invalid_context";
 }
 
 namespace {
@@ -124,11 +184,44 @@ void SurveySession::reset() {
     size_ = 0;
     dropped_ = 0;
     captureMetadata_ = {};
+    trustedSurveyContext_ = {};
     timeline_ = {};
     timelineWindows_.fill(SourceWindow{});
     timelineWindowHead_ = 0;
     timelineWindowSize_ = 0;
     latestTimelineWindowEndUs_ = 0;
+}
+
+TrustedSurveyContextStatus SurveySession::configureTrustedSurveyContext(
+    const TrustedSurveyContext& context) {
+    if (state_ != SessionState::Running || size_ != 0) {
+        return TrustedSurveyContextStatus::InvalidState;
+    }
+    if (trustedSurveyContext_.present) {
+        return TrustedSurveyContextStatus::AlreadyConfigured;
+    }
+    const bool validTimestamp = context.utcPresent
+        ? validUtc(context.firstSeenUtc)
+        : allZero(context.firstSeenUtc.data(), context.firstSeenUtc.size());
+    const bool validLocation = context.locationPresent
+        ? context.latitudeE7 >= -900000000 &&
+              context.latitudeE7 <= 900000000 &&
+              context.longitudeE7 >= -1800000000 &&
+              context.longitudeE7 <= 1800000000 &&
+              context.accuracyCentimeters <= 10000000U
+        : context.latitudeE7 == 0 && context.longitudeE7 == 0 &&
+              context.altitudeCentimeters == 0 &&
+              context.accuracyCentimeters == 0U;
+    if (!context.present ||
+        context.source != TrustedSurveySource::GpsNmea ||
+        (!context.utcPresent && !context.locationPresent) ||
+        context.observedMonotonicUs < startedUs_ ||
+        context.ageMs > TrustedSurveyContext::kMaximumAgeMs ||
+        !validTimestamp || !validLocation) {
+        return TrustedSurveyContextStatus::InvalidContext;
+    }
+    trustedSurveyContext_ = context;
+    return TrustedSurveyContextStatus::Configured;
 }
 
 CaptureMetadataStatus SurveySession::configureCaptureMetadata(
