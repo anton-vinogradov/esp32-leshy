@@ -1097,11 +1097,30 @@ The bounded result controller/presenter and schema-8/segment-8/wire-5 provenance
 foundation add no dynamic allocation, task, radio owner or TX dependency. The full
 host suite passed before independent review found the all-zero Key MIC P1; on this
 exact post-fix source the focused capture/policy ASan+UBSan tests, focused review,
-production build and budget pass. This is a host/build bound only: no device was
-flashed, the accepted physical runtime/heap baseline remains dev.246 `RB-M185`, and
-cadence remains 11/15. Product persistence and export are not wired, the standard
+production build and budget pass. At this historical checkpoint no device was
+flashed, so the accepted physical runtime/heap baseline was dev.246 `RB-M185` and
+cadence was 11/15; `RB-M187` below supersedes that physical bound. Product
+persistence and export are not wired, the standard
 artifact serializer does not yet exist, and `exportEligibility` remains
 `NotEvaluated`.
+
+CAP-049 physical navigation and product-entry regression `RB-M187`: exact
+`1.0.0-dev.248` at source `e62599c1827e249845105405797cb75aedaa5226` uses
+229,960 B static RAM and a 3,413,764 B linked image. The exact flashed
+application/factory sizes are 3,414,272/3,479,808 B with SHA-256
+`15ab98ef95a85afae840b913ddeef60f0883bccf99a03e4f74ed50f1235ac40c`/
+`d75ff42bfbd343d87e29022e4b16c1816db244c48705d769af679a290b3fffc0`;
+ELF/app identity is
+`1c908d29de25e84dba3423657464bedb0ced245115e7a18e93c9a3996c7bb5f1`
+and map SHA-256 is
+`c5484b781e923ef0d247aa274aa834832a29072e71b858420a0858cc908710a8`.
+On the original DIV, two Bluetooth lifecycles preserve identical 75,380 B free heap,
+zero driver drops and exact bounded retention accounting. The top-level menu and
+CAP-049 navigation/Repeat/replay-negative paths all return to Home/none/lease 0 with
+content-only repaint. This accepts the physical runtime/navigation bound and advances
+cadence to 12/15; it does not add or claim the still-missing standard serializer,
+product persistence/export, useful EAPOL/PMKID evidence or Product Survey cold
+recovery.
 
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while

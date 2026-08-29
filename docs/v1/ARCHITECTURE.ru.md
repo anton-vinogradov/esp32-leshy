@@ -886,9 +886,10 @@ automatic response; physical evidence TFT, cleanup и negative corpus всё е�
 
 Exact physical dev.246 доказывает receive-only lifecycle CAP-049, continuity fixed
 target/channel, честный `inconclusive` result, когда ambient traffic не даёт
-EAPOL/PMKID, повторный product FAT/VFS mount и final cleanup. Этот принятый physical
-baseline не меняется. Exact host/build dev.247 добавляет bounded allocation-free
-controller и presentation EN/RU над immutable terminal report. До publication он
+EAPOL/PMKID, повторный product FAT/VFS mount и final cleanup. Exact dev.247 добавляет
+bounded allocation-free controller и presentation EN/RU над immutable terminal
+report, а exact physical dev.248 принимает этот path на оригинальном DIV. До
+publication он
 валидирует report, ставит `inconclusive` раньше evidence Full, PMKID и Partial,
 отвергает M2/M3/M4 с полностью нулевым Key MIC, исключает zero-mask peers и открывает
 стабильный path `Результат → Действия → Устройство → Доказательства → Детали`.
@@ -907,10 +908,11 @@ dependency radio/platform или TX path.
 
 Это foundation, а не claim persistence/export. Product result остаётся
 volatile/RAM-only/not saved, `exportEligibility` равен `NotEvaluated`, persistence и
-export не подключены, standard artifact serializer ещё не существует. Сначала нужен
-physical TFT/navigation regression dev.247 после USB repower оригинального DIV;
-только затем можно реализовать serializer, подключить product save/export и проверить
-их полезным authentication evidence.
+export не подключены, standard artifact serializer ещё не существует. Exact physical
+dev.248 проходит Result, Actions, оба выбора Устройства, список/детали Evidence,
+Повтор и replay rejection с content-only repaint и финальным Home/none/lease 0.
+Следующая граница — standard serializer и wiring product save/export, проверенные
+полезным bounded authentication evidence.
 
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;

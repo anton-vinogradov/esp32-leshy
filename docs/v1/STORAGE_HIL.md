@@ -239,8 +239,10 @@ radio/platform dependency or TX.
 `E-BUILD-175`/`E-AUTO-149` accept only this host/build foundation. Product
 persistence/export is not wired, no standard artifact serializer exists, and the
 on-device CAP-049 result remains volatile/RAM-only/not saved with
-`exportEligibility=NotEvaluated`. No device was flashed; dev.246 `E-HIL-191` remains
-the physical baseline and cadence remains 11/15.
+`exportEligibility=NotEvaluated`. At this historical checkpoint no device was
+flashed; dev.246 `E-HIL-191` was the physical baseline and cadence was 11/15. Exact
+physical dev.248 `E-HIL-192` later accepts result navigation and advances cadence to
+12/15, while serializer and persistence/export remain open.
 
 ## Physical fixture safety
 

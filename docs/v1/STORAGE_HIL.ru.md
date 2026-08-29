@@ -337,8 +337,10 @@ dynamic allocation, dependency radio/platform или TX.
 `E-BUILD-175`/`E-AUTO-149` принимают только эту host/build foundation. Product
 persistence/export не подключён, standard artifact serializer не существует, а
 on-device result CAP-049 остаётся volatile/RAM-only/not saved с
-`exportEligibility=NotEvaluated`. Device не прошивался; dev.246 `E-HIL-191` остаётся
-physical baseline, cadence остаётся 11/15.
+`exportEligibility=NotEvaluated`. В этом историческом checkpoint device не
+прошивался; dev.246 `E-HIL-191` был physical baseline, cadence была 11/15. Позже
+exact physical dev.248 `E-HIL-192` принимает navigation результата и двигает cadence
+до 12/15, но serializer и persistence/export остаются открыты.
 
 ## Реализованный и физически проверенный software-reset harness
 

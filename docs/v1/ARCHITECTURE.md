@@ -805,9 +805,9 @@ response; physical TFT, cleanup and negative-corpus evidence remain required.
 
 Exact physical dev.246 proves the receive-only CAP-049 lifecycle, fixed target/channel
 continuity, an honest `inconclusive` result when ambient traffic supplies no
-EAPOL/PMKID, repeated product FAT/VFS mount and final cleanup. That accepted physical
-baseline remains unchanged. Exact host/build dev.247 adds a bounded allocation-free
-controller and EN/RU presentation over the immutable terminal report. It validates
+EAPOL/PMKID, repeated product FAT/VFS mount and final cleanup. Exact dev.247 adds a
+bounded allocation-free controller and EN/RU presentation over the immutable terminal
+report, and exact physical dev.248 accepts that path on the original DIV. It validates
 the report before publication, orders `inconclusive` before Full, PMKID and Partial
 evidence, rejects M2/M3/M4 with an all-zero Key MIC, removes zero-mask peers, and
 exposes the stable path `Result → Actions → Peer → Evidence → Detail`. Up/Down moves
@@ -826,10 +826,11 @@ radio/platform dependency or TX path.
 
 This is foundation, not a persistence/export claim. The product result remains
 volatile/RAM-only/not saved, `exportEligibility` is `NotEvaluated`, persistence and
-export are not wired, and no standard artifact serializer exists yet. Physical
-dev.247 TFT/navigation regression after original-DIV USB repower comes first; only
-then may the serializer and product save/export wiring be implemented and exercised
-with useful authentication evidence.
+export are not wired, and no standard artifact serializer exists yet. Exact physical
+dev.248 traverses Result, Actions, both Peer selections, Evidence list/detail, Repeat
+and replay rejection with content-only repaint and final Home/none/lease 0. The next
+boundary is therefore the standard serializer and product save/export wiring,
+exercised with useful bounded authentication evidence.
 
 ## 1.x implementation sequence
 

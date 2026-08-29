@@ -139,16 +139,19 @@ ordinary Back traverses the stack.
 | Device → Settings | PR-011, NFR-010 | EN/RU switch; immediate application and persistent selection |
 | Device → Self-Test | CAP-001…CAP-055 as applicable, PR-009 | Quick/Full use the same versioned checks as release HIL; report→Diagnostics/remedy/export |
 
-Exact host/build dev.247 binds UX-S30 to one stable controller path. On terminal
-results, `inconclusive` has priority over Full, PMKID and Partial evidence; peers with
+Exact dev.247 defines the UX-S30 controller path, and exact physical dev.248 accepts
+it on the original DIV. On terminal results, `inconclusive` has priority over Full,
+PMKID and Partial evidence; peers with
 no valid message mask are not navigable. Up/Down changes selection only within the
 current level, Right/OK moves inward, Left/Back returns exactly one level, and Repeat
 starts the same bounded receive-only capture. The result explicitly says
 volatile/RAM-only/not saved. It cannot offer Save or Export: product persistence is
 not wired, no standard artifact serializer exists, and export eligibility remains
 `NotEvaluated`. Live/tone/selection updates repaint only changed content, not the
-whole screen. This mapping is host/build only until the exact dev.247 TFT/navigation
-delta passes on the original DIV after USB repower.
+whole screen. A title is repainted only when its visible tone/color changes;
+identical list/detail titles are left intact, and the footer changes only when its
+visible hints differ. The automatic physical run traverses every level, Repeat and
+replay rejection, then returns to Home with authentication view `none` and lease 0.
 
 ## UX-01 acceptance
 

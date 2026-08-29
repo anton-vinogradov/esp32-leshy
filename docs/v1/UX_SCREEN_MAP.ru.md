@@ -139,16 +139,19 @@ action. В активном TX `Back` никогда не открывает con
 | Устройство → Настройки | PR-011, NFR-010 | переключение EN/RU; немедленное применение и persistent selection |
 | Устройство → Самопроверка | применимые CAP-001…CAP-055, PR-009 | Quick/Full выполняют те же versioned checks, что release HIL; report→Diagnostics/remedy/export |
 
-Exact host/build dev.247 связывает UX-S30 с одним стабильным controller path. В
-terminal result `inconclusive` имеет приоритет над evidence Full, PMKID и Partial;
+Exact dev.247 определяет controller path UX-S30, а exact physical dev.248 принимает
+его на оригинальном DIV. В terminal result `inconclusive` имеет приоритет над
+evidence Full, PMKID и Partial;
 peers без valid message mask не участвуют в навигации. Up/Down меняют selection
 только внутри текущего уровня, Right/OK двигают внутрь, Left/Back возвращают ровно на
 уровень, Повторить запускает тот же bounded receive-only capture. Result явно
 сообщает volatile/RAM-only/not saved. Он не предлагает Save или Export: product
 persistence не подключён, standard artifact serializer не существует, export
 eligibility остаётся `NotEvaluated`. Live/tone/selection updates перерисовывают только
-изменённый content, а не весь экран. Эта карта остаётся host/build до physical
-проверки TFT/navigation delta exact dev.247 на оригинальном DIV после USB repower.
+изменённый content, а не весь экран. Title перерисовывается только при видимой смене
+tone/color; одинаковые title list/detail остаются нетронутыми, footer меняется только
+при изменении видимых hints. Автоматический physical run проходит все уровни, Повтор
+и replay rejection, затем возвращается в Home с authentication view `none` и lease 0.
 
 ## Acceptance UX-01
 

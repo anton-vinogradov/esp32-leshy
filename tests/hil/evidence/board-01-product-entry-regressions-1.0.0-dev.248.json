@@ -1,0 +1,74 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "1c908d29de25e84dba3423657464bedb0ced245115e7a18e93c9a3996c7bb5f1",
+    "factory_sha256": "d75ff42bfbd343d87e29022e4b16c1816db244c48705d769af679a290b3fffc0",
+    "firmware_sha256": "15ab98ef95a85afae840b913ddeef60f0883bccf99a03e4f74ed50f1235ac40c",
+    "map_sha256": "c5484b781e923ef0d247aa274aa834832a29072e71b858420a0858cc908710a8",
+    "source_commit": "e62599c1827e249845105405797cb75aedaa5226",
+    "version": "1.0.0-dev.248"
+  },
+  "evidence_ids": [
+    "E-BUILD-176",
+    "E-AUTO-150",
+    "E-HIL-192",
+    "E-UX-056"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "runs": {
+    "ble_nearby": {
+      "artifact_index_sha256": "95f51cf2c203d7f978ca555a1606cf5f0490d25e8a0d72ee25190dcdb10a656f",
+      "checker_sha256": "f6a6e510a8f74c18e534f208f2513aff782135f9a97a59eed070320019a3ee73",
+      "run_id": "e2a1d22ea97b1f3ef7a5802877f846ba",
+      "run_sha256": "949210a4163627a743562375d955e18725905a4a5e09dbb72bc9380a0bf4a398",
+      "runner_commit": "a9d16ec1e2e6a1e6f48084cbd02205f6d1bedbb2",
+      "runner_sha256": "f98aad81d772b8534b4c3f36174016837cc0e31ce11777d1e09c0f8d698187dc"
+    },
+    "top_level_menu": {
+      "artifact_index_sha256": "89d2e6b21ade97ea1fdb22e39a72836984ec3c1005f7ed9a0459859fd541e29d",
+      "run_id": "0ecd55327a2c0a73a143573dd8c89e09",
+      "run_sha256": "d638b30a170ee420aebd46289eb05aeaf8023724b9990b7b27b5f11f27246ff5",
+      "runner_commit": "e62599c1827e249845105405797cb75aedaa5226",
+      "runner_sha256": "8d1542035155d0caa9301827c5ba97dab0d54a770896c3992789d5dea2697185"
+    }
+  },
+  "schema": "leshy.product_entry_regressions.acceptance.v1",
+  "status": "pass_product_entry_regressions",
+  "verified": {
+    "ble": {
+      "active_probe_allowed": false,
+      "company_database_records": 4012,
+      "entry_stability_ms": 15240,
+      "final_lease_mask": 0,
+      "heap_free_after_first": 75380,
+      "heap_free_after_second": 75380,
+      "identity_stable": true,
+      "list_content_changed_pixels": 2603,
+      "list_static_chrome_changed_pixels": 0,
+      "passive_only": true,
+      "radar_changed_pixels": 116,
+      "radar_static_changed_pixels": 0,
+      "scan_drops": 0,
+      "screenshots_automatic": true,
+      "unique_devices_first": 32,
+      "unique_devices_second": 32
+    },
+    "top_level_menu": {
+      "all_entries_return_home": true,
+      "ble_dwell_seconds": 15,
+      "final_lease_mask": 0,
+      "input_queue_drops": 0,
+      "input_read_errors": 0,
+      "items": [
+        "wifi",
+        "ble",
+        "spectrum24",
+        "subghz",
+        "capture",
+        "targets",
+        "library",
+        "device"
+      ]
+    }
+  }
+}

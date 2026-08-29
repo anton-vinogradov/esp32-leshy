@@ -1091,10 +1091,29 @@ schema-8/segment-8/wire-5 не добавляют dynamic allocation, task, radi
 dependency. Full host suite прошёл до того, как независимое review нашло P1 с
 полностью нулевым Key MIC; на этом exact post-fix source проходят focused
 capture/policy ASan+UBSan tests, focused review, production build и budget. Это
-только host/build bound: device не прошивался, принятым physical runtime/heap
-baseline остаётся dev.246 `RB-M185`, cadence остаётся 11/15. Product persistence и
+исторический host/build bound: device не прошивался, поэтому принятым physical
+runtime/heap baseline был dev.246 `RB-M185`, cadence была 11/15; physical bound ниже
+заменён `RB-M187`. Product persistence и
 export не подключены, standard artifact serializer ещё не существует,
 `exportEligibility` остаётся `NotEvaluated`.
+
+Physical navigation CAP-049 и regression product-entry `RB-M187`: exact
+`1.0.0-dev.248` на source `e62599c1827e249845105405797cb75aedaa5226`
+использует 229 960 B static RAM и linked image 3 413 764 B. Размеры exact прошитых
+application/factory — 3 414 272/3 479 808 B с SHA-256
+`15ab98ef95a85afae840b913ddeef60f0883bccf99a03e4f74ed50f1235ac40c`/
+`d75ff42bfbd343d87e29022e4b16c1816db244c48705d769af679a290b3fffc0`;
+identity ELF/app —
+`1c908d29de25e84dba3423657464bedb0ced245115e7a18e93c9a3996c7bb5f1`,
+SHA-256 map —
+`c5484b781e923ef0d247aa274aa834832a29072e71b858420a0858cc908710a8`.
+На оригинальном DIV два lifecycle Bluetooth сохраняют одинаковый free heap 75 380 B,
+zero driver drops и exact bounded retention accounting. Верхнее меню и paths
+CAP-049 navigation/Повтор/replay-negative возвращаются в Home/none/lease 0 с
+content-only repaint. Это принимает physical runtime/navigation bound и двигает
+cadence до 12/15; всё ещё отсутствующие standard serializer, product
+persistence/export, полезный EAPOL/PMKID evidence и cold recovery Product Survey не
+заявляются.
 
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
