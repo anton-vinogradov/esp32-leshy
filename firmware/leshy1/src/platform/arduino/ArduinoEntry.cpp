@@ -425,6 +425,8 @@ constexpr const char* kSdReadOnlyMountPrefix =
     "storage.sd.readonly-mount disposable-read-only ";
 constexpr const char* kWifiIngressPrefix =
     "survey.wifi.passive-ingress measure passive-only ";
+constexpr const char* kWifiNetworkHilSelectPrefix =
+    "wifi.network.hil-select-label-fnv1a64 ";
 constexpr const char* kProductBootstrapPrefix =
     "storage.product.bootstrap disposable-write ";
 constexpr const char* kProductEnrollPrefix =
@@ -29710,6 +29712,77 @@ void emitWifiNetworkDetailState(Stream& reply) {
     reply.println(line);
 }
 
+bool parseWifiNetworkHilSelectCommand(const char* command,
+                                      std::uint64_t* requestedHash) {
+    if (command == nullptr || requestedHash == nullptr) return false;
+    const std::size_t prefixLength = std::strlen(kWifiNetworkHilSelectPrefix);
+    if (std::strncmp(command, kWifiNetworkHilSelectPrefix, prefixLength) != 0 ||
+        std::strlen(command) != prefixLength + 16U) {
+        return false;
+    }
+    std::uint64_t parsed = 0U;
+    for (std::size_t index = 0; index < 16U; ++index) {
+        const int nibble = hexNibble(command[prefixLength + index]);
+        if (nibble < 0) return false;
+        parsed = (parsed << 4U) | static_cast<std::uint64_t>(nibble);
+    }
+    if (parsed == 0U) return false;
+    *requestedHash = parsed;
+    return true;
+}
+
+void selectWifiNetworkForHil(Stream& reply, std::uint64_t requestedHash) {
+    const bool correctView =
+        wifiProductView == WifiProductView::Networks &&
+        surveyWorkflow.state() == SurveyWorkflowState::Running;
+    const bool correctRuntime =
+        productSurveyControl() == ProductSurveyWorkerControl::Running &&
+        productSurveyRuntime.workerReady &&
+        std::strcmp(appRuntime.activeApp(), "wifi") == 0 &&
+        resourceBroker.ownerOf(Resource::EspRf) ==
+            AppRuntime::kForegroundOwner;
+    const bool unlocked = !wifiNetworkNavigationOrder.locked();
+    const bool admissible = hilSession.active() && correctView &&
+        correctRuntime && unlocked;
+    std::size_t matches = 0U;
+    std::size_t selected = wifiNetworkCatalog.size();
+    if (admissible) {
+        selected = wifiNetworkNavigationOrder.indexOfLabelHash(
+            wifiNetworkCatalog, requestedHash, &matches);
+    }
+    const bool found = admissible && matches != 0U &&
+        selected < wifiNetworkCatalog.size();
+    if (found) {
+        wifiNetworkSelection = selected;
+        lastRuntimeEvent = "wifi_network_hil_selected";
+        renderInteractiveScreen(false);
+    }
+    const char* status = !hilSession.active()
+        ? "hil_inactive"
+        : !correctView
+            ? "wrong_view"
+            : !correctRuntime
+                ? "runtime_not_ready"
+                : !unlocked
+                    ? "navigation_locked"
+                    : found ? "selected" : "not_found";
+    char line[512] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.wifi.network_hil_selector.v1\","
+        "\"kind\":\"%s\",\"status\":\"%s\",\"selected\":%s,"
+        "\"match_count\":%u,\"strongest_match\":%s,"
+        "\"hil_active\":%s,\"display_touched\":%s,"
+        "\"rf_hardware_touched\":false,\"radio_started\":false,"
+        "\"storage_mounted\":false,\"storage_written\":false,"
+        "\"identifier_disclosed\":false,\"response_complete\":true}",
+        "state", status,
+        found ? "true" : "false", static_cast<unsigned>(matches),
+        found ? "true" : "false", hilSession.active() ? "true" : "false",
+        found ? "true" : "false");
+    reply.println(line);
+}
+
 void emitWifiAuthenticationHilHold(Stream& reply) {
     expireWifiAuthenticationSurveyTerminalHold();
     const bool safeState = hilSession.active() &&
@@ -30872,6 +30945,28 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitCompanionWebHilProof(reply);
     } else if (std::strcmp(command, "companion.web.state") == 0) {
         emitCompanionWebState(reply);
+    } else if (std::strncmp(
+                   command, kWifiNetworkHilSelectPrefix,
+                   std::strlen(kWifiNetworkHilSelectPrefix)) == 0) {
+        std::uint64_t requestedHash = 0U;
+        if (parseWifiNetworkHilSelectCommand(command, &requestedHash)) {
+            selectWifiNetworkForHil(reply, requestedHash);
+        } else {
+            char line[512] = {};
+            std::snprintf(
+                line, sizeof(line),
+                "{\"schema\":\"leshy.wifi.network_hil_selector.v1\","
+                "\"kind\":\"state\",\"status\":\"invalid_scope\","
+                "\"selected\":false,\"match_count\":0,"
+                "\"strongest_match\":false,\"hil_active\":%s,"
+                "\"display_touched\":false,"
+                "\"rf_hardware_touched\":false,\"radio_started\":false,"
+                "\"storage_mounted\":false,\"storage_written\":false,"
+                "\"identifier_disclosed\":false,"
+                "\"response_complete\":true}",
+                hilSession.active() ? "true" : "false");
+            reply.println(line);
+        }
     } else if (std::strcmp(command, "wifi.network.detail") == 0) {
         emitWifiNetworkDetailState(reply);
     } else if (std::strcmp(
@@ -31594,6 +31689,7 @@ void setup() {
               "\"capture.subghz.test-fixture fixed-rx-only\","
               "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
               "\"wifi.network.detail\","
+              "\"wifi.network.hil-select-label-fnv1a64 <16-hex-hash>\","
               "\"wifi.authentication.state\","
               "\"wifi.authentication.persistence.state\","
               "\"companion.web.hil-seed <32-hex-entropy>\","

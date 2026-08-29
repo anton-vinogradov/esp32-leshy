@@ -2822,6 +2822,65 @@ void testWifiNetworkNavigationLocksIdentityOrder() {
     CHECK(navigation.at(catalog, 0)->identity[5] == 0x04);
 }
 
+void testWifiNetworkNavigationFindsStrongestExactLabelHash() {
+    WifiNetworkCatalog catalog;
+    WifiNetworkNavigationOrder navigation;
+    WifiScanRecord record;
+    Observation observation;
+
+    record.bssid = {0x02, 0x11, 0x22, 0x33, 0x44, 0x01};
+    record.channel = 1;
+    record.rssiDbm = -62;
+    record.ssid = "authorized-ap";
+    record.ssidLength = 13;
+    CHECK(normalizePassiveRecord(record, 1000, &observation));
+    CHECK(catalog.upsert(observation));
+    const std::uint64_t authorizedHash =
+        WifiNetworkNavigationOrder::labelHash(observation);
+    CHECK(authorizedHash != 0U);
+
+    record.bssid[5] = 0x02;
+    record.channel = 6;
+    record.rssiDbm = -35;
+    CHECK(normalizePassiveRecord(record, 2000, &observation));
+    CHECK(catalog.upsert(observation));
+
+    record.bssid[5] = 0x03;
+    record.channel = 11;
+    record.rssiDbm = -20;
+    record.ssid = "other-ap";
+    record.ssidLength = 8;
+    CHECK(normalizePassiveRecord(record, 3000, &observation));
+    CHECK(catalog.upsert(observation));
+
+    record.bssid[5] = 0x04;
+    record.channel = 3;
+    record.rssiDbm = -10;
+    record.ssid = nullptr;
+    record.ssidLength = 0;
+    CHECK(normalizePassiveRecord(record, 4000, &observation));
+    CHECK(catalog.upsert(observation));
+
+    std::size_t matches = 99U;
+    const std::size_t selected = navigation.indexOfLabelHash(
+        catalog, authorizedHash, &matches);
+    CHECK(matches == 2U);
+    CHECK(selected == 2U);
+    CHECK(catalog.at(selected) != nullptr);
+    CHECK(catalog.at(selected)->identity[5] == 0x02);
+
+    const std::uint64_t otherHash =
+        WifiNetworkNavigationOrder::labelHash(*catalog.at(1));
+    CHECK(otherHash != 0U);
+    CHECK(otherHash != authorizedHash);
+    CHECK(navigation.indexOfLabelHash(catalog, otherHash, &matches) == 1U);
+    CHECK(matches == 1U);
+    CHECK(navigation.indexOfLabelHash(
+              catalog, authorizedHash ^ 0x100U, &matches) == catalog.size());
+    CHECK(matches == 0U);
+    CHECK(WifiNetworkNavigationOrder::labelHash(*catalog.at(0)) == 0U);
+}
+
 void testBleDeviceCatalogKeepsStrongestUniqueRows() {
     leshy1::apps::ble::BleDeviceCatalog catalog;
     leshy1::drivers::ble::BleAdvertisementRecord record;
@@ -6375,6 +6434,7 @@ int main() {
     testWifiNetworkCatalogKeepsStrongestUniqueRows();
     testWifiNetworkCatalogResolvesHiddenSsidMonotonically();
     testWifiNetworkNavigationLocksIdentityOrder();
+    testWifiNetworkNavigationFindsStrongestExactLabelHash();
     testBleDeviceCatalogKeepsStrongestUniqueRows();
     testBleDeviceIntelligenceAccumulatesPassiveFactsAndSignal();
     testBleCompanyDatabaseIsBoundedAndExact();

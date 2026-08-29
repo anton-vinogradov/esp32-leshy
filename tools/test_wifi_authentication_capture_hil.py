@@ -176,6 +176,27 @@ def synthetic_controller_state(
 
 
 class WifiAuthenticationCaptureHilTests(unittest.TestCase):
+    def test_authorized_network_selector_retains_no_identifier(self) -> None:
+        device = MagicMock()
+        ack = {
+            "schema": RUNNER.NETWORK_SELECTOR_SCHEMA,
+            "kind": "state", "status": "selected", "selected": True,
+            "match_count": 2, "strongest_match": True,
+            "hil_active": True, "display_touched": True,
+            "rf_hardware_touched": False, "radio_started": False,
+            "storage_mounted": False, "storage_written": False,
+            "identifier_disclosed": False, "response_complete": True,
+        }
+        with patch.object(RUNNER, "query", return_value=ack) as query_mock:
+            retained = RUNNER.select_authorized_network(
+                device, "0123456789abcdef", "capture")
+        query_mock.assert_called_once_with(
+            device,
+            b"wifi.network.hil-select-label-fnv1a64 0123456789abcdef",
+            RUNNER.NETWORK_SELECTOR_SCHEMA, "state", timeout=2.0)
+        self.assertEqual(ack, retained)
+        self.assertNotIn("ssid", json.dumps(retained).lower())
+
     def test_ui_wait_recovers_read_only_transport_timeout(self) -> None:
         device = MagicMock()
         ready = {

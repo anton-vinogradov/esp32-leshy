@@ -53,6 +53,8 @@ AMBIENT_REPORT_ORIGIN = "ambient_rf"
 NO_REPORT_ORIGIN = "none"
 CAPTURE_SCHEMA = "leshy.capture.wifi_frame.v1"
 UI_SCHEMA = "leshy.ui.v1"
+NETWORK_SELECTOR_SCHEMA = "leshy.wifi.network_hil_selector.v1"
+NETWORK_SELECTOR_COMMAND = "wifi.network.hil-select-label-fnv1a64"
 BOARD_ID = "board-01"
 BOARD_PORT = "/dev/cu.usbmodem2101"
 FORBIDDEN_FIXTURE_PORT = "/dev/cu.usbmodem1101"
@@ -1114,10 +1116,36 @@ def home_wifi(device: PassiveSerial,
     return state
 
 
+def select_authorized_network(
+        device: PassiveSerial, allowed_label_hash: str,
+        label: str) -> dict[str, Any]:
+    """Select the strongest exact authorized SSID without retaining its ID."""
+    command = f"{NETWORK_SELECTOR_COMMAND} {allowed_label_hash}".encode(
+        "ascii")
+    selected = query(
+        device, command, NETWORK_SELECTOR_SCHEMA, "state", timeout=2.0)
+    require_exact(selected, {
+        "schema": NETWORK_SELECTOR_SCHEMA,
+        "kind": "state", "status": "selected", "selected": True,
+        "strongest_match": True, "hil_active": True,
+        "display_touched": True, "rf_hardware_touched": False,
+        "radio_started": False, "storage_mounted": False,
+        "storage_written": False, "identifier_disclosed": False,
+        "response_complete": True,
+    }, f"{label}_authorized_network_selector")
+    matches = selected.get("match_count")
+    if (not isinstance(matches, int) or isinstance(matches, bool) or
+            matches < 1):
+        raise RuntimeError(
+            f"{label}: authorized network selector returned no match")
+    return selected
+
+
 def enter_network_detail(
         device: PassiveSerial,
         trace: list[dict[str, Any]],
         label: str,
+        allowed_label_hash: str,
         mount_diagnostics: dict[str, Any] | None = None,
         ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     preparing = action(device, "right")
@@ -1206,6 +1234,8 @@ def enter_network_detail(
         raise RuntimeError(
             f"{label}: invalid filesystem remount accounting: "
             f"{privacy_safe_repr(network_list)}")
+    network_list["authorized_selector"] = select_authorized_network(
+        device, allowed_label_hash, label)
     detail_ui = action(device, "right")
     trace.append(detail_ui)
     require_exact(detail_ui, {
@@ -1234,6 +1264,7 @@ def run_minimal_ambient_terminal(
         device: PassiveSerial,
         trace: list[dict[str, Any]],
         label: str,
+        allowed_label_hash: str,
         mount_diagnostics: dict[str, Any],
         ) -> dict[str, Any]:
     """Reach a second honest terminal report without synthetic shortcuts."""
@@ -1249,7 +1280,7 @@ def run_minimal_ambient_terminal(
         device, wifi_menu_quiescent, 15.0,
         f"{label}: Wi-Fi menu did not become quiescent")
     network_list, detail_ui, detail = enter_network_detail(
-        device, trace, label, mount_diagnostics)
+        device, trace, label, allowed_label_hash, mount_diagnostics)
     requested_ui = action(device, "right")
     trace.append(requested_ui)
     require_exact(requested_ui, {
@@ -1402,6 +1433,7 @@ def main() -> int:
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--expected-cid", required=True)
     parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--allowed-ssid-fnv1a64", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash", action="store_true")
     parser.add_argument("--reuse-exact-flash", action="store_true")
@@ -1421,6 +1453,11 @@ def main() -> int:
             any(character not in "0123456789abcdefABCDEF"
                 for character in args.source_commit)):
         parser.error("--source-commit must be a full hexadecimal Git commit ID")
+    if (re.fullmatch(r"[0-9a-fA-F]{16}", args.allowed_ssid_fnv1a64) is None or
+            int(args.allowed_ssid_fnv1a64, 16) == 0):
+        parser.error(
+            "--allowed-ssid-fnv1a64 must be one non-zero 64-bit hex value")
+    allowed_label_hash = args.allowed_ssid_fnv1a64.lower()
     if not args.flash or args.reuse_exact_flash:
         parser.error("CAP049 requires exactly one fresh app flash (--flash)")
 
@@ -1540,7 +1577,8 @@ def main() -> int:
                 # capture and must return to an entirely quiescent Wi-Fi menu.
                 (cancel_network_list, cancel_network_detail_ui,
                  cancel_network_detail) = enter_network_detail(
-                    device, trace, "cancel", filesystem_mount_diagnostics)
+                    device, trace, "cancel", allowed_label_hash,
+                    filesystem_mount_diagnostics)
                 hold_pre_arm_state = auth_state(device)
                 hold_armed_at = time.monotonic()
                 cancel_hold = arm_authentication_survey_stop_hold(
@@ -1645,7 +1683,7 @@ def main() -> int:
                 # Start a fresh, complete capture lifecycle after cancellation.
                 network_list, network_detail_ui, network_detail = \
                     enter_network_detail(
-                        device, trace, "capture",
+                        device, trace, "capture", allowed_label_hash,
                         filesystem_mount_diagnostics)
                 second_mount_attempts = network_list[
                     "survey_product_filesystem_mount_attempts"]
@@ -2327,7 +2365,7 @@ def main() -> int:
                     device, run_id, app_identity, args.expected_version)
                 hil_started = True
                 back_ambient = run_minimal_ambient_terminal(
-                    device, trace, "synthetic_back",
+                    device, trace, "synthetic_back", allowed_label_hash,
                     filesystem_mount_diagnostics)
                 back_ambient_state = auth_state(device)
                 back_repeat_generation = back_ambient_state.get(

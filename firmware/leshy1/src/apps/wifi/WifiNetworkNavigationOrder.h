@@ -87,6 +87,44 @@ public:
         return hash;
     }
 
+    static std::uint64_t labelHash(
+        const domain::observations::Observation& observation) {
+        if (observation.labelLength == 0U ||
+            observation.labelLength > observation.label.size() - 1U) {
+            return 0U;
+        }
+        std::uint64_t hash = 14695981039346656037ULL;
+        for (std::size_t byte = 0; byte < observation.labelLength; ++byte) {
+            hash ^= static_cast<std::uint8_t>(observation.label[byte]);
+            hash *= 1099511628211ULL;
+        }
+        return hash;
+    }
+
+    // HIL can bind an authorized passive capture to an exact visible network
+    // name without exposing that name or a BSSID through the diagnostic API.
+    // The first match is strongest because an unlocked catalog is maintained
+    // strongest-first. Callers must reject a locked order before using this
+    // helper so the selected index remains the live catalog index.
+    std::size_t indexOfLabelHash(const WifiNetworkCatalog& catalog,
+                                 std::uint64_t requestedHash,
+                                 std::size_t* matchCount = nullptr) const {
+        std::size_t matches = 0U;
+        const std::size_t count = size(catalog);
+        std::size_t first = count;
+        for (std::size_t index = 0; index < count; ++index) {
+            const auto* observation = at(catalog, index);
+            if (observation == nullptr ||
+                labelHash(*observation) != requestedHash) {
+                continue;
+            }
+            if (matches == 0U) first = index;
+            ++matches;
+        }
+        if (matchCount != nullptr) *matchCount = matches;
+        return first;
+    }
+
 private:
     std::array<std::array<std::uint8_t,
                           domain::observations::Observation::kIdentityCapacity>,
