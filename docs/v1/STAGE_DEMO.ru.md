@@ -272,6 +272,18 @@ Exact `1.0.0-dev.266` принимает slice live stations CAP-050 по
 Home/none/lease 0. Optional trusted GPS/UTC всё ещё удерживает CAP-050 и `DEMO-S7`
 открытыми.
 
+Exact `1.0.0-dev.267` принимает software/persistence slice trusted context по
+`E-BUILD-188`/`E-AUTO-163`/`E-HIL-202`/`RB-M199`. Schema 9 добавляет один immutable
+64-byte checksummed record GPS-NMEA UTC/location, сохраняет readers schemas 1…8 и
+отвергает stale, malformed, impossible или late context. Goldens located/timed
+formatter требуют оба trusted input для upload readiness. Fresh-flash HIL на stock
+board-01 cold-recover-ит generation 175/51 read-only, экспортирует 51 native и
+49 WiGLE rows с `trusted_source=none`, `untimed_unlocated`, `upload_ready=false`,
+делает zero scans/writes и выходит Home/none/lease 0. Это делает CAP-050
+software-complete без выдуманного GPS device; physical located/timed export и
+финальное completion CAP-050 отложены до появления отдельно принадлежащего
+non-conflicting GPS profile. Активная реализация S7 переходит к CAP-051 BLE Inspector.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases. Physical

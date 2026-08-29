@@ -273,6 +273,18 @@ upload-ready. The export delta reuses the exact installed image with zero scans,
 commits or writes and exits Home/none/lease 0. Optional trusted GPS/UTC still holds
 CAP-050 and `DEMO-S7` open.
 
+Exact `1.0.0-dev.267` accepts the trusted-context software/persistence slice through
+`E-BUILD-188`/`E-AUTO-163`/`E-HIL-202`/`RB-M199`. Schema 9 adds one immutable,
+64-byte checksummed GPS-NMEA UTC/location record, retains readers for schemas 1…8
+and rejects stale, malformed, impossible or late context. Located/timed formatter
+goldens require both trusted inputs for upload readiness. Fresh-flash HIL on stock
+board-01 cold-recovers generation 175/51 read-only, exports 51 native and 49 WiGLE
+rows with `trusted_source=none`, `untimed_unlocated`, `upload_ready=false`, performs
+zero scans/writes and exits Home/none/lease 0. This makes CAP-050 software-complete
+without inventing a GPS device; physical located/timed export and final CAP-050
+completion remain deferred until a separately owned non-conflicting GPS profile is
+available. Active S7 implementation proceeds to CAP-051 BLE Inspector.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases. Physical HIL is

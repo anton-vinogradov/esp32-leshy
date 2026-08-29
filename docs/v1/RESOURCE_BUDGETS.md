@@ -1336,6 +1336,26 @@ Home/none/lease 0. The compact
 [station evidence](../../tests/hil/evidence/board-01-field-survey-stations-1.0.0-dev.266.json)
 accepts live station capture and its export boundary, not trusted GPS/UTC.
 
+Offline Field Survey trusted-context bound `RB-M199`: exact physical
+`1.0.0-dev.267` at source `eb23d614785420a10588a4ae5a8d3e351021702b`
+uses 231,736 B static RAM, an increase of 112 B over `RB-M198`. Schema 9 adds one
+fixed 64-byte checksummed `LTGC` record per segment and keeps schemas 1…8 readable;
+no dynamic allocation or resident raw-GPS buffer is introduced. Linked flash is
+3,459,768 B. App/factory sizes are 3,460,272/3,525,808 B with SHA-256
+`8d6982923dafdca1d7522e197eb7119cf69cbcb7045087bb193a58d2313cca55`/
+`b3ba37cb6201e73682dc4f1aed5ed3cd999567382cc4f76e8e44b967de7ad63c`;
+ELF/map SHA-256 are
+`c33fed0f41e7a5594342aa3f3bc58787048793460bf39b7de2cd0d6d1945f3a1`/
+`5f6f24f36d1ea80bf7d1b2545b45addfe62cc52bd418c7ec19c42b1f6d1c7a46`.
+The 4 MiB OTA slot retains 734,032 B, 209,744 B above the mandatory floor. Fresh-
+flash focused HIL cold-recovers generation 175/51 read-only and exports 51 native
+rows/4,593 B plus 49 WiGLE rows/3,362 B with zero scans/commits/physical writes.
+Because stock hardware has no GPS source, it truthfully reports
+`trusted_source=none`, `untimed_unlocated`, `upload_ready=false`; a separately
+profiled GPS fixture remains required for physical located/timed acceptance. The
+compact [trusted-context evidence](../../tests/hil/evidence/board-01-field-survey-trusted-context-1.0.0-dev.267.json)
+accepts the bounded software/persistence slice and stock absence path.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

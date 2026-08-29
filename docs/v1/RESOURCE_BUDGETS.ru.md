@@ -1325,6 +1325,26 @@ Physical first/revisit сохраняют по 51 bounded record с 2 stations �
 [evidence stations](../../tests/hil/evidence/board-01-field-survey-stations-1.0.0-dev.266.json)
 принимает live station capture и его export boundary, но не trusted GPS/UTC.
 
+Bound trusted context Offline Field Survey `RB-M199`: exact physical
+`1.0.0-dev.267` на source `eb23d614785420a10588a4ae5a8d3e351021702b` использует
+231 736 B static RAM, на 112 B больше `RB-M198`. Schema 9 добавляет один fixed
+64-byte checksummed `LTGC` record на segment и продолжает читать schemas 1…8;
+dynamic allocation или resident raw-GPS buffer не добавляются. Linked flash —
+3 459 768 B. Размеры app/factory — 3 460 272/3 525 808 B с SHA-256
+`8d6982923dafdca1d7522e197eb7119cf69cbcb7045087bb193a58d2313cca55`/
+`b3ba37cb6201e73682dc4f1aed5ed3cd999567382cc4f76e8e44b967de7ad63c`;
+SHA-256 ELF/map —
+`c33fed0f41e7a5594342aa3f3bc58787048793460bf39b7de2cd0d6d1945f3a1`/
+`5f6f24f36d1ea80bf7d1b2545b45addfe62cc52bd418c7ec19c42b1f6d1c7a46`.
+В app-slot OTA 4 MiB остаётся 734 032 B, на 209 744 B выше обязательного floor.
+Fresh-flash focused HIL cold-recover-ит generation 175/51 read-only и экспортирует
+51 native rows/4 593 B плюс 49 WiGLE rows/3 362 B с zero scans/commits/physical
+writes. Поскольку stock hardware не имеет GPS source, оно честно сообщает
+`trusted_source=none`, `untimed_unlocated`, `upload_ready=false`; отдельно
+профилированный GPS fixture всё ещё нужен для physical located/timed acceptance.
+Compact [evidence trusted context](../../tests/hil/evidence/board-01-field-survey-trusted-context-1.0.0-dev.267.json)
+принимает bounded software/persistence slice и stock absence path.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты
