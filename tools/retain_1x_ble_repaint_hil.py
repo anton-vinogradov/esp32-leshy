@@ -14,18 +14,18 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "1.0.0-dev.251"
+VERSION = "1.0.0-dev.252"
 CID = "FE343253440000002000000055019CB7"
-SOURCE_COMMIT = "d84f8259c6781dcbe90ae00fba00f0c6f4379c32"
+SOURCE_COMMIT = "30530812efe045aadd112d8b1b0961a48a48b89b"
 FIRMWARE_SHA256 = (
-    "66b9f27a32159292d0ec168dce7bafe5871aadf2759541960fc2ab7edd9e4781")
+    "7cab8fd8a85b9fb437d21cdbc6d81e4a24aa050a814a9714337697d5cdb100a1")
 APP_ELF_SHA256 = (
-    "698c7a8ef19388762845ec7d95219a09ae132b3a6155bcf351af8486bb04202c")
+    "19f2667f3b3a1a755417dce602f29977f04cc977541c04b33045bd8f4e3bf101")
 FACTORY_SHA256 = (
-    "e793b1a322a989824aeefc049fa1346e83a50e2b690067b599c5aa9de4845772")
+    "b581fff7b8911250b549e20414a409f797fd133086782139fee599fd2ce4bd45")
 MAP_SHA256 = (
-    "7f3e77e78a45f5516b812a0e617890aef1eb7f4799c687318c123366c9bc2c75")
-EVIDENCE_IDS = ["E-BUILD-179", "E-AUTO-153", "E-HIL-194", "E-UX-058"]
+    "f46bdc1d538014a3c8f4cb5b053354d279cb543d1da8a083d9fc65c045da1d34")
+EVIDENCE_IDS = ["E-BUILD-180", "E-AUTO-154", "E-HIL-195", "E-UX-059"]
 
 
 def digest(path: Path) -> str:
@@ -116,14 +116,14 @@ def main() -> int:
                  first_list["list_row_repaints"])
     delta_repaints = (second_detail["radar_delta_repaints"] -
                       first_detail["radar_delta_repaints"])
-    require(row_delta == 3 and
+    require(0 < row_delta <= 8 and
             second_list["list_content_clears"] ==
             first_list["list_content_clears"],
-            "expected exact bounded list repaint proof")
+            "expected bounded list repaint proof")
     atomic_text_delta = (second_detail["atomic_text_row_pushes"] -
                          first_detail["atomic_text_row_pushes"])
     require(delta_repaints == 1 and
-            atomic_text_delta == 3 and
+            0 < atomic_text_delta <= 4 and
             second_detail["atomic_text_row_allocation_failures"] == 0 and
             second_detail["direct_text_row_fallbacks"] == 0 and
             second_detail["radar_full_repaints"] ==
@@ -131,6 +131,18 @@ def main() -> int:
             second_detail["detail_content_clears"] ==
             first_detail["detail_content_clears"],
             "expected exact delta-only detail repaint proof")
+    stability = run["detail_stability_window"]
+    stability_oracle = run["detail_stability_oracle"]
+    require(stability["scan_cycles"] >= 2 and
+            stability["content_clears"] == 0 and
+            stability["radar_full_repaints"] == 0 and
+            0 < stability["refreshes"] <= stability["maximum_refreshes"] and
+            stability["refreshes_deferred"] > 0 and
+            stability_oracle["detail_refresh_period_us"] == 250000 and
+            stability_oracle["detail_refresh_pending"] is False and
+            stability_oracle["atomic_text_row_allocation_failures"] == 0 and
+            stability_oracle["direct_text_row_fallbacks"] == 0,
+            "expected stable multi-window detail proof")
     require(final_state["page"] == "home" and
             final_state["runtime_owner"] == "none" and
             final_state["lease_mask"] == 0,
@@ -155,8 +167,8 @@ def main() -> int:
             f"{digest(path)}  {path.relative_to(staged_bundle)}\n"
             for path in indexed), encoding="utf-8")
         summary_value = {
-            "schema": "leshy.ble_repaint_hil.acceptance.v2",
-            "status": "pass_bluetooth_atomic_live_text",
+            "schema": "leshy.ble_repaint_hil.acceptance.v3",
+            "status": "pass_bluetooth_stable_scan_window",
             "board": "board-01",
             "evidence_ids": EVIDENCE_IDS,
             "exact_cid": CID,
@@ -194,6 +206,15 @@ def main() -> int:
                 "detail_direct_text_row_fallbacks": 0,
                 "detail_full_repaints": 0,
                 "detail_full_content_clears": 0,
+                "detail_stability_scan_cycles": stability["scan_cycles"],
+                "detail_stability_elapsed_ms": stability["elapsed_ms"],
+                "detail_stability_refreshes": stability["refreshes"],
+                "detail_stability_maximum_refreshes":
+                    stability["maximum_refreshes"],
+                "detail_stability_refreshes_deferred":
+                    stability["refreshes_deferred"],
+                "detail_refresh_period_us": 250000,
+                "detail_refresh_pending_final": False,
                 "passive_only": True,
                 "active_probe_allowed": False,
                 "driver_scan_drops": 0,

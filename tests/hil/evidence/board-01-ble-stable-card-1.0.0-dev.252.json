@@ -1,0 +1,58 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "19f2667f3b3a1a755417dce602f29977f04cc977541c04b33045bd8f4e3bf101",
+    "factory_sha256": "b581fff7b8911250b549e20414a409f797fd133086782139fee599fd2ce4bd45",
+    "firmware_sha256": "7cab8fd8a85b9fb437d21cdbc6d81e4a24aa050a814a9714337697d5cdb100a1",
+    "map_sha256": "f46bdc1d538014a3c8f4cb5b053354d279cb543d1da8a083d9fc65c045da1d34",
+    "source_commit": "30530812efe045aadd112d8b1b0961a48a48b89b",
+    "version": "1.0.0-dev.252"
+  },
+  "evidence": {
+    "artifact_index_sha256": "b6f591378f535ecfdb5ef4047f81ae8ca83f26a4629c162276d7d6fed382c4b9",
+    "checker_sha256": "d3cc22308c7145212f81aba69ebb71a554f39e0c6cf2cf603b325ca2d164e1e7",
+    "run_id": "8cdb7ac3c68c2add7bd86a658c368481",
+    "run_sha256": "1be286d793208635860c1ccb848a08601c869571e5693eecb9a61d53dcdff1ee",
+    "runner_sha256": "3e9a1793e062348c255c593208c0d7384ef3e63b7fba17a8615ed1a79f0e21ca",
+    "source_guard_sha256": "a5d79e2fe95c45975bd77e42121cb06249de646c06d6dc83e16d3ecff1fa64f6"
+  },
+  "evidence_ids": [
+    "E-BUILD-180",
+    "E-AUTO-154",
+    "E-HIL-195",
+    "E-UX-059"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "schema": "leshy.ble_repaint_hil.acceptance.v3",
+  "status": "pass_bluetooth_stable_scan_window",
+  "verified": {
+    "active_probe_allowed": false,
+    "detail_atomic_text_row_allocation_failures": 0,
+    "detail_atomic_text_row_pushes": 2,
+    "detail_chrome_changed_pixels": 0,
+    "detail_delta_repaints": 1,
+    "detail_direct_text_row_fallbacks": 0,
+    "detail_full_content_clears": 0,
+    "detail_full_repaints": 0,
+    "detail_radar_changed_pixels": 904,
+    "detail_refresh_pending_final": false,
+    "detail_refresh_period_us": 250000,
+    "detail_stability_elapsed_ms": 2633,
+    "detail_stability_maximum_refreshes": 12,
+    "detail_stability_refreshes": 6,
+    "detail_stability_refreshes_deferred": 19,
+    "detail_stability_scan_cycles": 2,
+    "detail_static_changed_pixels": 0,
+    "driver_scan_drops": 0,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "list_changed_rows": 5,
+    "list_chrome_changed_pixels": 0,
+    "list_content_changed_pixels": 2527,
+    "list_full_content_clears": 0,
+    "list_visible_rows": 4,
+    "manual_button_presses": 0,
+    "passive_only": true
+  }
+}
