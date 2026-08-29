@@ -194,8 +194,33 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
             device,
             b"wifi.network.hil-select-label-fnv1a64 0123456789abcdef",
             RUNNER.NETWORK_SELECTOR_SCHEMA, "state", timeout=2.0)
-        self.assertEqual(ack, retained)
+        self.assertEqual(1, retained["host_selector_attempts"])
+        self.assertEqual(0, retained["host_selector_transient_retries"])
         self.assertNotIn("ssid", json.dumps(retained).lower())
+
+    def test_authorized_network_selector_retries_transient_absence(self) -> None:
+        device = MagicMock()
+        missing = {
+            "schema": RUNNER.NETWORK_SELECTOR_SCHEMA,
+            "kind": "state", "status": "not_found", "selected": False,
+            "match_count": 0, "strongest_match": False,
+            "hil_active": True, "display_touched": False,
+            "rf_hardware_touched": False, "radio_started": False,
+            "storage_mounted": False, "storage_written": False,
+            "identifier_disclosed": False, "response_complete": True,
+        }
+        selected = dict(missing)
+        selected.update({
+            "status": "selected", "selected": True, "match_count": 1,
+            "strongest_match": True, "display_touched": True,
+        })
+        with patch.object(
+                RUNNER, "query", side_effect=(missing, selected)), \
+                patch.object(RUNNER.time, "sleep"):
+            retained = RUNNER.select_authorized_network(
+                device, "0123456789abcdef", "capture")
+        self.assertEqual(2, retained["host_selector_attempts"])
+        self.assertEqual(1, retained["host_selector_transient_retries"])
 
     def test_ui_wait_recovers_read_only_transport_timeout(self) -> None:
         device = MagicMock()

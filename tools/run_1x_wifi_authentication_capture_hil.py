@@ -1122,8 +1122,22 @@ def select_authorized_network(
     """Select the strongest exact authorized SSID without retaining its ID."""
     command = f"{NETWORK_SELECTOR_COMMAND} {allowed_label_hash}".encode(
         "ascii")
-    selected = query(
-        device, command, NETWORK_SELECTOR_SCHEMA, "state", timeout=2.0)
+    deadline = time.monotonic() + 30.0
+    attempts = 0
+    selected: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        attempts += 1
+        selected = query(
+            device, command, NETWORK_SELECTOR_SCHEMA, "state", timeout=2.0)
+        if selected.get("status") == "selected":
+            break
+        if selected.get("status") not in ("not_found", "runtime_not_ready"):
+            raise RuntimeError(
+                f"{label}: authorized selector rejected unsafe state")
+        time.sleep(0.5)
+    if selected.get("status") != "selected":
+        raise RuntimeError(
+            f"{label}: authorized network absent after bounded retries")
     require_exact(selected, {
         "schema": NETWORK_SELECTOR_SCHEMA,
         "kind": "state", "status": "selected", "selected": True,
@@ -1138,6 +1152,8 @@ def select_authorized_network(
             matches < 1):
         raise RuntimeError(
             f"{label}: authorized network selector returned no match")
+    selected["host_selector_attempts"] = attempts
+    selected["host_selector_transient_retries"] = attempts - 1
     return selected
 
 

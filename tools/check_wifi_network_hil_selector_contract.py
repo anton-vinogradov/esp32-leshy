@@ -73,6 +73,9 @@ def main() -> None:
         '"status": "selected", "selected": True',
         '"identifier_disclosed": False',
         "network_list[\"authorized_selector\"]",
+        "deadline = time.monotonic() + 30.0",
+        'selected.get("status") not in ("not_found", "runtime_not_ready")',
+        'selected["host_selector_transient_retries"] = attempts - 1',
     ):
         require(marker in runner, f"runner lost authorized selector: {marker}")
     result_block = runner[runner.index("    result = {"):]
@@ -83,6 +86,8 @@ def main() -> None:
     )
     require(
         "test_authorized_network_selector_retains_no_identifier" in
+        runner_tests
+        and "test_authorized_network_selector_retries_transient_absence" in
         runner_tests,
         "missing runner privacy regression",
     )
