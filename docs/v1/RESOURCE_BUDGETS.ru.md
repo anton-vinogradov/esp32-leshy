@@ -1171,6 +1171,27 @@ post-cleanup heap 73 936 B и final Home/none/lease 0. Это принимает
 runtime bound мерцания Bluetooth-card и двигает cadence до 14/15; persistence/export
 CAP-049 остаётся открыта.
 
+Physical bound стабильной scan-card Bluetooth `RB-M191`: exact
+`1.0.0-dev.252` на source `30530812efe045aadd112d8b1b0961a48a48b89b`
+использует 231 056 B static RAM и 3 435 604 B linked flash. Размеры app/factory —
+3 436 112/3 501 648 B с SHA-256
+`7cab8fd8a85b9fb437d21cdbc6d81e4a24aa050a814a9714337697d5cdb100a1`/
+`b581fff7b8911250b549e20414a409f797fd133086782139fee599fd2ce4bd45`;
+identity ELF/app —
+`19f2667f3b3a1a755417dce602f29977f04cc977541c04b33045bd8f4e3bf101`,
+SHA-256 map —
+`f46bdc1d538014a3c8f4cb5b053354d279cb543d1da8a083d9fc65c045da1d34`.
+Против `RB-M190` второй reusable sprite metadata 216×19 1-bpp/513 B,
+state coalescing 4 Hz и counters добавляют 328 B static RAM, 848 B linked
+flash, 848 B в app image и 848 B в factory image; в app-slot OTA 4 MiB остаётся
+758 192 B. Physical HIL держит одну реальную карточку открытой два полных scan
+cycle/2 633 ms, выполняет 6 refreshes, объединяет 19 лишних events, применяет
+последнее pending state и фиксирует zero full/content clears, failures sprite и
+direct fallbacks. Затем тот же image проходит periodic matrix
+Home/RF/Targets/companion с invariant heap 147 748/73 608 B и zero writes/TX,
+что принимает runtime/build bound и сбрасывает cadence до 0/15. Persistence/export
+CAP-049 остаётся открыта.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

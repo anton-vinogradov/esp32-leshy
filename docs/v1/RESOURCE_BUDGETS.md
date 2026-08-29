@@ -1180,6 +1180,27 @@ fallbacks, one radar delta repaint with no new full repaint/content clear, invar
 Bluetooth card-flicker/runtime bound and advances cadence to 14/15; CAP-049
 persistence/export remains open.
 
+Bluetooth stable-scan-card physical bound `RB-M191`: exact `1.0.0-dev.252` at
+source `30530812efe045aadd112d8b1b0961a48a48b89b` uses 231,056 B static RAM and
+3,435,604 B linked flash. App/factory sizes are 3,436,112/3,501,648 B with
+SHA-256
+`7cab8fd8a85b9fb437d21cdbc6d81e4a24aa050a814a9714337697d5cdb100a1`/
+`b581fff7b8911250b549e20414a409f797fd133086782139fee599fd2ce4bd45`;
+ELF/app identity is
+`19f2667f3b3a1a755417dce602f29977f04cc977541c04b33045bd8f4e3bf101`
+and map SHA-256 is
+`f46bdc1d538014a3c8f4cb5b053354d279cb543d1da8a083d9fc65c045da1d34`.
+Against `RB-M190`, the second reusable 216×19 1-bpp/513 B metadata sprite,
+4 Hz coalescing state and counters add 328 B static RAM, 848 B linked flash,
+848 B to the app image and 848 B to the factory image; 758,192 B remains in
+the 4 MiB OTA app slot. Physical HIL holds one real card across two complete
+scan cycles for 2,633 ms, performs 6 refreshes while coalescing 19 redundant
+events, drains the latest pending state and records zero full/content clears,
+sprite failures or direct fallbacks. The same image then passes the periodic
+Home/RF/Targets/companion matrix with invariant 147,748/73,608 B heap and zero
+writes/TX, accepting the runtime/build bound and resetting cadence to 0/15.
+CAP-049 persistence/export remains open.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
