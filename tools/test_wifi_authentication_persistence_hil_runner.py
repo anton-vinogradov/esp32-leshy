@@ -88,6 +88,18 @@ class WifiAuthenticationPersistenceHilRunnerTests(unittest.TestCase):
         self.assertEqual(opened["page"], "library")
         self.assertEqual(current["index"], 7)
 
+    def test_source_preflight_requires_exact_clean_head(self) -> None:
+        head = "a" * 40
+        self.assertIsNone(runner.source_state_failure(head, head, False))
+        self.assertIn(
+            "checked-out Git HEAD",
+            runner.source_state_failure("b" * 40, head, False) or "",
+        )
+        self.assertIn(
+            "committed",
+            runner.source_state_failure(head, head, True) or "",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

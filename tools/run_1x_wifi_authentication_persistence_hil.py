@@ -16,6 +16,7 @@ import json
 import re
 import secrets
 import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -67,6 +68,7 @@ HC22000_SCHEMA = "leshy.library.hc22000.v1"
 RECOVERY_SCHEMA = "leshy.storage.product_boot_recovery.v1"
 METADATA_SCHEMA = "leshy.capture.metadata.v1"
 UI_SCHEMA = "leshy.ui.v1"
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def require_exact(record: dict[str, Any], expected: dict[str, Any],
@@ -171,6 +173,28 @@ def open_home_item(device: PassiveSerial, item_id: str,
     raise RuntimeError(f"Home item {item_id!r} was not found")
 
 
+def source_state_failure(requested: str, head: str,
+                         tracked_dirty: bool) -> str | None:
+    if requested.lower() != head.lower():
+        return "--source-commit must equal the checked-out Git HEAD"
+    if tracked_dirty:
+        return "tracked worktree changes must be committed before HIL"
+    return None
+
+
+def checked_out_source_state() -> tuple[str, bool]:
+    head = subprocess.check_output(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
+    status = subprocess.check_output(
+        ["git", "-C", str(REPO_ROOT), "status", "--porcelain",
+         "--untracked-files=no"],
+        text=True,
+    )
+    return head, bool(status.strip())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
@@ -197,6 +221,11 @@ def main() -> int:
         parser.error("--expected-cid must be 32 uppercase hexadecimal characters")
     if re.fullmatch(r"[0-9a-fA-F]{40}", args.source_commit) is None:
         parser.error("--source-commit must be a full hexadecimal Git commit ID")
+    checked_out_head, tracked_dirty = checked_out_source_state()
+    source_failure = source_state_failure(
+        args.source_commit, checked_out_head, tracked_dirty)
+    if source_failure is not None:
+        parser.error(source_failure)
     if (re.fullmatch(r"[0-9a-fA-F]{16}", args.allowed_ssid_fnv1a64) is None or
             int(args.allowed_ssid_fnv1a64, 16) == 0):
         parser.error("--allowed-ssid-fnv1a64 must be one non-zero 64-bit hex")
