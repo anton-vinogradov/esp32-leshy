@@ -15,7 +15,11 @@ from ble_nearby_entry_gate import (
     BLE_ENTRY_STABILITY_SECONDS,
     ble_entry_failure,
 )
-from ble_nearby_run_policy import boot_recovery_continuity
+from ble_nearby_run_policy import (
+    boot_recovery_continuity,
+    bounded_pipeline_accounting_valid,
+    display_signal_signature,
+)
 from capture_1x_ui import PassiveSerial, synchronize_console
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
@@ -124,11 +128,6 @@ def fact_signature(state: dict[str, Any]) -> tuple[Any, ...]:
         "manufacturer_data_length", "payload_length",
     )
     return tuple(state.get(field) for field in fields)
-
-
-def signal_signature(state: dict[str, Any]) -> tuple[Any, ...]:
-    return tuple(state.get(field) for field in (
-        "rssi_dbm", "minimum_rssi_dbm", "maximum_rssi_dbm", "rssi_trend_db"))
 
 
 def wait_live(device: PassiveSerial, minimum_cycle: int = 1,
@@ -265,6 +264,9 @@ def main() -> int:
                     "survey_ble_scan_dropped": 0,
                     "survey_product_store_open_attempted": True,
                 }, "ble_nearby_live")
+                if not bounded_pipeline_accounting_valid(live_first):
+                    raise RuntimeError(
+                        "first bounded BLE pipeline accounting mismatch")
                 first_attempts = int(live_first.get(
                     "survey_ble_scan_attempts", 0))
                 first_retries = int(live_first.get(
@@ -292,6 +294,9 @@ def main() -> int:
                         or second_retries != second_attempts - second_cycles:
                     raise RuntimeError(
                         "BLE cumulative scan-retry accounting mismatch")
+                if not bounded_pipeline_accounting_valid(live_second):
+                    raise RuntimeError(
+                        "second bounded BLE pipeline accounting mismatch")
                 screens["ble_devices_second"] = capture(
                     device, frames, "ble-devices-second")
                 list_pixel_changes = changed_pixels(
@@ -324,7 +329,7 @@ def main() -> int:
                         f"{detail_oracle_first!r}")
                 deadline = time.monotonic() + 90.0
                 baseline_facts = fact_signature(detail_oracle_first)
-                baseline_signal = signal_signature(detail_oracle_first)
+                baseline_signal = display_signal_signature(detail_oracle_first)
                 while time.monotonic() < deadline:
                     current = ble_detail(device)
                     if current.get("identity_hash") != \
@@ -339,8 +344,8 @@ def main() -> int:
                         time.sleep(0.2)
                         screens["ble_detail_first"] = capture(
                             device, frames, "ble-detail-first")
-                        baseline_signal = signal_signature(current)
-                    elif signal_signature(current) != baseline_signal:
+                        baseline_signal = display_signal_signature(current)
+                    elif display_signal_signature(current) != baseline_signal:
                         detail_oracle_second = current
                         break
                     time.sleep(0.25)

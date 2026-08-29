@@ -86,7 +86,7 @@ def terminal_state(outcome: str = "inconclusive") -> dict[str, Any]:
         "presenter_view": "inconclusive",
         "presenter_tone": "caution",
         "presenter_evidence_incomplete": True,
-        "presenter_report_openable": False,
+        "presenter_report_openable": True,
         "presenter_cleanup_complete": True,
         "presenter_row_count": 4,
         "failure": "none",
@@ -874,7 +874,7 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
         failures: list[str] = []
         CHECKER.verify_presenter(failures, state, "terminal")
         self.assertEqual([], failures)
-        state["presenter_report_openable"] = True
+        state["presenter_report_openable"] = False
         self.assertTrue(RUNNER.presenter_failures(state, "terminal"))
         failures = []
         CHECKER.verify_presenter(failures, state, "terminal")
@@ -1370,8 +1370,8 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
             ("actions_details", "actions_repeat", 0),
             ("actions_repeat", "actions_details_again", 0),
             ("actions_details_again", "peer_first", 1),
-            ("peer_first", "peer_second", 0),
-            ("peer_second", "peer_first_again", 0),
+            ("peer_first", "peer_second", 1),
+            ("peer_second", "peer_first_again", 1),
             ("peer_first_again", "evidence_list", 1),
             ("evidence_list", "evidence_second", 0),
             ("evidence_second", "evidence_first_again", 0),
@@ -1516,10 +1516,10 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
                 "wifi-auth-result": frame(0, 0, 0, 1),
                 "wifi-auth-synthetic-outcome": frame(1, 1, 1, 2),
                 "wifi-auth-synthetic-actions": frame(2, 2, 2),
-                "wifi-auth-synthetic-peer-first": frame(3, 3, 3),
-                "wifi-auth-synthetic-peer-second": frame(4, 3, 3),
+                "wifi-auth-synthetic-peer-first": frame(3, 3, 2),
+                "wifi-auth-synthetic-peer-second": frame(4, 4, 2),
                 "wifi-auth-synthetic-evidence-list": frame(5, 4, 4),
-                "wifi-auth-synthetic-evidence-detail": frame(6, 5, 5),
+                "wifi-auth-synthetic-evidence-detail": frame(6, 4, 5),
             }
             for name, data in physical.items():
                 (frames / f"{name}.rgb565").write_bytes(data)
@@ -1715,7 +1715,7 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
             },
             "auth": {
                 "schema": RUNNER.AUTH_SCHEMA, "kind": "state",
-                "read_only_query": True, "view": "menu", "state": "idle",
+                "read_only_query": True, "view": "none", "state": "idle",
                 "synthetic": False,
                 "production_report_fingerprint": "unavailable",
                 "production_report_fingerprint_scope": "none",

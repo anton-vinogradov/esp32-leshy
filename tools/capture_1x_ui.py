@@ -38,6 +38,8 @@ def read_json(device: serial.Serial, schema: str, kind: str, timeout: float = 5.
             continue
         if isinstance(value, dict) and value.get("schema") == schema:
             if value.get("kind") == "error":
+                if kind == "error":
+                    return value
                 raise RuntimeError(f"device rejected command: {value}")
             if value.get("kind") == kind:
                 return value

@@ -633,8 +633,8 @@ def verify_ambient_and_synthetic_proofs(
         ("actions_details", "actions_repeat", 0),
         ("actions_repeat", "actions_details_again", 0),
         ("actions_details_again", "peer_first", 1),
-        ("peer_first", "peer_second", 0),
-        ("peer_second", "peer_first_again", 0),
+        ("peer_first", "peer_second", 1),
+        ("peer_second", "peer_first_again", 1),
         ("peer_first_again", "evidence_list", 1),
         ("evidence_list", "evidence_second", 0),
         ("evidence_second", "evidence_first_again", 0),
@@ -715,13 +715,13 @@ def verify_ambient_and_synthetic_proofs(
             "wifi-auth-synthetic-actions", True, True),
         "actions_to_peer": (
             "wifi-auth-synthetic-actions",
-            "wifi-auth-synthetic-peer-first", True, True),
+            "wifi-auth-synthetic-peer-first", True, False),
         "peer_first_to_second": (
             "wifi-auth-synthetic-peer-first",
-            "wifi-auth-synthetic-peer-second", False, False),
+            "wifi-auth-synthetic-peer-second", True, False),
         "evidence_list_to_detail": (
             "wifi-auth-synthetic-evidence-list",
-            "wifi-auth-synthetic-evidence-detail", True, True),
+            "wifi-auth-synthetic-evidence-detail", False, True),
     }
     retained_deltas = proof.get("pixel_deltas", {})
     require(failures, set(retained_deltas) == set(pixel_specs),
@@ -1312,11 +1312,11 @@ def verify_presenter(failures: list[str], state: dict[str, Any],
     elif product_state == "running":
         expected = ("running", "neutral", False, False, False, 4)
     elif product_state == "result" and outcome == "complete":
-        expected = ("result", "positive", False, False, True, 4)
+        expected = ("result", "positive", False, True, True, 4)
     elif product_state == "result" and outcome == "incomplete":
-        expected = ("result", "caution", False, False, True, 4)
+        expected = ("result", "caution", False, True, True, 4)
     elif product_state == "result" and outcome == "inconclusive":
-        expected = ("inconclusive", "caution", True, False, True, 4)
+        expected = ("inconclusive", "caution", True, True, True, 4)
     actual = (
         state.get("presenter_view"), state.get("presenter_tone"),
         state.get("presenter_evidence_incomplete"),
@@ -1438,7 +1438,7 @@ def verify_post_hil_end(failures: list[str], run: dict[str, Any]) -> None:
             auth.get("schema") == AUTH_SCHEMA and
             auth.get("kind") == "state" and
             auth.get("read_only_query") is True and
-            auth.get("view") == "menu" and auth.get("state") == "idle" and
+            auth.get("view") == "none" and auth.get("state") == "idle" and
             auth.get("synthetic") is False and
             auth.get("production_report_fingerprint") == "unavailable" and
             auth.get("production_report_fingerprint_scope") == "none",

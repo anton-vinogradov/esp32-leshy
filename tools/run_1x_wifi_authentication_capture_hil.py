@@ -1045,11 +1045,11 @@ def presenter_failures(state: dict[str, Any], label: str) -> list[str]:
     elif product_state == "running":
         expected = ("running", "neutral", False, False, False, 4)
     elif product_state == "result" and outcome == "complete":
-        expected = ("result", "positive", False, False, True, 4)
+        expected = ("result", "positive", False, True, True, 4)
     elif product_state == "result" and outcome == "incomplete":
-        expected = ("result", "caution", False, False, True, 4)
+        expected = ("result", "caution", False, True, True, 4)
     elif product_state == "result" and outcome == "inconclusive":
-        expected = ("inconclusive", "caution", True, False, True, 4)
+        expected = ("inconclusive", "caution", True, True, True, 4)
     if expected is None:
         failures.append(
             f"{label}.presenter: unsupported state/outcome projection")
@@ -2077,7 +2077,7 @@ def main() -> int:
                     synthetic_pixel_deltas["actions_to_peer"],
                     "synthetic_actions_to_peer",
                     title_change_required=True,
-                    footer_change_required=True))
+                    footer_change_required=False))
 
                 trace.append(action(device, "down"))
                 peer_second = auth_state(device)
@@ -2089,7 +2089,7 @@ def main() -> int:
                     repeat_request_generation=repeat_generation_before))
                 failures.extend(navigation_repaint_failures(
                     peer_first, peer_second, "synthetic_peer_down",
-                    expected_chrome_delta=0))
+                    expected_chrome_delta=1))
                 screens["synthetic_peer_second"] = capture_evidence_safe(
                     device, frames, "wifi-auth-synthetic-peer-second")
                 synthetic_pixel_deltas["peer_first_to_second"] = \
@@ -2099,7 +2099,7 @@ def main() -> int:
                 failures.extend(navigation_pixel_delta_failures(
                     synthetic_pixel_deltas["peer_first_to_second"],
                     "synthetic_peer_first_to_second",
-                    title_change_required=False,
+                    title_change_required=True,
                     footer_change_required=False))
 
                 trace.append(action(device, "up"))
@@ -2111,7 +2111,7 @@ def main() -> int:
                     repeat_request_generation=repeat_generation_before))
                 failures.extend(navigation_repaint_failures(
                     peer_second, peer_first_again, "synthetic_peer_up",
-                    expected_chrome_delta=0))
+                    expected_chrome_delta=1))
 
                 trace.append(action(device, "right"))
                 evidence_list = auth_state(device)
@@ -2170,7 +2170,7 @@ def main() -> int:
                 failures.extend(navigation_pixel_delta_failures(
                     synthetic_pixel_deltas["evidence_list_to_detail"],
                     "synthetic_evidence_list_to_detail",
-                    title_change_required=True,
+                    title_change_required=False,
                     footer_change_required=True))
 
                 # Return to Actions and prove synthetic Repeat is recorded
@@ -2506,7 +2506,7 @@ def main() -> int:
                                 "lease_mask": 0,
                             }, "post_hil_end_ui")
                             require_exact(post_hil_end["auth"], {
-                                "view": "menu", "state": "idle",
+                                "view": "none", "state": "idle",
                                 "synthetic": False,
                                 "production_report_fingerprint":
                                     "unavailable",

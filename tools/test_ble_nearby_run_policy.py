@@ -5,11 +5,59 @@ import unittest
 
 from ble_nearby_run_policy import (
     boot_recovery_continuity,
+    bounded_pipeline_accounting_valid,
+    display_signal_signature,
     storage_measurement_scope_valid,
 )
 
 
 class BleNearbyRunPolicyTest(unittest.TestCase):
+    def test_bounded_pipeline_requires_exact_explicit_accounting(self) -> None:
+        valid = {
+            "survey_received": 146,
+            "survey_forwarded": 64,
+            "survey_dropped": 82,
+            "survey_queue_depth": 0,
+        }
+        self.assertTrue(bounded_pipeline_accounting_valid(valid))
+        self.assertFalse(bounded_pipeline_accounting_valid({
+            **valid, "survey_dropped": 81,
+        }))
+        self.assertFalse(bounded_pipeline_accounting_valid({
+            **valid, "survey_queue_depth": 1,
+        }))
+        self.assertFalse(bounded_pipeline_accounting_valid({
+            **valid, "survey_received": True,
+        }))
+
+    def test_display_signal_signature_uses_rendered_trend_buckets(self) -> None:
+        baseline = {
+            "rssi_dbm": -73,
+            "minimum_rssi_dbm": -74,
+            "maximum_rssi_dbm": -73,
+            "rssi_trend_db": 1,
+        }
+        same_pixels = {**baseline, "rssi_trend_db": 0}
+        approaching = {**baseline, "rssi_trend_db": 4}
+        receding = {**baseline, "rssi_trend_db": -4}
+        changed_rssi = {**baseline, "rssi_dbm": -72}
+        self.assertEqual(
+            display_signal_signature(baseline),
+            display_signal_signature(same_pixels),
+        )
+        self.assertNotEqual(
+            display_signal_signature(baseline),
+            display_signal_signature(approaching),
+        )
+        self.assertNotEqual(
+            display_signal_signature(baseline),
+            display_signal_signature(receding),
+        )
+        self.assertNotEqual(
+            display_signal_signature(baseline),
+            display_signal_signature(changed_rssi),
+        )
+
     def test_continuity_does_not_overclaim_global_physical_writes(self) -> None:
         before = {
             "generation": 7,

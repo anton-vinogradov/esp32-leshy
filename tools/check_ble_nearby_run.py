@@ -12,6 +12,8 @@ from typing import Any
 from ble_nearby_entry_gate import ble_entry_stability_evidence_failure
 from ble_nearby_run_policy import (
     boot_recovery_continuity,
+    bounded_pipeline_accounting_valid,
+    display_signal_signature,
     storage_measurement_scope_valid,
 )
 from esp_app_identity import app_elf_sha256
@@ -46,11 +48,6 @@ def fact_signature(state: dict[str, Any]) -> tuple[Any, ...]:
         "service_uuid_hash",
         "service_uuid_count", "service_data_count",
         "manufacturer_data_length", "payload_length"))
-
-
-def signal_signature(state: dict[str, Any]) -> tuple[Any, ...]:
-    return tuple(state.get(field) for field in (
-        "rssi_dbm", "minimum_rssi_dbm", "maximum_rssi_dbm", "rssi_trend_db"))
 
 
 def verify_manifest(failures: list[str], root: Path) -> None:
@@ -134,7 +131,7 @@ def main() -> int:
             first.get("survey_ble_scan_accepted") ==
                 first.get("survey_ble_scan_read") and
             first.get("survey_ble_scan_dropped") == 0 and
-            first.get("survey_dropped") == 0 and
+            bounded_pipeline_accounting_valid(first) and
             isinstance(
                 first.get("survey_product_store_bytes_written"), int) and
             not isinstance(
@@ -154,7 +151,9 @@ def main() -> int:
                 first.get("survey_product_ble_scan_cycles", 0) and
             second.get("ble_devices_strongest_first") is True and
             second.get("ble_device_catalog_revision", 0) >
-                first.get("ble_device_catalog_revision", 0),
+                first.get("ble_device_catalog_revision", 0) and
+            second.get("survey_ble_scan_dropped") == 0 and
+            bounded_pipeline_accounting_valid(second),
             "live BLE catalog did not advance")
     for label, state in (("first", first), ("second", second)):
         cycles = state.get("survey_product_ble_scan_cycles")
@@ -194,7 +193,8 @@ def main() -> int:
             detail_second.get("identity_hash") ==
                 detail_first.get("identity_hash") and
             fact_signature(detail_second) == fact_signature(detail_first) and
-            signal_signature(detail_second) != signal_signature(detail_first),
+            display_signal_signature(detail_second) !=
+                display_signal_signature(detail_first),
             "BLE detail was not identity-stable with a live signal update")
 
     first_heap = run.get("metrics_after_first", {})
