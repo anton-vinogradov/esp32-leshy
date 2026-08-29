@@ -394,6 +394,18 @@ def main() -> int:
                         "BLE detail signal update used a full repaint: "
                         f"first={detail_oracle_first!r}, "
                         f"second={detail_oracle_second!r}")
+                if int(detail_oracle_second.get(
+                        "atomic_text_row_pushes", -1)) <= int(
+                            detail_oracle_first.get(
+                                "atomic_text_row_pushes", -1)) or \
+                        detail_oracle_second.get(
+                            "atomic_text_row_allocation_failures") != 0 or \
+                        detail_oracle_second.get(
+                            "direct_text_row_fallbacks") != 0:
+                    raise RuntimeError(
+                        "BLE detail live text was not atomically composited: "
+                        f"first={detail_oracle_first!r}, "
+                        f"second={detail_oracle_second!r}")
 
                 back_to_list = action(device, "left")
                 trace.append(back_to_list)
@@ -515,6 +527,7 @@ def main() -> int:
             "live_redraw_data_rows_only": True,
             "detail_live_radar_only": True,
             "intermediate_clear_counters_checked": True,
+            "atomic_text_rows_checked": True,
             "advertisement_facts_visible": True,
             "offline_company_database": True,
             "two_complete_ble_lifecycles": True,

@@ -212,6 +212,12 @@ def main() -> int:
             detail_second.get("radar_delta_repaints", -1) >
                 detail_first.get("radar_delta_repaints", -1),
             "BLE detail repaint counters show a full content clear")
+    require(failures,
+            detail_second.get("atomic_text_row_pushes", -1) >
+                detail_first.get("atomic_text_row_pushes", -1) and
+            detail_second.get("atomic_text_row_allocation_failures") == 0 and
+            detail_second.get("direct_text_row_fallbacks") == 0,
+            "BLE detail live text was not atomically composited")
 
     first_heap = run.get("metrics_after_first", {})
     final_heap = run.get("metrics_after", {})
@@ -230,6 +236,7 @@ def main() -> int:
             scope.get("active_scan") is False and
             scope.get("detail_live_radar_only") is True and
             scope.get("intermediate_clear_counters_checked") is True and
+            scope.get("atomic_text_rows_checked") is True and
             scope.get("advertisement_facts_visible") is True and
             scope.get("offline_company_database") is True and
             storage_measurement_scope_valid(scope),

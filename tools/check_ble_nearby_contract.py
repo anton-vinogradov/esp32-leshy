@@ -62,6 +62,13 @@ def main() -> int:
         "The visible-row cache compares final pixels",
         "renderBleDeviceRadar(live, signal, false)",
         "renderRadioSignalCardDelta(",
+        "TFT_eSprite liveTextRowSprite(&display);",
+        "liveTextRowSprite.setColorDepth(1);",
+        "liveTextRowSprite.pushSprite(x, y);",
+        "bleDeviceAtomicTextRowPushes",
+        "bleDeviceAtomicTextRowAllocationFailures",
+        "bleDeviceDirectTextRowFallbacks",
+        "Compose quality and dBm together",
         "bleDeviceRenderedRadar == next",
         "previousWidth - fillWidth",
         "bleDeviceListContentClears",
@@ -180,8 +187,10 @@ def main() -> int:
         '"boot_recovery_continuity": boot_recovery_continuity(',
         '"product_storage_writes_measured": False',
         '"intermediate_clear_counters_checked": True',
+        '"atomic_text_rows_checked": True',
         '1 <= row_repaint_delta <= 4',
         '"BLE detail signal update used a full repaint',
+        '"BLE detail live text was not atomically composited',
     )
     forbidden_runner = (
         '"survey_product_store_bytes_written": 0',
@@ -197,6 +206,9 @@ def main() -> int:
         '"BLE list final pixels/counters show a full or unbounded repaint"',
         '"BLE detail repaint counters show a full content clear"',
         'scope.get("intermediate_clear_counters_checked") is True',
+        'scope.get("atomic_text_rows_checked") is True',
+        'detail_second.get("atomic_text_row_pushes", -1) >',
+        'detail_second.get("direct_text_row_fallbacks") == 0',
     )
     required_entry_gate = (
         "NIMBLE_SYNC_TIMEOUT_MS = 5000",

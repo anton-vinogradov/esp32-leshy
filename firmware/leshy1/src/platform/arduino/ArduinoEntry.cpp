@@ -842,6 +842,11 @@ BootMetrics bootMetrics;
 char runningAppElfSha256[65] = {};
 HilSession hilSession;
 TFT_eSPI display;
+// Reuse one 1-bpp off-screen row for all live text fields. At 216x24 it costs
+// only 648 bytes, which is small enough for the no-PSRAM board while still
+// replacing an erase-then-draw pair with one opaque TFT transfer. This keeps
+// the proven 0.x sprite strategy without reserving a full RGB565 framebuffer.
+TFT_eSprite liveTextRowSprite(&display);
 BoardTouchInput boardTouchInput;
 bool touchCalibrationRequiredAtBoot = false;
 bool touchCalibrationSucceededAtBoot = false;
@@ -1473,6 +1478,9 @@ std::uint32_t bleDeviceListContentClears = 0U;
 std::uint32_t bleDeviceDetailContentClears = 0U;
 std::uint32_t bleDeviceRadarFullRepaints = 0U;
 std::uint32_t bleDeviceRadarDeltaRepaints = 0U;
+std::uint32_t bleDeviceAtomicTextRowPushes = 0U;
+std::uint32_t bleDeviceAtomicTextRowAllocationFailures = 0U;
+std::uint32_t bleDeviceDirectTextRowFallbacks = 0U;
 
 std::size_t bleDeviceVisibleSize() {
     return bleDeviceNavigationOrder.size(bleDeviceCatalog);
@@ -10801,6 +10809,44 @@ void setUiCursor(UiTextRole role, std::int16_t x, std::int16_t top) {
     display.setCursor(x, top + uiFontAscent(role));
 }
 
+constexpr std::int16_t kLiveTextRowWidth = Layout::ContentWidth;
+constexpr std::int16_t kLiveTextRowHeight = 24;
+
+bool beginLiveTextRow(UiTextRole role, std::uint16_t foreground,
+                      std::uint16_t background) {
+    if (!liveTextRowSprite.created()) {
+        liveTextRowSprite.setColorDepth(1);
+        if (liveTextRowSprite.createSprite(kLiveTextRowWidth,
+                                           kLiveTextRowHeight) == nullptr) {
+            ++bleDeviceAtomicTextRowAllocationFailures;
+            return false;
+        }
+        liveTextRowSprite.setTextWrap(false, false);
+    }
+    liveTextRowSprite.fillSprite(0U);
+    liveTextRowSprite.setBitmapColor(foreground, background);
+    // A 1-bpp sprite stores only foreground/background membership. The real
+    // RGB565 colors are applied by setBitmapColor() during the single push.
+    liveTextRowSprite.setTextColor(1U, 0U);
+    liveTextRowSprite.setFreeFont(
+        role == UiTextRole::Body ? &RobotoCondensedBody
+                                 : &RobotoCondensedMeta);
+    return true;
+}
+
+void setLiveTextRowCursor(UiTextRole role, std::int16_t x,
+                          std::int16_t top) {
+    liveTextRowSprite.setFreeFont(
+        role == UiTextRole::Body ? &RobotoCondensedBody
+                                 : &RobotoCondensedMeta);
+    liveTextRowSprite.setCursor(x, top + uiFontAscent(role));
+}
+
+void pushLiveTextRow(std::int16_t x, std::int16_t y) {
+    liveTextRowSprite.pushSprite(x, y);
+    ++bleDeviceAtomicTextRowPushes;
+}
+
 enum class NavigationKey : std::uint8_t {
     None,
     Left,
@@ -12522,6 +12568,36 @@ std::int16_t radioSignalTrackFillWidth(std::int16_t rssiDbm,
         (static_cast<std::int32_t>(clamped + 100) * (trackWidth - 2)) / 60);
 }
 
+void renderRadioSignalTextRow(std::int16_t rssiDbm, const Rect& bounds) {
+    const std::uint16_t tone = radioSignalTone(rssiDbm);
+    char value[24] = {};
+    std::snprintf(value, sizeof(value), tr(UiTextId::RadioSignalDbmFormat),
+                  static_cast<int>(rssiDbm));
+    if (beginLiveTextRow(UiTextRole::Body, tone, Palette::Surface)) {
+        setLiveTextRowCursor(UiTextRole::Body, 10, 4);
+        liveTextRowSprite.print(tr(radioSignalQualityText(rssiDbm)));
+        const std::int16_t valueX = bounds.width - 10 -
+            liveTextRowSprite.textWidth(value);
+        setLiveTextRowCursor(UiTextRole::Body, valueX, 4);
+        liveTextRowSprite.print(value);
+        pushLiveTextRow(bounds.x, bounds.y + 25);
+        return;
+    }
+
+    // Fail visibly but safely if even the 648-byte compositor cannot be
+    // allocated. Product HIL requires this counter to remain zero.
+    ++bleDeviceDirectTextRowFallbacks;
+    display.fillRect(bounds.x, bounds.y + 25, bounds.width, 24,
+                     Palette::Surface);
+    display.setTextColor(tone, Palette::Surface);
+    setUiCursor(UiTextRole::Body, bounds.x + 10, bounds.y + 29);
+    display.print(tr(radioSignalQualityText(rssiDbm)));
+    const std::int16_t valueX = bounds.x + bounds.width - 10 -
+        display.textWidth(value);
+    setUiCursor(UiTextRole::Body, valueX, bounds.y + 29);
+    display.print(value);
+}
+
 void renderRadioSignalCard(
         std::int16_t rssiDbm,
         const Rect& bounds = {
@@ -12540,19 +12616,7 @@ void renderRadioSignalCard(
         setUiCursor(UiTextRole::Meta, bounds.x + 10, bounds.y + 9);
         display.print(tr(UiTextId::RadioSignalLabel));
     }
-    display.fillRect(bounds.x + 6, bounds.y + 25, bounds.width - 12, 24,
-                     Palette::Surface);
-    display.setTextColor(tone, Palette::Surface);
-    setUiCursor(UiTextRole::Body, bounds.x + 10, bounds.y + 29);
-    display.print(tr(radioSignalQualityText(rssiDbm)));
-    char value[24] = {};
-    std::snprintf(value, sizeof(value), tr(UiTextId::RadioSignalDbmFormat),
-                  static_cast<int>(rssiDbm));
-    setUiCursor(UiTextRole::Body, bounds.x + 10, bounds.y + 29);
-    const std::int16_t valueX = bounds.x + bounds.width - 10 -
-                                display.textWidth(value);
-    setUiCursor(UiTextRole::Body, valueX, bounds.y + 29);
-    display.print(value);
+    renderRadioSignalTextRow(rssiDbm, bounds);
     display.fillRect(bounds.x + kTrackInset, kTrackY, kTrackWidth,
                      kTrackHeight, Palette::Canvas);
     display.drawRect(bounds.x + kTrackInset, kTrackY, kTrackWidth,
@@ -12582,35 +12646,15 @@ void renderRadioSignalCardDelta(
     if (previousRssiDbm == rssiDbm) return;
     constexpr std::int16_t kTrackInset = 10;
     constexpr std::int16_t kTrackHeight = 14;
-    constexpr std::int16_t kValueRegionWidth = 74;
     const bool compact = bounds.height < 100;
     const std::int16_t trackY = bounds.y + (compact ? 50 : 59);
     const std::int16_t trackWidth = bounds.width - 2 * kTrackInset;
     const std::uint16_t previousTone = radioSignalTone(previousRssiDbm);
     const std::uint16_t tone = radioSignalTone(rssiDbm);
 
-    if (radioSignalQualityText(previousRssiDbm) !=
-        radioSignalQualityText(rssiDbm)) {
-        display.fillRect(
-            bounds.x + 6, bounds.y + 25,
-            bounds.width - 12 - kValueRegionWidth, 24, Palette::Surface);
-        display.setTextColor(tone, Palette::Surface);
-        setUiCursor(UiTextRole::Body, bounds.x + 10, bounds.y + 29);
-        display.print(tr(radioSignalQualityText(rssiDbm)));
-    }
-
-    display.fillRect(bounds.x + bounds.width - 6 - kValueRegionWidth,
-                     bounds.y + 25, kValueRegionWidth, 24,
-                     Palette::Surface);
-    char value[24] = {};
-    std::snprintf(value, sizeof(value), tr(UiTextId::RadioSignalDbmFormat),
-                  static_cast<int>(rssiDbm));
-    display.setTextColor(tone, Palette::Surface);
-    setUiCursor(UiTextRole::Body, bounds.x + 10, bounds.y + 29);
-    const std::int16_t valueX = bounds.x + bounds.width - 10 -
-                                display.textWidth(value);
-    setUiCursor(UiTextRole::Body, valueX, bounds.y + 29);
-    display.print(value);
+    // Compose quality and dBm together, then replace the complete row in one
+    // transfer. Direct erase-before-redraw is visible on the ILI9341.
+    renderRadioSignalTextRow(rssiDbm, bounds);
 
     const std::int16_t previousWidth =
         radioSignalTrackFillWidth(previousRssiDbm, trackWidth);
@@ -13230,25 +13274,40 @@ BleDeviceRadarVisual bleDeviceRadarVisual(
 }
 
 void renderBleDeviceRange(const BleDeviceRadarVisual& visual) {
-    display.fillRect(Layout::Edge, 242, Layout::ContentWidth, 22,
-                     Palette::Canvas);
     char line[64] = {};
     std::snprintf(line, sizeof(line),
                   tr(UiTextId::WifiDeviceRssiRangeFormat),
                   static_cast<int>(visual.minimumRssiDbm),
                   static_cast<int>(visual.maximumRssiDbm));
+    if (beginLiveTextRow(
+            UiTextRole::Meta, Palette::TextMuted, Palette::Canvas)) {
+        setLiveTextRowCursor(UiTextRole::Meta, 2, 4);
+        liveTextRowSprite.print(line);
+        pushLiveTextRow(Layout::Edge, 242);
+        return;
+    }
+    ++bleDeviceDirectTextRowFallbacks;
+    display.fillRect(Layout::Edge, 242, Layout::ContentWidth, 22,
+                     Palette::Canvas);
     display.setTextColor(Palette::TextMuted, Palette::Canvas);
     setUiCursor(UiTextRole::Meta, 14, 246);
     display.print(line);
 }
 
 void renderBleDeviceTrend(const BleDeviceRadarVisual& visual) {
+    const std::uint16_t tone = visual.rssiTrendDb >= 4
+        ? Palette::Positive
+        : (visual.rssiTrendDb <= -4 ? Palette::Danger : Palette::TextMuted);
+    if (beginLiveTextRow(UiTextRole::Meta, tone, Palette::Canvas)) {
+        setLiveTextRowCursor(UiTextRole::Meta, 2, 5);
+        liveTextRowSprite.print(tr(wifiDeviceTrendText(visual.rssiTrendDb)));
+        pushLiveTextRow(Layout::Edge, 264);
+        return;
+    }
+    ++bleDeviceDirectTextRowFallbacks;
     display.fillRect(Layout::Edge, 264, Layout::ContentWidth,
                      Layout::FooterDividerY - 264, Palette::Canvas);
-    display.setTextColor(
-        visual.rssiTrendDb >= 4 ? Palette::Positive :
-        (visual.rssiTrendDb <= -4 ? Palette::Danger : Palette::TextMuted),
-        Palette::Canvas);
+    display.setTextColor(tone, Palette::Canvas);
     setUiCursor(UiTextRole::Meta, 14, 269);
     display.print(tr(wifiDeviceTrendText(visual.rssiTrendDb)));
 }
@@ -22059,6 +22118,9 @@ bool startBleDevicesProduct() {
     bleDeviceDetailContentClears = 0U;
     bleDeviceRadarFullRepaints = 0U;
     bleDeviceRadarDeltaRepaints = 0U;
+    bleDeviceAtomicTextRowPushes = 0U;
+    bleDeviceAtomicTextRowAllocationFailures = 0U;
+    bleDeviceDirectTextRowFallbacks = 0U;
     productSurveyRuntime = {};
     productSurveyRuntime.selected = true;
     productSurveyRuntime.workerReady = productSurveyWorkerReady;
@@ -30025,7 +30087,10 @@ void emitBleDeviceDetailState(Stream& reply) {
         "\"rssi_trend_db\":%d,\"catalog_revision\":%lu,"
         "\"list_row_repaints\":%lu,\"list_content_clears\":%lu,"
         "\"detail_content_clears\":%lu,"
-        "\"radar_full_repaints\":%lu,\"radar_delta_repaints\":%lu}",
+        "\"radar_full_repaints\":%lu,\"radar_delta_repaints\":%lu,"
+        "\"atomic_text_row_pushes\":%lu,"
+        "\"atomic_text_row_allocation_failures\":%lu,"
+        "\"direct_text_row_fallbacks\":%lu}",
         live ? "true" : "false",
         static_cast<unsigned long>(identityHash),
         device.labelLength != 0U ? "true" : "false",
@@ -30062,7 +30127,11 @@ void emitBleDeviceDetailState(Stream& reply) {
         static_cast<unsigned long>(bleDeviceListContentClears),
         static_cast<unsigned long>(bleDeviceDetailContentClears),
         static_cast<unsigned long>(bleDeviceRadarFullRepaints),
-        static_cast<unsigned long>(bleDeviceRadarDeltaRepaints));
+        static_cast<unsigned long>(bleDeviceRadarDeltaRepaints),
+        static_cast<unsigned long>(bleDeviceAtomicTextRowPushes),
+        static_cast<unsigned long>(
+            bleDeviceAtomicTextRowAllocationFailures),
+        static_cast<unsigned long>(bleDeviceDirectTextRowFallbacks));
     reply.println(line);
 }
 
