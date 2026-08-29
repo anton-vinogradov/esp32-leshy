@@ -11,4 +11,11 @@ bool normalizeFieldSurveyStation(
     const apps::wifi::WifiDeviceObservation& station,
     domain::observations::Observation* output);
 
+// A monitor starting on channel 1 has covered all requested channels after
+// at least channelCount - 1 successful hops. Extra hops are harmless: task
+// scheduling can keep the bounded monitor alive long enough to start another
+// sweep, and exact equality would falsely reject that valid coverage.
+bool fieldSurveyStationSweepCovered(std::uint32_t channelHops,
+                                    std::uint8_t channelCount);
+
 }  // namespace leshy1::apps::survey

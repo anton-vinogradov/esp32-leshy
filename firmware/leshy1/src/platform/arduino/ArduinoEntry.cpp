@@ -3525,7 +3525,8 @@ FieldSurveyStationCaptureResult captureFieldSurveyStations() {
         }
     }
     result.complete = result.cleanupComplete &&
-        result.channelHops == kFieldSurveyStationChannelCount - 1U &&
+        leshy1::apps::survey::fieldSurveyStationSweepCovered(
+            result.channelHops, kFieldSurveyStationChannelCount) &&
         result.rejected == 0U && result.dropped == 0U &&
         !productSurveyStopRequested();
     return result;

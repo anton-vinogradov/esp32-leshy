@@ -170,6 +170,11 @@ void testLiveStationNormalizationAndAutomaticCatalogKind() {
     CHECK(comparison.status == FieldSurveyComparisonStatus::Valid);
     CHECK(comparison.wifiAccessPoints == 0U);
     CHECK(comparison.wifiStations == 1U);
+
+    CHECK(!fieldSurveyStationSweepCovered(11U, 13U));
+    CHECK(fieldSurveyStationSweepCovered(12U, 13U));
+    CHECK(fieldSurveyStationSweepCovered(14U, 13U));
+    CHECK(!fieldSurveyStationSweepCovered(0U, 0U));
 }
 
 void testCatalogBuildFailsClosedOnDropsAndInvalidInput() {
