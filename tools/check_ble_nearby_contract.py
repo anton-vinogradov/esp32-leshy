@@ -194,7 +194,7 @@ def main() -> int:
         "boot_recovery_continuity(before, after)",
         'scope.get("boot_recovery_continuity") is True',
         'first.get("survey_product_store_bytes_written") >= 0',
-        '"BLE list repaint counters show a full/unbounded repaint"',
+        '"BLE list final pixels/counters show a full or unbounded repaint"',
         '"BLE detail repaint counters show a full content clear"',
         'scope.get("intermediate_clear_counters_checked") is True',
     )

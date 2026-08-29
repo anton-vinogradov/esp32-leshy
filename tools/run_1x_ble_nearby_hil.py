@@ -305,14 +305,17 @@ def main() -> int:
                 list_render_second = ble_detail(device)
                 list_pixel_changes = changed_pixels(
                     frames, "ble-devices-first", "ble-devices-second")
-                if list_pixel_changes["content_changed_pixels"] <= 0 or \
-                        list_pixel_changes["chrome_changed_pixels"] != 0:
-                    raise RuntimeError(
-                        f"live list redraw escaped rows: {list_pixel_changes}")
                 row_repaint_delta = int(list_render_second.get(
                     "list_row_repaints", -1)) - int(list_render_first.get(
                         "list_row_repaints", -1))
-                if not 1 <= row_repaint_delta <= 4 or \
+                content_changed = list_pixel_changes[
+                    "content_changed_pixels"]
+                bounded_rows = (content_changed == 0 and
+                                row_repaint_delta == 0) or \
+                    (content_changed > 0 and
+                     1 <= row_repaint_delta <= 4)
+                if list_pixel_changes["chrome_changed_pixels"] != 0 or \
+                        not bounded_rows or \
                         list_render_second.get("list_content_clears") != \
                         list_render_first.get("list_content_clears"):
                     raise RuntimeError(

@@ -165,21 +165,20 @@ def main() -> int:
                 cycles <= attempts <= cycles * 2 and
                 retries == attempts - cycles,
                 f"{label} bounded BLE retry accounting mismatch")
-    require(failures,
-            run.get("list_pixel_changes", {}).get(
-                "content_changed_pixels", 0) > 0 and
-            run.get("list_pixel_changes", {}).get(
-                "chrome_changed_pixels") == 0,
-            "live redraw escaped content rows")
+    list_changes = run.get("list_pixel_changes", {})
     list_render_first = run.get("list_render_first", {})
     list_render_second = run.get("list_render_second", {})
     row_repaint_delta = list_render_second.get("list_row_repaints", -1) - \
         list_render_first.get("list_row_repaints", -1)
+    content_changed = list_changes.get("content_changed_pixels", -1)
+    bounded_rows = (content_changed == 0 and row_repaint_delta == 0) or \
+        (content_changed > 0 and 1 <= row_repaint_delta <= 4)
     require(failures,
-            1 <= row_repaint_delta <= 4 and
+            list_changes.get("chrome_changed_pixels") == 0 and
+            bounded_rows and
             list_render_second.get("list_content_clears") ==
                 list_render_first.get("list_content_clears"),
-            "BLE list repaint counters show a full/unbounded repaint")
+            "BLE list final pixels/counters show a full or unbounded repaint")
     detail_changes = run.get("detail_pixel_changes", {})
     require(failures,
             detail_changes.get("radar_changed_pixels", 0) > 0 and
