@@ -1,0 +1,48 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "3c401f5b1a7ffb9e15298b6716506ec9475e7d4c980aa5adc0ddbd756d08b750",
+    "factory_sha256": "0b6c24cdc3ac4a90e7e2725be18bb62ca6d9a30c5eabb5f490f112782006a923",
+    "firmware_sha256": "4c82162eab199532fba475df8341c520d43bce8bf4ab04bc31f930bf5f310bce",
+    "map_sha256": "614a52bc07636efd0279ab4f100e7dfc78cd58c292a11de41c4a68cb05142e3f",
+    "source_commit": "bfe646e4d9408b4cd0ec1dc58c7c4e9c38a4ac0d",
+    "version": "1.0.0-dev.250"
+  },
+  "evidence": {
+    "artifact_index_sha256": "1caa05e55361c718e70635056c50739f4dd71338449b8e982d45a7f834c3bd91",
+    "checker_sha256": "0e7a953579dc21e8a468131f397f944a7fcfd696d2acd86c81e2f2c01e6a350e",
+    "run_id": "953be02267b2b07cbb0942806d757a5d",
+    "run_sha256": "383293ddd21559c4f6a379d0f92c0685565665726518297637b402f837ed4599",
+    "runner_sha256": "4bc62d20a28479b49a28bc0283e56a247dac1f90b53c9e2480300ff3c6caa50e",
+    "source_guard_sha256": "2e5e9dada66d36a08902b1b64265340f2c6345c5c2d5fc0f73c71acfdb5f260f"
+  },
+  "evidence_ids": [
+    "E-BUILD-178",
+    "E-AUTO-152",
+    "E-HIL-193",
+    "E-UX-057"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "schema": "leshy.ble_repaint_hil.acceptance.v1",
+  "status": "pass_bluetooth_bounded_repaint",
+  "verified": {
+    "active_probe_allowed": false,
+    "detail_chrome_changed_pixels": 0,
+    "detail_delta_repaints": 1,
+    "detail_full_content_clears": 0,
+    "detail_full_repaints": 0,
+    "detail_radar_changed_pixels": 929,
+    "detail_static_changed_pixels": 0,
+    "driver_scan_drops": 0,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "list_changed_rows": 2,
+    "list_chrome_changed_pixels": 0,
+    "list_content_changed_pixels": 1736,
+    "list_full_content_clears": 0,
+    "list_visible_rows": 4,
+    "manual_button_presses": 0,
+    "passive_only": true
+  }
+}

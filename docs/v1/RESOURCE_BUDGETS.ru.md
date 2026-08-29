@@ -1135,6 +1135,23 @@ image — на 11 344 B. Build сохраняет 28 544 B остатка intern
 dev.248 остаётся принятым physical baseline heap/cadence до проверки Save, commit SD,
 cold reopen и полезного export artifact на оригинальном DIV.
 
+Physical bound bounded repaint Bluetooth `RB-M189`: exact `1.0.0-dev.250` на source
+`bfe646e4d9408b4cd0ec1dc58c7c4e9c38a4ac0d` использует 230 400 B static RAM и
+3 426 528 B linked flash. Размеры app/factory — 3 427 024/3 492 560 B с SHA-256
+`4c82162eab199532fba475df8341c520d43bce8bf4ab04bc31f930bf5f310bce`/
+`0b6c24cdc3ac4a90e7e2725be18bb62ca6d9a30c5eabb5f490f112782006a923`;
+identity ELF/app —
+`3c401f5b1a7ffb9e15298b6716506ec9475e7d4c980aa5adc0ddbd756d08b750`,
+SHA-256 map —
+`614a52bc07636efd0279ab4f100e7dfc78cd58c292a11de41c4a68cb05142e3f`.
+Против `RB-M188` visual cache четырёх строк Bluetooth, delta-state signal-card и
+instrumentation добавляют 400 B static RAM, 1 416 B linked flash и 1 408 B в каждый
+image; внутри app-slot OTA 4 MiB остаётся 767 280 B. Physical HIL продвигает catalog,
+перерисовывая ровно две видимые строки, выполняет один detail delta repaint без full
+content clear и возвращается Home/none/lease 0 при zero BLE driver drops. Это принимает
+focused physical repaint/runtime bound и двигает cadence до 13/15, но не принимает
+унаследованный path persistence/export CAP-049.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

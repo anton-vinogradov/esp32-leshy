@@ -1142,6 +1142,24 @@ stream exports from the exact reopened generation. This is a host/build bound on
 dev.248 remains the accepted physical heap/cadence baseline until Save, SD commit,
 cold reopen and useful artifact export are exercised on the original DIV.
 
+Bluetooth bounded-repaint physical bound `RB-M189`: exact `1.0.0-dev.250` at
+source `bfe646e4d9408b4cd0ec1dc58c7c4e9c38a4ac0d` uses 230,400 B static RAM and
+3,426,528 B linked flash. App/factory sizes are 3,427,024/3,492,560 B with
+SHA-256
+`4c82162eab199532fba475df8341c520d43bce8bf4ab04bc31f930bf5f310bce`/
+`0b6c24cdc3ac4a90e7e2725be18bb62ca6d9a30c5eabb5f490f112782006a923`;
+ELF/app identity is
+`3c401f5b1a7ffb9e15298b6716506ec9475e7d4c980aa5adc0ddbd756d08b750`
+and map SHA-256 is
+`614a52bc07636efd0279ab4f100e7dfc78cd58c292a11de41c4a68cb05142e3f`.
+Against `RB-M188`, the four-row Bluetooth visual cache, signal-card delta state and
+instrumentation add 400 B static RAM, 1,416 B linked flash and 1,408 B to each image;
+767,280 B remains in the 4 MiB OTA app slot. Physical HIL advances the catalog while
+repainting exactly two visible rows, performs one detail delta repaint and no full
+content clear, and returns Home/none/lease 0 with zero BLE driver drops. This accepts
+the focused physical repaint/runtime bound and advances cadence to 13/15. It does
+not accept the inherited CAP-049 persistence/export path.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
