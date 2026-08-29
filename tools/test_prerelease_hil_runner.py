@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import struct
 import tempfile
 import unittest
@@ -55,6 +56,22 @@ class PrereleaseRunnerTests(unittest.TestCase):
         self.assertEqual("read_mac", reset_command[-1])
         for call in run.call_args_list:
             self.assertTrue(call.kwargs["check"])
+            self.assertIn("env", call.kwargs)
+
+    def test_esptool_environment_accepts_bundled_tools_layout(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            core = Path(directory)
+            package = core / "tools" / "tool-esptoolpy"
+            (package / "esptool").mkdir(parents=True)
+            (package / "esptool" / "__init__.py").touch()
+            with mock.patch.dict(
+                    RUNNER.os.environ, {"PYTHONPATH": "/existing"},
+                    clear=True):
+                environment = RUNNER.esptool_environment(core)
+        self.assertEqual(
+            [str(package), "/existing"],
+            environment["PYTHONPATH"].split(os.pathsep),
+        )
 
     def test_candidate_app_identity_is_read_from_descriptor(self) -> None:
         image = bytearray(288)

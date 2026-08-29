@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import secrets
 import shutil
 import subprocess
@@ -224,13 +225,40 @@ def write_json(path: Path, value: Any) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def esptool_environment(platformio_core: Path | None = None) -> dict[str, str]:
+    """Return an environment that can import PlatformIO's bundled esptool.
+
+    PlatformIO normally installs ``tool-esptoolpy`` below ``packages``.  The
+    bundled desktop workspace may expose the same package below ``tools`` while
+    leaving the virtualenv's editable-install metadata pointed at ``packages``.
+    Resolve either layout explicitly so a missing Python module fails before a
+    physical HIL result can be mistaken for a board/serial failure.
+    """
+    environment = os.environ.copy()
+    if platformio_core is None:
+        configured = environment.get("PLATFORMIO_CORE_DIR")
+        platformio_core = (Path(configured) if configured
+                           else Path(sys.prefix).parent)
+    for package_root in (
+            platformio_core / "packages" / "tool-esptoolpy",
+            platformio_core / "tools" / "tool-esptoolpy"):
+        if not (package_root / "esptool" / "__init__.py").is_file():
+            continue
+        existing = environment.get("PYTHONPATH")
+        environment["PYTHONPATH"] = os.pathsep.join(
+            [str(package_root), existing] if existing else [str(package_root)])
+        break
+    return environment
+
+
 def flash_candidate(port: str, firmware: Path, offset: int, baud: int) -> None:
+    environment = esptool_environment()
     flash_command = [
         sys.executable, "-m", "esptool", "--chip", "esp32s3", "--port", port,
         "--baud", str(baud), "--after", "no_reset",
         "write_flash", hex(offset), str(firmware),
     ]
-    subprocess.run(flash_command, check=True)
+    subprocess.run(flash_command, check=True, env=environment)
     # Native USB disappears while the S3 watchdog is armed.  Keeping that
     # transition in the write-flash process makes macOS report the expected
     # disconnect as an I/O failure after the image hash was already verified.
@@ -239,7 +267,7 @@ def flash_candidate(port: str, firmware: Path, offset: int, baud: int) -> None:
         sys.executable, "-m", "esptool", "--chip", "esp32s3", "--port", port,
         "--before", "no_reset", "--after", "watchdog_reset", "read_mac",
     ]
-    subprocess.run(reset_command, check=True)
+    subprocess.run(reset_command, check=True, env=environment)
 
 
 def capture_frame(device: Any) -> tuple[dict[str, Any], bytes, dict[str, Any], dict[str, Any]]:
