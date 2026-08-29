@@ -1,0 +1,51 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "698c7a8ef19388762845ec7d95219a09ae132b3a6155bcf351af8486bb04202c",
+    "factory_sha256": "e793b1a322a989824aeefc049fa1346e83a50e2b690067b599c5aa9de4845772",
+    "firmware_sha256": "66b9f27a32159292d0ec168dce7bafe5871aadf2759541960fc2ab7edd9e4781",
+    "map_sha256": "7f3e77e78a45f5516b812a0e617890aef1eb7f4799c687318c123366c9bc2c75",
+    "source_commit": "d84f8259c6781dcbe90ae00fba00f0c6f4379c32",
+    "version": "1.0.0-dev.251"
+  },
+  "evidence": {
+    "artifact_index_sha256": "8514526c9f9eb182f08c2f1b10f5c30ba83b2b257f99dd3c98acc7b32da50c2a",
+    "checker_sha256": "4f3c0e90205bafada9445b196664544c5dfd0b94d39b9da2f6fbdce3b8108d9c",
+    "run_id": "27823bbd9cb9817a247c30f0668bce2a",
+    "run_sha256": "92613d6331ea41016149d8481be9ba285911fb7642e3b75ac5f3fa13a08e4708",
+    "runner_sha256": "bf4d0d236dbbc044b3e7c37e1d374892dbec254966535de6628b28fcc5452d8d",
+    "source_guard_sha256": "80e115fa19a8705e8ee06e41b5bbadd5727edb25b406889f0a8405c50dea4fe6"
+  },
+  "evidence_ids": [
+    "E-BUILD-179",
+    "E-AUTO-153",
+    "E-HIL-194",
+    "E-UX-058"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "schema": "leshy.ble_repaint_hil.acceptance.v2",
+  "status": "pass_bluetooth_atomic_live_text",
+  "verified": {
+    "active_probe_allowed": false,
+    "detail_atomic_text_row_allocation_failures": 0,
+    "detail_atomic_text_row_pushes": 3,
+    "detail_chrome_changed_pixels": 0,
+    "detail_delta_repaints": 1,
+    "detail_direct_text_row_fallbacks": 0,
+    "detail_full_content_clears": 0,
+    "detail_full_repaints": 0,
+    "detail_radar_changed_pixels": 805,
+    "detail_static_changed_pixels": 0,
+    "driver_scan_drops": 0,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "list_changed_rows": 3,
+    "list_chrome_changed_pixels": 0,
+    "list_content_changed_pixels": 1826,
+    "list_full_content_clears": 0,
+    "list_visible_rows": 4,
+    "manual_button_presses": 0,
+    "passive_only": true
+  }
+}

@@ -1152,6 +1152,25 @@ content clear и возвращается Home/none/lease 0 при zero BLE driv
 focused physical repaint/runtime bound и двигает cadence до 13/15, но не принимает
 унаследованный path persistence/export CAP-049.
 
+Physical bound atomic-card Bluetooth `RB-M190`: exact `1.0.0-dev.251` на source
+`d84f8259c6781dcbe90ae00fba00f0c6f4379c32` использует 230 728 B static RAM и
+3 434 756 B linked flash. Размеры app/factory — 3 435 264/3 500 800 B с SHA-256
+`66b9f27a32159292d0ec168dce7bafe5871aadf2759541960fc2ab7edd9e4781`/
+`e793b1a322a989824aeefc049fa1346e83a50e2b690067b599c5aa9de4845772`;
+identity ELF/app —
+`698c7a8ef19388762845ec7d95219a09ae132b3a6155bcf351af8486bb04202c`,
+SHA-256 map —
+`7f3e77e78a45f5516b812a0e617890aef1eb7f4799c687318c123366c9bc2c75`.
+Против `RB-M189` объект reusable sprite и instrumentation atomic rows добавляют
+328 B static RAM, 8 228 B linked flash и 8 240 B в каждый image; в app-slot OTA
+4 MiB остаётся 759 040 B. Реальный live-buffer без PSRAM — один переиспользуемый
+sprite 216×24 1-bpp, 648 B, а не full-card framebuffer RGB565. Physical HIL
+наблюдает три atomic push строк с zero failures allocation и zero direct fallback,
+один delta repaint радара без нового full repaint/content clear, invariant
+post-cleanup heap 73 936 B и final Home/none/lease 0. Это принимает оставшийся
+runtime bound мерцания Bluetooth-card и двигает cadence до 14/15; persistence/export
+CAP-049 остаётся открыта.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

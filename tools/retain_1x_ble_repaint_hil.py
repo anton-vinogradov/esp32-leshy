@@ -14,18 +14,18 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "1.0.0-dev.250"
+VERSION = "1.0.0-dev.251"
 CID = "FE343253440000002000000055019CB7"
-SOURCE_COMMIT = "bfe646e4d9408b4cd0ec1dc58c7c4e9c38a4ac0d"
+SOURCE_COMMIT = "d84f8259c6781dcbe90ae00fba00f0c6f4379c32"
 FIRMWARE_SHA256 = (
-    "4c82162eab199532fba475df8341c520d43bce8bf4ab04bc31f930bf5f310bce")
+    "66b9f27a32159292d0ec168dce7bafe5871aadf2759541960fc2ab7edd9e4781")
 APP_ELF_SHA256 = (
-    "3c401f5b1a7ffb9e15298b6716506ec9475e7d4c980aa5adc0ddbd756d08b750")
+    "698c7a8ef19388762845ec7d95219a09ae132b3a6155bcf351af8486bb04202c")
 FACTORY_SHA256 = (
-    "0b6c24cdc3ac4a90e7e2725be18bb62ca6d9a30c5eabb5f490f112782006a923")
+    "e793b1a322a989824aeefc049fa1346e83a50e2b690067b599c5aa9de4845772")
 MAP_SHA256 = (
-    "614a52bc07636efd0279ab4f100e7dfc78cd58c292a11de41c4a68cb05142e3f")
-EVIDENCE_IDS = ["E-BUILD-178", "E-AUTO-152", "E-HIL-193", "E-UX-057"]
+    "7f3e77e78a45f5516b812a0e617890aef1eb7f4799c687318c123366c9bc2c75")
+EVIDENCE_IDS = ["E-BUILD-179", "E-AUTO-153", "E-HIL-194", "E-UX-058"]
 
 
 def digest(path: Path) -> str:
@@ -116,11 +116,16 @@ def main() -> int:
                  first_list["list_row_repaints"])
     delta_repaints = (second_detail["radar_delta_repaints"] -
                       first_detail["radar_delta_repaints"])
-    require(row_delta == 2 and
+    require(row_delta == 3 and
             second_list["list_content_clears"] ==
             first_list["list_content_clears"],
             "expected exact bounded list repaint proof")
+    atomic_text_delta = (second_detail["atomic_text_row_pushes"] -
+                         first_detail["atomic_text_row_pushes"])
     require(delta_repaints == 1 and
+            atomic_text_delta == 3 and
+            second_detail["atomic_text_row_allocation_failures"] == 0 and
+            second_detail["direct_text_row_fallbacks"] == 0 and
             second_detail["radar_full_repaints"] ==
             first_detail["radar_full_repaints"] and
             second_detail["detail_content_clears"] ==
@@ -150,8 +155,8 @@ def main() -> int:
             f"{digest(path)}  {path.relative_to(staged_bundle)}\n"
             for path in indexed), encoding="utf-8")
         summary_value = {
-            "schema": "leshy.ble_repaint_hil.acceptance.v1",
-            "status": "pass_bluetooth_bounded_repaint",
+            "schema": "leshy.ble_repaint_hil.acceptance.v2",
+            "status": "pass_bluetooth_atomic_live_text",
             "board": "board-01",
             "evidence_ids": EVIDENCE_IDS,
             "exact_cid": CID,
@@ -184,6 +189,9 @@ def main() -> int:
                 "detail_static_changed_pixels": 0,
                 "detail_chrome_changed_pixels": 0,
                 "detail_delta_repaints": delta_repaints,
+                "detail_atomic_text_row_pushes": atomic_text_delta,
+                "detail_atomic_text_row_allocation_failures": 0,
+                "detail_direct_text_row_fallbacks": 0,
                 "detail_full_repaints": 0,
                 "detail_full_content_clears": 0,
                 "passive_only": True,

@@ -1160,6 +1160,26 @@ content clear, and returns Home/none/lease 0 with zero BLE driver drops. This ac
 the focused physical repaint/runtime bound and advances cadence to 13/15. It does
 not accept the inherited CAP-049 persistence/export path.
 
+Bluetooth atomic-card physical bound `RB-M190`: exact `1.0.0-dev.251` at source
+`d84f8259c6781dcbe90ae00fba00f0c6f4379c32` uses 230,728 B static RAM and
+3,434,756 B linked flash. App/factory sizes are 3,435,264/3,500,800 B with
+SHA-256
+`66b9f27a32159292d0ec168dce7bafe5871aadf2759541960fc2ab7edd9e4781`/
+`e793b1a322a989824aeefc049fa1346e83a50e2b690067b599c5aa9de4845772`;
+ELF/app identity is
+`698c7a8ef19388762845ec7d95219a09ae132b3a6155bcf351af8486bb04202c`
+and map SHA-256 is
+`7f3e77e78a45f5516b812a0e617890aef1eb7f4799c687318c123366c9bc2c75`.
+Against `RB-M189`, the reusable sprite object and atomic-row instrumentation add
+328 B static RAM, 8,228 B linked flash and 8,240 B to each image; 759,040 B remains
+in the 4 MiB OTA app slot. The actual no-PSRAM live buffer is one reusable
+216×24 1-bpp sprite, 648 B, rather than a full-card RGB565 framebuffer. Physical
+HIL observes three atomic row pushes with zero allocation failures and zero direct
+fallbacks, one radar delta repaint with no new full repaint/content clear, invariant
+73,936 B post-cleanup heap and final Home/none/lease 0. This accepts the remaining
+Bluetooth card-flicker/runtime bound and advances cadence to 14/15; CAP-049
+persistence/export remains open.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
