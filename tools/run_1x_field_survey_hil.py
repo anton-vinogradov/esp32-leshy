@@ -354,6 +354,10 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash-baud", type=int, default=460800)
+    parser.add_argument(
+        "--reuse-exact-flash", action="store_true",
+        help="reuse the already-flashed exact candidate after boot identity proof",
+    )
     args = parser.parse_args()
     for path in (args.firmware, args.elf, args.map):
         if not path.is_file():
@@ -400,20 +404,24 @@ def main() -> int:
     write_json(args.output / "run.json", record)
 
     try:
-        flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
-        flashed = True
-        time.sleep(0.75)
+        if not args.reuse_exact_flash:
+            flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            flashed = True
+            time.sleep(0.75)
         boot, recovery, boot_timing = reset_capture(
             args.port, args.output, "boot", 20.0, maximum_attempts=2)
-        failures.extend(boot_failures(
-            boot, recovery, args.expected_version, app_sha,
-            args.expected_cid))
-        if failures:
-            raise RuntimeError("; ".join(failures))
 
         with PassiveSerial(args.port, 115200, timeout=0.25) as device:
             synchronize_console(device, 20.0)
             try:
+                recovery = read_only_query(
+                    device, b"storage.product.boot-recovery",
+                    "leshy.storage.product_boot_recovery.v1", "state")
+                failures.extend(boot_failures(
+                    boot, recovery, args.expected_version, app_sha,
+                    args.expected_cid))
+                if failures:
+                    raise RuntimeError("; ".join(failures))
                 begun = begin_hil(device, run_id, app_sha,
                                   args.expected_version)
                 generation = int(recovery["generation"])
@@ -454,9 +462,10 @@ def main() -> int:
     record.update({
         "status": "pass" if not failures else "failed",
         "passed": not failures,
-        "gate_eligible": flashed and not failures,
+        "gate_eligible": (flashed or args.reuse_exact_flash) and not failures,
         "failures": failures,
         "flashed": flashed,
+        "reused_exact_flash": args.reuse_exact_flash,
         "boot": {"ready": boot, "recovery": recovery,
                  "timing": boot_timing},
         "hil_begin": begun,

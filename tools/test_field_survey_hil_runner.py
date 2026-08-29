@@ -97,6 +97,12 @@ class FieldSurveyHilRunnerTests(unittest.TestCase):
     def test_runner_is_single_flash_and_contains_physical_negative(self) -> None:
         source = Path(RUNNER.__file__).read_text(encoding="utf-8")
         self.assertEqual(1, source.count("flash_candidate(args.port"))
+        self.assertIn("--reuse-exact-flash", source)
+        self.assertIn('b"storage.product.boot-recovery"', source)
+        self.assertLess(
+            source.index('b"storage.product.boot-recovery"'),
+            source.index("failures.extend(boot_failures("),
+        )
         self.assertIn("survey.field-visit.test-incomplete once", source)
         self.assertIn('"survey_product_wifi_scan_cycles"', source)
         self.assertIn('"survey_product_ble_scan_cycles"', source)
