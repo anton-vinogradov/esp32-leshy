@@ -239,6 +239,19 @@ not physical evidence: the one-command board run is pending, physical HTTP parit
 still requires a dedicated client, and the deferred S5 predecessor gate still holds
 final S6 acceptance.
 
+Exact `1.0.0-dev.262` advances `DEMO-S7` CAP-050 through the physical Field Visit
+lifecycle in `E-BUILD-185`/`E-AUTO-160`/`E-HIL-199`/`RB-M196`. A visit is now one
+bounded selected-source pass rather than an accumulating monitor. Preflight, first
+visit and revisit each complete exactly one Wi-Fi+BLE cycle with zero drops; first
+and revisit commit generations 171/172 with 46/52 observations, and comparison
+reports 42 seen again, 10 new and 4 missing. The deterministic incomplete path does
+not touch radio or storage. A separate no-flash/no-scan reset then cold-recovers
+exact generation 172/52 read-only with zero physical or blocked writes and final
+Home/none/lease 0. The retained acceptance explicitly records the original runner's
+missing post-commit reopen and the correction that prevents future false eligibility.
+This accepts only the visit lifecycle: native/WiGLE export, live station capture and
+optional trusted GPS/UTC still hold CAP-050 and `DEMO-S7` open.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases. Physical HIL is

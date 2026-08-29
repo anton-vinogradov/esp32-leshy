@@ -44,6 +44,17 @@ def failures(record: dict[str, Any]) -> list[str]:
     exact("negative.ble_begin_stage", negative.get("ble_begin_stage"),
           "host_sync")
     exact("negative.ble_begin_error", negative.get("ble_begin_error"), 263)
+    exact("negative.scan_cycles", negative.get("scan_cycles"), 11)
+    exact("negative.wifi_scan_cycles", negative.get("wifi_scan_cycles"), 11)
+    exact("negative.ble_scan_cycles", negative.get("ble_scan_cycles"), 0)
+    exact("negative.active_source_mask",
+          negative.get("active_source_mask"), 1)
+    exact("negative.unavailable_source_mask",
+          negative.get("unavailable_source_mask"), 2)
+    exact("negative.wifi_read", negative.get("wifi_read"), 81)
+    exact("negative.wifi_accepted", negative.get("wifi_accepted"), 81)
+    exact("negative.pipeline_received",
+          negative.get("pipeline_received"), 81)
     exact("negative.pipeline_forwarded",
           negative.get("pipeline_forwarded"), 64)
     exact("negative.pipeline_dropped", negative.get("pipeline_dropped"), 17)
@@ -67,6 +78,15 @@ def failures(record: dict[str, Any]) -> list[str]:
     exact("positive.ble_begin_stage", positive.get("ble_begin_stage"),
           "ready")
     exact("positive.ble_begin_error", positive.get("ble_begin_error"), 0)
+    exact("positive.scan_cycles", positive.get("scan_cycles"), 1)
+    exact("positive.wifi_scan_cycles", positive.get("wifi_scan_cycles"), 1)
+    exact("positive.ble_scan_cycles", positive.get("ble_scan_cycles"), 1)
+    exact("positive.selected_source_mask",
+          positive.get("selected_source_mask"), 3)
+    exact("positive.active_source_mask",
+          positive.get("active_source_mask"), 3)
+    exact("positive.unavailable_source_mask",
+          positive.get("unavailable_source_mask"), 0)
     if positive.get("ble_heap_free_before", 0) < 73000:
         result.append("positive BLE pre-start heap is below regression floor")
     if positive.get("ble_heap_largest_before", 0) < 28000:
@@ -112,8 +132,9 @@ def main() -> int:
             print(f"FAIL: {problem}")
         return 1
     print(
-        "Field Survey preflight acceptance passed: dev.260 failure retained, "
-        "dev.261 BLE ready, zero drops/writes and final Home/none/lease 0; "
+        "Field Survey preflight acceptance passed: dev.260 repeated-cycle failure "
+        "retained, dev.261 BLE ready after one "
+        "Wi-Fi+BLE pass with zero drops/writes and final Home/none/lease 0; "
         "full CAP-050 visit gate remains open"
     )
     return 0

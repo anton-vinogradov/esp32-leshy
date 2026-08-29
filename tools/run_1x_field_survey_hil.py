@@ -210,6 +210,31 @@ def auto_paused_failures(state: dict[str, Any], expected_cid: str,
     return failures
 
 
+def post_commit_recovery_failures(record: dict[str, Any], expected_cid: str,
+                                  expected_generation: int,
+                                  label: str) -> list[str]:
+    failures = expect(record, {
+        "status": "admitted",
+        "catalog_admitted": True,
+        "integrity": "valid",
+        "expected_fingerprint": expected_cid,
+        "observed_fingerprint": expected_cid,
+        "fingerprint_matched": True,
+        "generation": expected_generation,
+        "mounted_read_only": True,
+        "read_only_guaranteed": True,
+        "write_enabled": False,
+        "physical_write_calls": 0,
+        "blocked_write_attempts": 0,
+        "cleanup_complete": True,
+        "owned_after": 0,
+    }, label)
+    observations = record.get("observations")
+    if not isinstance(observations, int) or observations < 1:
+        failures.append(f"{label}.observations: expected >= 1")
+    return failures
+
+
 def begin_hil(device: Any, run_id: str, app_sha: str,
               version: str) -> dict[str, Any]:
     try:
@@ -451,10 +476,20 @@ def main() -> int:
         "--reuse-exact-flash", action="store_true",
         help="reuse the already-flashed exact candidate after boot identity proof",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--preflight-only", action="store_true",
         help=("run one live Wi-Fi+BLE cycle, cancel to Home, and never commit "
               "a field visit"),
+    )
+    mode.add_argument(
+        "--recovery-only", action="store_true",
+        help=("cold-reset and prove the already-committed exact generation "
+              "read-only without scanning or writing"),
+    )
+    parser.add_argument(
+        "--expected-generation", type=int,
+        help="exact retained generation required by --recovery-only",
     )
     args = parser.parse_args()
     for path in (args.firmware, args.elf, args.map):
@@ -466,6 +501,10 @@ def main() -> int:
         parser.error("--expected-cid must be 32 uppercase hex characters")
     if len(args.source_commit) != 40:
         parser.error("--source-commit must be a full commit")
+    if args.recovery_only and args.expected_generation is None:
+        parser.error("--recovery-only requires --expected-generation")
+    if not args.recovery_only and args.expected_generation is not None:
+        parser.error("--expected-generation is valid only with --recovery-only")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -485,6 +524,9 @@ def main() -> int:
     boot: dict[str, Any] = {}
     recovery: dict[str, Any] = {}
     boot_timing: dict[str, Any] = {}
+    post_commit_boot: dict[str, Any] = {}
+    post_commit_recovery: dict[str, Any] = {}
+    post_commit_boot_timing: dict[str, Any] = {}
     flashed = False
     record: dict[str, Any] = {
         "schema": RUN_SCHEMA,
@@ -521,9 +563,20 @@ def main() -> int:
                     args.expected_cid))
                 if failures:
                     raise RuntimeError("; ".join(failures))
-                begun = begin_hil(device, run_id, app_sha,
-                                  args.expected_version)
-                generation = int(recovery["generation"])
+                if args.recovery_only:
+                    failures.extend(post_commit_recovery_failures(
+                        recovery, args.expected_cid,
+                        int(args.expected_generation), "post_commit_recovery"))
+                    if failures:
+                        raise RuntimeError("; ".join(failures))
+                    cleanup = best_effort_cleanup(device)
+                    if not cleanup.get("complete"):
+                        raise RuntimeError(
+                            "recovery cleanup: terminal Home/none/lease0 unproven")
+                else:
+                    begun = begin_hil(device, run_id, app_sha,
+                                      args.expected_version)
+                    generation = int(recovery["generation"])
                 if args.preflight_only:
                     preflight = run_preflight(
                         device, frames, trace, args.expected_cid)
@@ -531,7 +584,7 @@ def main() -> int:
                     if not cleanup.get("complete"):
                         raise RuntimeError(
                             "preflight cleanup: terminal Home/none/lease0 unproven")
-                else:
+                elif not args.recovery_only:
                     first = run_visit(
                         device, frames, "first", generation, True, trace,
                         args.expected_cid,
@@ -542,11 +595,12 @@ def main() -> int:
                     revisit = run_visit(
                         device, frames, "revisit", generation, False, trace,
                         args.expected_cid, baseline_unique=first_unique)
-                ended = end_hil(device, run_id, app_sha)
+                if not args.recovery_only:
+                    ended = end_hil(device, run_id, app_sha)
             finally:
                 if not cleanup.get("complete"):
                     cleanup = best_effort_cleanup(device)
-                if not ended:
+                if not ended and not args.recovery_only:
                     try:
                         hil_state = read_only_query(
                             device, b"hil.state", HIL_SCHEMA, "state")
@@ -562,6 +616,27 @@ def main() -> int:
                         failures.append(f"hil_cleanup: {type(error).__name__}: {error}")
                 if not cleanup.get("complete"):
                     failures.append("cleanup: terminal Home/none/lease0 unproven")
+        if not args.preflight_only and not args.recovery_only and not failures:
+            expected_generation = int(revisit["committed"]["library_generation"])
+            post_commit_boot, post_commit_recovery, post_commit_boot_timing = (
+                reset_capture(
+                    args.port, args.output, "post-commit-cold", 20.0,
+                    maximum_attempts=1))
+            with PassiveSerial(args.port, 115200, timeout=0.25) as device:
+                synchronize_console(device, 20.0)
+                post_commit_recovery = read_only_query(
+                    device, b"storage.product.boot-recovery",
+                    "leshy.storage.product_boot_recovery.v1", "state")
+                failures.extend(boot_failures(
+                    post_commit_boot, post_commit_recovery,
+                    args.expected_version, app_sha, args.expected_cid))
+                failures.extend(post_commit_recovery_failures(
+                    post_commit_recovery, args.expected_cid,
+                    expected_generation, "post_commit_recovery"))
+                cleanup = best_effort_cleanup(device)
+                if not cleanup.get("complete"):
+                    failures.append(
+                        "post_commit_cleanup: terminal Home/none/lease0 unproven")
     except Exception as error:
         message = f"workflow: {type(error).__name__}: {error}"
         if message not in failures:
@@ -570,10 +645,13 @@ def main() -> int:
     record.update({
         "status": "pass" if not failures else "failed",
         "passed": not failures,
-        "mode": "preflight" if args.preflight_only else "full",
+        "mode": ("preflight" if args.preflight_only else
+                 "recovery" if args.recovery_only else "full"),
         "gate_eligible": (
             not args.preflight_only and
+            not args.recovery_only and
             (flashed or args.reuse_exact_flash) and
+            bool(post_commit_recovery) and
             not failures
         ),
         "failures": failures,
@@ -581,6 +659,11 @@ def main() -> int:
         "reused_exact_flash": args.reuse_exact_flash,
         "boot": {"ready": boot, "recovery": recovery,
                  "timing": boot_timing},
+        "post_commit_boot": {
+            "ready": post_commit_boot,
+            "recovery": post_commit_recovery,
+            "timing": post_commit_boot_timing,
+        },
         "hil_begin": begun,
         "preflight": preflight,
         "first_visit": first,

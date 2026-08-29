@@ -137,6 +137,7 @@ run_opaque_evidence_check() {
 "$test_tmp/field_survey_tests"
 python3 "$repo_dir/tools/check_field_survey_product_contract.py"
 python3 "$repo_dir/tools/check_field_survey_preflight_acceptance.py"
+python3 "$repo_dir/tools/check_field_survey_visits_acceptance.py"
 
 "${CXX:-c++}" \
     -std=c++17 \

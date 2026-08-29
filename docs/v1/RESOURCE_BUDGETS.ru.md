@@ -1258,8 +1258,34 @@ app/factory/ELF/map —
 73 360 B free/28 660 B largest block и завершает один real cycle 12 Wi-Fi/33 BLE,
 45 forwarded, zero drops, zero writes и exact cleanup. Compact
 [evidence preflight](../../tests/hil/evidence/board-01-field-survey-preflight-1.0.0-dev.261.json)
-является только regression, а не capability gate first/revisit CAP-050. Dense source
-input выше 64, routing persistence/export и runtime heap committed visits остаются открыты.
+является только regression, а не capability gate first/revisit CAP-050. `RB-M196`
+закрывает accumulation repeated cycles и runtime boundary committed visits; routing
+native/WiGLE, station capture и trusted GPS/UTC остаются открыты.
+
+Bound one-pass/commit/recovery Offline Field Survey `RB-M196`: exact physical
+`1.0.0-dev.262` на source `99aacd01336a065e18b52035ec243e2eb47abd92`
+не добавляет измеримой static RAM против `RB-M195`: 231 624 B. Field Visit теперь
+учитывает один внешний проход selected sources и запрашивает Pause только когда
+Wi-Fi и BLE каждый либо завершились, либо объявлены unavailable; generic monitoring
+остаётся continuous. Размеры app/factory — 3 447 824/3 513 360 B с SHA-256
+`8e21225c6041126a7ff11b0fe50b64d2dd3e64705e9b592cc33d3820aa551ae1`/
+`a60df4249a7005c9671dab14eeeea160cee553de199aa2055d16da1b4c0994ec`;
+SHA-256 ELF/map —
+`deeccd42afe1112da6b47c29eb5269ce6b9da332819aef2d0bd735b6321b91a6`/
+`3aaeb56afed302d81003bf8e5494346db65b21b970e2c6a2261e4ac4140f77a2`.
+В app-slot OTA 4 MiB остаётся 746 480 B при обязательном floor 524 288 B.
+Preflight, first visit и revisit завершают ровно по 1/1 cycles Wi-Fi/BLE с zero
+source/pipeline drops. Committed visits содержат 46 и 52 bounded records, записывают
+3 737 и 7 890 B, сохраняют по шесть timeline windows и двигают generation
+170→171→172. Deterministic incomplete-input query не затрагивает radio или storage.
+Финальный cold delta не сканирует и не пишет, а на attempt 1 восстанавливает exact
+generation 172/52 read-only с zero physical/blocked writes и owner/lease none/0.
+Исходный full runner ошибочно помечал себя eligible без post-commit cold reopen;
+retained acceptance явно объединяет этот run с recovery-only delta, а исправленный
+runner теперь требует integrated cold evidence для eligibility будущего full run.
+Compact [evidence визитов](../../tests/hil/evidence/board-01-field-survey-visits-1.0.0-dev.262.json)
+принимает lifecycle визита, но не native/WiGLE export, live station capture или
+trusted GPS/UTC.
 
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как

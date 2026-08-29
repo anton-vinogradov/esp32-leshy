@@ -1267,8 +1267,35 @@ On original board-01 the boot heap is 74,012 B; BLE reaches `ready` from
 73,360 B free/28,660 B largest block and completes one real 12-Wi-Fi/33-BLE,
 45-forwarded, zero-drop cycle with zero writes and exact cleanup. The compact
 [preflight evidence](../../tests/hil/evidence/board-01-field-survey-preflight-1.0.0-dev.261.json)
-is regression-only, not a CAP-050 first/revisit capability gate. Dense source input
-above 64, persistence/export routing and runtime heap across committed visits remain open.
+is regression-only, not a CAP-050 first/revisit capability gate. `RB-M196` closes
+the repeated-cycle accumulation and committed-visit runtime boundary; native/WiGLE
+routing, station capture and trusted GPS/UTC remain open.
+
+Offline Field Survey one-pass/commit/recovery bound `RB-M196`: exact physical
+`1.0.0-dev.262` at source `99aacd01336a065e18b52035ec243e2eb47abd92`
+adds no measured static RAM over `RB-M195`: 231,624 B. A Field Visit now records one
+outer selected-source pass and requests Pause only after Wi-Fi and BLE have each
+either completed or declared themselves unavailable; generic monitoring remains
+continuous. App/factory sizes are 3,447,824/3,513,360 B with SHA-256
+`8e21225c6041126a7ff11b0fe50b64d2dd3e64705e9b592cc33d3820aa551ae1`/
+`a60df4249a7005c9671dab14eeeea160cee553de199aa2055d16da1b4c0994ec`;
+ELF/map SHA-256 are
+`deeccd42afe1112da6b47c29eb5269ce6b9da332819aef2d0bd735b6321b91a6`/
+`3aaeb56afed302d81003bf8e5494346db65b21b970e2c6a2261e4ac4140f77a2`.
+The 4 MiB OTA slot retains 746,480 B, above the mandatory 524,288 B floor.
+Preflight, first visit and revisit each complete exactly 1/1 Wi-Fi/BLE cycle with
+zero source or pipeline drops. The committed visits contain 46 and 52 bounded
+records, write 3,737 and 7,890 B, persist six timeline windows each and advance
+generation 170→171→172. A deterministic incomplete-input query touches neither
+radio nor storage. The final cold delta performs no scan or write and recovers exact
+generation 172/52 on attempt 1, read-only, with zero physical/blocked writes and
+owner/lease none/0. The original full runner incorrectly marked itself eligible
+without a post-commit cold reopen; retained acceptance explicitly pairs that run with
+the recovery-only delta, and the corrected runner now requires integrated cold
+evidence before future full eligibility. The compact
+[visit evidence](../../tests/hil/evidence/board-01-field-survey-visits-1.0.0-dev.262.json)
+accepts the visit lifecycle, not native/WiGLE export, live station capture or trusted
+GPS/UTC.
 
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while

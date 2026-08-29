@@ -237,6 +237,19 @@ Home/none/lease 0. Команда не запрашивает SoftAP или host
 one-command run на плате ожидается, physical HTTP parity всё ещё требует отдельный
 client, а deferred predecessor gate S5 по-прежнему удерживает final acceptance S6.
 
+Exact `1.0.0-dev.262` продвигает CAP-050 в `DEMO-S7` через physical lifecycle
+Field Visit по `E-BUILD-185`/`E-AUTO-160`/`E-HIL-199`/`RB-M196`. Visit теперь
+является одним bounded pass selected sources, а не accumulating monitor. Preflight,
+first visit и revisit выполняют ровно по одному cycle Wi-Fi+BLE с zero drops; first
+и revisit коммитят generations 171/172 с 46/52 observations, comparison сообщает
+42 seen again, 10 new и 4 missing. Deterministic incomplete path не затрагивает radio
+или storage. Отдельный no-flash/no-scan reset затем cold-recover-ит exact generation
+172/52 read-only с zero physical/blocked writes и final Home/none/lease 0. Retained
+acceptance явно фиксирует отсутствие post-commit reopen в исходном runner и correction,
+не допускающий future false eligibility. Это принимает только lifecycle визита:
+native/WiGLE export, live station capture и optional trusted GPS/UTC всё ещё удерживают
+CAP-050 и `DEMO-S7` открытыми.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases. Physical

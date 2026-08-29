@@ -145,6 +145,42 @@ class FieldSurveyHilRunnerTests(unittest.TestCase):
         source = Path(RUNNER.__file__).read_text(encoding="utf-8")
         self.assertIn("not args.preflight_only and", source)
 
+    def test_post_commit_recovery_requires_exact_read_only_generation(self) -> None:
+        record = {
+            "status": "admitted",
+            "catalog_admitted": True,
+            "integrity": "valid",
+            "expected_fingerprint": "A" * 32,
+            "observed_fingerprint": "A" * 32,
+            "fingerprint_matched": True,
+            "generation": 172,
+            "observations": 52,
+            "mounted_read_only": True,
+            "read_only_guaranteed": True,
+            "write_enabled": False,
+            "physical_write_calls": 0,
+            "blocked_write_attempts": 0,
+            "cleanup_complete": True,
+            "owned_after": 0,
+        }
+        self.assertEqual([], RUNNER.post_commit_recovery_failures(
+            record, "A" * 32, 172, "cold"))
+        record["generation"] = 171
+        self.assertTrue(RUNNER.post_commit_recovery_failures(
+            record, "A" * 32, 172, "cold"))
+
+    def test_full_mode_cold_reopens_after_revisit_and_recovery_only_is_delta(self) -> None:
+        source = Path(RUNNER.__file__).read_text(encoding="utf-8")
+        self.assertIn('"post-commit-cold"', source)
+        self.assertLess(
+            source.index('revisit = run_visit('),
+            source.index('"post-commit-cold"'),
+        )
+        self.assertIn("--recovery-only", source)
+        self.assertIn("--expected-generation", source)
+        self.assertIn("not args.recovery_only and", source)
+        self.assertIn("bool(post_commit_recovery) and", source)
+
 
 if __name__ == "__main__":
     unittest.main()
