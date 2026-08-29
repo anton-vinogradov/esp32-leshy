@@ -38,6 +38,7 @@
 #include "apps/auth/WifiAuthenticationCaptureController.h"
 #include "apps/auth/WifiAuthenticationArtifactPolicy.h"
 #include "apps/auth/WifiAuthenticationHc22000.h"
+#include "apps/auth/WifiAuthenticationPersistenceHilFixture.h"
 #include "apps/auth/WifiAuthenticationSyntheticHilFixture.h"
 #include "apps/capture/RadiotapPcap.h"
 #include "apps/capture/InfraredCapture.h"
@@ -171,6 +172,9 @@ using leshy1::apps::auth::WifiAuthenticationCaptureAction;
 using leshy1::apps::auth::WifiAuthenticationCaptureController;
 using leshy1::apps::auth::WifiAuthenticationCaptureLoadStatus;
 using leshy1::apps::auth::WifiAuthenticationCaptureView;
+using leshy1::apps::auth::WifiAuthenticationPersistenceHilContext;
+using leshy1::apps::auth::WifiAuthenticationPersistenceHilFixture;
+using leshy1::apps::auth::WifiAuthenticationPersistenceHilStatus;
 using leshy1::apps::auth::WifiAuthenticationSyntheticHilContext;
 using leshy1::apps::auth::WifiAuthenticationSyntheticHilFixture;
 using leshy1::apps::auth::WifiAuthenticationSyntheticHilStatus;
@@ -182,6 +186,7 @@ using leshy1::apps::capture::SubGhzRawCapture;
 using leshy1::apps::capture::SubGhzRawCapturePlan;
 using leshy1::apps::capture::SubGhzRawCaptureState;
 using leshy1::apps::capture::SubGhzRawRssiSample;
+using leshy1::apps::capture::WifiFrameCapture;
 using leshy1::apps::capture::WifiFrameCapturePlan;
 using leshy1::apps::capture::WifiFrameCaptureState;
 using leshy1::apps::self_test::SelfTestController;
@@ -1232,9 +1237,14 @@ WifiAuthenticationTarget wifiAuthenticationTarget{};
 WifiAuthenticationCaptureReport wifiAuthenticationReport{};
 WifiAuthenticationCaptureController wifiAuthenticationController{};
 WifiAuthenticationSyntheticHilFixture wifiAuthenticationSyntheticHilFixture{};
+WifiAuthenticationPersistenceHilFixture
+    wifiAuthenticationPersistenceHilFixture{};
+WifiFrameCapture wifiAuthenticationPersistenceHilCapture{};
 WifiAuthenticationCaptureReport wifiAuthenticationSyntheticHilReport{};
 WifiAuthenticationCaptureController wifiAuthenticationSyntheticHilController{};
 bool wifiAuthenticationSynthetic = false;
+bool wifiAuthenticationPersistenceHil = false;
+BoardWifiPassiveCapture wifiFrameCapture;
 bool wifiAuthenticationRepeatRequested = false;
 std::uint32_t wifiAuthenticationRepeatRequestGeneration = 0;
 bool wifiAuthenticationReturnAfterSurveyStop = false;
@@ -1267,10 +1277,52 @@ const WifiAuthenticationCaptureReport& activeWifiAuthenticationCaptureReport() {
         : wifiAuthenticationReport;
 }
 
+const WifiFrameCapture& activeWifiAuthenticationFrameCapture() {
+    return wifiAuthenticationPersistenceHil
+        ? wifiAuthenticationPersistenceHilCapture
+        : wifiFrameCapture.capture();
+}
+
+leshy1::apps::capture::WifiFrameCaptureStats
+activeWifiAuthenticationFrameCaptureStats() {
+    return activeWifiAuthenticationFrameCapture().stats();
+}
+
+leshy1::platform::arduino::BoardWifiPassiveCapture::AuthenticationCaptureStats
+activeWifiAuthenticationIngressStats() {
+    if (!wifiAuthenticationPersistenceHil) {
+        return wifiFrameCapture.authenticationCaptureStats();
+    }
+    leshy1::platform::arduino::BoardWifiPassiveCapture::
+        AuthenticationCaptureStats stats{};
+    const auto capture = wifiAuthenticationPersistenceHilCapture.stats();
+    stats.framesObserved = capture.framesReported;
+    stats.candidates = capture.framesReported;
+    stats.candidatesAccepted = capture.framesAccepted;
+    stats.candidatesDropped = capture.framesDroppedCapacity;
+    stats.framesInvalid = capture.framesDroppedInvalid;
+    stats.active = false;
+    stats.cleanupComplete =
+        capture.state == WifiFrameCaptureState::Complete;
+    return stats;
+}
+
+bool activeWifiAuthenticationCaptureCleanupComplete() {
+    if (wifiAuthenticationPersistenceHil) {
+        return wifiAuthenticationPersistenceHilCapture.stats().state ==
+            WifiFrameCaptureState::Complete;
+    }
+    const auto ingress = activeWifiAuthenticationIngressStats();
+    return wifiFrameCapture.cleanupComplete() && ingress.cleanupComplete &&
+        !ingress.active;
+}
+
 void clearWifiAuthenticationSyntheticHilState() {
     wifiAuthenticationSyntheticHilController.reset();
     wifiAuthenticationSyntheticHilReport = {};
+    wifiAuthenticationPersistenceHilCapture.reset();
     wifiAuthenticationSynthetic = false;
+    wifiAuthenticationPersistenceHil = false;
     wifiAuthenticationRenderedModel = {};
     wifiAuthenticationRenderedModelValid = false;
 }
@@ -1595,7 +1647,6 @@ void resetSpectrumWaterfallTiming() {
 }
 
 void armSpectrumWaterfallForCurrentReceiver();
-BoardWifiPassiveCapture wifiFrameCapture;
 constexpr WifiFrameCapturePlan kProductWifiFrameCapturePlan{};
 constexpr std::uint32_t kWifiAuthenticationCaptureDurationMs = 10000U;
 constexpr std::uint16_t kWifiAuthenticationCaptureMaximumFrames = 16U;
@@ -4813,21 +4864,26 @@ CaptureMetadata productCaptureMetadata(std::uint8_t selectedSourceMask) {
     return metadata;
 }
 
-CaptureMetadata productWifiFrameCaptureMetadata() {
+CaptureMetadata productWifiFrameCaptureMetadata(
+    const WifiFrameCapture& capture) {
     CaptureMetadata metadata = productCaptureMetadata(
         leshy1::services::survey::sourceMask(RadioKind::Wifi));
-    const auto& plan = wifiFrameCapture.capture().plan();
-    const auto& stats = wifiFrameCapture.stats();
+    const auto& plan = capture.plan();
+    const auto& stats = capture.stats();
     metadata.wifiShowHidden = false;
     metadata.wifiMaxMsPerChannel = plan.channelDwellMs;
     metadata.wifiChannel = plan.channel;
     metadata.framePayloadCaptured = true;
     metadata.framePayloadBytes = stats.payloadBytes;
     metadata.framePayloadRecords = static_cast<std::uint16_t>(
-        wifiFrameCapture.capture().size());
+        capture.size());
     metadata.framePayloadSnapLength = plan.snapLength;
     metadata.framePayloadFormat = FramePayloadFormat::Ieee80211;
     return metadata;
+}
+
+CaptureMetadata productWifiFrameCaptureMetadata() {
+    return productWifiFrameCaptureMetadata(wifiFrameCapture.capture());
 }
 
 leshy1::storage::AuthenticationCaptureProvenance
@@ -4839,14 +4895,13 @@ productWifiAuthenticationCaptureProvenance() {
     provenance.ssid = wifiAuthenticationTarget.ssid;
     provenance.ssidLength = wifiAuthenticationTarget.ssidLength;
     provenance.ssidKnown = wifiAuthenticationTarget.ssidKnown;
-    provenance.framesReported =
-        wifiAuthenticationReport.counters.captureFramesReported;
-    provenance.framesAccepted =
-        wifiAuthenticationReport.counters.captureFramesAccepted;
+    const auto& report = activeWifiAuthenticationCaptureReport();
+    provenance.framesReported = report.counters.captureFramesReported;
+    provenance.framesAccepted = report.counters.captureFramesAccepted;
     provenance.framesDroppedCapacity =
-        wifiAuthenticationReport.counters.captureFramesDroppedCapacity;
+        report.counters.captureFramesDroppedCapacity;
     provenance.framesDroppedInvalid =
-        wifiAuthenticationReport.counters.captureFramesDroppedInvalid;
+        report.counters.captureFramesDroppedInvalid;
     return provenance;
 }
 
@@ -5042,7 +5097,11 @@ void runCaptureStoreWorker(void*) {
         }
         if (!supervisedCheckpoint()) break;
 
-        const auto& stats = wifiFrameCapture.stats();
+        const WifiFrameCapture& storedCapture =
+            storeKind == WifiCaptureStoreKind::Authentication
+                ? activeWifiAuthenticationFrameCapture()
+                : wifiFrameCapture.capture();
+        const auto& stats = storedCapture.stats();
         char sessionId[SurveySession::kSessionIdCapacity + 1] = {};
         std::snprintf(sessionId, sizeof(sessionId),
                       storeKind == WifiCaptureStoreKind::Authentication
@@ -5051,11 +5110,11 @@ void runCaptureStoreWorker(void*) {
                           stats.startedUs & 0xFFFFFFFFULL));
         surveySession.reset();
         if (stats.state != WifiFrameCaptureState::Complete ||
-            wifiFrameCapture.capture().size() == 0 ||
+            storedCapture.size() == 0 ||
             surveySession.start(sessionId, stats.startedUs) !=
                 SessionStatus::Started ||
             surveySession.configureCaptureMetadata(
-                productWifiFrameCaptureMetadata()) !=
+                productWifiFrameCaptureMetadata(storedCapture)) !=
                 CaptureMetadataStatus::Configured ||
             surveySession.stop(stats.endedUs) != SessionStatus::Stopped) {
             event.status = "artifact_invalid";
@@ -5067,10 +5126,10 @@ void runCaptureStoreWorker(void*) {
                 ? leshy1::storage::commitNextAuthenticationCapture(
                       productSurveyStore, sessionStoreWorkspace(),
                       surveySession, provenance,
-                      wifiFrameCapture.capture())
+                      storedCapture)
                 : leshy1::storage::commitNextWifiFrameCapture(
                       productSurveyStore, sessionStoreWorkspace(),
-                      surveySession, wifiFrameCapture.capture());
+                      surveySession, storedCapture);
         if (!supervisedCheckpoint()) break;
         event.storeStatus = commit.status;
         if (!commit.complete()) {
@@ -5204,12 +5263,14 @@ bool requestWifiFrameCapturePersist() {
 
 bool requestWifiAuthenticationCapturePersist() {
     if (wifiAuthenticationPersistState != CapturePersistState::Confirm ||
-        wifiAuthenticationSynthetic ||
+        (wifiAuthenticationSynthetic && !wifiAuthenticationPersistenceHil) ||
         wifiAuthenticationProductState !=
             WifiAuthenticationProductState::Result ||
-        !wifiAuthenticationController.ready() ||
-        wifiFrameCapture.stats().state != WifiFrameCaptureState::Complete ||
-        wifiFrameCapture.capture().size() == 0U) {
+        !activeWifiAuthenticationCaptureController().ready() ||
+        activeWifiAuthenticationFrameCaptureStats().state !=
+            WifiFrameCaptureState::Complete ||
+        activeWifiAuthenticationFrameCapture().size() == 0U ||
+        !activeWifiAuthenticationCaptureCleanupComplete()) {
         return false;
     }
     if (powerSafetyPolicy.writeDisposition() ==
@@ -15191,8 +15252,8 @@ void renderCc1101SpectrumPage(bool clearContent) {
 WifiAuthenticationCaptureUiInput wifiAuthenticationCaptureUiInput() {
     WifiAuthenticationCaptureUiInput input{};
     input.synthetic = wifiAuthenticationSynthetic;
-    const auto capture = wifiFrameCapture.stats();
-    const auto ingress = wifiFrameCapture.authenticationCaptureStats();
+    const auto capture = activeWifiAuthenticationFrameCaptureStats();
+    const auto ingress = activeWifiAuthenticationIngressStats();
     if (wifiAuthenticationProductState ==
         WifiAuthenticationProductState::WaitingForSurveyStop) {
         input.phase = wifiAuthenticationReturnAfterSurveyStop
@@ -15228,9 +15289,10 @@ WifiAuthenticationCaptureUiInput wifiAuthenticationCaptureUiInput() {
         input.phase = WifiAuthenticationCaptureUiPhase::Report;
         input.report = &activeWifiAuthenticationCaptureReport();
         input.controller = &activeWifiAuthenticationCaptureController();
-        input.cleanupComplete = wifiFrameCapture.cleanupComplete() &&
-            ingress.cleanupComplete && !ingress.active;
-        if (!wifiAuthenticationSynthetic) {
+        input.cleanupComplete =
+            activeWifiAuthenticationCaptureCleanupComplete();
+        if (!wifiAuthenticationSynthetic ||
+            wifiAuthenticationPersistenceHil) {
             switch (wifiAuthenticationPersistState) {
                 case CapturePersistState::Result:
                     input.persistence =
@@ -19786,8 +19848,11 @@ bool leaveWifiAuthenticationCapture() {
 }
 
 void serviceWifiAuthenticationSyntheticHilExpiry() {
-    if (!wifiAuthenticationSynthetic ||
-        !wifiAuthenticationSyntheticHilFixture.expired(millis())) {
+    const bool expired = wifiAuthenticationPersistenceHil
+        ? wifiAuthenticationPersistenceHilFixture.expired(millis())
+        : wifiAuthenticationSyntheticHilFixture.expired(millis());
+    if (!wifiAuthenticationSynthetic || !expired ||
+        captureStoreTaskHandle != nullptr) {
         return;
     }
     if (leaveWifiAuthenticationSyntheticHilView(false)) {
@@ -23302,7 +23367,9 @@ bool applyUiAction(UiAction action, bool render = true) {
             const bool terminal = wifiAuthenticationProductState ==
                 WifiAuthenticationProductState::Result &&
                 controller.ready();
-            const bool persistDialog = !wifiAuthenticationSynthetic &&
+            const bool persistDialog =
+                (!wifiAuthenticationSynthetic ||
+                 wifiAuthenticationPersistenceHil) &&
                 (wifiAuthenticationPersistState ==
                      CapturePersistState::Confirm ||
                  wifiAuthenticationPersistState ==
@@ -23341,7 +23408,8 @@ bool applyUiAction(UiAction action, bool render = true) {
                                WifiAuthenticationCaptureView::Actions &&
                            controller.selectedAction() ==
                                WifiAuthenticationCaptureAction::Save) {
-                    if (!wifiAuthenticationSynthetic &&
+                    if ((!wifiAuthenticationSynthetic ||
+                         wifiAuthenticationPersistenceHil) &&
                         wifiAuthenticationPersistState !=
                             CapturePersistState::Saved) {
                         wifiAuthenticationPersistState =
@@ -28644,6 +28712,7 @@ void emitHilSessionBegin(Stream& reply, const char* command) {
     char line[384] = {};
     if (status == HilSessionStatus::Begun) {
         wifiAuthenticationSyntheticHilFixture.resetForSession();
+        wifiAuthenticationPersistenceHilFixture.resetForSession();
         clearWifiAuthenticationSyntheticHilState();
         wifiAuthenticationRepeatRequested = false;
         std::snprintf(
@@ -28683,12 +28752,21 @@ void emitHilSessionState(Stream& reply) {
 void emitHilSessionEnd(Stream& reply, const char* command) {
     constexpr const char* prefix = "hil.end ";
     const char* sessionId = command + std::strlen(prefix);
+    if (wifiAuthenticationPersistenceHil &&
+        captureStoreTaskHandle != nullptr) {
+        reply.println(
+            "{\"schema\":\"leshy.hil.session.v1\",\"kind\":\"error\","
+            "\"operation\":\"end\",\"status\":\"storage_busy\","
+            "\"active\":true}");
+        return;
+    }
     const HilSessionStatus status = hilSession.end(sessionId);
     if (status == HilSessionStatus::Ended) {
         clearWebCompanionHilEntropy();
         setAirspaceGuardBleCapacityDropInjection(false);
         clearWifiAuthenticationSurveyTerminalHold();
         wifiAuthenticationSyntheticHilFixture.resetForSession();
+        wifiAuthenticationPersistenceHilFixture.resetForSession();
         const bool syntheticWasActive = wifiAuthenticationSynthetic;
         clearWifiAuthenticationSyntheticHilState();
         wifiAuthenticationRepeatRequested = false;
@@ -29885,9 +29963,121 @@ void emitWifiAuthenticationSyntheticHilReport(Stream& reply) {
     reply.println(line);
 }
 
-void emitWifiAuthenticationCaptureState(Stream& reply) {
-    const auto capture = wifiFrameCapture.stats();
+void emitWifiAuthenticationPersistenceHilFixture(Stream& reply) {
     const auto ingress = wifiFrameCapture.authenticationCaptureStats();
+    std::uint64_t nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0U) nowUs = 1U;
+    const bool syntheticStateAdmissible = !wifiAuthenticationSynthetic ||
+        wifiAuthenticationPersistenceHil;
+    const WifiAuthenticationPersistenceHilContext context{
+        hilSession.active(),
+        wifiProductView == WifiProductView::AuthenticationCapture,
+        wifiAuthenticationProductState ==
+                WifiAuthenticationProductState::Result &&
+            syntheticStateAdmissible,
+        wifiFrameCapture.cleanupComplete() && ingress.cleanupComplete &&
+            !ingress.active && captureStoreTaskHandle == nullptr,
+        !ingress.active &&
+            wifiAuthenticationPersistenceHilCapture.stats().state ==
+                WifiFrameCaptureState::Idle,
+        resourceBroker.ownerOf(Resource::EspRf) ==
+                AppRuntime::kForegroundOwner &&
+            std::strcmp(appRuntime.activeApp(), "wifi") == 0,
+        millis(),
+        nowUs,
+    };
+    const WifiAuthenticationPersistenceHilStatus status =
+        wifiAuthenticationPersistenceHilFixture.loadOnce(
+            context, &wifiAuthenticationPersistenceHilCapture,
+            &wifiAuthenticationSyntheticHilReport,
+            &wifiAuthenticationSyntheticHilController);
+    const bool loaded =
+        status == WifiAuthenticationPersistenceHilStatus::Loaded;
+    if (loaded) {
+        wifiAuthenticationTarget = {};
+        wifiAuthenticationTarget.accessPoint =
+            WifiAuthenticationPersistenceHilFixture::kAccessPoint;
+        std::copy(
+            WifiAuthenticationPersistenceHilFixture::kSsid.begin(),
+            WifiAuthenticationPersistenceHilFixture::kSsid.end(),
+            wifiAuthenticationTarget.ssid.begin());
+        wifiAuthenticationTarget.ssidLength = static_cast<std::uint8_t>(
+            WifiAuthenticationPersistenceHilFixture::kSsid.size());
+        wifiAuthenticationTarget.ssidKnown = true;
+        wifiAuthenticationTarget.channel =
+            WifiAuthenticationPersistenceHilFixture::kChannel;
+        wifiAuthenticationSynthetic = true;
+        wifiAuthenticationPersistenceHil = true;
+        wifiAuthenticationRepeatRequested = false;
+        wifiAuthenticationPersistState = CapturePersistState::Result;
+        wifiAuthenticationPersistStatus = "volatile";
+        wifiAuthenticationPersistGeneration = 0U;
+        wifiAuthenticationPcapReady = false;
+        wifiAuthenticationStandardReady = false;
+        ++wifiAuthenticationGeneration;
+        if (wifiAuthenticationGeneration == 0U) {
+            ++wifiAuthenticationGeneration;
+        }
+        wifiAuthenticationRenderedModelValid = false;
+        display.startWrite();
+        renderWifiAuthenticationCapture(false);
+        renderNavigationFooter();
+        display.endWrite();
+        lastRuntimeEvent =
+            "authentication_persistence_hil_fixture_loaded";
+    }
+    const bool replayed = status ==
+        WifiAuthenticationPersistenceHilStatus::ReplayRejected;
+    char line[896] = {};
+    const int formatted = std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.wifi.authentication.persistence_fixture.v1\","
+        "\"kind\":\"%s\",\"status\":\"%s\",\"loaded\":%s,"
+        "\"synthetic\":true,\"profile\":\"%s\","
+        "\"report_identity\":\"%s\","
+        "\"report_origin\":\"synthetic_hil_persistence\","
+        "\"one_shot\":true,\"replayed\":%s,\"hil_active\":%s,"
+        "\"fixture_frames\":%u,\"strict_message_pair\":%s,"
+        "\"display_touched\":%s,\"rf_hardware_touched\":false,"
+        "\"radio_started\":false,\"persistence_allowed\":%s,"
+        "\"export_allowed\":%s,\"storage_mounted\":false,"
+        "\"storage_written\":false,\"connect_calls\":0,"
+        "\"raw_tx_calls\":0,\"raw_payload_disclosed\":false,"
+        "\"public_test_identifiers_only\":true,\"generation\":%lu,"
+        "\"response_complete\":true}",
+        loaded ? "loaded" : "error",
+        leshy1::apps::auth::
+            wifiAuthenticationPersistenceHilStatusName(status),
+        loaded ? "true" : "false",
+        WifiAuthenticationPersistenceHilFixture::kProfile,
+        WifiAuthenticationPersistenceHilFixture::kReportIdentity,
+        replayed ? "true" : "false",
+        hilSession.active() ? "true" : "false",
+        static_cast<unsigned>(loaded
+            ? wifiAuthenticationPersistenceHilCapture.size() : 0U),
+        loaded ? "true" : "false",
+        loaded ? "true" : "false",
+        loaded ? "true" : "false",
+        loaded ? "true" : "false",
+        static_cast<unsigned long>(wifiAuthenticationGeneration));
+    if (formatted < 0 ||
+        static_cast<std::size_t>(formatted) >= sizeof(line)) {
+        reply.println(
+            "{\"schema\":\"leshy.wifi.authentication.persistence_fixture.v1\","
+            "\"kind\":\"error\",\"status\":\"response_truncated\","
+            "\"loaded\":false,\"synthetic\":true,"
+            "\"rf_hardware_touched\":false,\"radio_started\":false,"
+            "\"persistence_allowed\":false,\"export_allowed\":false,"
+            "\"raw_payload_disclosed\":false,"
+            "\"response_complete\":false}");
+        return;
+    }
+    reply.println(line);
+}
+
+void emitWifiAuthenticationCaptureState(Stream& reply) {
+    const auto capture = activeWifiAuthenticationFrameCaptureStats();
+    const auto ingress = activeWifiAuthenticationIngressStats();
     const WorkerDeadlineSnapshot worker = workerDeadlineSnapshot();
     const WifiAuthenticationCaptureUiModel presenter =
         leshy1::ui::presentWifiAuthenticationCapture(
@@ -29908,7 +30098,9 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
         }
     }
     const bool controllerReady = controller.ready();
-    const char* reportOrigin = wifiAuthenticationSynthetic
+    const char* reportOrigin = wifiAuthenticationPersistenceHil
+        ? "synthetic_hil_persistence"
+        : wifiAuthenticationSynthetic
         ? "synthetic_hil"
         : (controllerReady && wifiAuthenticationProductState ==
                     WifiAuthenticationProductState::Result
@@ -29987,8 +30179,8 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
         "\"presenter_title_semantic\":\"%s\","
         "\"presenter_headline_semantic\":\"%s\","
         "\"presenter_note_semantic\":\"%s\","
-        "\"synthetic_persistence_allowed\":false,"
-        "\"synthetic_export_allowed\":false,"
+        "\"synthetic_persistence_allowed\":%s,"
+        "\"synthetic_export_allowed\":%s,"
         "\"controller_ready\":%s,\"controller_view\":\"%s\","
         "\"controller_action_count\":%u,"
         "\"controller_action_selection\":%u,"
@@ -30060,11 +30252,18 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
         static_cast<unsigned long>(wifiFrameCapture.heapFreeBeforeInit()),
         static_cast<unsigned long>(wifiFrameCapture.heapLargestBeforeInit()),
         wifiAuthenticationTargetValid() ? "true" : "false",
-        wifiAuthenticationTargetMatchesSelectedDetail() ? "true" : "false",
+        (wifiAuthenticationPersistenceHil ||
+         wifiAuthenticationTargetMatchesSelectedDetail()) ? "true" : "false",
         static_cast<unsigned>(wifiAuthenticationTarget.channel),
-        static_cast<unsigned long>(kWifiAuthenticationCaptureDurationMs),
-        static_cast<unsigned>(kWifiAuthenticationCaptureMaximumFrames),
-        static_cast<unsigned>(kWifiAuthenticationCaptureSnapLength),
+        static_cast<unsigned long>(capture.state != WifiFrameCaptureState::Idle
+            ? activeWifiAuthenticationFrameCapture().plan().durationMs
+            : kWifiAuthenticationCaptureDurationMs),
+        static_cast<unsigned>(capture.state != WifiFrameCaptureState::Idle
+            ? activeWifiAuthenticationFrameCapture().plan().maximumFrames
+            : kWifiAuthenticationCaptureMaximumFrames),
+        static_cast<unsigned>(capture.state != WifiFrameCaptureState::Idle
+            ? activeWifiAuthenticationFrameCapture().plan().snapLength
+            : kWifiAuthenticationCaptureSnapLength),
         leshy1::apps::capture::wifiFrameCaptureStateName(capture.state),
         static_cast<unsigned long>(capture.framesReported),
         static_cast<unsigned long>(capture.framesAccepted),
@@ -30082,7 +30281,7 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
         static_cast<unsigned long>(ingress.candidatesDropped),
         static_cast<unsigned long>(ingress.framesInvalid),
         analysisAccountingValid ? "true" : "false",
-        wifiFrameCapture.cleanupComplete() ? "true" : "false",
+        activeWifiAuthenticationCaptureCleanupComplete() ? "true" : "false",
         ingress.cleanupComplete ? "true" : "false",
         wifiAuthenticationUiViewName(presenter.view),
         wifiAuthenticationUiToneName(presenter.tone),
@@ -30098,6 +30297,8 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
         wifiAuthenticationPresenterTitleSemantic(presenter.title),
         wifiAuthenticationPresenterHeadlineSemantic(presenter.headline),
         wifiAuthenticationPresenterNoteSemantic(presenter.note),
+        wifiAuthenticationPersistenceHil ? "true" : "false",
+        wifiAuthenticationPersistenceHil ? "true" : "false",
         controllerReady ? "true" : "false",
         controllerReady
             ? leshy1::apps::auth::wifiAuthenticationCaptureViewName(
@@ -30181,6 +30382,7 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
 }
 
 void emitWifiAuthenticationPersistenceState(Stream& reply) {
+    const auto capture = activeWifiAuthenticationFrameCaptureStats();
     char line[640] = {};
     std::snprintf(
         line, sizeof(line),
@@ -30197,10 +30399,10 @@ void emitWifiAuthenticationPersistenceState(Stream& reply) {
         static_cast<unsigned long>(wifiAuthenticationPersistGeneration),
         wifiAuthenticationPcapReady ? "true" : "false",
         wifiAuthenticationStandardReady ? "true" : "false",
-        wifiFrameCapture.stats().state == WifiFrameCaptureState::Complete
+        capture.state == WifiFrameCaptureState::Complete
             ? "true" : "false",
-        static_cast<unsigned>(wifiFrameCapture.capture().size()),
-        wifiFrameCapture.cleanupComplete() ? "true" : "false",
+        static_cast<unsigned>(activeWifiAuthenticationFrameCapture().size()),
+        activeWifiAuthenticationCaptureCleanupComplete() ? "true" : "false",
         captureStoreTaskHandle != nullptr ? "true" : "false",
         wifiCaptureStoreKind == WifiCaptureStoreKind::Authentication
             ? "authentication" : "generic",
@@ -30978,6 +31180,11 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
                    "wifi.authentication.hil-load-synthetic-report once") ==
                0) {
         emitWifiAuthenticationSyntheticHilReport(reply);
+    } else if (std::strcmp(
+                   command,
+                   "wifi.authentication.hil-load-persistence-fixture once") ==
+               0) {
+        emitWifiAuthenticationPersistenceHilFixture(reply);
     } else if (std::strcmp(command, "wifi.authentication.state") == 0) {
         emitWifiAuthenticationCaptureState(reply);
     } else if (std::strcmp(
@@ -31670,6 +31877,7 @@ void setup() {
               "\"hil.end <session-id>\","
               "\"wifi.authentication.hil-hold-survey-stop once\","
               "\"wifi.authentication.hil-load-synthetic-report once\","
+              "\"wifi.authentication.hil-load-persistence-fixture once\","
               "\"metrics\",\"inventory\",\"hardware.safe-outputs\",\"ping\","
               "\"power.state\",\"power.low-voltage-test confirm\","
               "\"power.sleep-test confirm\",\"power.sleep-test state\","
