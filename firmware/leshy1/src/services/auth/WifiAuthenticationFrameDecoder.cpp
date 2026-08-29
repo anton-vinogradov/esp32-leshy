@@ -220,6 +220,16 @@ WifiAuthenticationFrameDecodeStatus decodeWifiAuthenticationKeyFrame(
     if (bodyLength != eapolAvailable - kEapolHeaderBytes) {
         return Status::Malformed;
     }
+    const std::size_t eapolOffset = headerLength + kLlcSnapBytes;
+    const std::size_t eapolLength = kEapolHeaderBytes + bodyLength;
+    const std::size_t keyMicOffset = kEapolHeaderBytes + kKeyMicOffset;
+    if (eapolOffset > UINT16_MAX || eapolLength > UINT16_MAX ||
+        keyMicOffset > UINT16_MAX) {
+        return Status::Malformed;
+    }
+    output->eapolOffset = static_cast<std::uint16_t>(eapolOffset);
+    output->eapolLength = static_cast<std::uint16_t>(eapolLength);
+    output->keyMicOffset = static_cast<std::uint16_t>(keyMicOffset);
     if (eapol[1] != kEapolKeyPacketType) return Status::EapolNonKey;
     if (bodyLength < 1U) return Status::Malformed;
 

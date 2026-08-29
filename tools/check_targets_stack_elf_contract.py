@@ -94,9 +94,36 @@ def stack_frames(elf: Path) -> dict[str, int]:
         start = disassembly.index(headers[0])
         body = disassembly[start:start + 600]
         match = re.search(r"\bentry\s+a1,\s*(0x[0-9a-f]+|[0-9]+)", body)
-        if match is None:
-            raise ValueError(f"stack entry not found for {label}")
-        frame = int(match.group(1), 0)
+        if match is not None:
+            frame = int(match.group(1), 0)
+        else:
+            # Binutils can mark an otherwise valid local function as data
+            # after linker relaxation. In that case `objdump -d` prints raw
+            # four-byte groups even though the FUNC symbol starts with the
+            # canonical three-byte Xtensa ENTRY encoding. Decode only that
+            # exact opcode from the symbol address; all other cases remain
+            # fail closed.
+            address_match = re.match(r"([0-9a-f]+)\s+<", headers[0])
+            if address_match is None:
+                raise ValueError(f"stack entry not found for {label}")
+            address = int(address_match.group(1), 16)
+            raw = subprocess.run(
+                [tool("xtensa-esp32s3-elf-objdump"), "-s",
+                 f"--start-address={address:#x}",
+                 f"--stop-address={address + 4:#x}", str(elf)],
+                check=True, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            ).stdout
+            octets_match = re.search(
+                rf"^\s*{address:x}\s+([0-9a-f]{{8}})", raw,
+                re.MULTILINE)
+            if octets_match is None:
+                raise ValueError(f"stack entry not found for {label}")
+            octets = bytes.fromhex(octets_match.group(1))
+            if len(octets) < 3 or octets[0] != 0x36 or \
+                    (octets[1] & 0x0f) != 0x01:
+                raise ValueError(f"stack entry not found for {label}")
+            frame = ((octets[2] << 4) | (octets[1] >> 4)) << 3
         if frame > limit:
             raise ValueError(f"unsafe Targets stack frame {label}: {frame} > {limit}")
         frames[label] = frame

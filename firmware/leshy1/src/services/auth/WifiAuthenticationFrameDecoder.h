@@ -39,6 +39,13 @@ struct WifiAuthenticationDecodedKeyFrame final {
     std::uint8_t descriptorVersion = 0;
     std::array<std::uint8_t, 32> nonce{};
     std::array<std::uint8_t, 16> pmkid{};
+    // Byte-exact borrowed ranges inside the source 802.11 payload.  They let
+    // standard artifact serializers reuse the decoder's validated framing
+    // instead of maintaining a second EAPOL parser.  The full EAPOL packet
+    // includes its four-byte header; keyMicOffset is relative to that packet.
+    std::uint16_t eapolOffset = 0;
+    std::uint16_t eapolLength = 0;
+    std::uint16_t keyMicOffset = 0;
     bool hasPmkid = false;
     bool fromAccessPoint = false;
 };

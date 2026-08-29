@@ -286,7 +286,7 @@ def contract_failures(
             'caseUiTextId::WifiAuthFullHandshakeHeadline:'
             'return"full_handshake";',
         "synthetic label presenter semantic":
-            'note==UiTextId::SimulatedData?"simulated_data":"unknown"',
+            'caseUiTextId::SimulatedData:return"simulated_data";',
         "repeat telemetry": r'\"repeat_request_generation\":%lu',
     }
     for label, marker in required_entry.items():
@@ -490,7 +490,9 @@ def contract_failures(
         "independent PMKID": "report->pmkidCount=1U",
         "full handshake": "complete.messageMask=0x0fU",
         "partial handshake": "partial.messageMask=0x03U",
-        "controller validation": "controller->load(*report)",
+        # Synthetic evidence must remain inspectable but cannot expose the
+        # product persistence action.
+        "controller validation": "controller->load(*report,false)",
     }
     for label, marker in required_fixture.items():
         if marker not in fixture_c:

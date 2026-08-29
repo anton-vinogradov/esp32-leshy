@@ -550,7 +550,8 @@ class WifiAuthenticationSyntheticHilContractTests(unittest.TestCase):
              "capture result presenter semantic"),
             ('return "full_handshake";', 'return "unknown";',
              "full handshake presenter semantic"),
-            ('? "simulated_data" : "unknown"', '? "unknown" : "unknown"',
+            ('case UiTextId::SimulatedData: return "simulated_data";',
+             'case UiTextId::SimulatedData: return "unknown";',
              "synthetic label presenter semantic"),
         )
         for old, new, expected in cases:

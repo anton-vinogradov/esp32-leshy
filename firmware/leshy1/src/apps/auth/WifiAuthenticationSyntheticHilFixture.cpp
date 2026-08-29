@@ -70,7 +70,7 @@ WifiAuthenticationSyntheticHilFixture::loadOnce(
     }
 
     buildFullReport(report, context.channel);
-    if (controller->load(*report) !=
+    if (controller->load(*report, false) !=
         WifiAuthenticationCaptureLoadStatus::Ready) {
         *report = {};
         controller->reset();

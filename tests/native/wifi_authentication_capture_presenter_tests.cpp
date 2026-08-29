@@ -280,10 +280,14 @@ void testResultActionsPeerAndEvidenceDrilldown() {
     CHECK((outcomeToActions.fixedRegionMask &
            kWifiAuthenticationTitleRegion) != 0U);
     CHECK(!outcomeToActions.fullScreenClear);
-    CHECK(actions.rowCount == 2U);
+    CHECK(actions.rowCount == 3U);
     CHECK(actions.rows[0].selected);
     CHECK(actions.rows[0].metric ==
           WifiAuthenticationCaptureUiMetric::ActionDetails);
+    CHECK(actions.rows[1].metric ==
+          WifiAuthenticationCaptureUiMetric::ActionSave);
+    CHECK(actions.rows[2].metric ==
+          WifiAuthenticationCaptureUiMetric::ActionRepeat);
     CHECK(controller.next());
     const auto actionsNext = presentWifiAuthenticationCapture(
         reportInput(report, controller));
@@ -362,6 +366,80 @@ void testSyntheticHilReportIsVisiblyAndStructurallyDistinct() {
           WifiAuthenticationCaptureUiFailure::InvalidPresentationInput);
 }
 
+void testPersistenceStatesAreHonestAndLocalized() {
+    WifiAuthenticationCaptureReport report = completeReport();
+    WifiAuthenticationCaptureController controller;
+    CHECK(controller.load(report) ==
+          WifiAuthenticationCaptureLoadStatus::Ready);
+
+    auto confirmInput = reportInput(report, controller);
+    confirmInput.persistence = WifiAuthenticationCapturePersistence::Confirm;
+    const auto confirm = presentWifiAuthenticationCapture(confirmInput);
+    CHECK(confirm.title == UiTextId::CaptureSaveConfirm);
+    CHECK(confirm.note == UiTextId::CaptureConfirmNote);
+    CHECK(confirm.exportEligibility ==
+          WifiAuthenticationCaptureExportEligibility::NotEvaluated);
+
+    auto savingInput = reportInput(report, controller);
+    savingInput.persistence = WifiAuthenticationCapturePersistence::Saving;
+    const auto saving = presentWifiAuthenticationCapture(savingInput);
+    CHECK(saving.title == UiTextId::CaptureSaving);
+    CHECK(saving.note == UiTextId::CaptureSavingNote);
+
+    auto pcapInput = reportInput(report, controller);
+    pcapInput.persistence = WifiAuthenticationCapturePersistence::Saved;
+    pcapInput.persistedGeneration = 7U;
+    pcapInput.persistedPcapReady = true;
+    const auto pcap = presentWifiAuthenticationCapture(pcapInput);
+    CHECK(pcap.title == UiTextId::CaptureSaved);
+    CHECK(pcap.note == UiTextId::WifiAuthSavedPcapNote);
+    CHECK(pcap.exportEligibility ==
+          WifiAuthenticationCaptureExportEligibility::Ineligible);
+
+    auto standardInput = pcapInput;
+    standardInput.persistedStandardReady = true;
+    const auto standard = presentWifiAuthenticationCapture(standardInput);
+    CHECK(standard.note == UiTextId::WifiAuthSavedStandardNote);
+    CHECK(standard.exportEligibility ==
+          WifiAuthenticationCaptureExportEligibility::Eligible);
+
+    auto failedInput = reportInput(report, controller);
+    failedInput.persistence = WifiAuthenticationCapturePersistence::Failed;
+    const auto failed = presentWifiAuthenticationCapture(failedInput);
+    CHECK(failed.title == UiTextId::CaptureSaveFailed);
+    CHECK(failed.note == UiTextId::CaptureSaveFailedNote);
+}
+
+void testPersistenceMetadataFailsClosed() {
+    WifiAuthenticationCaptureReport report = completeReport();
+    WifiAuthenticationCaptureController controller;
+    CHECK(controller.load(report) ==
+          WifiAuthenticationCaptureLoadStatus::Ready);
+
+    auto missingGeneration = reportInput(report, controller);
+    missingGeneration.persistence =
+        WifiAuthenticationCapturePersistence::Saved;
+    missingGeneration.persistedPcapReady = true;
+    CHECK(presentWifiAuthenticationCapture(missingGeneration).failure ==
+          WifiAuthenticationCaptureUiFailure::ReportRejected);
+
+    auto standardWithoutPcap = reportInput(report, controller);
+    standardWithoutPcap.persistence =
+        WifiAuthenticationCapturePersistence::Saved;
+    standardWithoutPcap.persistedGeneration = 7U;
+    standardWithoutPcap.persistedStandardReady = true;
+    CHECK(presentWifiAuthenticationCapture(standardWithoutPcap).failure ==
+          WifiAuthenticationCaptureUiFailure::ReportRejected);
+
+    auto syntheticSaved = reportInput(report, controller);
+    syntheticSaved.synthetic = true;
+    syntheticSaved.persistence = WifiAuthenticationCapturePersistence::Saved;
+    syntheticSaved.persistedGeneration = 7U;
+    syntheticSaved.persistedPcapReady = true;
+    CHECK(presentWifiAuthenticationCapture(syntheticSaved).failure ==
+          WifiAuthenticationCaptureUiFailure::ReportRejected);
+}
+
 void testFailClosedInputs() {
     auto invalidRunning = runningInput();
     invalidRunning.progress.framesReported = 8U;
@@ -397,6 +475,8 @@ int main() {
     testResultActionsPeerAndEvidenceDrilldown();
     testPeerToneChangeRepaintsColoredRegionsWithoutClearing();
     testSyntheticHilReportIsVisiblyAndStructurallyDistinct();
+    testPersistenceStatesAreHonestAndLocalized();
+    testPersistenceMetadataFailsClosed();
     testFailClosedInputs();
     std::puts("Wi-Fi authentication capture presenter tests passed");
     return 0;

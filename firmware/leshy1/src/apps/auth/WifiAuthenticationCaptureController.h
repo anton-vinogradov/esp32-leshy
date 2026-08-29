@@ -18,6 +18,7 @@ enum class WifiAuthenticationCaptureView : std::uint8_t {
 
 enum class WifiAuthenticationCaptureAction : std::uint8_t {
     Details,
+    Save,
     Repeat,
 };
 
@@ -36,10 +37,11 @@ const char* wifiAuthenticationCaptureActionName(
 // bytes are copied or retained here.
 class WifiAuthenticationCaptureController final {
 public:
-    static constexpr std::size_t kActionCapacity = 2U;
+    static constexpr std::size_t kActionCapacity = 3U;
 
     WifiAuthenticationCaptureLoadStatus load(
-        const services::auth::WifiAuthenticationCaptureReport& report);
+        const services::auth::WifiAuthenticationCaptureReport& report,
+        bool saveAvailable = true);
     void reset();
 
     bool next();
@@ -56,6 +58,7 @@ public:
             report_ != nullptr;
     }
     bool hasDetails() const;
+    bool saveAvailable() const;
     bool reportOpenable() const;
 
     std::size_t actionCount() const;
@@ -100,6 +103,7 @@ private:
     std::size_t actionSelection_ = 0U;
     std::size_t peerSelection_ = 0U;
     std::size_t evidenceSelection_ = 0U;
+    bool saveAvailable_ = false;
 };
 
 }  // namespace leshy1::apps::auth

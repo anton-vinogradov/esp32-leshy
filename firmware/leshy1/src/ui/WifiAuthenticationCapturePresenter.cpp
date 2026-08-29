@@ -15,6 +15,7 @@ using services::auth::WifiAuthenticationCaptureReport;
 using services::auth::WifiAuthenticationEvidence;
 using services::auth::WifiAuthenticationPeer;
 using services::auth::WifiAuthenticationUncertainty;
+using leshy1::ui::WifiAuthenticationCapturePersistence;
 
 static_assert(
     std::is_trivially_copyable_v<WifiAuthenticationCaptureUiModel>,
@@ -267,6 +268,8 @@ UiTextId metricText(WifiAuthenticationCaptureUiMetric metric,
             return uncertaintyText(static_cast<std::uint16_t>(primary));
         case WifiAuthenticationCaptureUiMetric::ActionDetails:
             return UiTextId::WifiAuthActionDetails;
+        case WifiAuthenticationCaptureUiMetric::ActionSave:
+            return UiTextId::WifiAuthActionSave;
         case WifiAuthenticationCaptureUiMetric::ActionRepeat:
             return UiTextId::WifiAuthActionRepeat;
         case WifiAuthenticationCaptureUiMetric::PeerPosition:
@@ -482,14 +485,19 @@ WifiAuthenticationCaptureUiModel actionsModel(
     model.tone = WifiAuthenticationCaptureUiTone::Neutral;
     model.evidenceIncomplete = false;
     for (std::size_t index = 0U; index < controller.actionCount(); ++index) {
-        const WifiAuthenticationCaptureAction action =
-            controller.hasDetails() && index == 0U
-                ? WifiAuthenticationCaptureAction::Details
-                : WifiAuthenticationCaptureAction::Repeat;
+        const bool details = controller.hasDetails() && index == 0U;
+        const std::size_t saveIndex = controller.hasDetails() ? 1U : 0U;
+        const bool save = controller.saveAvailable() && index == saveIndex;
+        const WifiAuthenticationCaptureAction action = details
+            ? WifiAuthenticationCaptureAction::Details
+            : save ? WifiAuthenticationCaptureAction::Save
+                   : WifiAuthenticationCaptureAction::Repeat;
         setRow(model, index,
                action == WifiAuthenticationCaptureAction::Details
                    ? WifiAuthenticationCaptureUiMetric::ActionDetails
-                   : WifiAuthenticationCaptureUiMetric::ActionRepeat,
+                   : action == WifiAuthenticationCaptureAction::Save
+                         ? WifiAuthenticationCaptureUiMetric::ActionSave
+                         : WifiAuthenticationCaptureUiMetric::ActionRepeat,
                0U, 0U, false, controller.actionSelection() == index);
     }
     return model;
@@ -637,6 +645,45 @@ WifiAuthenticationCaptureUiModel reportModel(
         WifiAuthenticationCaptureUiFailure::ReportRejected, true);
 }
 
+bool persistenceValid(const WifiAuthenticationCaptureUiInput& input) {
+    if (input.persistence == WifiAuthenticationCapturePersistence::Saved) {
+        return !input.synthetic && input.persistedGeneration != 0U &&
+            input.persistedPcapReady;
+    }
+    return input.persistedGeneration == 0U && !input.persistedPcapReady &&
+        !input.persistedStandardReady;
+}
+
+void applyPersistence(const WifiAuthenticationCaptureUiInput& input,
+                      WifiAuthenticationCaptureUiModel* model) {
+    if (model == nullptr) return;
+    switch (input.persistence) {
+        case WifiAuthenticationCapturePersistence::Volatile:
+            return;
+        case WifiAuthenticationCapturePersistence::Confirm:
+            model->title = UiTextId::CaptureSaveConfirm;
+            model->note = UiTextId::CaptureConfirmNote;
+            return;
+        case WifiAuthenticationCapturePersistence::Saving:
+            model->title = UiTextId::CaptureSaving;
+            model->note = UiTextId::CaptureSavingNote;
+            return;
+        case WifiAuthenticationCapturePersistence::Saved:
+            model->title = UiTextId::CaptureSaved;
+            model->note = input.persistedStandardReady
+                ? UiTextId::WifiAuthSavedStandardNote
+                : UiTextId::WifiAuthSavedPcapNote;
+            model->exportEligibility = input.persistedStandardReady
+                ? WifiAuthenticationCaptureExportEligibility::Eligible
+                : WifiAuthenticationCaptureExportEligibility::Ineligible;
+            return;
+        case WifiAuthenticationCapturePersistence::Failed:
+            model->title = UiTextId::CaptureSaveFailed;
+            model->note = UiTextId::CaptureSaveFailedNote;
+            return;
+    }
+}
+
 bool sameRow(const WifiAuthenticationCaptureUiRow& left,
              const WifiAuthenticationCaptureUiRow& right) {
     return left.metric == right.metric && left.text == right.text &&
@@ -685,7 +732,8 @@ WifiAuthenticationCaptureUiModel presentWifiAuthenticationCapture(
                 input.failure != WifiAuthenticationCaptureUiFailure::None ||
                 !input.controller->ready() ||
                 input.controller->report() != input.report ||
-                !reportShapeValid(*input.report)) {
+                !reportShapeValid(*input.report) ||
+                !persistenceValid(input)) {
                 return failedModel(
                     WifiAuthenticationCaptureUiFailure::ReportRejected,
                     true);
@@ -694,7 +742,11 @@ WifiAuthenticationCaptureUiModel presentWifiAuthenticationCapture(
                 WifiAuthenticationCaptureUiModel model =
                     reportModel(*input.report, *input.controller);
                 model.synthetic = input.synthetic;
-                if (input.synthetic) model.note = UiTextId::SimulatedData;
+                if (input.synthetic) {
+                    model.note = UiTextId::SimulatedData;
+                } else {
+                    applyPersistence(input, &model);
+                }
                 return model;
             }
         case WifiAuthenticationCaptureUiPhase::Failed:

@@ -53,6 +53,7 @@ enum class WifiAuthenticationCaptureUiMetric : std::uint8_t {
     LossAndRejectedFrames,
     UncertaintyMask,
     ActionDetails,
+    ActionSave,
     ActionRepeat,
     PeerPosition,
     PeerMessageMask,
@@ -70,6 +71,14 @@ enum class WifiAuthenticationCaptureExportEligibility : std::uint8_t {
     NotEvaluated,
     Eligible,
     Ineligible,
+};
+
+enum class WifiAuthenticationCapturePersistence : std::uint8_t {
+    Volatile,
+    Confirm,
+    Saving,
+    Saved,
+    Failed,
 };
 
 enum class WifiAuthenticationCaptureUiFailure : std::uint8_t {
@@ -105,6 +114,11 @@ struct WifiAuthenticationCaptureUiInput final {
     // True only for the deterministic HIL UI fixture.  Ambient RF reports
     // always leave this false.
     bool synthetic = false;
+    WifiAuthenticationCapturePersistence persistence =
+        WifiAuthenticationCapturePersistence::Volatile;
+    std::uint32_t persistedGeneration = 0U;
+    bool persistedPcapReady = false;
+    bool persistedStandardReady = false;
 };
 
 struct WifiAuthenticationCaptureUiRow final {

@@ -85,14 +85,20 @@ void testResultActionsAndPeerNavigationAreBounded() {
           WifiAuthenticationCaptureLoadStatus::Ready);
     CHECK(controller.openSelected());
     CHECK(controller.view() == WifiAuthenticationCaptureView::Actions);
-    CHECK(controller.actionCount() == 2U);
+    CHECK(controller.actionCount() == 3U);
     CHECK(controller.selectedAction() ==
           WifiAuthenticationCaptureAction::Details);
     CHECK(!controller.previous());
     CHECK(controller.next());
     CHECK(controller.selectedAction() ==
+          WifiAuthenticationCaptureAction::Save);
+    CHECK(controller.next());
+    CHECK(controller.selectedAction() ==
           WifiAuthenticationCaptureAction::Repeat);
     CHECK(!controller.next());
+    CHECK(controller.previous());
+    CHECK(controller.selectedAction() ==
+          WifiAuthenticationCaptureAction::Save);
     CHECK(controller.previous());
     CHECK(controller.openSelected());
     CHECK(controller.view() == WifiAuthenticationCaptureView::PeerDetail);
@@ -102,6 +108,26 @@ void testResultActionsAndPeerNavigationAreBounded() {
     CHECK(controller.next());
     CHECK(controller.peerSelection() == 1U);
     CHECK(!controller.next());
+}
+
+void testSaveCanBeExplicitlyUnavailableWithoutChangingDetailNavigation() {
+    WifiAuthenticationCaptureReport report = reportFixture();
+    WifiAuthenticationCaptureController controller;
+    CHECK(controller.load(report, false) ==
+          WifiAuthenticationCaptureLoadStatus::Ready);
+    CHECK(!controller.saveAvailable());
+    CHECK(controller.openSelected());
+    CHECK(controller.view() == WifiAuthenticationCaptureView::Actions);
+    CHECK(controller.actionCount() == 2U);
+    CHECK(controller.selectedAction() ==
+          WifiAuthenticationCaptureAction::Details);
+    CHECK(controller.next());
+    CHECK(controller.selectedAction() ==
+          WifiAuthenticationCaptureAction::Repeat);
+    CHECK(!controller.next());
+    CHECK(controller.previous());
+    CHECK(controller.openSelected());
+    CHECK(controller.view() == WifiAuthenticationCaptureView::PeerDetail);
 }
 
 void testEvidenceOrderIsStableAndBackRestoresEveryLevel() {
@@ -196,6 +222,7 @@ static_assert(sizeof(WifiAuthenticationCaptureController) <= 64U);
 int main() {
     testLoadSelectsMostUsefulPeerWithoutCopyingReport();
     testResultActionsAndPeerNavigationAreBounded();
+    testSaveCanBeExplicitlyUnavailableWithoutChangingDetailNavigation();
     testEvidenceOrderIsStableAndBackRestoresEveryLevel();
     testNoEvidenceReportOpensActionsButCannotInventDetails();
     testZeroMaskPeerIsNotPresentedAsHandshakePeer();

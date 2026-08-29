@@ -49,6 +49,7 @@ const char* wifiAuthenticationCaptureActionName(
     WifiAuthenticationCaptureAction action) {
     switch (action) {
         case WifiAuthenticationCaptureAction::Details: return "details";
+        case WifiAuthenticationCaptureAction::Save: return "save";
         case WifiAuthenticationCaptureAction::Repeat: return "repeat";
     }
     return "repeat";
@@ -56,10 +57,11 @@ const char* wifiAuthenticationCaptureActionName(
 
 WifiAuthenticationCaptureLoadStatus
 WifiAuthenticationCaptureController::load(
-    const WifiAuthenticationCaptureReport& report) {
+    const WifiAuthenticationCaptureReport& report, bool saveAvailable) {
     reset();
     if (!validateReport(report)) return loadStatus_;
     report_ = &report;
+    saveAvailable_ = saveAvailable && report.counters.sourceFrames != 0U;
     loadStatus_ = WifiAuthenticationCaptureLoadStatus::Ready;
     buildEvidenceOrder();
     selectMostUsefulPeer();
@@ -74,6 +76,7 @@ void WifiAuthenticationCaptureController::reset() {
     actionSelection_ = 0U;
     peerSelection_ = 0U;
     evidenceSelection_ = 0U;
+    saveAvailable_ = false;
 }
 
 bool WifiAuthenticationCaptureController::next() {
@@ -187,16 +190,26 @@ bool WifiAuthenticationCaptureController::reportOpenable() const {
     return ready();
 }
 
+bool WifiAuthenticationCaptureController::saveAvailable() const {
+    return ready() && saveAvailable_;
+}
+
 std::size_t WifiAuthenticationCaptureController::actionCount() const {
-    return hasDetails() ? kActionCapacity : 1U;
+    if (!ready()) return 0U;
+    return (hasDetails() ? 1U : 0U) + (saveAvailable() ? 1U : 0U) + 1U;
 }
 
 WifiAuthenticationCaptureAction
 WifiAuthenticationCaptureController::selectedAction() const {
-    if (!hasDetails()) return WifiAuthenticationCaptureAction::Repeat;
-    return actionSelection_ == 0U
-        ? WifiAuthenticationCaptureAction::Details
-        : WifiAuthenticationCaptureAction::Repeat;
+    std::size_t index = actionSelection_;
+    if (hasDetails()) {
+        if (index == 0U) return WifiAuthenticationCaptureAction::Details;
+        --index;
+    }
+    if (saveAvailable()) {
+        if (index == 0U) return WifiAuthenticationCaptureAction::Save;
+    }
+    return WifiAuthenticationCaptureAction::Repeat;
 }
 
 const WifiAuthenticationPeer*

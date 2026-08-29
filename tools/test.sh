@@ -160,6 +160,20 @@ run_opaque_evidence_check() {
     -Wall -Wextra -Werror -pedantic \
     -Wconversion -Wsign-conversion -Wshadow \
     -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/wifi_authentication_hc22000_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/auth/WifiAuthenticationHc22000.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/auth/WifiAuthenticationArtifactPolicy.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/auth/WifiAuthenticationFrameDecoder.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/auth/WifiAuthenticationCapture.cpp" \
+    -o "$test_tmp/wifi_authentication_hc22000_tests"
+
+"$test_tmp/wifi_authentication_hc22000_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -Wconversion -Wsign-conversion -Wshadow \
+    -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/wifi_passive_capture_teardown_policy_tests.cpp" \
     -o "$test_tmp/wifi_passive_capture_teardown_policy_tests"
 

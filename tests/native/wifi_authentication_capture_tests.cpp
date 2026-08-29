@@ -286,6 +286,9 @@ void testSharedDecoderPreservesNonQosQosFcsAndTargetIdentity() {
     CHECK(decoded.fromAccessPoint);
     CHECK(decoded.hasPmkid);
     CHECK(decoded.pmkid == kPmkid);
+    CHECK(decoded.eapolOffset == 32U);
+    CHECK(decoded.eapolLength == nonQos.capturedLength - 32U);
+    CHECK(decoded.keyMicOffset == 81U);
     CHECK(classifyWifiAuthenticationIngress(viewOf(nonQos),
                                              kOtherAccessPoint) ==
           WifiAuthenticationIngressDisposition::Ignore);
@@ -301,6 +304,9 @@ void testSharedDecoderPreservesNonQosQosFcsAndTargetIdentity() {
     CHECK(decoded.accessPoint == kAccessPoint);
     CHECK(decoded.station == kStation);
     CHECK(!decoded.fromAccessPoint);
+    CHECK(decoded.eapolOffset == 34U);
+    CHECK(decoded.eapolLength == qos.capturedLength - 34U);
+    CHECK(decoded.keyMicOffset == 81U);
 
     FixtureFrame& fcs = source.addEapolKey(
         WifiEapolKeyMessage::Message3, 6U);
