@@ -45,7 +45,8 @@ constexpr std::uint8_t kCaptureKnownFlags =
     kCaptureFlagPassive | kCaptureFlagWifiShowHidden |
     kCaptureFlagLocation | kCaptureFlagFramePayload |
     kCaptureFlagSubGhzRaw | kCaptureFlagInfraredRaw;
-constexpr std::uint8_t kObservationFactsWireVersion = 1;
+constexpr std::uint8_t kObservationFactsWireVersion = 2;
+constexpr std::uint8_t kLegacyObservationFactsWireVersion = 1;
 constexpr std::size_t kWifiObservationFactsBytes = 19;
 constexpr std::size_t kBleObservationFactsBytes = 29;
 
@@ -304,7 +305,10 @@ SessionCodecStatus encodeObservation(
                 (source.wps ? 1U << 1U : 0U) |
                 (source.ftmResponder ? 1U << 2U : 0U) |
                 (source.ftmInitiator ? 1U << 3U : 0U) |
-                (source.bssColorKnown ? 1U << 4U : 0U));
+                (source.bssColorKnown ? 1U << 4U : 0U) |
+                (observation.wifiKind ==
+                         domain::observations::WifiObservationKind::Station
+                     ? 1U << 5U : 0U));
             facts[2] = static_cast<std::uint8_t>(source.authentication);
             facts[3] = static_cast<std::uint8_t>(source.pairwiseCipher);
             facts[4] = static_cast<std::uint8_t>(source.groupCipher);
@@ -423,9 +427,14 @@ SessionCodecStatus decodeObservation(
             return SessionCodecStatus::Malformed;
         }
         if (observation.radio == domain::observations::RadioKind::Wifi) {
-            if (length != kWifiObservationFactsBytes ||
-                bytes[0] != kObservationFactsWireVersion ||
-                (bytes[1] & 0xe0U) != 0 ||
+            if (length != kWifiObservationFactsBytes) {
+                return SessionCodecStatus::Malformed;
+            }
+            const bool legacyFacts =
+                bytes[0] == kLegacyObservationFactsWireVersion;
+            if ((!legacyFacts &&
+                 bytes[0] != kObservationFactsWireVersion) ||
+                (bytes[1] & (legacyFacts ? 0xe0U : 0xc0U)) != 0 ||
                 bytes[2] > static_cast<std::uint8_t>(
                     domain::observations::WifiAuthentication::WpaEnterprise) ||
                 bytes[3] > static_cast<std::uint8_t>(
@@ -443,6 +452,10 @@ SessionCodecStatus decodeObservation(
             facts.ftmResponder = (bytes[1] & (1U << 2U)) != 0;
             facts.ftmInitiator = (bytes[1] & (1U << 3U)) != 0;
             facts.bssColorKnown = (bytes[1] & (1U << 4U)) != 0;
+            observation.wifiKind = !legacyFacts &&
+                    (bytes[1] & (1U << 5U)) != 0
+                ? domain::observations::WifiObservationKind::Station
+                : domain::observations::WifiObservationKind::AccessPoint;
             facts.authentication =
                 static_cast<domain::observations::WifiAuthentication>(bytes[2]);
             facts.pairwiseCipher =
@@ -465,7 +478,8 @@ SessionCodecStatus decodeObservation(
             facts.vhtCenterChannel2 = bytes[18];
         } else {
             if (length != kBleObservationFactsBytes ||
-                bytes[0] != kObservationFactsWireVersion ||
+                (bytes[0] != kObservationFactsWireVersion &&
+                 bytes[0] != kLegacyObservationFactsWireVersion) ||
                 (bytes[1] & 0x80U) != 0 || bytes[2] > 3U ||
                 bytes[12] > domain::observations::BleAdvertisementFacts::
                     kServiceUuidCapacity) {

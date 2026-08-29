@@ -108,6 +108,57 @@ class FieldSurveyHilRunnerTests(unittest.TestCase):
         self.assertEqual({"WIFI": 1, "BLE": 1}, summary["entity_counts"])
         self.assertFalse(summary["upload_ready"])
 
+    def test_export_validators_retain_station_only_in_native(self) -> None:
+        native_payload = (
+            ",".join(RUNNER.NATIVE_COLUMNS) + "\r\n" +
+            "wifi_access_point,AA:BB:CC:DD:EE:FF,Cafe,1,2,3,2437000,"
+            "6,-42,-51,wpa2_psk,ccmp,ccmp,\r\n" +
+            "wifi_station,12:34:56:78:9A:BC,Phone,3,4,1,2437000,"
+            "6,-60,-60,,,,\r\n"
+        ).encode("utf-8")
+        native_begin = {
+            "status": "valid", "generation": 173,
+            "session_id": RUNNER.FIELD_SESSION_ID, "records": 2,
+            "columns": 14, "line_endings": "crlf",
+            "deduplicated": True, "persistent": True,
+            "radio_touched": False,
+        }
+        native_end = {
+            "status": "complete", "records": 2,
+            "bytes": len(native_payload), "radio_touched": False,
+        }
+        failures, summary = RUNNER.native_export_failures(
+            native_begin, native_payload, native_end,
+            generation=173, records=2, wifi_stations=1)
+        self.assertEqual([], failures)
+        self.assertEqual(1, summary["entity_counts"]["wifi_station"])
+
+        wigle_payload = (
+            "WigleWifi-1.6,appRelease=ESP32-Leshy-test\r\n" +
+            ",".join(RUNNER.WIGLE_COLUMNS) + "\r\n" +
+            "AA:BB:CC:DD:EE:FF,Cafe,Auth,,6,2437,-42,,,,,,,WIFI\r\n"
+        ).encode("utf-8")
+        wigle_begin = {
+            "status": "valid", "generation": 173,
+            "session_id": RUNNER.FIELD_SESSION_ID,
+            "format": "wigle_wifi_1.6", "records": 1,
+            "skipped_wifi_stations": 1,
+            "readiness": "untimed_unlocated", "trusted_utc": False,
+            "trusted_location": False, "upload_ready": False,
+            "persistent": True, "radio_touched": False,
+        }
+        wigle_end = {
+            "status": "complete", "records": 1,
+            "bytes": len(wigle_payload), "skipped_wifi_stations": 1,
+            "readiness": "untimed_unlocated", "upload_ready": False,
+            "radio_touched": False,
+        }
+        failures, summary = RUNNER.wigle_export_failures(
+            wigle_begin, wigle_payload, wigle_end,
+            generation=173, records=2, wifi_stations=1)
+        self.assertEqual([], failures)
+        self.assertEqual({"WIFI": 1, "BLE": 0}, summary["entity_counts"])
+
     def test_first_visit_result_requires_exact_count_accounting(self) -> None:
         record = result()
         self.assertEqual(
@@ -115,6 +166,15 @@ class FieldSurveyHilRunnerTests(unittest.TestCase):
         record["ble_devices"] = 1
         self.assertTrue(
             RUNNER.field_result_failures(record, "first_visit"))
+
+    def test_station_delta_requires_live_station(self) -> None:
+        record = result()
+        self.assertEqual([], RUNNER.field_result_failures(
+            record, "first_visit", require_wifi_station=True))
+        record["wifi_access_points"] += record["wifi_stations"]
+        record["wifi_stations"] = 0
+        self.assertTrue(RUNNER.field_result_failures(
+            record, "first_visit", require_wifi_station=True))
 
     def test_revisit_result_requires_set_arithmetic_and_exact_baseline(self) -> None:
         record = result("compared")

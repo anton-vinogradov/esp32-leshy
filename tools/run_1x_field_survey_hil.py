@@ -189,7 +189,7 @@ def parse_csv(payload: bytes, columns: list[str], label: str
 
 def native_export_failures(begin: dict[str, Any], payload: bytes,
                            end: dict[str, Any], *, generation: int,
-                           records: int
+                           records: int, wifi_stations: int = 0
                            ) -> tuple[list[str], dict[str, Any]]:
     failures = expect(begin, {
         "status": "valid", "generation": generation,
@@ -239,6 +239,10 @@ def native_export_failures(begin: dict[str, Any], payload: bytes,
         if not -127 <= strongest <= 0 or not -127 <= latest <= 0:
             failures.append(f"{prefix}: invalid RSSI evidence")
         observations += count
+    if kinds["wifi_station"] != wifi_stations:
+        failures.append(
+            "native.wifi_stations: "
+            f"{kinds['wifi_station']} != {wifi_stations}")
     return failures, {
         "payload_sha256": hashlib.sha256(payload).hexdigest(),
         "payload_bytes": len(payload), "records": len(rows),
@@ -249,19 +253,26 @@ def native_export_failures(begin: dict[str, Any], payload: bytes,
 
 def wigle_export_failures(begin: dict[str, Any], payload: bytes,
                           end: dict[str, Any], *, generation: int,
-                          records: int
+                          records: int, wifi_stations: int = 0
                           ) -> tuple[list[str], dict[str, Any]]:
+    exported_records = records - wifi_stations
+    if exported_records < 0:
+        return [
+            f"wigle.records: source {records} < stations {wifi_stations}"
+        ], {}
     failures = expect(begin, {
         "status": "valid", "generation": generation,
         "session_id": FIELD_SESSION_ID, "format": "wigle_wifi_1.6",
-        "records": records, "skipped_wifi_stations": 0,
+        "records": exported_records,
+        "skipped_wifi_stations": wifi_stations,
         "readiness": "untimed_unlocated", "trusted_utc": False,
         "trusted_location": False, "upload_ready": False,
         "persistent": True, "radio_touched": False,
     }, "wigle.begin")
     failures.extend(expect(end, {
-        "status": "complete", "records": records,
-        "bytes": len(payload), "skipped_wifi_stations": 0,
+        "status": "complete", "records": exported_records,
+        "bytes": len(payload),
+        "skipped_wifi_stations": wifi_stations,
         "readiness": "untimed_unlocated", "upload_ready": False,
         "radio_touched": False,
     }, "wigle.end"))
@@ -273,8 +284,8 @@ def wigle_export_failures(begin: dict[str, Any], payload: bytes,
         csv_payload = b"".join(lines[1:])
     parsed_failures, rows = parse_csv(csv_payload, WIGLE_COLUMNS, "wigle")
     failures.extend(parsed_failures)
-    if len(rows) != records:
-        failures.append(f"wigle.rows: {len(rows)} != {records}")
+    if len(rows) != exported_records:
+        failures.append(f"wigle.rows: {len(rows)} != {exported_records}")
     types = {"WIFI": 0, "BLE": 0}
     identities: set[tuple[str, str]] = set()
     for index, row in enumerate(rows, start=1):
@@ -305,7 +316,7 @@ def wigle_export_failures(begin: dict[str, Any], payload: bytes,
 
 
 def run_exports(device: Any, frames: Path, trace: list[dict[str, Any]],
-                generation: int, records: int
+                generation: int, records: int, wifi_stations: int = 0
                 ) -> tuple[dict[str, Any], list[str]]:
     from run_1x_product_survey_hil import open_latest_library
 
@@ -337,13 +348,15 @@ def run_exports(device: Any, frames: Path, trace: list[dict[str, Any]],
         device, b"library.field-survey.export.native", NATIVE_SCHEMA)
     native_failures, native_summary = native_export_failures(
         native_begin, native_payload, native_end,
-        generation=generation, records=records)
+        generation=generation, records=records,
+        wifi_stations=wifi_stations)
     failures.extend(native_failures)
     wigle_begin, wigle_payload, wigle_end = read_framed_csv(
         device, b"library.field-survey.export.wigle", WIGLE_SCHEMA)
     wigle_failures, wigle_summary = wigle_export_failures(
         wigle_begin, wigle_payload, wigle_end,
-        generation=generation, records=records)
+        generation=generation, records=records,
+        wifi_stations=wifi_stations)
     failures.extend(wigle_failures)
 
     return {
@@ -357,7 +370,8 @@ def run_exports(device: Any, frames: Path, trace: list[dict[str, Any]],
 
 
 def field_result_failures(record: dict[str, Any], status: str,
-                          baseline_unique: int | None = None) -> list[str]:
+                          baseline_unique: int | None = None,
+                          require_wifi_station: bool = False) -> list[str]:
     failures = expect(record, {
         "active": True,
         "status": status,
@@ -380,6 +394,8 @@ def field_result_failures(record: dict[str, Any], status: str,
         failures.append(f"{status}.radio_counts: invalid")
     elif wifi_ap + wifi_sta + ble != current:
         failures.append(f"{status}.radio_counts: do not total current_unique")
+    if require_wifi_station and (not isinstance(wifi_sta, int) or wifi_sta < 1):
+        failures.append(f"{status}.wifi_stations: expected >= 1")
     if status == "first_visit":
         failures.extend(expect(record, {
             "compare_previous": False,
@@ -518,7 +534,8 @@ def run_visit(device: Any, frames: Path, name: str,
               before_generation: int, first: bool,
               trace: list[dict[str, Any]], expected_cid: str,
               baseline_unique: int | None = None,
-              run_incomplete_negative: bool = False) -> dict[str, Any]:
+              run_incomplete_negative: bool = False,
+              require_wifi_station: bool = False) -> dict[str, Any]:
     setup = open_product_survey_visit(device, trace)
     failures = setup_failures(setup, "wifi")
     failures.extend(expect(setup, {
@@ -622,7 +639,8 @@ def run_visit(device: Any, frames: Path, name: str,
     result = field_state(device)
     result_failures = field_result_failures(
         result, "first_visit" if first else "compared",
-        None if first else baseline_unique)
+        None if first else baseline_unique,
+        require_wifi_station=require_wifi_station)
     if result_failures:
         raise RuntimeError("; ".join(result_failures))
     result_capture = capture(device, frames, f"{name}-result")
@@ -739,6 +757,15 @@ def main() -> int:
         "--expected-records", type=int,
         help="exact deduplicated record count required by --export-only",
     )
+    parser.add_argument(
+        "--expected-wifi-stations", type=int, default=0,
+        help=("exact native station count and WiGLE exclusion count required "
+              "by --export-only"),
+    )
+    parser.add_argument(
+        "--require-wifi-station", action="store_true",
+        help="require at least one live passive station in each committed visit",
+    )
     args = parser.parse_args()
     for path in (args.firmware, args.elf, args.map):
         if not path.is_file():
@@ -761,6 +788,14 @@ def main() -> int:
         parser.error("--export-only requires --expected-records")
     if not args.export_only and args.expected_records is not None:
         parser.error("--expected-records is valid only with --export-only")
+    if args.expected_wifi_stations < 0:
+        parser.error("--expected-wifi-stations must be non-negative")
+    if not args.export_only and args.expected_wifi_stations != 0:
+        parser.error(
+            "--expected-wifi-stations is valid only with --export-only")
+    if args.require_wifi_station and (
+            args.preflight_only or args.recovery_only or args.export_only):
+        parser.error("--require-wifi-station is valid only in full mode")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -847,7 +882,8 @@ def main() -> int:
                         raise RuntimeError("; ".join(failures))
                     exports, export_failures = run_exports(
                         device, frames, trace, int(args.expected_generation),
-                        int(args.expected_records))
+                        int(args.expected_records),
+                        args.expected_wifi_stations)
                     failures.extend(export_failures)
                     cleanup = best_effort_cleanup(device)
                     if not cleanup.get("complete"):
@@ -864,13 +900,15 @@ def main() -> int:
                     first = run_visit(
                         device, frames, "first", generation, True, trace,
                         args.expected_cid,
-                        run_incomplete_negative=True)
+                        run_incomplete_negative=True,
+                        require_wifi_station=args.require_wifi_station)
                     first_result = first["result"]
                     first_unique = int(first_result["current_unique"])
                     generation += 1
                     revisit = run_visit(
                         device, frames, "revisit", generation, False, trace,
-                        args.expected_cid, baseline_unique=first_unique)
+                        args.expected_cid, baseline_unique=first_unique,
+                        require_wifi_station=args.require_wifi_station)
                 if not args.recovery_only:
                     ended = end_hil(device, run_id, app_sha)
             finally:

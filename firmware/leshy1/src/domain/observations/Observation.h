@@ -11,6 +11,15 @@ enum class RadioKind : std::uint8_t {
     Ble = 2,
 };
 
+// Wi-Fi observations from a managed scan and client-side frames share the
+// same radio timeline, but they are different field-survey entities. Keep the
+// role explicit so persistence, revisit comparison and export never infer it
+// from a label or from the presence of optional network facts.
+enum class WifiObservationKind : std::uint8_t {
+    AccessPoint = 0,
+    Station = 1,
+};
+
 // Passive facts reported by the Wi-Fi scan driver for an access point.  They
 // are deliberately stored alongside the normalized observation: the survey
 // pipeline remains allocation-free and the live network catalog can enrich a
@@ -192,6 +201,7 @@ struct Observation final {
     std::uint8_t identityLength = 0;
     std::array<char, kLabelCapacity + 1> label{};
     std::uint8_t labelLength = 0;
+    WifiObservationKind wifiKind = WifiObservationKind::AccessPoint;
     WifiNetworkFacts wifiNetwork{};
     BleAdvertisementFacts bleAdvertisement{};
 };

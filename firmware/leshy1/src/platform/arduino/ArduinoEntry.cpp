@@ -53,6 +53,7 @@
 #include "apps/spectrum/Nrf24SpectrumController.h"
 #include "apps/spectrum/SpectrumViewport.h"
 #include "apps/survey/FieldSurveyNativeCsv.h"
+#include "apps/survey/FieldSurveyStation.h"
 #include "apps/survey/FieldSurveyTracker.h"
 #include "apps/survey/FieldSurveyWigleCsv.h"
 #include "apps/survey/ProductSurveyAdmission.h"
@@ -2229,6 +2230,8 @@ constexpr UBaseType_t kProductSurveyWorkerEventCapacity = 8;
 constexpr UBaseType_t kProductSurveyObservationCapacity =
     leshy1::services::survey::SurveySession::kObservationCapacity;
 constexpr std::uint32_t kProductSurveyScanIntervalMs = 1000;
+constexpr std::uint16_t kFieldSurveyStationChannelDwellMs = 120U;
+constexpr std::uint8_t kFieldSurveyStationChannelCount = 13U;
 constexpr std::uint64_t kProductSurveyPreparationDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kProductSurveyWorkerDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kAirspaceGuardBleWorkerDeadlineUs = 25000000ULL;
@@ -3396,6 +3399,138 @@ BleRecordDisposition enqueueProductSurveyWorkerBleRecord(
     return BleRecordDisposition::Accepted;
 }
 
+struct FieldSurveyStationCaptureResult final {
+    bool begun = false;
+    bool cleanupComplete = false;
+    bool complete = false;
+    std::uint16_t uniqueStations = 0U;
+    std::uint16_t accepted = 0U;
+    std::uint16_t rejected = 0U;
+    std::uint32_t dropped = 0U;
+    std::uint64_t durationUs = 0U;
+    std::uint32_t channelHops = 0U;
+};
+
+void retainFieldSurveyStationObservation(
+    WifiDeviceObservation observation, std::uint32_t* catalogDrops) {
+    const std::size_t existing =
+        wifiDeviceCatalog.indexOfAddress(observation.address);
+    if (existing >= wifiDeviceCatalog.size() &&
+        wifiDeviceCatalog.size() >= WifiDeviceCatalog::kCapacity &&
+        catalogDrops != nullptr) {
+        ++*catalogDrops;
+    }
+    if (!observation.locallyAdministered &&
+        observation.wpsManufacturerLength == 0U) {
+        const WifiDeviceRecord* known = wifiDeviceCatalog.at(existing);
+        const bool needsVendor = known == nullptr ||
+            (known->wpsManufacturerLength == 0U &&
+             known->ouiVendorLength == 0U);
+        if (needsVendor) {
+            char vendor[WifiDeviceObservation::kWpsTextCapacity] = {};
+            if (wifiOuiDatabase.lookup(observation.address.data(), vendor,
+                                       sizeof(vendor))) {
+                std::snprintf(observation.ouiVendor.data(),
+                              observation.ouiVendor.size(), "%s", vendor);
+                observation.ouiVendorLength = static_cast<std::uint8_t>(
+                    std::strlen(observation.ouiVendor.data()));
+            }
+        }
+    }
+    wifiDeviceCatalog.upsert(observation);
+}
+
+FieldSurveyStationCaptureResult captureFieldSurveyStations() {
+    FieldSurveyStationCaptureResult result{};
+    wifiDeviceCatalog.reset();
+    wifiFrameCapture.reset();
+    std::uint64_t startedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (startedUs == 0U) startedUs = 1U;
+    result.begun = wifiFrameCapture.beginDeviceMonitor(
+        startedUs, kFieldSurveyStationChannelDwellMs);
+    if (!result.begun) {
+        result.cleanupComplete = wifiFrameCapture.stop(startedUs) &&
+            wifiFrameCapture.cleanupComplete();
+        return result;
+    }
+
+    const std::uint64_t durationUs =
+        static_cast<std::uint64_t>(kFieldSurveyStationChannelDwellMs) *
+        static_cast<std::uint64_t>(kFieldSurveyStationChannelCount) *
+        1000ULL;
+    const std::uint64_t deadlineUs = startedUs + durationUs;
+    std::uint64_t nowUs = startedUs;
+    std::uint32_t catalogDrops = 0U;
+    while (nowUs < deadlineUs && !productSurveyStopRequested()) {
+        wifiFrameCapture.service(nowUs);
+        WifiDeviceObservation observation{};
+        while (wifiFrameCapture.pollDevice(&observation)) {
+            retainFieldSurveyStationObservation(observation, &catalogDrops);
+            observation = {};
+        }
+        heartbeatProductSurveyWorker(nowUs);
+        vTaskDelay(pdMS_TO_TICKS(5));
+        nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+        if (nowUs == 0U) nowUs = 1U;
+    }
+    WifiDeviceObservation observation{};
+    while (wifiFrameCapture.pollDevice(&observation)) {
+        retainFieldSurveyStationObservation(observation, &catalogDrops);
+        observation = {};
+    }
+    const auto monitor = wifiFrameCapture.deviceMonitorStats();
+    result.cleanupComplete = wifiFrameCapture.stop(nowUs) &&
+        wifiFrameCapture.cleanupComplete();
+    result.uniqueStations = static_cast<std::uint16_t>(
+        wifiDeviceCatalog.size());
+    result.durationUs = nowUs >= startedUs ? nowUs - startedUs : 0U;
+    result.channelHops = monitor.channelHops;
+    result.dropped = monitor.clientsDropped + catalogDrops;
+
+    // WifiDeviceCatalog is signal-sorted for the interactive screen. Emit its
+    // bounded snapshot in monotonic order so SurveySession's ordering contract
+    // remains exact without another allocation or a second catalog.
+    std::uint32_t emittedMask = 0U;
+    for (std::size_t emitted = 0U;
+         emitted < wifiDeviceCatalog.size(); ++emitted) {
+        std::size_t oldest = wifiDeviceCatalog.size();
+        for (std::size_t index = 0U;
+             index < wifiDeviceCatalog.size(); ++index) {
+            if ((emittedMask & (1UL << index)) != 0U) continue;
+            const WifiDeviceRecord* candidate = wifiDeviceCatalog.at(index);
+            const WifiDeviceRecord* selected =
+                oldest < wifiDeviceCatalog.size()
+                    ? wifiDeviceCatalog.at(oldest) : nullptr;
+            if (candidate != nullptr &&
+                (selected == nullptr ||
+                 candidate->monotonicUs < selected->monotonicUs)) {
+                oldest = index;
+            }
+        }
+        if (oldest >= wifiDeviceCatalog.size()) break;
+        emittedMask |= 1UL << oldest;
+        const WifiDeviceRecord* station = wifiDeviceCatalog.at(oldest);
+        Observation normalized{};
+        if (station == nullptr ||
+            !leshy1::apps::survey::normalizeFieldSurveyStation(
+                *station, &normalized)) {
+            ++result.rejected;
+        } else if (productSurveyObservations == nullptr ||
+                   xQueueSend(productSurveyObservations, &normalized, 0) !=
+                       pdTRUE) {
+            ++result.dropped;
+        } else {
+            ++result.accepted;
+        }
+    }
+    result.complete = result.cleanupComplete &&
+        result.channelHops == kFieldSurveyStationChannelCount - 1U &&
+        result.rejected == 0U && result.dropped == 0U &&
+        !productSurveyStopRequested();
+    return result;
+}
+
 void sendProductSurveyWorkerEvent(
     ProductSurveyWorkerEventKind kind,
     const ProductSurveyWorkerReport& report,
@@ -4079,6 +4214,49 @@ void runProductSurveyWorker(void*) {
                         wifiScan = wifiScanner.scan(
                             leshy1::drivers::wifi::defaultPassivePlan(),
                             enqueueProductSurveyWorkerRecord, nullptr);
+                        const bool accessPointCleanup = wifiScanner.end();
+                        if (productSurveyFieldVisit() && wifiScan.valid() &&
+                            !productSurveyStopRequested()) {
+                            if (!accessPointCleanup) {
+                                wifiScan.status = leshy1::platform::arduino::
+                                    BoardWifiScanStatus::RecordFailed;
+                            } else {
+                                const FieldSurveyStationCaptureResult stations =
+                                    captureFieldSurveyStations();
+                                wifiScan.recordsReported =
+                                    static_cast<std::uint16_t>(
+                                        wifiScan.recordsReported +
+                                        stations.uniqueStations);
+                                wifiScan.recordsRead =
+                                    static_cast<std::uint16_t>(
+                                        wifiScan.recordsRead +
+                                        stations.uniqueStations);
+                                wifiScan.accepted =
+                                    static_cast<std::uint16_t>(
+                                        wifiScan.accepted +
+                                        stations.accepted);
+                                wifiScan.rejected =
+                                    static_cast<std::uint16_t>(
+                                        wifiScan.rejected +
+                                        stations.rejected);
+                                wifiScan.dropped =
+                                    static_cast<std::uint16_t>(
+                                        wifiScan.dropped +
+                                        std::min<std::uint32_t>(
+                                            stations.dropped,
+                                            UINT16_MAX -
+                                                wifiScan.dropped));
+                                wifiScan.durationUs += stations.durationUs;
+                                if (!stations.begun || !stations.complete) {
+                                    wifiScan.status = leshy1::platform::arduino::
+                                        BoardWifiScanStatus::RecordFailed;
+                                    if (wifiScan.driverError == 0) {
+                                        wifiScan.driverError =
+                                            wifiFrameCapture.lastError();
+                                    }
+                                }
+                            }
+                        }
                     } else {
                         // Preserve the exact driver init/start error even
                         // though NotStarted intentionally classifies this
@@ -4098,8 +4276,16 @@ void runProductSurveyWorker(void*) {
                 }
                 setProductSurveyScanActive(false);
                 heartbeatProductSurveyWorker();
+                std::uint64_t sourceCleanupUs =
+                    static_cast<std::uint64_t>(esp_timer_get_time());
+                if (sourceCleanupUs == 0U) sourceCleanupUs = 1U;
+                const bool wifiScannerCleanup = source == RadioKind::Wifi
+                    ? wifiScanner.end() : true;
+                const bool wifiCaptureCleanup = source == RadioKind::Wifi
+                    ? wifiFrameCapture.stop(sourceCleanupUs) : true;
                 const bool sourceCleanup = source == RadioKind::Wifi
-                    ? wifiScanner.end()
+                    ? (wifiScannerCleanup && wifiCaptureCleanup &&
+                       wifiFrameCapture.cleanupComplete())
                     : bleScanner.end();
                 if (source == RadioKind::Ble) {
                     publishProductSurveyBleBeginDiagnostic(

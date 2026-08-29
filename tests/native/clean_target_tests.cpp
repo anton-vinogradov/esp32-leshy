@@ -4090,6 +4090,7 @@ void testCaptureMetadataV3AndCsvExportAreCanonical() {
     wifi.wifiNetwork.countryStartChannel = 1;
     wifi.wifiNetwork.countryChannelCount = 13;
     wifi.wifiNetwork.countryMaximumTxPowerDbm = 20;
+    wifi.wifiKind = WifiObservationKind::Station;
     std::memcpy(wifi.label.data(), "alpha", 6);
     wifi.labelLength = 5;
     CHECK(original.append(wifi) == SessionStatus::Appended);
@@ -4186,6 +4187,7 @@ void testCaptureMetadataV3AndCsvExportAreCanonical() {
     const Observation* reopenedBle = reopened.get(1);
     CHECK(reopenedWifi != nullptr && wifiNetworkFactsEqual(
               reopenedWifi->wifiNetwork, wifi.wifiNetwork));
+    CHECK(reopenedWifi->wifiKind == WifiObservationKind::Station);
     CHECK(reopenedBle != nullptr && bleAdvertisementFactsEqual(
               reopenedBle->bleAdvertisement, ble.bleAdvertisement));
 

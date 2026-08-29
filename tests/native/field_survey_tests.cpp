@@ -7,6 +7,7 @@
 
 #include "apps/survey/FieldSurveyCatalog.h"
 #include "apps/survey/FieldSurveyNativeCsv.h"
+#include "apps/survey/FieldSurveyStation.h"
 #include "apps/survey/FieldSurveyTracker.h"
 #include "apps/survey/FieldSurveyWigleCsv.h"
 #include "services/survey/SurveySession.h"
@@ -69,6 +70,17 @@ Observation bleDevice(std::array<std::uint8_t, 6> identity,
     return value;
 }
 
+Observation station(std::array<std::uint8_t, 6> identity,
+                    std::uint64_t monotonicUs, std::int16_t rssiDbm,
+                    const char* label) {
+    Observation value = observation(
+        RadioKind::Wifi, identity, monotonicUs, rssiDbm, label);
+    value.channel = 11U;
+    value.frequencyKhz = 2462000U;
+    value.wifiKind = WifiObservationKind::Station;
+    return value;
+}
+
 void testCatalogDeduplicatesAndComparesVisits() {
     constexpr std::array<std::uint8_t, 6> kAp{
         0xa0U, 0xb1U, 0xc2U, 0xd3U, 0xe4U, 0xf5U};
@@ -87,7 +99,7 @@ void testCatalogDeduplicatesAndComparesVisits() {
     CHECK(current.ingest(strong, FieldSurveyEntityKind::WifiAccessPoint) ==
           FieldSurveyIngestStatus::Updated);
     CHECK(current.ingest(
-              observation(RadioKind::Wifi, kStation, 1400U, -55, "client"),
+              station(kStation, 1400U, -55, "client"),
               FieldSurveyEntityKind::WifiStation) ==
           FieldSurveyIngestStatus::Added);
     CHECK(current.ingest(bleDevice(kBle, 1500U, -61, "Tag"),
@@ -124,6 +136,40 @@ void testCatalogDeduplicatesAndComparesVisits() {
     CHECK(comparison.wifiAccessPoints == 1U);
     CHECK(comparison.wifiStations == 1U);
     CHECK(comparison.bleDevices == 1U);
+}
+
+void testLiveStationNormalizationAndAutomaticCatalogKind() {
+    leshy1::apps::wifi::WifiDeviceObservation live{};
+    live.address = {0x10U, 0x11U, 0x12U, 0x13U, 0x14U, 0x15U};
+    live.channel = 11U;
+    live.rssiDbm = -47;
+    live.monotonicUs = 1200U;
+    live.evidence = leshy1::apps::wifi::WifiDeviceEvidenceData;
+    std::memcpy(live.wpsDeviceName.data(), "Desk sensor", 11U);
+    live.wpsDeviceNameLength = 11U;
+    std::memcpy(live.ssid.data(), "fallback", 8U);
+    live.ssidLength = 8U;
+
+    Observation normalized{};
+    CHECK(normalizeFieldSurveyStation(live, &normalized));
+    CHECK(normalized.radio == RadioKind::Wifi);
+    CHECK(normalized.wifiKind == WifiObservationKind::Station);
+    CHECK(normalized.frequencyKhz == 2462000U);
+    CHECK(normalized.channel == 11U);
+    CHECK(normalized.identity == live.address);
+    CHECK(std::strcmp(normalized.label.data(), "Desk sensor") == 0);
+
+    SurveySession session;
+    CHECK(session.start(FieldSurveyTracker::kSessionId, 1000U) ==
+          SessionStatus::Started);
+    CHECK(session.append(normalized) == SessionStatus::Appended);
+    CHECK(session.stop(1300U) == SessionStatus::Stopped);
+    FieldSurveyCatalog catalog;
+    CHECK(catalog.build(session) == FieldSurveyBuildStatus::Complete);
+    const FieldSurveyComparison comparison = catalog.compare({});
+    CHECK(comparison.status == FieldSurveyComparisonStatus::Valid);
+    CHECK(comparison.wifiAccessPoints == 0U);
+    CHECK(comparison.wifiStations == 1U);
 }
 
 void testCatalogBuildFailsClosedOnDropsAndInvalidInput() {
@@ -457,6 +503,7 @@ void testFieldVisitAutoPauseRequiresOneCoveredPass() {
 
 int main() {
     testCatalogDeduplicatesAndComparesVisits();
+    testLiveStationNormalizationAndAutomaticCatalogKind();
     testCatalogBuildFailsClosedOnDropsAndInvalidInput();
     testNativeExportPreservesDeduplicatedEvidence();
     testWigleExportIsExactAndTruthful();

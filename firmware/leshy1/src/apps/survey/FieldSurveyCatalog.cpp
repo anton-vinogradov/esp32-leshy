@@ -20,8 +20,12 @@ bool validKind(const Observation& observation, FieldSurveyEntityKind kind) {
 }
 
 FieldSurveyEntityKind defaultKind(const Observation& observation) {
-    return observation.radio == RadioKind::Ble
-        ? FieldSurveyEntityKind::BleDevice
+    if (observation.radio == RadioKind::Ble) {
+        return FieldSurveyEntityKind::BleDevice;
+    }
+    return observation.wifiKind ==
+            domain::observations::WifiObservationKind::Station
+        ? FieldSurveyEntityKind::WifiStation
         : FieldSurveyEntityKind::WifiAccessPoint;
 }
 
