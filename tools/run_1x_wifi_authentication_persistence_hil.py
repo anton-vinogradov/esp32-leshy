@@ -295,7 +295,9 @@ def main() -> int:
                     "controller_peer_count": 1,
                     "controller_selected_peer_mask": 3,
                     "evidence": 2, "peers": 1,
-                    "complete_peers": 1, "partial_peers": 0,
+                    # M1+M2 is the minimum exportable hc22000 pair, not a
+                    # complete four-message exchange in the UI vocabulary.
+                    "complete_peers": 0, "partial_peers": 1,
                     "source_frames": 2, "frames_read": 2,
                     "data_frames": 2, "eapol_frames": 2,
                     "eapol_key_frames": 2,
