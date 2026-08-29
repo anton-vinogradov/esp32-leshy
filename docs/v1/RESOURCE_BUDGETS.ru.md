@@ -1224,6 +1224,21 @@ Static RAM/linked flash — 235 624/3 445 368 B. Размеры app/factory/ELF 
 host/build bound; runtime heap, storage routing и physical cleanup остаются открыты
 до product workflow.
 
+Product-tracker bound Offline Field Survey `RB-M194`: exact host/build
+`1.0.0-dev.257` на source `c5634400dc7a0dea23358ef4f21ff3255ccbc59a`
+добавляет один allocation-free tracker 6 200 B. Он включает существующий current
+catalog 5 656 B и только 64 компактные записи kind/identity предыдущего визита;
+поэтому прирост против `RB-M193` составляет 6 192 B global RAM, а не второй catalog
+или Session. Baseline допускается только по exact session id и complete input;
+bounded comparison O(64²) выполняется только после Stop/commit, не использует heap
+и не запускает radio или storage. Static RAM/linked flash — 241 816/3 454 652 B.
+Размеры app/factory/ELF — 3 455 152/3 520 688/23 394 676 B, SHA-256 —
+`1ab506fe080244c56d2886ad1c9bcbd625acf3230735f41b89377e57e22f6ed6`/
+`ae7d24e0393f741f4c6ac20dcd19326b26343e49f269afb2db23d8315c2002ca`/
+`5753bf949b1237d4c3325ea953acdb61d275b2445f65f4317824af0ccc865d71`.
+В app-slot OTA 4 MiB остаётся 739 152 B при floor 524 288 B. Runtime heap и
+physical cleanup остаются открыты до focused board HIL.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

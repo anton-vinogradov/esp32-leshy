@@ -167,6 +167,16 @@ Exact host/build dev.256 принимает только bounded catalog, compar
 строк за этим screen contract. Wiring product state, routing persistence/export,
 live station capture, optional adapter GPS и physical pixels остаются открыты.
 
+Exact host/build dev.257 принимает первый product slice: пункт меню Wi-Fi объясняет
+comparison Wi-Fi+Bluetooth, Setup заменяет не относящийся к визиту переход в RF spectrum
+на явный выбор `Предыдущий визит` / `Первый визит`, все доступные receivers выбраны по
+умолчанию, а automatic baseline может стать только exact complete запись
+`field-visit-live`. Result показывает unique либо Новые/Снова/Не найдено и totals
+Wi-Fi/BLE; incomplete input выводит `Результат неполный` и не публикует comparison.
+Для Running в этом slice остаётся существующий strongest-first browser observations.
+Более богатые live Новые/Снова, Actions результата, routing native/WiGLE, station
+capture, optional adapter GPS и focused physical pixels остаются открыты.
+
 Exact physical dev.248 принимает исходную иерархию результата UX-S30 на оригинальном
 DIV. Exact host/build dev.249 расширяет production Actions до Детали, Сохранить и
 Повторить. Save сначала открывает явное подтверждение, затем показывает Сохранение и

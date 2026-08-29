@@ -1233,6 +1233,21 @@ The 4 MiB OTA slot retains 748,432 B, above the mandatory 524,288 B floor. This 
 a host/build bound only; runtime heap, storage routing and physical cleanup remain
 open with the product workflow.
 
+Offline Field Survey product-tracker bound `RB-M194`: exact host/build
+`1.0.0-dev.257` at source `c5634400dc7a0dea23358ef4f21ff3255ccbc59a`
+adds one 6,200 B allocation-free tracker. It embeds the existing 5,656 B current
+catalog and only 64 compact previous kind/identity entries; it therefore costs
+6,192 B global RAM over `RB-M193`, not a second catalog or Session. Baseline
+capture is exact-session-id and complete-input gated; result comparison is bounded
+O(64²), happens only after Stop/commit, owns no heap and starts no radio or storage.
+Static RAM/linked flash are 241,816/3,454,652 B. App/factory/ELF sizes are
+3,455,152/3,520,688/23,394,676 B with SHA-256
+`1ab506fe080244c56d2886ad1c9bcbd625acf3230735f41b89377e57e22f6ed6`/
+`ae7d24e0393f741f4c6ac20dcd19326b26343e49f269afb2db23d8315c2002ca`/
+`5753bf949b1237d4c3325ea953acdb61d275b2445f65f4317824af0ccc865d71`.
+The 4 MiB OTA slot retains 739,152 B, above the mandatory 524,288 B floor.
+Runtime heap and physical cleanup remain open until focused board HIL.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
