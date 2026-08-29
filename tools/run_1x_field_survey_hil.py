@@ -87,12 +87,27 @@ def action(device: Any, name: str,
 
 def wait_state(device: Any,
                predicate: Callable[[dict[str, Any]], bool],
-               timeout: float, description: str) -> dict[str, Any]:
+               timeout: float, description: str,
+               trace: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     last: dict[str, Any] = {}
     while time.monotonic() < deadline:
         last = read_only_query(
             device, b"ui.state", "leshy.ui.v1", "state")
+        if last.get("safety_latched") is True:
+            safety = read_only_query(
+                device, b"safety.state", "leshy.safety.v1", "state")
+            if trace is not None:
+                trace.append({
+                    "checkpoint": "safety_latched",
+                    "ui": last,
+                    "safety": safety,
+                })
+            raise RuntimeError(
+                f"{description}: safety latch: "
+                f"worker={safety.get('worker_last_expired')!r} "
+                f"stage={safety.get('product_survey_preparation_stage')!r} "
+                f"age_ms={safety.get('worker_age_ms')!r}")
         if predicate(last):
             return last
         time.sleep(0.05)
@@ -246,7 +261,8 @@ def run_visit(device: Any, frames: Path, name: str,
             state.get("survey_product_wifi_scan_cycles", 0) >= 1 and
             state.get("survey_product_ble_scan_cycles", 0) >= 1 and
             state.get("survey_observations", 0) >= 1
-        ), 35.0, f"{name}: both receive sources did not complete one cycle")
+        ), 35.0, f"{name}: both receive sources did not complete one cycle",
+        trace)
     trace.append(running)
     failures = running_failures(running, expected_cid, "wifi")
     failures.extend(expect(running, {
@@ -281,7 +297,7 @@ def run_visit(device: Any, frames: Path, name: str,
         lambda state: (
             state.get("survey_product_status") == "paused" and
             state.get("survey_product_source_active") is False
-    ), 20.0, f"{name}: did not pause")
+        ), 20.0, f"{name}: did not pause", trace)
     trace.append(paused)
     paused_observations = int(paused["survey_observations"])
     paused_cycles = int(paused["survey_product_scan_cycles"])
@@ -307,7 +323,7 @@ def run_visit(device: Any, frames: Path, name: str,
         committed = wait_state(
             device,
             lambda state: state.get("survey_product_status") == "committed",
-            20.0, f"{name}: did not commit")
+            20.0, f"{name}: did not commit", trace)
         trace.append(committed)
     failures = committed_failures(committed, before_generation, "wifi")
     if failures:
@@ -409,7 +425,7 @@ def main() -> int:
             flashed = True
             time.sleep(0.75)
         boot, recovery, boot_timing = reset_capture(
-            args.port, args.output, "boot", 20.0, maximum_attempts=2)
+            args.port, args.output, "boot", 20.0, maximum_attempts=1)
 
         with PassiveSerial(args.port, 115200, timeout=0.25) as device:
             synchronize_console(device, 20.0)

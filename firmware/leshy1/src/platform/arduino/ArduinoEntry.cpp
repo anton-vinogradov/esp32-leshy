@@ -2146,6 +2146,11 @@ struct ProductSurveyWorkerEvent final {
     SourceWindowReason failureReason = SourceWindowReason::DriverFault;
 };
 
+struct ProductSurveyPreparationSnapshot final {
+    const char* stage = "idle";
+    std::uint64_t stageStartedUs = 0;
+};
+
 constexpr UBaseType_t kProductSurveyWorkerEventCapacity = 8;
 constexpr UBaseType_t kProductSurveyObservationCapacity =
     leshy1::services::survey::SurveySession::kObservationCapacity;
@@ -2191,6 +2196,7 @@ StaticSemaphore_t productSurveyScanStartGateStorage{};
 SemaphoreHandle_t productSurveyScanStartGate = nullptr;
 TaskHandle_t productSurveyWorkerTaskHandle = nullptr;
 portMUX_TYPE productSurveyWorkerMux = portMUX_INITIALIZER_UNLOCKED;
+ProductSurveyPreparationSnapshot productSurveyPreparation{};
 BoardBleBeginDiagnostic productSurveyBleBeginDiagnostic{};
 
 void publishProductSurveyBleBeginDiagnostic(
@@ -3097,6 +3103,23 @@ WorkerDeadlineSnapshot workerDeadlineSnapshot() {
     return snapshot;
 }
 
+void publishProductSurveyPreparationStage(const char* stage) {
+    std::uint64_t nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0) nowUs = 1;
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    productSurveyPreparation.stage = stage == nullptr ? "unknown" : stage;
+    productSurveyPreparation.stageStartedUs = nowUs;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+}
+
+ProductSurveyPreparationSnapshot productSurveyPreparationSnapshot() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const ProductSurveyPreparationSnapshot snapshot =
+        productSurveyPreparation;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return snapshot;
+}
+
 std::uint8_t productSurveyRuntimeUnavailableInjectionMask() {
     portENTER_CRITICAL(&productSurveyWorkerMux);
     const std::uint8_t mask = productSurveyRuntimeUnavailableOnceMask;
@@ -3334,6 +3357,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
     ProductSurveyWorkerReport report;
     report.status = "preparing";
     report.cleanupComplete = false;
+    publishProductSurveyPreparationStage("entry");
     heartbeatProductSurveyPreparation();
     if (wifiScanner == nullptr || bleScanner == nullptr) {
         report.status = "worker_missing";
@@ -3370,6 +3394,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
             return report;
         }
         heartbeatProductSurveyPreparation();
+        publishProductSurveyPreparationStage("identity");
         BoardSdSpiTransport identityTransport;
         const bool identityBegun = identityTransport.begin();
         identity = {};
@@ -3446,6 +3471,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
             return report;
         }
         report.filesystemMountAttempts = attempt;
+        publishProductSurveyPreparationStage("filesystem_mount");
         filesystemMounted = productSurveyFilesystem.begin();
         recordProductSurveyMountOutcome(filesystemMounted);
         report.filesystemMountError = productSurveyFilesystem.mountError();
@@ -3513,6 +3539,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
         report.status = "cancelled";
         return report;
     }
+    publishProductSurveyPreparationStage("filesystem_metadata");
     report.cardCapacityBytes = productSurveyFilesystem.cardCapacityBytes();
     report.cachedFreeBytes = productSurveyFilesystem.cachedFreeBytes();
     const bool capacityMatched =
@@ -3583,12 +3610,14 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
     // atomic terminal commit.
     report.storeOpenAttempted = true;
     heartbeatProductSurveyPreparation();
+    publishProductSurveyPreparationStage("store_open");
     if (!productSurveyStore.selectDrive(productSurveyFilesystem.driveNumber()) ||
         !productSurveyStore.openExistingWritable(storePermit)) {
         report.status = "store_open_failed";
         return report;
     }
     heartbeatProductSurveyPreparation();
+    publishProductSurveyPreparationStage("storage_release");
     productSurveyStore.end();
     productSurveyFilesystem.end();
     surveyStoreRouter.bind(ramSessionStore);
@@ -3626,6 +3655,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
     surveyRequest.bleScanPlan = leshy1::drivers::ble::defaultPassivePlan();
     surveyRequest.storePermit = storePermit;
     surveyRequest.ownedResources = ownedResources;
+    publishProductSurveyPreparationStage("admission");
     const leshy1::apps::survey::ProductSurveyPermit surveyPermit =
         leshy1::apps::survey::authorizeProductSurvey(surveyRequest);
     report.admissionStatus = surveyPermit.status;
@@ -3643,6 +3673,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
     }
     report.sourceActive = true;
     report.status = "prepared";
+    publishProductSurveyPreparationStage("prepared");
     return report;
 }
 
@@ -3818,6 +3849,7 @@ void runProductSurveyWorker(void*) {
         publishProductSurveyBleBeginDiagnostic({});
         BoardWifiPassiveScanner wifiScanner;
         BoardBlePassiveScanner bleScanner;
+        publishProductSurveyPreparationStage("arming");
         std::uint64_t preparationStartedUs =
             static_cast<std::uint64_t>(esp_timer_get_time());
         if (preparationStartedUs == 0) preparationStartedUs = 1;
@@ -10523,6 +10555,16 @@ void emitSafetyState(Stream& reply) {
     const bool watchdogArmed = runtimeSafetyWatchdogReady &&
         __atomic_load_n(&runtimeSafetyWatchdogArmed, __ATOMIC_ACQUIRE) != 0;
     const WorkerDeadlineSnapshot worker = workerDeadlineSnapshot();
+    const ProductSurveyPreparationSnapshot preparation =
+        productSurveyPreparationSnapshot();
+    std::uint64_t preparationNowUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (preparationNowUs < preparation.stageStartedUs) {
+        preparationNowUs = preparation.stageStartedUs;
+    }
+    const std::uint64_t preparationStageAgeMs =
+        preparation.stageStartedUs == 0
+            ? 0 : (preparationNowUs - preparation.stageStartedUs) / 1000ULL;
     char line[1400] = {};
     std::snprintf(
         line, sizeof(line),
@@ -10539,6 +10581,8 @@ void emitSafetyState(Stream& reply) {
         "\"worker_expired\":%s,\"worker_deadline_ms\":%llu,"
         "\"worker_age_ms\":%llu,\"worker_arm_count\":%lu,"
         "\"worker_heartbeat_count\":%lu,\"worker_trip_count\":%lu,"
+        "\"product_survey_preparation_stage\":\"%s\","
+        "\"product_survey_preparation_stage_age_ms\":%llu,"
         "\"software_only\":true,\"physical_rail_kill_available\":false,"
         "\"thermal_sensor_available\":false,"
         "\"cc1101_hard_kill_available\":false,"
@@ -10567,7 +10611,9 @@ void emitSafetyState(Stream& reply) {
         static_cast<unsigned long long>(worker.lastObservedAgeUs / 1000ULL),
         static_cast<unsigned long>(worker.armCount),
         static_cast<unsigned long>(worker.heartbeatCount),
-        static_cast<unsigned long>(worker.tripCount));
+        static_cast<unsigned long>(worker.tripCount),
+        preparation.stage,
+        static_cast<unsigned long long>(preparationStageAgeMs));
     reply.println(line);
 }
 
@@ -20180,6 +20226,16 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
     line[0] = '\0';
     const ProductSurveyMountTotals productSurveyMountTotals =
         productSurveyMountTotalsSnapshot();
+    const ProductSurveyPreparationSnapshot preparation =
+        productSurveyPreparationSnapshot();
+    std::uint64_t preparationNowUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (preparationNowUs < preparation.stageStartedUs) {
+        preparationNowUs = preparation.stageStartedUs;
+    }
+    const std::uint64_t preparationStageAgeMs =
+        preparation.stageStartedUs == 0
+            ? 0 : (preparationNowUs - preparation.stageStartedUs) / 1000ULL;
     const AppMenuItem* selected = appCatalog.get(uiController.selection());
     const LibraryEntry* selectedLibrary = libraryController.selected();
     std::snprintf(line, sizeof(line),
@@ -20309,6 +20365,8 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_product_unavailable_source_mask\":%u,"
                       "\"survey_product_selected\":%s,"
                       "\"survey_product_status\":\"%s\","
+                      "\"survey_product_preparation_stage\":\"%s\","
+                      "\"survey_product_preparation_stage_age_ms\":%llu,"
                       "\"survey_product_backend_open\":%s,"
                       "\"survey_product_storage_mounted\":%s,"
                       "\"survey_product_store_status\":\"%s\","
@@ -20550,6 +20608,8 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           productSurveyRuntime.unavailableSourceMask),
                       productSurveyRuntime.selected ? "true" : "false",
                       productSurveyRuntime.status,
+                      preparation.stage,
+                      static_cast<unsigned long long>(preparationStageAgeMs),
                       productSurveyRuntime.backendOpen ? "true" : "false",
                       productSurveyFilesystem.mounted() ? "true" : "false",
                       leshy1::storage::productStoreAccessStatusName(

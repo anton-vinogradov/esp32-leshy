@@ -94,11 +94,32 @@ class FieldSurveyHilRunnerTests(unittest.TestCase):
         self.assertEqual(0, state["host_begin_action_replays"])
         self.assertFalse(state["host_begin_ack_received"])
 
+    def test_wait_aborts_and_retains_exact_safety_latch(self) -> None:
+        ui = {
+            "safety_latched": True,
+            "survey_product_preparation_stage": "filesystem_mount",
+        }
+        safety = {
+            "worker_last_expired": "product_survey_preparation",
+            "worker_age_ms": 8001,
+            "product_survey_preparation_stage": "filesystem_mount",
+        }
+        trace: list[dict[str, Any]] = []
+        with patch.object(
+                RUNNER, "read_only_query", side_effect=[ui, safety]):
+            with self.assertRaisesRegex(
+                    RuntimeError, "stage='filesystem_mount'"):
+                RUNNER.wait_state(
+                    object(), lambda _: False, 1.0, "waiting", trace)
+        self.assertEqual("safety_latched", trace[0]["checkpoint"])
+        self.assertEqual(safety, trace[0]["safety"])
+
     def test_runner_is_single_flash_and_contains_physical_negative(self) -> None:
         source = Path(RUNNER.__file__).read_text(encoding="utf-8")
         self.assertEqual(1, source.count("flash_candidate(args.port"))
         self.assertIn("--reuse-exact-flash", source)
         self.assertIn('b"storage.product.boot-recovery"', source)
+        self.assertIn('maximum_attempts=1', source)
         self.assertLess(
             source.index('b"storage.product.boot-recovery"'),
             source.index("failures.extend(boot_failures("),
