@@ -1296,7 +1296,10 @@ WifiAuthenticationCaptureController wifiAuthenticationController{};
 WifiAuthenticationSyntheticHilFixture wifiAuthenticationSyntheticHilFixture{};
 WifiAuthenticationPersistenceHilFixture
     wifiAuthenticationPersistenceHilFixture{};
-WifiFrameCapture wifiAuthenticationPersistenceHilCapture{};
+// CAP049's raw fixture is a HIL-only 4.5 KiB object. Keep it off the
+// product's resident heap so normal BLE startup has the same memory budget as
+// the user firmware; the authenticated fixture command owns its lifetime.
+WifiFrameCapture* wifiAuthenticationPersistenceHilCapture = nullptr;
 WifiAuthenticationCaptureReport wifiAuthenticationSyntheticHilReport{};
 WifiAuthenticationCaptureController wifiAuthenticationSyntheticHilController{};
 bool wifiAuthenticationSynthetic = false;
@@ -1334,9 +1337,23 @@ const WifiAuthenticationCaptureReport& activeWifiAuthenticationCaptureReport() {
         : wifiAuthenticationReport;
 }
 
+WifiFrameCapture* ensureWifiAuthenticationPersistenceHilCapture() {
+    if (wifiAuthenticationPersistenceHilCapture == nullptr) {
+        wifiAuthenticationPersistenceHilCapture =
+            new (std::nothrow) WifiFrameCapture();
+    }
+    return wifiAuthenticationPersistenceHilCapture;
+}
+
+void releaseWifiAuthenticationPersistenceHilCapture() {
+    delete wifiAuthenticationPersistenceHilCapture;
+    wifiAuthenticationPersistenceHilCapture = nullptr;
+}
+
 const WifiFrameCapture& activeWifiAuthenticationFrameCapture() {
-    return wifiAuthenticationPersistenceHil
-        ? wifiAuthenticationPersistenceHilCapture
+    return wifiAuthenticationPersistenceHil &&
+            wifiAuthenticationPersistenceHilCapture != nullptr
+        ? *wifiAuthenticationPersistenceHilCapture
         : wifiFrameCapture.capture();
 }
 
@@ -1352,7 +1369,10 @@ activeWifiAuthenticationIngressStats() {
     }
     leshy1::platform::arduino::BoardWifiPassiveCapture::
         AuthenticationCaptureStats stats{};
-    const auto capture = wifiAuthenticationPersistenceHilCapture.stats();
+    if (wifiAuthenticationPersistenceHilCapture == nullptr) {
+        return stats;
+    }
+    const auto capture = wifiAuthenticationPersistenceHilCapture->stats();
     stats.framesObserved = capture.framesReported;
     stats.candidates = capture.framesReported;
     stats.candidatesAccepted = capture.framesAccepted;
@@ -1366,8 +1386,9 @@ activeWifiAuthenticationIngressStats() {
 
 bool activeWifiAuthenticationCaptureCleanupComplete() {
     if (wifiAuthenticationPersistenceHil) {
-        return wifiAuthenticationPersistenceHilCapture.stats().state ==
-            WifiFrameCaptureState::Complete;
+        return wifiAuthenticationPersistenceHilCapture != nullptr &&
+            wifiAuthenticationPersistenceHilCapture->stats().state ==
+                WifiFrameCaptureState::Complete;
     }
     const auto ingress = activeWifiAuthenticationIngressStats();
     return wifiFrameCapture.cleanupComplete() && ingress.cleanupComplete &&
@@ -1377,9 +1398,9 @@ bool activeWifiAuthenticationCaptureCleanupComplete() {
 void clearWifiAuthenticationSyntheticHilState() {
     wifiAuthenticationSyntheticHilController.reset();
     wifiAuthenticationSyntheticHilReport = {};
-    wifiAuthenticationPersistenceHilCapture.reset();
     wifiAuthenticationSynthetic = false;
     wifiAuthenticationPersistenceHil = false;
+    releaseWifiAuthenticationPersistenceHilCapture();
     wifiAuthenticationRenderedModel = {};
     wifiAuthenticationRenderedModelValid = false;
 }
@@ -30216,6 +30237,23 @@ void emitWifiAuthenticationPersistenceHilFixture(Stream& reply) {
     if (nowUs == 0U) nowUs = 1U;
     const bool syntheticStateAdmissible = !wifiAuthenticationSynthetic ||
         wifiAuthenticationPersistenceHil;
+    const bool fixtureContextAdmissible =
+        hilSession.active() &&
+        wifiProductView == WifiProductView::AuthenticationCapture &&
+        wifiAuthenticationProductState ==
+            WifiAuthenticationProductState::Result &&
+        syntheticStateAdmissible && wifiFrameCapture.cleanupComplete() &&
+        ingress.cleanupComplete && !ingress.active &&
+        captureStoreTaskHandle == nullptr &&
+        resourceBroker.ownerOf(Resource::EspRf) ==
+            AppRuntime::kForegroundOwner &&
+        std::strcmp(appRuntime.activeApp(), "wifi") == 0;
+    WifiFrameCapture* persistenceCapture =
+        wifiAuthenticationPersistenceHilCapture;
+    if (persistenceCapture == nullptr && fixtureContextAdmissible) {
+        persistenceCapture =
+            ensureWifiAuthenticationPersistenceHilCapture();
+    }
     const WifiAuthenticationPersistenceHilContext context{
         hilSession.active(),
         wifiProductView == WifiProductView::AuthenticationCapture,
@@ -30224,8 +30262,8 @@ void emitWifiAuthenticationPersistenceHilFixture(Stream& reply) {
             syntheticStateAdmissible,
         wifiFrameCapture.cleanupComplete() && ingress.cleanupComplete &&
             !ingress.active && captureStoreTaskHandle == nullptr,
-        !ingress.active &&
-            wifiAuthenticationPersistenceHilCapture.stats().state ==
+        !ingress.active && persistenceCapture != nullptr &&
+            persistenceCapture->stats().state ==
                 WifiFrameCaptureState::Idle,
         resourceBroker.ownerOf(Resource::EspRf) ==
                 AppRuntime::kForegroundOwner &&
@@ -30235,7 +30273,7 @@ void emitWifiAuthenticationPersistenceHilFixture(Stream& reply) {
     };
     const WifiAuthenticationPersistenceHilStatus status =
         wifiAuthenticationPersistenceHilFixture.loadOnce(
-            context, &wifiAuthenticationPersistenceHilCapture,
+            context, persistenceCapture,
             &wifiAuthenticationSyntheticHilReport,
             &wifiAuthenticationSyntheticHilController);
     const bool loaded =
@@ -30272,6 +30310,10 @@ void emitWifiAuthenticationPersistenceHilFixture(Stream& reply) {
         display.endWrite();
         lastRuntimeEvent =
             "authentication_persistence_hil_fixture_loaded";
+    } else if (!wifiAuthenticationPersistenceHil) {
+        // A rejected first load must restore the product heap immediately.
+        releaseWifiAuthenticationPersistenceHilCapture();
+        persistenceCapture = nullptr;
     }
     const bool replayed = status ==
         WifiAuthenticationPersistenceHilStatus::ReplayRejected;
@@ -30300,8 +30342,8 @@ void emitWifiAuthenticationPersistenceHilFixture(Stream& reply) {
         WifiAuthenticationPersistenceHilFixture::kReportIdentity,
         replayed ? "true" : "false",
         hilSession.active() ? "true" : "false",
-        static_cast<unsigned>(loaded
-            ? wifiAuthenticationPersistenceHilCapture.size() : 0U),
+        static_cast<unsigned>(loaded && persistenceCapture != nullptr
+            ? persistenceCapture->size() : 0U),
         loaded ? "true" : "false",
         loaded ? "true" : "false",
         loaded ? "true" : "false",

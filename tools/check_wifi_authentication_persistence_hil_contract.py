@@ -56,6 +56,10 @@ def contract_failures(entry: str, fixture_h: str,
     ui_action = require_function(entry, "applyUiAction", failures)
     clear = require_function(
         entry, "clearWifiAuthenticationSyntheticHilState", failures)
+    ensure_capture = require_function(
+        entry, "ensureWifiAuthenticationPersistenceHilCapture", failures)
+    release_capture = require_function(
+        entry, "releaseWifiAuthenticationPersistenceHilCapture", failures)
     load = require_function(fixture_cpp, "loadOnce", failures)
 
     audit_forbidden_apis("fixture", fixture_cpp, failures)
@@ -91,7 +95,8 @@ def contract_failures(entry: str, fixture_h: str,
             "wifiFrameCapture.cleanupComplete() && ingress.cleanupComplete",
         "idle store worker": "captureStoreTaskHandle == nullptr",
         "idle fixture capture":
-            "wifiAuthenticationPersistenceHilCapture.stats().state == "
+            "persistenceCapture != nullptr && "
+            "persistenceCapture->stats().state == "
             "WifiFrameCaptureState::Idle",
         "foreground RF owner":
             "resourceBroker.ownerOf(Resource::EspRf) == "
@@ -99,9 +104,18 @@ def contract_failures(entry: str, fixture_h: str,
         "Wi-Fi foreground app":
             'std::strcmp(appRuntime.activeApp(), "wifi") == 0',
         "dedicated synthetic state":
-            "&wifiAuthenticationPersistenceHilCapture, "
+            "context, persistenceCapture, "
             "&wifiAuthenticationSyntheticHilReport, "
             "&wifiAuthenticationSyntheticHilController",
+        "admissible on-demand allocation":
+            "if (persistenceCapture == nullptr && "
+            "fixtureContextAdmissible)",
+        "on-demand fixture construction":
+            "ensureWifiAuthenticationPersistenceHilCapture()",
+        "failed-load heap restoration":
+            "else if (!wifiAuthenticationPersistenceHil)",
+        "failed-load fixture release":
+            "releaseWifiAuthenticationPersistenceHilCapture()",
         "synthetic persistence origin":
             r'\"report_origin\":\"synthetic_hil_persistence\"',
         "no RF touch acknowledgement":
@@ -158,8 +172,19 @@ def contract_failures(entry: str, fixture_h: str,
             "wifiAuthenticationPersistenceHilFixture.resetForSession()",
     }, failures)
     require_all("fixture clear", clear, {
-        "raw capture reset": "wifiAuthenticationPersistenceHilCapture.reset()",
+        "raw capture release":
+            "releaseWifiAuthenticationPersistenceHilCapture()",
         "authorization clear": "wifiAuthenticationPersistenceHil = false",
+    }, failures)
+    require_all("fixture allocation", ensure_capture, {
+        "non-throwing dynamic allocation":
+            "new (std::nothrow) WifiFrameCapture()",
+    }, failures)
+    require_all("fixture release", release_capture, {
+        "dynamic capture deletion":
+            "delete wifiAuthenticationPersistenceHilCapture",
+        "pointer clear":
+            "wifiAuthenticationPersistenceHilCapture = nullptr",
     }, failures)
 
     entry_c = compact(entry)
@@ -174,6 +199,16 @@ def contract_failures(entry: str, fixture_h: str,
     for meaning, marker in required_entry.items():
         if compact(marker) not in entry_c:
             failures.append(f"entry missing {meaning}")
+    if compact(
+            "WifiFrameCapture* wifiAuthenticationPersistenceHilCapture = "
+            "nullptr") not in entry_c:
+        failures.append("entry missing non-resident HIL capture pointer")
+    entry_code = mask_cpp_non_code(entry)
+    if re.search(
+            r"\bWifiFrameCapture\s+"
+            r"wifiAuthenticationPersistenceHilCapture\s*[\{=]",
+            entry_code):
+        failures.append("entry permanently allocates HIL-only frame capture")
 
     # The public fixture must remain a two-frame, strict M1/M2 path.  This is
     # deliberately structural: changing the bytes is allowed only together

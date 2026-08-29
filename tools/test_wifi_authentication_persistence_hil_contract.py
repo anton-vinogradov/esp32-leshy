@@ -38,6 +38,28 @@ class WifiAuthenticationPersistenceHilContractTests(unittest.TestCase):
     def test_current_contract_passes(self) -> None:
         self.assertEqual(self.failures(), [])
 
+    def test_hil_capture_cannot_return_to_resident_storage(self) -> None:
+        mutated = self.mutate_once(
+            self.entry,
+            "WifiFrameCapture* wifiAuthenticationPersistenceHilCapture = "
+            "nullptr;",
+            "WifiFrameCapture wifiAuthenticationPersistenceHilCapture{};",
+        )
+        self.assertTrue(self.failures(entry=mutated))
+
+    def test_hil_capture_allocation_must_be_nothrow_and_admissible(self) -> None:
+        for old, new in (
+            ("new (std::nothrow) WifiFrameCapture()",
+             "new WifiFrameCapture()"),
+            ("persistenceCapture == nullptr && fixtureContextAdmissible",
+             "persistenceCapture == nullptr"),
+            ("releaseWifiAuthenticationPersistenceHilCapture();",
+             "wifiAuthenticationPersistenceHilCapture = nullptr;"),
+        ):
+            with self.subTest(marker=old):
+                mutated = self.mutate_once(self.entry, old, new)
+                self.assertTrue(self.failures(entry=mutated))
+
     def test_each_fixture_safety_gate_is_required(self) -> None:
         for marker in (
             "if (!context.hilActive)",
