@@ -847,6 +847,10 @@ TFT_eSPI display;
 // replacing an erase-then-draw pair with one opaque TFT transfer. This keeps
 // the proven 0.x sprite strategy without reserving a full RGB565 framebuffer.
 TFT_eSprite liveTextRowSprite(&display);
+// Dense metadata rows are 19 px apart. A second 216x19 1-bpp compositor costs
+// 513 bytes and lets a later BLE advertisement replace one complete field
+// without clearing either the whole card or the neighbouring row first.
+TFT_eSprite liveMetaTextRowSprite(&display);
 BoardTouchInput boardTouchInput;
 bool touchCalibrationRequiredAtBoot = false;
 bool touchCalibrationSucceededAtBoot = false;
@@ -1473,11 +1477,16 @@ std::array<bool, kVisibleBleDeviceRows> bleDeviceRenderedRowValid{};
 BleDeviceListRenderState bleDeviceListRenderState =
     BleDeviceListRenderState::Unknown;
 BleDeviceRadarVisual bleDeviceRenderedRadar{};
+constexpr std::uint64_t kBleDeviceUiRefreshPeriodUs = 250000ULL;
+std::uint64_t nextBleDeviceUiRefreshUs = 0U;
+bool bleDeviceUiRefreshPending = false;
 std::uint32_t bleDeviceListRowRepaints = 0U;
 std::uint32_t bleDeviceListContentClears = 0U;
 std::uint32_t bleDeviceDetailContentClears = 0U;
 std::uint32_t bleDeviceRadarFullRepaints = 0U;
 std::uint32_t bleDeviceRadarDeltaRepaints = 0U;
+std::uint32_t bleDeviceDetailRefreshes = 0U;
+std::uint32_t bleDeviceDetailRefreshesDeferred = 0U;
 std::uint32_t bleDeviceAtomicTextRowPushes = 0U;
 std::uint32_t bleDeviceAtomicTextRowAllocationFailures = 0U;
 std::uint32_t bleDeviceDirectTextRowFallbacks = 0U;
@@ -10811,6 +10820,7 @@ void setUiCursor(UiTextRole role, std::int16_t x, std::int16_t top) {
 
 constexpr std::int16_t kLiveTextRowWidth = Layout::ContentWidth;
 constexpr std::int16_t kLiveTextRowHeight = 24;
+constexpr std::int16_t kLiveMetaTextRowHeight = 19;
 
 bool beginLiveTextRow(UiTextRole role, std::uint16_t foreground,
                       std::uint16_t background) {
@@ -10845,6 +10855,46 @@ void setLiveTextRowCursor(UiTextRole role, std::int16_t x,
 void pushLiveTextRow(std::int16_t x, std::int16_t y) {
     liveTextRowSprite.pushSprite(x, y);
     ++bleDeviceAtomicTextRowPushes;
+}
+
+bool beginLiveMetaTextRow(std::uint16_t foreground,
+                          std::uint16_t background) {
+    if (!liveMetaTextRowSprite.created()) {
+        liveMetaTextRowSprite.setColorDepth(1);
+        if (liveMetaTextRowSprite.createSprite(
+                kLiveTextRowWidth, kLiveMetaTextRowHeight) == nullptr) {
+            ++bleDeviceAtomicTextRowAllocationFailures;
+            return false;
+        }
+        liveMetaTextRowSprite.setTextWrap(false, false);
+    }
+    liveMetaTextRowSprite.fillSprite(0U);
+    liveMetaTextRowSprite.setBitmapColor(foreground, background);
+    liveMetaTextRowSprite.setTextColor(1U, 0U);
+    liveMetaTextRowSprite.setFreeFont(&RobotoCondensedMeta);
+    return true;
+}
+
+void pushLiveMetaTextRow(const char* text, std::uint16_t foreground,
+                         std::int16_t top) {
+    constexpr std::int16_t kLocalTextTop = 2;
+    if (beginLiveMetaTextRow(foreground, Palette::Canvas)) {
+        liveMetaTextRowSprite.setCursor(
+            2, kLocalTextTop + kRobotoCondensedMetaAscent);
+        liveMetaTextRowSprite.print(text);
+        liveMetaTextRowSprite.pushSprite(
+            Layout::Edge, top - kLocalTextTop);
+        ++bleDeviceAtomicTextRowPushes;
+        return;
+    }
+
+    ++bleDeviceDirectTextRowFallbacks;
+    display.fillRect(Layout::Edge, top - kLocalTextTop,
+                     Layout::ContentWidth, kLiveMetaTextRowHeight,
+                     Palette::Canvas);
+    display.setTextColor(foreground, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, top);
+    display.print(text);
 }
 
 enum class NavigationKey : std::uint8_t {
@@ -13357,20 +13407,42 @@ void renderBleDeviceRadar(const Observation& device,
     bleDeviceRenderedRadar = next;
 }
 
-void renderBleDeviceDetailData() {
-    const Observation& device = *liveBleDeviceDetail();
-    const BleDeviceSignalStats& signal = *liveBleDeviceSignal();
-    bleDeviceDetail = device;
-    bleDeviceDetailSignal = signal;
-    display.fillRect(0, Layout::ContentTop, Layout::ScreenWidth,
-                     Layout::FooterDividerY - Layout::ContentTop,
-                     Palette::Canvas);
-    ++bleDeviceDetailContentClears;
+void renderBleDevicePrimaryTextRow(const char* text, bool atomic) {
+    constexpr std::int16_t kRowY = 30;
+    constexpr std::int16_t kTextTop = 34;
+    if (atomic && beginLiveTextRow(
+            UiTextRole::Body, Palette::Focus, Palette::Canvas)) {
+        setLiveTextRowCursor(UiTextRole::Body, 2, 4);
+        liveTextRowSprite.print(text);
+        pushLiveTextRow(Layout::Edge, kRowY);
+        return;
+    }
+    if (atomic) {
+        ++bleDeviceDirectTextRowFallbacks;
+        display.fillRect(Layout::Edge, kRowY, Layout::ContentWidth,
+                         kLiveTextRowHeight, Palette::Canvas);
+    }
+    display.setTextColor(Palette::Focus, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, 14, kTextTop);
+    display.print(text);
+}
+
+void renderBleDeviceMetaTextRow(const char* text, std::uint16_t tone,
+                                std::int16_t top, bool atomic) {
+    if (atomic) {
+        pushLiveMetaTextRow(text, tone, top);
+        return;
+    }
+    display.setTextColor(tone, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, top);
+    display.print(text);
+}
+
+void renderBleDeviceStaticFields(const Observation& device, bool atomic) {
     char primary[24] = {};
     compactBlePrimary(device, primary, sizeof(primary));
-    display.setTextColor(Palette::Focus, Palette::Canvas);
-    setUiCursor(UiTextRole::Body, 14, 34);
-    display.print(primary);
+    renderBleDevicePrimaryTextRow(primary, atomic);
+
     char line[96] = {};
     char vendor[BleCompanyDatabase::kNameSize + 1U] = {};
     const BleTrackerKind tracker =
@@ -13383,24 +13455,19 @@ void renderBleDeviceDetailData() {
     } else {
         std::snprintf(line, sizeof(line), "%s", descriptor);
     }
-    display.setTextColor(tracker != BleTrackerKind::None
-                             ? Palette::Warning : Palette::TextSecondary,
-                         Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 57);
-    display.print(line);
+    renderBleDeviceMetaTextRow(
+        line, tracker != BleTrackerKind::None
+            ? Palette::Warning : Palette::TextSecondary,
+        57, atomic);
 
     formatBleAddress(device, line, sizeof(line));
-    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 76);
-    display.print(line);
+    renderBleDeviceMetaTextRow(line, Palette::TextSecondary, 76, atomic);
 
     const auto& facts = device.bleAdvertisement;
     std::snprintf(line, sizeof(line), tr(UiTextId::BleAddressModeFormat),
                   tr(bleAddressTypeText(facts.addressType)),
                   tr(bleAdvertisementModeText(facts)));
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 95);
-    display.print(line);
+    renderBleDeviceMetaTextRow(line, Palette::TextMuted, 95, atomic);
 
     const bool vendorKnown = bleDeviceVendor(device, vendor, sizeof(vendor));
     if (vendorKnown) {
@@ -13412,11 +13479,9 @@ void renderBleDeviceDetailData() {
         std::snprintf(line, sizeof(line), "%s",
                       tr(UiTextId::BleVendorUnknown));
     }
-    display.setTextColor(vendorKnown ? Palette::TextSecondary
-                                     : Palette::TextMuted,
-                         Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 114);
-    display.print(line);
+    renderBleDeviceMetaTextRow(
+        line, vendorKnown ? Palette::TextSecondary : Palette::TextMuted,
+        114, atomic);
 
     char serviceText[24] = {};
     const char* service =
@@ -13428,13 +13493,10 @@ void renderBleDeviceDetailData() {
         std::snprintf(line, sizeof(line), "%s",
                       tr(UiTextId::BleServiceUnknown));
     }
-    display.setTextColor(service[0] == '\0' ? Palette::TextMuted
-                                             : Palette::Positive,
-                         Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 133);
-    display.print(line);
+    renderBleDeviceMetaTextRow(
+        line, service[0] == '\0' ? Palette::TextMuted : Palette::Positive,
+        133, atomic);
 
-    line[0] = '\0';
     if (facts.txPowerKnown && facts.appearanceKnown) {
         std::snprintf(line, sizeof(line),
                       tr(UiTextId::BleTxAppearanceFormat),
@@ -13449,9 +13511,19 @@ void renderBleDeviceDetailData() {
     } else {
         std::snprintf(line, sizeof(line), "%s", tr(UiTextId::BlePassiveOnly));
     }
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 152);
-    display.print(line);
+    renderBleDeviceMetaTextRow(line, Palette::TextMuted, 152, atomic);
+}
+
+void renderBleDeviceDetailData() {
+    const Observation& device = *liveBleDeviceDetail();
+    const BleDeviceSignalStats& signal = *liveBleDeviceSignal();
+    bleDeviceDetail = device;
+    bleDeviceDetailSignal = signal;
+    display.fillRect(0, Layout::ContentTop, Layout::ScreenWidth,
+                     Layout::FooterDividerY - Layout::ContentTop,
+                     Palette::Canvas);
+    ++bleDeviceDetailContentClears;
+    renderBleDeviceStaticFields(device, false);
     renderBleDeviceRadar(device, signal);
     bleDeviceRenderedDetail = device;
 }
@@ -17084,20 +17156,45 @@ bool renderSelectionDelta() {
         bleProductView == BleProductView::DeviceDetail &&
         renderedUi.bleProductView ==
             static_cast<std::uint8_t>(BleProductView::DeviceDetail)) {
-        if (renderedUi.bleDeviceRevision == bleDeviceCatalog.revision()) {
-            return false;
+        const bool catalogChanged =
+            renderedUi.bleDeviceRevision != bleDeviceCatalog.revision();
+        if (!catalogChanged && !bleDeviceUiRefreshPending) {
+            // A scan-window event can request a render even when it produced
+            // no new fact for the selected device. Returning false here would
+            // invoke the generic full-screen fallback and visibly blink the
+            // otherwise unchanged card.
+            ++bleDeviceDetailRefreshesDeferred;
+            return true;
         }
+        std::uint64_t nowUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (nowUs == 0U) nowUs = 1U;
+        if (nextBleDeviceUiRefreshUs != 0U &&
+            nowUs < nextBleDeviceUiRefreshUs) {
+            bleDeviceUiRefreshPending = true;
+            ++bleDeviceDetailRefreshesDeferred;
+            // Acknowledge the catalog revision without falling through to a
+            // full screen repaint. A later passive sample will publish the
+            // most recent aggregate at the bounded four-Hz visual cadence.
+            return true;
+        }
+        nextBleDeviceUiRefreshUs =
+            nowUs + kBleDeviceUiRefreshPeriodUs;
+        bleDeviceUiRefreshPending = false;
+        ++bleDeviceDetailRefreshes;
         const Observation& live = *liveBleDeviceDetail();
         const BleDeviceSignalStats& signal = *liveBleDeviceSignal();
         if (bleDeviceDetailStaticFieldsDiffer(
                 bleDeviceRenderedDetail, live)) {
-            renderBleDeviceDetailData();
-        } else {
-            renderBleDeviceRadar(live, signal, false);
-            bleDeviceDetail = live;
-            bleDeviceDetailSignal = signal;
-            bleDeviceRenderedDetail = live;
+            // Advertising devices may alternate packet shapes under one
+            // address. Replace complete user-visible rows atomically instead
+            // of clearing and redrawing the complete card.
+            renderBleDeviceStaticFields(live, true);
         }
+        renderBleDeviceRadar(live, signal, false);
+        bleDeviceDetail = live;
+        bleDeviceDetailSignal = signal;
+        bleDeviceRenderedDetail = live;
         return true;
     }
 
@@ -22112,12 +22209,16 @@ bool startBleDevicesProduct() {
     bleDeviceRenderedDetail = {};
     bleDeviceDetailSignal = {};
     bleDeviceRenderedRadar = {};
+    nextBleDeviceUiRefreshUs = 0U;
+    bleDeviceUiRefreshPending = false;
     resetBleDeviceListRenderCache();
     bleDeviceListRowRepaints = 0U;
     bleDeviceListContentClears = 0U;
     bleDeviceDetailContentClears = 0U;
     bleDeviceRadarFullRepaints = 0U;
     bleDeviceRadarDeltaRepaints = 0U;
+    bleDeviceDetailRefreshes = 0U;
+    bleDeviceDetailRefreshesDeferred = 0U;
     bleDeviceAtomicTextRowPushes = 0U;
     bleDeviceAtomicTextRowAllocationFailures = 0U;
     bleDeviceDirectTextRowFallbacks = 0U;
@@ -22798,6 +22899,12 @@ bool applyUiAction(UiAction action, bool render = true) {
                         ? BleDeviceSignalStats{} : *signal;
                     bleDeviceRenderedDetail = {};
                     bleDeviceRenderedRadar = {};
+                    std::uint64_t nowUs = static_cast<std::uint64_t>(
+                        esp_timer_get_time());
+                    if (nowUs == 0U) nowUs = 1U;
+                    nextBleDeviceUiRefreshUs =
+                        nowUs + kBleDeviceUiRefreshPeriodUs;
+                    bleDeviceUiRefreshPending = false;
                     bleProductView = BleProductView::DeviceDetail;
                     lastRuntimeEvent = "ble_device_detail";
                     changed = true;
@@ -30088,6 +30195,9 @@ void emitBleDeviceDetailState(Stream& reply) {
         "\"list_row_repaints\":%lu,\"list_content_clears\":%lu,"
         "\"detail_content_clears\":%lu,"
         "\"radar_full_repaints\":%lu,\"radar_delta_repaints\":%lu,"
+        "\"detail_refreshes\":%lu,\"detail_refreshes_deferred\":%lu,"
+        "\"detail_refresh_period_us\":%llu,"
+        "\"detail_refresh_pending\":%s,"
         "\"atomic_text_row_pushes\":%lu,"
         "\"atomic_text_row_allocation_failures\":%lu,"
         "\"direct_text_row_fallbacks\":%lu}",
@@ -30128,6 +30238,10 @@ void emitBleDeviceDetailState(Stream& reply) {
         static_cast<unsigned long>(bleDeviceDetailContentClears),
         static_cast<unsigned long>(bleDeviceRadarFullRepaints),
         static_cast<unsigned long>(bleDeviceRadarDeltaRepaints),
+        static_cast<unsigned long>(bleDeviceDetailRefreshes),
+        static_cast<unsigned long>(bleDeviceDetailRefreshesDeferred),
+        static_cast<unsigned long long>(kBleDeviceUiRefreshPeriodUs),
+        bleDeviceUiRefreshPending ? "true" : "false",
         static_cast<unsigned long>(bleDeviceAtomicTextRowPushes),
         static_cast<unsigned long>(
             bleDeviceAtomicTextRowAllocationFailures),

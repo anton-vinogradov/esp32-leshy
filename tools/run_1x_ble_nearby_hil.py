@@ -222,6 +222,8 @@ def main() -> int:
     detail_second: dict[str, Any] = {}
     detail_oracle_first: dict[str, Any] = {}
     detail_oracle_second: dict[str, Any] = {}
+    detail_stability_oracle: dict[str, Any] = {}
+    detail_stability_window: dict[str, Any] = {}
     entry_stability: dict[str, Any] = {}
 
     try:
@@ -349,9 +351,17 @@ def main() -> int:
                     raise RuntimeError(
                         f"BLE advertisement facts/signal missing: "
                         f"{detail_oracle_first!r}")
+                if detail_oracle_first.get("detail_refresh_period_us") != \
+                        250000:
+                    raise RuntimeError(
+                        "BLE detail refresh cadence is not bounded to four Hz")
                 deadline = time.monotonic() + 90.0
                 baseline_facts = fact_signature(detail_oracle_first)
                 baseline_signal = display_signal_signature(detail_oracle_first)
+                entry_content_clears = int(detail_oracle_first.get(
+                    "detail_content_clears", -1))
+                entry_full_repaints = int(detail_oracle_first.get(
+                    "radar_full_repaints", -1))
                 while time.monotonic() < deadline:
                     current = ble_detail(device)
                     if current.get("identity_hash") != \
@@ -361,13 +371,23 @@ def main() -> int:
                     if current_facts != baseline_facts:
                         # Enrichment is useful static data, not flicker. Make it
                         # the new baseline and prove the next update is radar-only.
+                        if int(current.get("detail_content_clears", -2)) != \
+                                entry_content_clears or int(current.get(
+                                    "radar_full_repaints", -2)) != \
+                                entry_full_repaints:
+                            raise RuntimeError(
+                                "BLE fact enrichment cleared the device card")
                         baseline_facts = current_facts
                         detail_oracle_first = current
                         time.sleep(0.2)
                         screens["ble_detail_first"] = capture(
                             device, frames, "ble-detail-first")
                         baseline_signal = display_signal_signature(current)
-                    elif display_signal_signature(current) != baseline_signal:
+                    elif display_signal_signature(current) != baseline_signal \
+                            and int(current.get(
+                                "radar_delta_repaints", -1)) > int(
+                                    detail_oracle_first.get(
+                                        "radar_delta_repaints", -1)):
                         detail_oracle_second = current
                         break
                     time.sleep(0.25)
@@ -410,6 +430,81 @@ def main() -> int:
                         "BLE detail live text was not atomically composited: "
                         f"first={detail_oracle_first!r}, "
                         f"second={detail_oracle_second!r}")
+
+                # Keep the live card open across two complete scan windows.
+                # Empty windows and cadence-coalesced samples must remain
+                # incremental no-ops; neither may fall back to a full card
+                # redraw just because the selected catalog revision is equal.
+                stability_started = time.monotonic()
+                stability_first_ui = detail_second
+                first_stability_cycle = int(stability_first_ui.get(
+                    "survey_product_ble_scan_cycles", 0))
+                target_stability_cycle = first_stability_cycle + 2
+                stability_final_ui = stability_first_ui
+                stability_deadline = time.monotonic() + 45.0
+                while time.monotonic() < stability_deadline:
+                    stability_final_ui = query(
+                        device, b"ui.state", "leshy.ui.v1", "state")
+                    if stability_final_ui.get("ble_product_view") != \
+                            "device_detail":
+                        raise RuntimeError(
+                            "BLE detail left the card during stability window")
+                    if int(stability_final_ui.get(
+                            "survey_product_ble_scan_cycles", 0)) >= \
+                            target_stability_cycle:
+                        break
+                    time.sleep(0.1)
+                else:
+                    raise RuntimeError(
+                        "BLE detail did not span two scan windows")
+                pending_deadline = time.monotonic() + 2.0
+                while True:
+                    detail_stability_oracle = ble_detail(device)
+                    if detail_stability_oracle.get(
+                            "detail_refresh_pending") is False:
+                        break
+                    if time.monotonic() >= pending_deadline:
+                        raise RuntimeError(
+                            "BLE deferred card update did not flush")
+                    time.sleep(0.05)
+                stability_elapsed_ms = int(
+                    (time.monotonic() - stability_started) * 1000.0)
+                refresh_delta = int(detail_stability_oracle.get(
+                    "detail_refreshes", -1)) - int(detail_oracle_second.get(
+                        "detail_refreshes", -1))
+                deferred_delta = int(detail_stability_oracle.get(
+                    "detail_refreshes_deferred", -1)) - int(
+                        detail_oracle_second.get(
+                            "detail_refreshes_deferred", -1))
+                maximum_refreshes = stability_elapsed_ms // 250 + 2
+                if detail_stability_oracle.get("identity_hash") != \
+                        detail_oracle_second.get("identity_hash") or \
+                        detail_stability_oracle.get(
+                            "detail_content_clears") != \
+                        detail_oracle_second.get("detail_content_clears") or \
+                        detail_stability_oracle.get(
+                            "radar_full_repaints") != \
+                        detail_oracle_second.get("radar_full_repaints") or \
+                        detail_stability_oracle.get(
+                            "detail_refresh_pending") is not False or \
+                        not 0 <= refresh_delta <= maximum_refreshes or \
+                        deferred_delta <= 0:
+                    raise RuntimeError(
+                        "BLE card stability/no-op cadence failed: "
+                        f"second={detail_oracle_second!r}, "
+                        f"stable={detail_stability_oracle!r}")
+                detail_stability_window = {
+                    "elapsed_ms": stability_elapsed_ms,
+                    "scan_cycles": int(stability_final_ui.get(
+                        "survey_product_ble_scan_cycles", 0)) -
+                        first_stability_cycle,
+                    "refreshes": refresh_delta,
+                    "refreshes_deferred": deferred_delta,
+                    "maximum_refreshes": maximum_refreshes,
+                    "content_clears": 0,
+                    "radar_full_repaints": 0,
+                }
+                trace.extend((stability_first_ui, stability_final_ui))
 
                 back_to_list = action(device, "left")
                 trace.append(back_to_list)
@@ -513,6 +608,8 @@ def main() -> int:
         "detail_second": detail_second,
         "detail_oracle_first": detail_oracle_first,
         "detail_oracle_second": detail_oracle_second,
+        "detail_stability_oracle": detail_stability_oracle,
+        "detail_stability_window": detail_stability_window,
         "entry_stability": entry_stability,
         "list_pixel_changes": list_pixel_changes,
         "detail_pixel_changes": detail_pixel_changes,
@@ -531,6 +628,8 @@ def main() -> int:
             "live_redraw_data_rows_only": True,
             "list_repaint_observation_windows": 2,
             "detail_live_radar_only": True,
+            "detail_noop_scan_windows_checked": 2,
+            "detail_refresh_cadence_hz_max": 4,
             "intermediate_clear_counters_checked": True,
             "atomic_text_rows_checked": True,
             "advertisement_facts_visible": True,

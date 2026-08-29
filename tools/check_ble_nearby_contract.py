@@ -63,7 +63,9 @@ def main() -> int:
         "renderBleDeviceRadar(live, signal, false)",
         "renderRadioSignalCardDelta(",
         "TFT_eSprite liveTextRowSprite(&display);",
+        "TFT_eSprite liveMetaTextRowSprite(&display);",
         "liveTextRowSprite.setColorDepth(1);",
+        "liveMetaTextRowSprite.setColorDepth(1);",
         "liveTextRowSprite.pushSprite(x, y);",
         "bleDeviceAtomicTextRowPushes",
         "bleDeviceAtomicTextRowAllocationFailures",
@@ -74,6 +76,12 @@ def main() -> int:
         "bleDeviceListContentClears",
         "bleDeviceDetailContentClears",
         "bleDeviceRadarDeltaRepaints",
+        "kBleDeviceUiRefreshPeriodUs = 250000ULL",
+        "bleDeviceUiRefreshPending",
+        "bleDeviceDetailRefreshesDeferred",
+        "invoke the generic full-screen fallback",
+        "renderBleDeviceStaticFields(live, true);",
+        "Replace complete user-visible rows atomically",
         "liveBleDeviceSignal()",
         "bleDeviceDetailStaticFieldsDiffer(",
         "bleCompanyDatabase.lookup(",
@@ -192,6 +200,9 @@ def main() -> int:
         '"list_repaint_observation_windows": 2',
         '"BLE detail signal update used a full repaint',
         '"BLE detail live text was not atomically composited',
+        '"detail_noop_scan_windows_checked": 2',
+        '"detail_refresh_cadence_hz_max": 4',
+        '"BLE card stability/no-op cadence failed',
     )
     forbidden_runner = (
         '"survey_product_store_bytes_written": 0',
@@ -211,6 +222,9 @@ def main() -> int:
         'scope.get("atomic_text_rows_checked") is True',
         'detail_second.get("atomic_text_row_pushes", -1) >',
         'detail_second.get("direct_text_row_fallbacks") == 0',
+        'scope.get("detail_noop_scan_windows_checked") == 2',
+        'scope.get("detail_refresh_cadence_hz_max") == 4',
+        '"BLE detail scan-window no-op/cadence stability failed"',
     )
     required_entry_gate = (
         "NIMBLE_SYNC_TIMEOUT_MS = 5000",

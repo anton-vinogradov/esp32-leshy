@@ -218,6 +218,30 @@ def main() -> int:
             detail_second.get("atomic_text_row_allocation_failures") == 0 and
             detail_second.get("direct_text_row_fallbacks") == 0,
             "BLE detail live text was not atomically composited")
+    stable = run.get("detail_stability_oracle", {})
+    window = run.get("detail_stability_window", {})
+    require(failures,
+            detail_first.get("detail_refresh_period_us") == 250000 and
+            detail_second.get("detail_refresh_period_us") == 250000 and
+            stable.get("detail_refresh_period_us") == 250000,
+            "BLE detail four-Hz refresh contract missing")
+    require(failures,
+            stable.get("identity_hash") == detail_second.get("identity_hash") and
+            stable.get("detail_content_clears") ==
+                detail_second.get("detail_content_clears") and
+            stable.get("radar_full_repaints") ==
+                detail_second.get("radar_full_repaints") and
+            stable.get("detail_refresh_pending") is False and
+            stable.get("atomic_text_row_allocation_failures") == 0 and
+            stable.get("direct_text_row_fallbacks") == 0 and
+            window.get("scan_cycles", 0) >= 2 and
+            window.get("content_clears") == 0 and
+            window.get("radar_full_repaints") == 0 and
+            window.get("refreshes_deferred", 0) > 0 and
+            isinstance(window.get("refreshes"), int) and
+            0 <= window.get("refreshes", -1) <=
+                window.get("maximum_refreshes", -2),
+            "BLE detail scan-window no-op/cadence stability failed")
 
     first_heap = run.get("metrics_after_first", {})
     final_heap = run.get("metrics_after", {})
@@ -235,6 +259,8 @@ def main() -> int:
             scope.get("passive_ble_only") is True and
             scope.get("active_scan") is False and
             scope.get("detail_live_radar_only") is True and
+            scope.get("detail_noop_scan_windows_checked") == 2 and
+            scope.get("detail_refresh_cadence_hz_max") == 4 and
             scope.get("intermediate_clear_counters_checked") is True and
             scope.get("list_repaint_observation_windows") == 2 and
             scope.get("atomic_text_rows_checked") is True and
