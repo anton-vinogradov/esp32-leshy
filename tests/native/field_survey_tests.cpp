@@ -174,7 +174,11 @@ void testLiveStationNormalizationAndAutomaticCatalogKind() {
     CHECK(!fieldSurveyStationSweepCovered(11U, 13U));
     CHECK(fieldSurveyStationSweepCovered(12U, 13U));
     CHECK(fieldSurveyStationSweepCovered(14U, 13U));
+    CHECK(!fieldSurveyStationSweepCovered(37U, 13U, 3U));
+    CHECK(fieldSurveyStationSweepCovered(38U, 13U, 3U));
+    CHECK(fieldSurveyStationSweepCovered(40U, 13U, 3U));
     CHECK(!fieldSurveyStationSweepCovered(0U, 0U));
+    CHECK(!fieldSurveyStationSweepCovered(0U, 13U, 0U));
 }
 
 void testCatalogBuildFailsClosedOnDropsAndInvalidInput() {

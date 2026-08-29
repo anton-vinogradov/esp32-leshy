@@ -2232,6 +2232,7 @@ constexpr UBaseType_t kProductSurveyObservationCapacity =
 constexpr std::uint32_t kProductSurveyScanIntervalMs = 1000;
 constexpr std::uint16_t kFieldSurveyStationChannelDwellMs = 120U;
 constexpr std::uint8_t kFieldSurveyStationChannelCount = 13U;
+constexpr std::uint8_t kFieldSurveyStationSweepCount = 3U;
 constexpr std::uint64_t kProductSurveyPreparationDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kProductSurveyWorkerDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kAirspaceGuardBleWorkerDeadlineUs = 25000000ULL;
@@ -3458,6 +3459,7 @@ FieldSurveyStationCaptureResult captureFieldSurveyStations() {
     const std::uint64_t durationUs =
         static_cast<std::uint64_t>(kFieldSurveyStationChannelDwellMs) *
         static_cast<std::uint64_t>(kFieldSurveyStationChannelCount) *
+        static_cast<std::uint64_t>(kFieldSurveyStationSweepCount) *
         1000ULL;
     const std::uint64_t deadlineUs = startedUs + durationUs;
     std::uint64_t nowUs = startedUs;
@@ -3526,7 +3528,8 @@ FieldSurveyStationCaptureResult captureFieldSurveyStations() {
     }
     result.complete = result.cleanupComplete &&
         leshy1::apps::survey::fieldSurveyStationSweepCovered(
-            result.channelHops, kFieldSurveyStationChannelCount) &&
+            result.channelHops, kFieldSurveyStationChannelCount,
+            kFieldSurveyStationSweepCount) &&
         result.rejected == 0U && result.dropped == 0U &&
         !productSurveyStopRequested();
     return result;

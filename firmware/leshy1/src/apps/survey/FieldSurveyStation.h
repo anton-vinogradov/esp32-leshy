@@ -16,6 +16,7 @@ bool normalizeFieldSurveyStation(
 // scheduling can keep the bounded monitor alive long enough to start another
 // sweep, and exact equality would falsely reject that valid coverage.
 bool fieldSurveyStationSweepCovered(std::uint32_t channelHops,
-                                    std::uint8_t channelCount);
+                                    std::uint8_t channelCount,
+                                    std::uint8_t sweepCount = 1U);
 
 }  // namespace leshy1::apps::survey

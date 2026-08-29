@@ -65,9 +65,12 @@ bool normalizeFieldSurveyStation(
 }
 
 bool fieldSurveyStationSweepCovered(std::uint32_t channelHops,
-                                    std::uint8_t channelCount) {
-    return channelCount > 0U &&
-        channelHops >= static_cast<std::uint32_t>(channelCount - 1U);
+                                    std::uint8_t channelCount,
+                                    std::uint8_t sweepCount) {
+    if (channelCount == 0U || sweepCount == 0U) return false;
+    const std::uint32_t requiredDwells =
+        static_cast<std::uint32_t>(channelCount) * sweepCount;
+    return channelHops >= requiredDwells - 1U;
 }
 
 }  // namespace leshy1::apps::survey
