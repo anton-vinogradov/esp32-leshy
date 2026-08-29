@@ -128,12 +128,14 @@ run_opaque_evidence_check() {
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/field_survey_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/FieldSurveyCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/survey/FieldSurveyTracker.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/FieldSurveyWigleCsv.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SurveySession.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SourceTimeline.cpp" \
     -o "$test_tmp/field_survey_tests"
 
 "$test_tmp/field_survey_tests"
+python3 "$repo_dir/tools/check_field_survey_product_contract.py"
 
 "${CXX:-c++}" \
     -std=c++17 \

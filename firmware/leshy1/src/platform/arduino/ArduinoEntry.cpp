@@ -52,6 +52,7 @@
 #include "apps/spectrum/Nrf24SignalFinder.h"
 #include "apps/spectrum/Nrf24SpectrumController.h"
 #include "apps/spectrum/SpectrumViewport.h"
+#include "apps/survey/FieldSurveyTracker.h"
 #include "apps/survey/ProductSurveyAdmission.h"
 #include "apps/survey/SurveyController.h"
 #include "apps/survey/SurveyPipeline.h"
@@ -206,6 +207,8 @@ using leshy1::apps::spectrum::Nrf24SpectrumMetric;
 using leshy1::apps::spectrum::Nrf24SpectrumViewState;
 using leshy1::apps::spectrum::SpectrumDisplayMode;
 using leshy1::apps::spectrum::SpectrumViewport;
+using leshy1::apps::survey::FieldSurveyTracker;
+using leshy1::apps::survey::FieldSurveyVisitStatus;
 using leshy1::apps::survey::SurveyController;
 using leshy1::apps::survey::ObservationHistory;
 using leshy1::apps::survey::SurveyFilter;
@@ -463,6 +466,7 @@ AppRuntime appRuntime(resourceBroker);
 SurveySession surveySession;
 SurveyController surveyController(surveySession);
 SurveySourceController surveySourceController;
+FieldSurveyTracker fieldSurveyTracker;
 SurveySession librarySession;
 // Destructive storage fixtures and Self-Test are admitted only while the
 // foreground Survey workflow is stopped. Reuse its bounded session instead of
@@ -4644,6 +4648,9 @@ bool commitPausedProductSurvey() {
     }
     const SurveyPipelineStatus committed = stopProductSurvey();
     if (committed == SurveyPipelineStatus::Committed) {
+        if (wifiProductView == WifiProductView::Visit) {
+            fieldSurveyTracker.completeVisit(surveySession);
+        }
         constexpr ProductSurveyWorkerControl terminalControl =
             ProductSurveyWorkerControl::Idle;
         setProductSurveyControl(terminalControl);
@@ -5868,8 +5875,11 @@ void serviceProductSurveyWorker() {
         if (event.kind == ProductSurveyWorkerEventKind::Prepared) {
             std::uint64_t startedUs = event.eventUs;
             if (startedUs == 0) startedUs = 1;
+            const char* sessionId = wifiProductView == WifiProductView::Visit
+                ? FieldSurveyTracker::kSessionId
+                : "product-passive-live";
             const SurveyPipelineStatus pipelineStarted = surveyPipeline.start(
-                "product-passive-live", startedUs);
+                sessionId, startedUs);
             const CaptureMetadataStatus captureConfigured =
                 pipelineStarted == SurveyPipelineStatus::Started
                     ? surveySession.configureCaptureMetadata(
@@ -6052,6 +6062,9 @@ void serviceProductSurveyWorker() {
                 releaseProductSurveyAfterTerminal("commit_failed", true);
                 render = false;
             } else {
+                if (wifiProductView == WifiProductView::Visit) {
+                    fieldSurveyTracker.completeVisit(surveySession);
+                }
                 setProductSurveyControl(ProductSurveyWorkerControl::Idle);
                 render = true;
             }
@@ -14195,6 +14208,17 @@ void renderSurveyPlanRow(std::uint8_t index) {
         return;
     }
     if (index == 1) {
+        if (wifiProductView == WifiProductView::Visit) {
+            const bool previous = fieldSurveyTracker.comparePrevious();
+            const bool available = fieldSurveyTracker.previousAvailable();
+            renderMenuRow(
+                surveyPlanRowBounds(index), tr(UiTextId::FieldSurveyCompare),
+                tr(previous ? UiTextId::FieldSurveyPrevious
+                            : UiTextId::FieldSurveyFirst),
+                selected, available,
+                previous ? Tone::Positive : Tone::Muted);
+            return;
+        }
         const bool available = BoardProfile::kRfShieldDeclared &&
             !BoardProfile::kGpsDeclared && !BoardProfile::kPn532Declared;
         renderMenuRow(surveyPlanRowBounds(index), tr(UiTextId::PlanSpectrum),
@@ -15771,7 +15795,7 @@ void renderInventoryPage(bool clearContent) {
             }
         } else {
             const UiTextId title = wifiProductView == WifiProductView::Visit
-                ? UiTextId::WifiMenuVisit
+                ? UiTextId::FieldSurveyTitle
                 : surveySourceController.scope() ==
                     SurveySourceScope::WifiOnly
                 ? UiTextId::WifiScanSetup
@@ -15793,6 +15817,51 @@ void renderInventoryPage(bool clearContent) {
         return;
     }
     if (surveyWorkflow.state() == SurveyWorkflowState::Result) {
+        if (wifiProductView == WifiProductView::Visit) {
+            const auto& result = fieldSurveyTracker.result();
+            renderHeader(tr(UiTextId::FieldSurveyResult), clearContent);
+            if (result.status == FieldSurveyVisitStatus::Incomplete ||
+                result.status == FieldSurveyVisitStatus::Empty) {
+                renderMetric(0, tr(UiTextId::FieldSurveyIncomplete),
+                             Tone::Danger);
+                renderMetric(1, tr(UiTextId::FieldSurveyNoComparison),
+                             Tone::Warning);
+                renderMetric(2, tr(UiTextId::SurveyResultsSaved),
+                             Tone::Positive);
+                return;
+            }
+            if (result.status == FieldSurveyVisitStatus::Compared) {
+                std::snprintf(
+                    line, sizeof(line),
+                    tr(UiTextId::FieldSurveyNewSeenFormat),
+                    static_cast<unsigned>(result.newThisVisit),
+                    static_cast<unsigned>(result.seenAgain));
+                renderMetric(0, line, Tone::Positive);
+                std::snprintf(
+                    line, sizeof(line),
+                    tr(UiTextId::FieldSurveyMissingFormat),
+                    static_cast<unsigned>(result.missingThisVisit));
+                renderMetric(1, line,
+                             result.missingThisVisit == 0U
+                                 ? Tone::Neutral : Tone::Warning);
+            } else {
+                std::snprintf(
+                    line, sizeof(line),
+                    tr(UiTextId::FieldSurveyUniqueFormat),
+                    static_cast<unsigned>(result.currentUnique));
+                renderMetric(0, line, Tone::Positive);
+                renderMetric(1, tr(UiTextId::FieldSurveyBaselineSaved));
+            }
+            std::snprintf(
+                line, sizeof(line), tr(UiTextId::FieldSurveyRadioFormat),
+                static_cast<unsigned>(result.wifiAccessPoints +
+                                      result.wifiStations),
+                static_cast<unsigned>(result.bleDevices));
+            renderMetric(2, line);
+            renderMetric(3, tr(UiTextId::SurveyResultsSaved),
+                         Tone::Positive);
+            return;
+        }
         renderHeader(tr(UiTextId::SurveyCommitted), clearContent);
         std::snprintf(line, sizeof(line), tr(UiTextId::SurveyFoundFormat),
                       static_cast<unsigned>(surveySession.size()));
@@ -22434,6 +22503,10 @@ bool openWifiVisitProduct() {
     productSurveyRuntime.selected = true;
     productSurveyRuntime.workerReady = productSurveyWorkerReady;
     productSurveyRuntime.cleanupComplete = true;
+    // Only an exact retained Field Survey is eligible as an automatic
+    // baseline. A generic Wi-Fi/BLE scan must never silently become a visit
+    // comparison merely because it happens to be the newest library entry.
+    fieldSurveyTracker.capturePrevious(librarySession);
     // A retained visit is a device-level observation source, not merely a
     // Wi-Fi list refresh. Listen with every available built-in receiver by
     // default so consecutive visits can support cross-radio Target review.
@@ -23589,13 +23662,20 @@ bool applyUiAction(UiAction action, bool render = true) {
                 changed = true;
             } else if (activation ==
                        SurveySetupActivation::OpenedSpectrum) {
-                const bool available = BoardProfile::kRfShieldDeclared &&
-                    !BoardProfile::kGpsDeclared &&
-                    !BoardProfile::kPn532Declared;
-                if (available) {
-                    rfSpectrumView = RfSpectrumView::SourceMenu;
-                    rfSpectrumSelection = 0;
-                    changed = true;
+                if (wifiProductView == WifiProductView::Visit) {
+                    changed = fieldSurveyTracker.toggleComparePrevious();
+                    lastRuntimeEvent = fieldSurveyTracker.comparePrevious()
+                        ? "field_visit_compare_previous"
+                        : "field_visit_first";
+                } else {
+                    const bool available = BoardProfile::kRfShieldDeclared &&
+                        !BoardProfile::kGpsDeclared &&
+                        !BoardProfile::kPn532Declared;
+                    if (available) {
+                        rfSpectrumView = RfSpectrumView::SourceMenu;
+                        rfSpectrumSelection = 0;
+                        changed = true;
+                    }
                 }
             } else if (activation ==
                        SurveySetupActivation::StartRequested) {

@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "apps/survey/FieldSurveyCatalog.h"
+#include "apps/survey/FieldSurveyTracker.h"
 #include "apps/survey/FieldSurveyWigleCsv.h"
 #include "services/survey/SurveySession.h"
 
@@ -297,6 +298,81 @@ void testWigleBleAndFailureBoundaries() {
                "bad version", output.data(), output.size()).valid());
 }
 
+SurveySession stoppedVisit(
+    const char* id, const std::array<Observation, 3>& observations,
+    std::size_t count) {
+    SurveySession session;
+    CHECK(session.start(id, 10U) == SessionStatus::Started);
+    for (std::size_t index = 0; index < count; ++index) {
+        CHECK(session.append(observations[index]) == SessionStatus::Appended);
+    }
+    CHECK(session.stop(10000U) == SessionStatus::Stopped);
+    return session;
+}
+
+void testVisitTrackerUsesOnlyAnExplicitPreviousFieldVisit() {
+    constexpr std::array<std::uint8_t, 6> kSame{
+        1U, 2U, 3U, 4U, 5U, 6U};
+    constexpr std::array<std::uint8_t, 6> kMissing{
+        2U, 3U, 4U, 5U, 6U, 7U};
+    constexpr std::array<std::uint8_t, 6> kNew{
+        3U, 4U, 5U, 6U, 7U, 8U};
+    constexpr std::array<std::uint8_t, 6> kBle{
+        4U, 5U, 6U, 7U, 8U, 9U};
+
+    const SurveySession unrelated = stoppedVisit(
+        "product-passive-live",
+        {accessPoint(kSame, 100U, -50, "same"), {}, {}}, 1U);
+    FieldSurveyTracker tracker;
+    CHECK(!tracker.capturePrevious(unrelated));
+    CHECK(!tracker.previousAvailable());
+    CHECK(!tracker.toggleComparePrevious());
+
+    const SurveySession previous = stoppedVisit(
+        FieldSurveyTracker::kSessionId,
+        {accessPoint(kSame, 100U, -50, "same"),
+         bleDevice(kMissing, 200U, -70, "missing"), {}}, 2U);
+    CHECK(tracker.capturePrevious(previous));
+    CHECK(tracker.previousAvailable());
+    CHECK(tracker.comparePrevious());
+
+    const SurveySession current = stoppedVisit(
+        FieldSurveyTracker::kSessionId,
+        {accessPoint(kSame, 300U, -40, "same"),
+         accessPoint(kNew, 400U, -60, "new"),
+         bleDevice(kBle, 500U, -55, "tag")}, 3U);
+    const FieldSurveyVisitResult& compared = tracker.completeVisit(current);
+    CHECK(compared.status == FieldSurveyVisitStatus::Compared);
+    CHECK(compared.complete());
+    CHECK(compared.currentUnique == 3U);
+    CHECK(compared.baselineUnique == 2U);
+    CHECK(compared.seenAgain == 1U);
+    CHECK(compared.newThisVisit == 2U);
+    CHECK(compared.missingThisVisit == 1U);
+    CHECK(compared.wifiAccessPoints == 2U);
+    CHECK(compared.wifiStations == 0U);
+    CHECK(compared.bleDevices == 1U);
+
+    CHECK(tracker.toggleComparePrevious());
+    CHECK(!tracker.comparePrevious());
+    const FieldSurveyVisitResult& first = tracker.completeVisit(current);
+    CHECK(first.status == FieldSurveyVisitStatus::FirstVisit);
+    CHECK(first.newThisVisit == 3U);
+    CHECK(first.seenAgain == 0U);
+    CHECK(first.missingThisVisit == 0U);
+}
+
+void testVisitTrackerFailsClosedOnIncompleteCurrentVisit() {
+    FieldSurveyTracker tracker;
+    SurveySession running;
+    CHECK(running.start(FieldSurveyTracker::kSessionId, 1U) ==
+          SessionStatus::Started);
+    const FieldSurveyVisitResult& result = tracker.completeVisit(running);
+    CHECK(result.status == FieldSurveyVisitStatus::Incomplete);
+    CHECK(!result.complete());
+    CHECK(result.buildStatus == FieldSurveyBuildStatus::SessionNotStopped);
+}
+
 }  // namespace
 
 int main() {
@@ -304,7 +380,11 @@ int main() {
     testCatalogBuildFailsClosedOnDropsAndInvalidInput();
     testWigleExportIsExactAndTruthful();
     testWigleBleAndFailureBoundaries();
-    std::printf("field survey tests passed (record=%zu B, catalog=%zu B)\n",
-                sizeof(FieldSurveyRecord), sizeof(FieldSurveyCatalog));
+    testVisitTrackerUsesOnlyAnExplicitPreviousFieldVisit();
+    testVisitTrackerFailsClosedOnIncompleteCurrentVisit();
+    std::printf(
+        "field survey tests passed (record=%zu B, catalog=%zu B, tracker=%zu B)\n",
+        sizeof(FieldSurveyRecord), sizeof(FieldSurveyCatalog),
+        sizeof(FieldSurveyTracker));
     return 0;
 }
