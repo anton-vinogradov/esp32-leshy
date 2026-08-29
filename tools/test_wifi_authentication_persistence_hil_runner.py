@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 import run_1x_wifi_authentication_persistence_hil as runner
 
@@ -59,6 +60,33 @@ class WifiAuthenticationPersistenceHilRunnerTests(unittest.TestCase):
         self.assertEqual(runner.FORBIDDEN_FIXTURE_PORT,
                          "/dev/cu.usbmodem1101")
         self.assertNotEqual(runner.BOARD_PORT, runner.FORBIDDEN_FIXTURE_PORT)
+
+    def test_library_navigation_uses_stable_item_identity(self) -> None:
+        states = [
+            {"page": "home", "selected_id": "wifi"},
+            {"page": "home", "selected_id": "ble"},
+            {"page": "home", "selected_id": "spectrum24"},
+            {"page": "home", "selected_id": "subghz"},
+            {"page": "home", "selected_id": "capture"},
+            {"page": "home", "selected_id": "targets"},
+            {"page": "home", "selected_id": "library"},
+            {"page": "library", "selected_id": "library"},
+        ]
+        current = {"index": 0}
+
+        def fake_query(*args: object, **kwargs: object) -> dict[str, object]:
+            return states[current["index"]]
+
+        def fake_action(device: object, name: str) -> dict[str, object]:
+            self.assertIn(name, ("down", "right"))
+            current["index"] += 1
+            return states[current["index"]]
+
+        with patch.object(runner, "query", side_effect=fake_query), patch.object(
+                runner, "action", side_effect=fake_action):
+            opened = runner.open_home_item(object(), "library", "library")
+        self.assertEqual(opened["page"], "library")
+        self.assertEqual(current["index"], 7)
 
 
 if __name__ == "__main__":

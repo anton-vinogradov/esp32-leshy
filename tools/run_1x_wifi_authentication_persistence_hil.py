@@ -153,6 +153,24 @@ def safe_ambient_summary(workflow: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def open_home_item(device: PassiveSerial, item_id: str,
+                   destination_page: str) -> dict[str, Any]:
+    """Open a Home item by stable identity, independent of menu order."""
+    state = query(device, b"ui.state", UI_SCHEMA, "state")
+    if state.get("page") != "home":
+        raise RuntimeError("Home expected before semantic navigation")
+    for _ in range(8):
+        if state.get("selected_id") == item_id:
+            opened = action(device, "right")
+            if opened.get("page") != destination_page:
+                raise RuntimeError(
+                    f"{item_id} opened {opened.get('page')!r}, "
+                    f"expected {destination_page!r}")
+            return opened
+        state = action(device, "down")
+    raise RuntimeError(f"Home item {item_id!r} was not found")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
@@ -411,10 +429,9 @@ def main() -> int:
                         "cleanup_complete": True, "owned_after": 0,
                     }, "cold_recovery")
 
-                    # Home index 2 is Library; list -> detail -> export-ready.
-                    action(device, "down")
-                    action(device, "down")
-                    action(device, "right")
+                    # Resolve Library by stable identity; product menu order is
+                    # intentionally free to evolve.
+                    open_home_item(device, "library", "library")
                     action(device, "right")
                     action(device, "right")
                     metadata = query(
