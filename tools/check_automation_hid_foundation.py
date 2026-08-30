@@ -386,6 +386,7 @@ def main() -> int:
         '"full_hil": False',
         '"delta_only": True',
         '"--skip-flash"',
+        '"git", "rev-parse", "--verify"',
         'stage_public_bundle(device, bundle)',
         'trust_fixture_command(',
         'device_lock_fixture_command(device, "cleanup")',

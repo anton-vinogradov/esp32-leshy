@@ -8,6 +8,7 @@ import hashlib
 import json
 import secrets
 import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -255,6 +256,14 @@ def main() -> int:
         parser.error(f"exact board-01 port required: {BOARD_PORT}")
     if len(args.source_commit) != 40:
         parser.error("source commit must be a full hash")
+    try:
+        resolved_source = subprocess.check_output(
+            ["git", "rev-parse", "--verify", f"{args.source_commit}^{{commit}}"],
+            cwd=Path(__file__).resolve().parents[1], text=True).strip()
+    except subprocess.CalledProcessError:
+        parser.error("source commit does not exist in this repository")
+    if resolved_source != args.source_commit:
+        parser.error("source commit did not resolve to the exact supplied hash")
     if (len(args.expected_cid) != 32 or args.expected_cid.upper() !=
             args.expected_cid or any(character not in "0123456789ABCDEF"
                                      for character in args.expected_cid)):
@@ -429,7 +438,7 @@ def main() -> int:
         device.close()
         device = None
         boot_restore, recovery_restore, reset_restore = reset_capture(
-            args.port, args.output, "automation-trust-cold-restore", 25.0, 2)
+            args.port, args.output, "automation-trust-cold-restore", 25.0, 1)
         reports["cold_restore_boot"] = boot_restore
         reports["cold_restore_recovery"] = recovery_restore
         reports["cold_restore_reset"] = reset_restore
@@ -548,7 +557,7 @@ def main() -> int:
         device = None
 
         final_boot, final_recovery, final_reset = reset_capture(
-            args.port, args.output, "automation-trust-final-clean", 25.0, 2)
+            args.port, args.output, "automation-trust-final-clean", 25.0, 1)
         reports["final_boot"] = final_boot
         reports["final_recovery"] = final_recovery
         reports["final_reset"] = final_reset
