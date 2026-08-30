@@ -1605,6 +1605,25 @@ Home entries. Full host, documentation and production-build gates pass. No physi
 runtime, package fixture, radio, host network, clone or Cardputer claim is added;
 exact dev.288 remains the accepted physical baseline until the due full checkpoint.
 
+Product Survey terminal-commit supervision bound `RB-M215`: exact host/build and
+physical `1.0.0-dev.301` at source
+`d34a9b0c6f61d43b462b1a638ce1c7781fe77947` uses 232,496 B static RAM,
+3,533,256 B linked flash and a 3,533,760 B app image, leaving 660,544 B in the
+4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`d45fcdadb39bc1ea3851c65bb96792abcc5251cbdf9b1677f23914dc6f72255f`/
+`8b611677b0622a0594c926f5d64366ade352ad50e84bc3e29e72cd776729e35f`/
+`921e1eff0f5083cdda8533e9d376cc4b08fbffcdba0c4353fe24e66978008fe5`/
+`452cb9d01a23132a2f2551649b857939e291c51b00b1a4230a16c8694deaadcd`.
+Against dev.289 this is +56 B static RAM, +1,636 B linked flash and +1,632 B app,
+with 1,632 B less OTA headroom. The delta funds no new resident product buffer: it
+moves exact-media terminal reopen/write/cleanup to the existing Survey worker and
+adds real storage-progress heartbeats under the existing 8 s worker deadline. Two
+physical commits retain 54 observations each with zero source/pipeline drops. The
+post-run worker ledger is inactive/armed with 6 arms, 2,263 heartbeats and zero trip;
+final product state is Home/none/lease 0 with persistent generation 8. This focused
+bound does not replace the due periodic full checkpoint, stage-end/RC matrix or the
+one-hour release qualification.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

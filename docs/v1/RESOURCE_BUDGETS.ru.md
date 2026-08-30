@@ -1592,6 +1592,25 @@ result untrusted signature в 212 px и обновляет историческ�
 или Cardputer нет; exact dev.288 остаётся принятым physical baseline до прохождения
 обязательного full checkpoint.
 
+Bound supervision terminal commit Product Survey `RB-M215`: exact host/build и
+physical `1.0.0-dev.301` на source
+`d34a9b0c6f61d43b462b1a638ce1c7781fe77947` использует 232 496 B static RAM,
+3 533 256 B linked flash и app image 3 533 760 B, оставляя 660 544 B в OTA slot
+4 MiB. SHA-256 app/factory/ELF/map —
+`d45fcdadb39bc1ea3851c65bb96792abcc5251cbdf9b1677f23914dc6f72255f`/
+`8b611677b0622a0594c926f5d64366ade352ad50e84bc3e29e72cd776729e35f`/
+`921e1eff0f5083cdda8533e9d376cc4b08fbffcdba0c4353fe24e66978008fe5`/
+`452cb9d01a23132a2f2551649b857939e291c51b00b1a4230a16c8694deaadcd`.
+Относительно dev.289 это +56 B static RAM, +1 636 B linked flash и +1 632 B app,
+с уменьшением OTA headroom на 1 632 B. Delta не финансирует новый resident product
+buffer: reopen/write/cleanup exact media переносится в существующий worker Survey,
+а реальный storage progress даёт heartbeats под существующим deadline worker 8 s.
+Два physical commit сохраняют по 54 observations с zero drops source/pipeline.
+Post-run ledger worker — inactive/armed, 6 arms, 2 263 heartbeats и zero trip;
+final product state — Home/none/lease 0 с persistent generation 8. Этот focused bound
+не заменяет обязательный periodic full checkpoint, stage-end/RC matrix или часовую
+release qualification.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

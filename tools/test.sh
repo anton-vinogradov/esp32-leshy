@@ -158,6 +158,7 @@ python3 "$repo_dir/tools/check_ble_inspector_acceptance.py"
 python3 "$repo_dir/tools/check_ble_gatt_acceptance.py"
 python3 "$repo_dir/tools/check_ble_gatt_negative_acceptance.py"
 python3 "$repo_dir/tools/check_product_survey_terminal_acceptance.py"
+python3 "$repo_dir/tools/check_product_survey_commit_supervision_acceptance.py"
 
 "$repo_dir/tools/test-device-lock.sh"
 "$repo_dir/tools/test-serial-console.sh"
