@@ -404,8 +404,35 @@ def main() -> int:
             "input health mismatch")
     require(failures, safe.get("buzzer_inactive") is True and
             safe.get("buzzer_level") == "low", "buzzer invariant mismatch")
-    require(failures, metrics_after.get("heap_free") == boot.get("heap_free"),
-            "heap baseline mismatch")
+    test_heap_baseline = run.get("test_heap_baseline")
+    if isinstance(test_heap_baseline, dict):
+        test_heap_samples = run.get("test_heap_baseline_samples", [])
+        boot_free = boot.get("heap_free")
+        test_free = test_heap_baseline.get("heap_free")
+        require(failures,
+                run.get("test_heap_baseline_stabilized") is True and
+                isinstance(test_heap_samples, list) and
+                2 <= len(test_heap_samples) <= 4 and
+                test_heap_samples[-1] == test_heap_baseline and
+                all(test_heap_samples[-1].get(key) ==
+                    test_heap_samples[-2].get(key)
+                    for key in ("heap_total", "heap_free", "heap_min_free")),
+                "warm test heap baseline stabilization mismatch")
+        require(failures,
+                isinstance(boot_free, int) and isinstance(test_free, int) and
+                0 <= boot_free - test_free <= 1024 and
+                test_heap_baseline.get("heap_total") ==
+                    boot.get("heap_total"),
+                "temporary Device Lock heap initialization mismatch")
+        require(failures,
+                metrics_after.get("heap_free") == test_free and
+                metrics_after.get("heap_total") ==
+                    test_heap_baseline.get("heap_total"),
+                "warm test heap baseline mismatch")
+    else:
+        require(failures,
+                metrics_after.get("heap_free") == boot.get("heap_free"),
+                "heap baseline mismatch")
     for label in ("cleanup_before", "cleanup_after"):
         cleanup = run.get(label, {})
         final = cleanup.get("final_state", {})
@@ -446,8 +473,8 @@ def main() -> int:
                 sessions[0].get("active") is True and
                 sessions[1].get("kind") == "ended" and
                 sessions[1].get("active") is False and
-                sessions[0].get("run_id") == run.get("run_id") ==
-                    sessions[1].get("run_id"),
+                sessions[0].get("session_id") == run.get("run_id") ==
+                    sessions[1].get("session_id"),
                 "temporary Device Lock HIL session mismatch")
     if pixel_contract:
         expected_scope["waterfall_chrome_static_verified"] = True

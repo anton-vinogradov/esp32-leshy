@@ -264,6 +264,8 @@ def main() -> int:
     waterfall_pixel_changes: dict[str, Any] = {}
     boot: dict[str, Any] = {}
     boot_metrics_samples: list[dict[str, Any]] = []
+    test_heap_baseline: dict[str, Any] = {}
+    test_heap_baseline_samples: list[dict[str, Any]] = []
     recovery_before: dict[str, Any] = {}
     recovery_after: dict[str, Any] = {}
     metrics_after: dict[str, Any] = {}
@@ -332,6 +334,14 @@ def main() -> int:
                     raise RuntimeError(
                         "; ".join(fixture_configuration_failures))
                 home_device(device)
+                test_heap_baseline, test_heap_baseline_samples = \
+                    stabilized_boot_metrics(device)
+                fixture_heap_delta = int(boot.get("heap_free", 0)) - \
+                    int(test_heap_baseline.get("heap_free", 0))
+                if not 0 <= fixture_heap_delta <= 1024:
+                    raise RuntimeError(
+                        "temporary Device Lock heap initialization outside "
+                        f"0..1024 bytes: {fixture_heap_delta}")
 
                 home_selection(device, 0)
                 screens["home_top"] = capture(device, frames, "home-top")
@@ -621,8 +631,10 @@ def main() -> int:
                         failures.append(f"persistent {key} changed")
                 if recovery_after.get("physical_write_calls") != 0:
                     failures.append("physical SD write observed")
-                if metrics_after.get("heap_free") != boot.get("heap_free"):
-                    failures.append("heap free did not return to boot baseline")
+                if metrics_after.get("heap_free") != \
+                        test_heap_baseline.get("heap_free"):
+                    failures.append(
+                        "heap free did not return to warm test baseline")
             except Exception as error:
                 failures.append(f"workflow: {type(error).__name__}: {error}")
             finally:
@@ -678,6 +690,10 @@ def main() -> int:
         "boot_metrics_samples": boot_metrics_samples,
         "boot_metrics_stabilized": bool(boot_metrics_samples) and
             len(boot_metrics_samples) >= 2,
+        "test_heap_baseline": test_heap_baseline,
+        "test_heap_baseline_samples": test_heap_baseline_samples,
+        "test_heap_baseline_stabilized": bool(test_heap_baseline_samples) and
+            len(test_heap_baseline_samples) >= 2,
         "recovery_before": recovery_before,
         "reports": reports,
         "waterfall_pixel_changes": waterfall_pixel_changes,
