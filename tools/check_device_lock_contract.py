@@ -208,6 +208,8 @@ def main() -> int:
         ("fixture_command(device, \"cleanup\")",
          "explicit fixture cleanup"),
         ("fixture_cleanup_proven", "machine-checked fixture cleanup"),
+        ("--reuse-exact-flash", "delta-HIL exact-flash reuse"),
+        ("boot_ready_failures(", "Device Lock scoped reboot oracle"),
         ("wipe_pin(correct_pin)", "ephemeral correct PIN wipe"),
         ("wipe_pin(wrong_pin)", "ephemeral wrong PIN wipe"),
         ("pin_or_digest_retained\": False", "PIN evidence exclusion"),

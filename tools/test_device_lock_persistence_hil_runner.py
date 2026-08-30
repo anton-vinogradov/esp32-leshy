@@ -60,6 +60,21 @@ class DeviceLockPersistenceHilRunnerTests(unittest.TestCase):
         self.assertTrue(RUNNER.full_retry_failures(
             dict(record, retry_remaining_ms=4000), "retry", 5000))
 
+        dormant_cleanup = dict(
+            record,
+            status="unconfigured",
+            failure="none",
+            failed_attempts=0,
+            credential_generation=0,
+            protected_access=False,
+            persistence_fixture_active=False,
+        )
+        self.assertEqual([], RUNNER.state_failures(
+            dormant_cleanup, "dormant_cleanup", status="unconfigured",
+            failure="none", failed_attempts=0, generation=0,
+            protected=False, fixture_active=False,
+            fixture_cleanup_required=True))
+
     def test_fixture_contract_excludes_product_and_whole_nvs(self) -> None:
         record = {
             "operation": "cleanup",

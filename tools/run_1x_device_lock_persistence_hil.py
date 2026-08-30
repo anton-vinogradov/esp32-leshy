@@ -25,6 +25,7 @@ from run_1x_product_survey_hil import (
     action,
     artifact_manifest,
     best_effort_cleanup,
+    boot_ready_failures,
     boot_failures,
     capture,
     expect,
@@ -68,7 +69,10 @@ def wipe_pin(pin: bytearray) -> None:
 def state_failures(record: dict[str, Any], label: str, *, status: str,
                    failure: str, failed_attempts: int, generation: int,
                    protected: bool, fixture_active: bool,
+                   fixture_cleanup_required: bool | None = None,
                    ) -> list[str]:
+    if fixture_cleanup_required is None:
+        fixture_cleanup_required = fixture_active
     failures = expect(record, {
         "status": status,
         "failure": failure,
@@ -77,7 +81,7 @@ def state_failures(record: dict[str, Any], label: str, *, status: str,
         "protected_access": protected,
         "worker_active": False,
         "persistence_fixture_active": fixture_active,
-        "persistence_fixture_cleanup_required": fixture_active,
+        "persistence_fixture_cleanup_required": fixture_cleanup_required,
         "radio_touched": False,
     }, label)
     if status == "retry_delay":
@@ -184,6 +188,7 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash-baud", type=int, default=460800)
+    parser.add_argument("--reuse-exact-flash", action="store_true")
     args = parser.parse_args()
     if not args.firmware.is_file():
         parser.error("--firmware must name an existing app image")
@@ -219,9 +224,10 @@ def main() -> int:
     final_reset: dict[str, Any] = {}
 
     try:
-        flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
-        candidate_flashed = True
-        time.sleep(0.6)
+        if not args.reuse_exact_flash:
+            flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            candidate_flashed = True
+            time.sleep(0.6)
         device = PassiveSerial(args.port, 115200, timeout=0.25)
         synchronize_console(device, 30.0)
         metrics = read_only_query(
@@ -305,9 +311,8 @@ def main() -> int:
         reports["cold_locked_boot"] = boot_locked
         reports["cold_locked_recovery"] = recovery_locked
         reports["cold_locked_reset"] = reset_locked
-        failures.extend(boot_failures(
-            boot_locked, recovery_locked, args.expected_version,
-            app_identity, args.expected_cid))
+        failures.extend(boot_ready_failures(
+            boot_locked, args.expected_version, app_identity))
         device, session = reopen_after_reset(
             args.port, run_id, app_identity)
         sessions.append(session)
@@ -316,7 +321,8 @@ def main() -> int:
         failures.extend(state_failures(
             product_after_reset, "product_after_reset", status="unconfigured",
             failure="none", failed_attempts=0, generation=0,
-            protected=False, fixture_active=False))
+            protected=False, fixture_active=False,
+            fixture_cleanup_required=True))
         fixture_resume = fixture_command(device, "resume")
         reports["fixture_resume_locked"] = fixture_resume
         failures.extend(fixture_failures(
@@ -368,9 +374,8 @@ def main() -> int:
         reports["cold_retry_boot"] = boot_retry
         reports["cold_retry_recovery"] = recovery_retry
         reports["cold_retry_reset"] = reset_retry
-        failures.extend(boot_failures(
-            boot_retry, recovery_retry, args.expected_version,
-            app_identity, args.expected_cid))
+        failures.extend(boot_ready_failures(
+            boot_retry, args.expected_version, app_identity))
         device, session = reopen_after_reset(
             args.port, run_id, app_identity)
         sessions.append(session)
@@ -446,7 +451,7 @@ def main() -> int:
     finally:
         wipe_pin(correct_pin)
         wipe_pin(wrong_pin)
-        if candidate_flashed and not fixture_cleanup_proven:
+        if fixture_ever_started and not fixture_cleanup_proven:
             try:
                 if device is None:
                     device = PassiveSerial(
@@ -478,14 +483,13 @@ def main() -> int:
             device.close()
             device = None
 
-    if candidate_flashed and fixture_cleanup_proven:
+    if fixture_ever_started and fixture_cleanup_proven:
         try:
             final_boot, final_recovery, final_reset = reset_capture(
                 args.port, args.output,
                 "device-lock-product-after-cleanup", 25.0, 2)
-            failures.extend(boot_failures(
-                final_boot, final_recovery, args.expected_version,
-                app_identity, args.expected_cid))
+            failures.extend(boot_ready_failures(
+                final_boot, args.expected_version, app_identity))
             device = PassiveSerial(args.port, 115200, timeout=0.25)
             synchronize_console(device, 20.0)
             final_lock = read_only_query(
@@ -521,7 +525,8 @@ def main() -> int:
             "firmware_sha256": sha256_file(candidate),
             "app_elf_sha256": app_identity,
             "flashed": candidate_flashed,
-            "flash_mode": "fresh",
+            "flash_mode": (
+                "reuse_exact" if args.reuse_exact_flash else "fresh"),
         },
         "expected_cid": args.expected_cid,
         "reports": reports,
