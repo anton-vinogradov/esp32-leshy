@@ -2653,6 +2653,18 @@ struct ProductSurveyPreparationSnapshot final {
 constexpr UBaseType_t kProductSurveyWorkerEventCapacity = 8;
 constexpr UBaseType_t kProductSurveyObservationCapacity =
     leshy1::services::survey::SurveySession::kObservationCapacity;
+// NimBLE's first process-lifetime initialization consumes roughly 71.8 KiB
+// of the no-PSRAM DIV's internal heap.  Product Survey historically kept a
+// 64-record ingress queue alive at the same time even though physical BLE HIL
+// measured a maximum queue high-water of 18 records.  Keep the full queue for
+// Wi-Fi and mixed field visits, but compact the BLE-only foreground to 32
+// records before NimBLE starts.  The consumer runs concurrently and explicit
+// drop counters still fail closed if a denser environment exceeds this burst
+// allowance.
+constexpr UBaseType_t kBleProductSurveyObservationCapacity = 32;
+constexpr std::uint32_t kBleProductMinimumFreeHeapBeforeBegin = 74000U;
+constexpr std::uint32_t kBleProductMinimumLargestHeapBeforeBegin = 30000U;
+static_assert(kBleProductSurveyObservationCapacity >= 32U);
 constexpr std::uint32_t kProductSurveyScanIntervalMs = 1000;
 constexpr std::uint16_t kFieldSurveyStationChannelDwellMs = 120U;
 constexpr std::uint8_t kFieldSurveyStationChannelCount = 13U;
@@ -2746,6 +2758,9 @@ bool airspaceGuardBleCapacityDropInjectionOnce = false;
 AirspaceGuardBleRetention airspaceGuardBleRetention;
 std::uint32_t productSurveyWorkerOwnedResources = 0;
 bool productSurveyWorkerReady = false;
+UBaseType_t productSurveyObservationQueueCapacity =
+    kProductSurveyObservationCapacity;
+bool bleProductSurveyMemoryCompact = false;
 bool airspaceGuardSurveyQueuesReleased = false;
 bool airspaceGuardSurveyQueueRestorePending = false;
 std::uint32_t airspaceGuardHeapFreeBeforeQueueRelease = 0;
@@ -5083,8 +5098,77 @@ bool initializeProductSurveyWorker() {
         productSurveyObservations = nullptr;
         airspaceGuardBleWorkerEvents = nullptr;
         productSurveyScanStartGate = nullptr;
+    } else {
+        productSurveyObservationQueueCapacity =
+            kProductSurveyObservationCapacity;
+        bleProductSurveyMemoryCompact = false;
     }
     return started;
+}
+
+bool resizeProductSurveyObservationQueue(UBaseType_t capacity) {
+    if (capacity == 0U || productSurveyControl() !=
+            ProductSurveyWorkerControl::Idle ||
+        productSurveyWorkerTaskHandle == nullptr ||
+        productSurveyObservations == nullptr ||
+        uxQueueMessagesWaiting(productSurveyObservations) != 0U ||
+        airspaceGuardSurveyQueuesReleased) {
+        return false;
+    }
+    if (capacity == productSurveyObservationQueueCapacity) return true;
+
+    const UBaseType_t previousCapacity =
+        productSurveyObservationQueueCapacity;
+    vQueueDelete(productSurveyObservations);
+    productSurveyObservations = nullptr;
+    // A queue deleted by loopTask is immediately reclaimable, but one tick
+    // gives the allocator/idle housekeeping a deterministic boundary before
+    // the replacement and the later NimBLE preflight measurement.
+    vTaskDelay(1);
+    productSurveyObservations = xQueueCreate(capacity, sizeof(Observation));
+    if (productSurveyObservations != nullptr) {
+        productSurveyObservationQueueCapacity = capacity;
+        return true;
+    }
+
+    // Fail closed while retaining the ordinary Survey worker if the compact
+    // replacement cannot be allocated.  The caller will not start a radio.
+    productSurveyObservations = xQueueCreate(
+        previousCapacity, sizeof(Observation));
+    if (productSurveyObservations != nullptr) {
+        productSurveyObservationQueueCapacity = previousCapacity;
+    } else {
+        productSurveyWorkerReady = false;
+    }
+    return false;
+}
+
+bool restoreBleProductSurveyMemory();
+
+bool prepareBleProductSurveyMemory() {
+    if (!resizeProductSurveyObservationQueue(
+            kBleProductSurveyObservationCapacity)) {
+        return false;
+    }
+    bleProductSurveyMemoryCompact = true;
+    const std::uint32_t freeHeap = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    const std::uint32_t largestHeap = static_cast<std::uint32_t>(
+        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    if (freeHeap < kBleProductMinimumFreeHeapBeforeBegin ||
+        largestHeap < kBleProductMinimumLargestHeapBeforeBegin) {
+        (void)restoreBleProductSurveyMemory();
+        return false;
+    }
+    return true;
+}
+
+bool restoreBleProductSurveyMemory() {
+    if (!bleProductSurveyMemoryCompact) return true;
+    const bool restored = resizeProductSurveyObservationQueue(
+        kProductSurveyObservationCapacity);
+    if (restored) bleProductSurveyMemoryCompact = false;
+    return restored;
 }
 
 bool releaseProductSurveyQueuesForAirspaceGuard() {
@@ -5142,6 +5226,9 @@ bool restoreProductSurveyQueuesAfterAirspaceGuard() {
     }
     productSurveyWorkerEvents = events;
     productSurveyObservations = observations;
+    productSurveyObservationQueueCapacity =
+        kProductSurveyObservationCapacity;
+    bleProductSurveyMemoryCompact = false;
     airspaceGuardSurveyQueuesReleased = false;
     airspaceGuardSurveyQueueRestorePending = false;
     airspaceGuardHeapFreeAfterQueueRestore =
@@ -6760,6 +6847,10 @@ void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
         appRuntime.stop();
     }
     setProductSurveyControl(ProductSurveyWorkerControl::Idle);
+    if (returnFromBle && !restoreBleProductSurveyMemory()) {
+        productSurveyRuntime.status = "ble_memory_restore_failed";
+        lastRuntimeEvent = productSurveyRuntime.status;
+    }
     renderInteractiveScreen();
 }
 
@@ -25016,7 +25107,15 @@ bool startBleDevicesProduct() {
         lastRuntimeEvent = productSurveyRuntime.status;
         return false;
     }
+    if (!prepareBleProductSurveyMemory()) {
+        productSurveyRuntime = {};
+        productSurveyRuntime.selected = true;
+        productSurveyRuntime.status = "ble_memory_unavailable";
+        lastRuntimeEvent = productSurveyRuntime.status;
+        return false;
+    }
     if (!activateBleInspectorWorkspace()) {
+        (void)restoreBleProductSurveyMemory();
         productSurveyRuntime = {};
         productSurveyRuntime.selected = true;
         productSurveyRuntime.status = "ble_workspace_unavailable";
@@ -25089,9 +25188,11 @@ bool finishBleGattToHome() {
     const bool moved = uiController.apply(
         UiAction::Back, static_cast<std::uint8_t>(appCatalog.size()),
         false, 2);
-    lastRuntimeEvent = moved ? "ble_gatt_home"
-                             : "ble_gatt_home_failed";
-    return moved;
+    const bool memoryRestored = restoreBleProductSurveyMemory();
+    lastRuntimeEvent = moved && memoryRestored
+        ? "ble_gatt_home"
+        : (moved ? "ble_memory_restore_failed" : "ble_gatt_home_failed");
+    return moved && memoryRestored;
 }
 
 bool beginBleGattAfterSurvey() {
@@ -26137,7 +26238,11 @@ bool applyUiAction(UiAction action, bool render = true) {
                         static_cast<std::uint8_t>(appCatalog.size()),
                         true, 2);
                     if (changed) appRuntime.stop();
-                    lastRuntimeEvent = "ble_home";
+                    const bool memoryRestored =
+                        restoreBleProductSurveyMemory();
+                    lastRuntimeEvent = memoryRestored
+                        ? "ble_home" : "ble_memory_restore_failed";
+                    changed = changed && memoryRestored;
                 }
             }
         } else if (wifiProductView == WifiProductView::AirspaceGuard) {

@@ -23,17 +23,28 @@ def passing_result() -> dict[str, Any]:
             "page": "home", "selected_id": case.item_id,
             "runtime_owner": "none", "lease_mask": 0,
         }
+        dwell_samples = [
+            ui_state(case, host_dwell_offset_ms=0.0),
+            ui_state(
+                case,
+                host_dwell_offset_ms=
+                    case.minimum_dwell_seconds * 1000.0),
+        ]
+        if case.item_id == "ble":
+            dwell_samples[-1].update({
+                "ble_begin_stage": "ready",
+                "ble_begin_heap_free_before":
+                    runner.BLE_MINIMUM_FREE_HEAP_BEFORE_BEGIN,
+                "ble_begin_heap_largest_before":
+                    runner.BLE_MINIMUM_LARGEST_HEAP_BEFORE_BEGIN,
+                "ble_begin_heap_free_after": 2000,
+                "ble_begin_heap_largest_after": 1000,
+            })
         menus.append({
             "id": case.item_id, "index": case.index,
             "passed": True, "failures": [],
             "effective_dwell_seconds": case.minimum_dwell_seconds,
-            "dwell_samples": [
-                ui_state(case, host_dwell_offset_ms=0.0),
-                ui_state(
-                    case,
-                    host_dwell_offset_ms=
-                        case.minimum_dwell_seconds * 1000.0),
-            ],
+            "dwell_samples": dwell_samples,
             "home_settled": home,
         })
     return {
@@ -252,6 +263,16 @@ class RetainedContractTests(unittest.TestCase):
             "host_dwell_offset_ms"] = 1250.0
         failures = runner.result_contract_failures(result)
         self.assertTrue(any("effective dwell below case minimum" in failure
+                            for failure in failures))
+
+    def test_missing_ble_begin_evidence_is_rejected(self) -> None:
+        result = passing_result()
+        ble = next(menu for menu in result["menus"]
+                   if menu["id"] == "ble")
+        for sample in ble["dwell_samples"]:
+            sample.pop("ble_begin_stage", None)
+        failures = runner.result_contract_failures(result)
+        self.assertTrue(any("BLE initialization" in failure
                             for failure in failures))
 
     def test_mutated_retained_dwell_is_revalidated(self) -> None:

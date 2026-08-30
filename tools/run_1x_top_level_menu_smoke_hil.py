@@ -65,6 +65,8 @@ DEFAULT_DWELL_SECONDS = 1.25
 DEFAULT_SAMPLE_SECONDS = 0.20
 HOME_SETTLE_SECONDS = 0.25
 BLE_MINIMUM_DWELL_SECONDS = BLE_ENTRY_STABILITY_SECONDS
+BLE_MINIMUM_FREE_HEAP_BEFORE_BEGIN = 74000
+BLE_MINIMUM_LARGEST_HEAP_BEFORE_BEGIN = 30000
 
 
 @dataclass(frozen=True)
@@ -168,6 +170,27 @@ def effective_dwell_seconds(case: MenuCase, requested_seconds: float) -> float:
     if requested_seconds <= 0:
         raise ValueError("requested dwell must be positive")
     return max(requested_seconds, case.minimum_dwell_seconds)
+
+
+def ble_begin_evidence_failure(samples: list[dict[str, Any]]) -> str | None:
+    ready = [sample for sample in samples
+             if sample.get("ble_begin_stage") == "ready"]
+    if not ready:
+        return "bounded BLE initialization never reached ready"
+    sample = ready[-1]
+    required = {
+        "ble_begin_heap_free_before": BLE_MINIMUM_FREE_HEAP_BEFORE_BEGIN,
+        "ble_begin_heap_largest_before":
+            BLE_MINIMUM_LARGEST_HEAP_BEFORE_BEGIN,
+        "ble_begin_heap_free_after": 1,
+        "ble_begin_heap_largest_after": 1,
+    }
+    for key, minimum in required.items():
+        value = sample.get(key)
+        if (not isinstance(value, int) or isinstance(value, bool) or
+                value < minimum):
+            return f"{key}={value!r} below {minimum}"
+    return None
 
 
 def focus_home_case(device: PassiveSerial, case: MenuCase,
@@ -307,6 +330,10 @@ def result_contract_failures(result: dict[str, Any]) -> list[str]:
                     not isinstance(effective_dwell, (int, float)) or
                     terminal_offset + 0.001 < effective_dwell * 1000.0):
                 failures.append(f"{label}: terminal dwell boundary unproven")
+        if case.item_id == "ble" and isinstance(samples, list):
+            ble_failure = ble_begin_evidence_failure(samples)
+            if ble_failure is not None:
+                failures.append(f"{label}: {ble_failure}")
         settled = record.get("home_settled")
         failures.extend(expect(settled if isinstance(settled, dict) else {}, {
             "page": "home", "selected_id": case.item_id,
@@ -508,6 +535,10 @@ def main() -> int:
                             device, case, entered, effective_dwell,
                             args.sample_seconds)
                         record["dwell_samples"] = samples
+                        if case.item_id == "ble":
+                            ble_failure = ble_begin_evidence_failure(samples)
+                            if ble_failure is not None:
+                                record["failures"].append(ble_failure)
                         record["survey_product_store_bytes_written_samples"] = [
                             sample.get("survey_product_store_bytes_written")
                             for sample in samples
@@ -578,6 +609,19 @@ def main() -> int:
                     failures.append("cleanup_after: Home/zero lease unproven")
                 if lock_fixture_started:
                     try:
+                        cleanup_hil_state = read_only_query(
+                            device, b"hil.state", HIL_SESSION_SCHEMA,
+                            "state")
+                        device_lock_fixture["cleanup_hil_before"] = \
+                            cleanup_hil_state
+                        if cleanup_hil_state.get("active") is not True:
+                            device_lock_fixture["cleanup_hil_rebegun"] = \
+                                begin_hil_session(
+                                    device, run_id, app_identity,
+                                    args.expected_version)
+                        else:
+                            device_lock_fixture[
+                                "cleanup_hil_rebegun"] = False
                         device_lock_fixture["cleanup"] = fixture_command(
                             device, "cleanup")
                         lock_fixture_started = False
