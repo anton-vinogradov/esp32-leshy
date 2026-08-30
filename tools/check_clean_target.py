@@ -711,6 +711,7 @@ def main() -> int:
         "startProductSurvey()",
         "closeProductSurveyBackend()",
         "productSurveyFilesystem.cachedFreeBytes()",
+        "knownProductSessionRootExists(",
         "productSurveyStore.openExistingWritable(storePermit)",
         "authorizeProductSurvey(surveyRequest)",
         "scanner.scan(",

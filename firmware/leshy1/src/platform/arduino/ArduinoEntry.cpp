@@ -2202,6 +2202,26 @@ struct ProductBootRecoveryState final {
 };
 
 ProductBootRecoveryState productBootRecovery;
+
+bool knownProductSessionRootExists(const char* fingerprint) {
+    // Product boot already authenticated this exact CID and opened the
+    // versioned root through the read-only driver. Runtime write admission can
+    // reuse that immutable process-lifetime fact; openExistingWritable()
+    // still verifies the actual directory before any write. Avoiding a new
+    // f_stat here also prevents a stalled removable medium from starving the
+    // core-0 idle task until the independent hardware watchdog resets it.
+    return fingerprint != nullptr && fingerprint[0] != '\0' &&
+        productBootRecovery.enrolled &&
+        productBootRecovery.fingerprintMatched &&
+        productBootRecovery.rootExists &&
+        productBootRecovery.catalogAdmitted &&
+        productBootRecovery.cleanupComplete &&
+        std::strcmp(productBootRecovery.expectedFingerprint,
+                    fingerprint) == 0 &&
+        std::strcmp(productBootRecovery.observedFingerprint,
+                    fingerprint) == 0;
+}
+
 constexpr std::uint32_t kProductBootRetryRtcMagic = 0x4C425231U;
 constexpr std::uint32_t kProductBootWatchdogTestRtcMagic = 0x4C425754U;
 constexpr std::uint32_t kEarlyBootWatchdogTestRtcMagic = 0x4C425745U;
@@ -4353,9 +4373,9 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
     const bool capacityMatched =
         report.cardCapacityBytes != 0 &&
         report.cardCapacityBytes == identity.identity.capacityBytes;
-    publishProductSurveyPreparationStage("filesystem_root");
-    const bool rootExists = productSurveyFilesystem.exists(
-        leshy1::storage::kProductSessionStoreRoot);
+    publishProductSurveyPreparationStage("filesystem_root_evidence");
+    const bool rootExists = knownProductSessionRootExists(
+        report.observedFingerprint);
 
     leshy1::storage::MediaIdentity media;
     media.present = capacityMatched;
@@ -5521,8 +5541,8 @@ bool reopenProductSurveyBackendForCommit() {
     const bool capacityMatched =
         productSurveyRuntime.cardCapacityBytes != 0 &&
         productSurveyRuntime.cardCapacityBytes == identity.identity.capacityBytes;
-    const bool rootExists = productSurveyFilesystem.exists(
-        leshy1::storage::kProductSessionStoreRoot);
+    const bool rootExists = knownProductSessionRootExists(
+        productSurveyRuntime.observedFingerprint);
 
     leshy1::storage::MediaIdentity media;
     media.present = capacityMatched;
@@ -6051,8 +6071,8 @@ void runCaptureStoreWorker(void*) {
             productSurveyFilesystem.cardCapacityBytes();
         const std::uint64_t cachedFree =
             productSurveyFilesystem.cachedFreeBytes();
-        const bool rootExists = productSurveyFilesystem.exists(
-            leshy1::storage::kProductSessionStoreRoot);
+        const bool rootExists = knownProductSessionRootExists(
+            observedFingerprint);
         leshy1::storage::MediaIdentity media;
         media.present = cardCapacity != 0 &&
             cardCapacity == identity.identity.capacityBytes;
@@ -6490,8 +6510,8 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
             productSurveyFilesystem.cardCapacityBytes();
         const std::uint64_t cachedFree =
             productSurveyFilesystem.cachedFreeBytes();
-        const bool rootExists = productSurveyFilesystem.exists(
-            leshy1::storage::kProductSessionStoreRoot);
+        const bool rootExists = knownProductSessionRootExists(
+            observedFingerprint);
         leshy1::storage::MediaIdentity media;
         media.present = cardCapacity != 0 &&
             cardCapacity == identity.identity.capacityBytes;
@@ -8290,8 +8310,8 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         return true;
     }
     const std::uint64_t cardCapacity = filesystem.cardCapacityBytes();
-    const bool rootExists = filesystem.exists(
-        leshy1::storage::kProductSessionStoreRoot);
+    const bool rootExists = knownProductSessionRootExists(
+        observedFingerprint);
     leshy1::storage::MediaIdentity media;
     media.present = cardCapacity != 0 &&
         cardCapacity == identity.identity.capacityBytes;
@@ -8962,8 +8982,8 @@ void runTargetsMutationWorker(void*) {
         request.explicitlySelected = true;
         request.expectedFingerprint = event.expectedFingerprint;
         request.rootPath = leshy1::storage::kProductSessionStoreRoot;
-        request.rootExists = filesystem.exists(
-            leshy1::storage::kProductSessionStoreRoot);
+        request.rootExists = knownProductSessionRootExists(
+            event.observedFingerprint);
         request.driverWriteEnabled = true;
         request.requiredBytes = kProductSurveyCommitBytes;
         request.reserveBytes = kProductSurveyReserveBytes;
