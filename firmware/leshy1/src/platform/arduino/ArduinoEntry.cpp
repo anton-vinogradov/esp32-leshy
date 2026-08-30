@@ -1067,6 +1067,7 @@ DeviceLockKdfBenchmarkReport deviceLockKdfBenchmark{};
 std::uint64_t deviceLockLastKdfUs = 0;
 bool deviceLockPersistenceHilActive = false;
 bool deviceLockPersistenceHilCleanupRequired = false;
+bool deviceLockProtectedUiHilActive = false;
 leshy1::services::security::DeviceLockOperation deviceLockLastAdmissionOperation =
     leshy1::services::security::DeviceLockOperation::Status;
 leshy1::services::security::DeviceLockAccess deviceLockLastAdmissionAccess =
@@ -1119,6 +1120,21 @@ leshy1::services::security::DeviceLockAccess checkDeviceLockAdmission(
 
 bool deviceLockOperationAllowed(
     leshy1::services::security::DeviceLockOperation operation) {
+    // A physically attached, exact-candidate HIL session may exercise the UI
+    // while a virgin product Device Lock is still unconfigured.  This lease is
+    // deliberately narrower than DeviceLock::access(): it admits only page
+    // navigation, remains RAM-only, and never replaces the product data key.
+    // Storage and every sensitive operation continue through their normal
+    // Device Lock and product-media policy gates.
+    if (operation ==
+            leshy1::services::security::DeviceLockOperation::ProtectedUi &&
+        deviceLockProtectedUiHilActive && hilSession.active()) {
+        deviceLockLastAdmissionOperation = operation;
+        deviceLockLastAdmissionAccess =
+            leshy1::services::security::DeviceLockAccess::Allowed;
+        ++deviceLockAdmissionChecks;
+        return true;
+    }
     return checkDeviceLockAdmission(operation) ==
         leshy1::services::security::DeviceLockAccess::Allowed;
 }
@@ -13817,6 +13833,54 @@ void runDeviceLockPersistenceFixture(Stream& reply, const char* command) {
                 deviceLockFixtureEraser.credentialPresentDuringErase &&
                 deviceLockFixtureEraser.fixtureProtectedDataErased
             ? "true" : "false");
+    reply.println(line);
+}
+
+void runDeviceLockProtectedUiFixture(Stream& reply, const char* command) {
+    constexpr const char* beginCommand =
+        "device-lock.protected-ui-fixture begin";
+    constexpr const char* cleanupCommand =
+        "device-lock.protected-ui-fixture cleanup";
+    const bool begin = std::strcmp(command, beginCommand) == 0;
+    const bool cleanup = std::strcmp(command, cleanupCommand) == 0;
+    const char* operation = begin ? "begin" : cleanup ? "cleanup" : "invalid";
+    const char* status = "invalid_operation";
+
+    if (!hilSession.active()) {
+        status = "hil_session_required";
+    } else if (!begin && !cleanup) {
+        status = "invalid_operation";
+    } else if (begin && deviceLockPersistenceHilActive) {
+        status = "credential_fixture_active";
+    } else if (begin && deviceLockProtectedUiHilActive) {
+        status = "already_active";
+    } else if (begin && !deviceLock.audit(
+                    static_cast<std::uint64_t>(esp_timer_get_time()))
+                    .dataKeyAvailable) {
+        // Do not create an apparently open UI whose protected product store
+        // cannot authenticate.  A configured/locked owner must unlock through
+        // the product flow; HIL never reads or substitutes that credential.
+        status = "product_key_unavailable";
+    } else if (begin) {
+        deviceLockProtectedUiHilActive = true;
+        status = "begun";
+    } else {
+        deviceLockProtectedUiHilActive = false;
+        status = "cleaned";
+    }
+
+    char line[512] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.device_lock.protected_ui_fixture.v1\","
+        "\"kind\":\"protected_ui_fixture\",\"operation\":\"%s\","
+        "\"status\":\"%s\",\"active\":%s,"
+        "\"ram_only_admission\":true,\"protected_ui_only\":true,"
+        "\"credential_written\":false,\"data_key_replaced\":false,"
+        "\"product_namespace_written_or_erased\":false,"
+        "\"whole_nvs_read_or_copied\":false,\"radio_touched\":false}",
+        operation, status,
+        deviceLockProtectedUiHilActive ? "true" : "false");
     reply.println(line);
 }
 
@@ -32601,6 +32665,7 @@ void emitHilSessionBegin(Stream& reply, const char* command) {
     }
     char line[384] = {};
     if (status == HilSessionStatus::Begun) {
+        deviceLockProtectedUiHilActive = false;
         deviceLockPersistenceHilCleanupRequired =
             deviceLockStore.hilFixtureStatePresent();
         bleGattTransport.clearHilFault();
@@ -32647,6 +32712,7 @@ void emitHilSessionEnd(Stream& reply, const char* command) {
     constexpr const char* prefix = "hil.end ";
     const char* sessionId = command + std::strlen(prefix);
     if (deviceLockPersistenceHilActive ||
+        deviceLockProtectedUiHilActive ||
         deviceLockPersistenceHilCleanupRequired) {
         reply.println(
             "{\"schema\":\"leshy.hil.session.v1\",\"kind\":\"error\","
@@ -35613,6 +35679,10 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
     } else if (std::strncmp(
                    command, "device-lock.persistence-fixture ", 32) == 0) {
         runDeviceLockPersistenceFixture(reply, command);
+    } else if (std::strncmp(
+                   command, "device-lock.protected-ui-fixture ",
+                   sizeof("device-lock.protected-ui-fixture ") - 1U) == 0) {
+        runDeviceLockProtectedUiFixture(reply, command);
     } else if (std::strcmp(
                    command,
                    "device-lock.kdf-benchmark confirm-no-persist") == 0) {

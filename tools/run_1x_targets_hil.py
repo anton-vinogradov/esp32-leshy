@@ -31,7 +31,7 @@ from run_1x_product_survey_hil import (
     wait_ui_state,
 )
 from run_1x_ui_typography_hil import normalize_home
-from temporary_device_lock_hil import TemporaryDeviceLockHil
+from temporary_device_lock_hil import TemporaryProtectedUiAdmissionHil
 
 
 SCHEMA = "leshy.targets_product_hil.run.v1"
@@ -226,7 +226,7 @@ def main() -> int:
     write_json(args.output / "run.json", record)
 
     cleanup: dict[str, Any] = {"attempted": False}
-    protected_ui: TemporaryDeviceLockHil | None = None
+    protected_ui: TemporaryProtectedUiAdmissionHil | None = None
     try:
         if not args.reuse_exact_flash:
             flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
@@ -246,7 +246,8 @@ def main() -> int:
                     read_only_guaranteed=True, blocked_write_attempts=0,
                     cleanup_complete=True, physical_write_calls=0)
             generation_before = int(recovery["generation"])
-            protected_ui = TemporaryDeviceLockHil(device, app_identity)
+            protected_ui = TemporaryProtectedUiAdmissionHil(
+                device, app_identity)
             protected_ui.start()
             first: dict[str, Any] | None = None
             second: dict[str, Any] | None = None

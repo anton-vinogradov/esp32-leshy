@@ -29,7 +29,7 @@ from run_1x_product_survey_hil import (
     query,
 )
 from run_1x_ui_typography_hil import normalize_home
-from temporary_device_lock_hil import TemporaryDeviceLockHil
+from temporary_device_lock_hil import TemporaryProtectedUiAdmissionHil
 
 
 SCHEMA = "leshy.companion_usb_delta_hil.run.v1"
@@ -319,7 +319,7 @@ def main() -> int:
     }
     write_json(args.output / "run.json", record)
     cleanup: dict[str, Any] = {"attempted": False}
-    protected_ui: TemporaryDeviceLockHil | None = None
+    protected_ui: TemporaryProtectedUiAdmissionHil | None = None
 
     try:
         if not args.reuse_exact_flash:
@@ -349,7 +349,8 @@ def main() -> int:
                     recovery.get("physical_write_calls") == 0 and
                     recovery.get("cleanup_complete") is True,
                     f"exact product media unavailable: {recovery}")
-            protected_ui = TemporaryDeviceLockHil(device, app_identity)
+            protected_ui = TemporaryProtectedUiAdmissionHil(
+                device, app_identity)
             protected_ui.start()
 
             checkpoint(args.output, record, "home_denials")

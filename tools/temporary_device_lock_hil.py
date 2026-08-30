@@ -19,7 +19,115 @@ from run_1x_device_lock_persistence_hil import (
     wait_lock_state,
     wipe_pin,
 )
-from run_1x_product_survey_hil import action
+from run_1x_product_survey_hil import action, query
+
+
+PROTECTED_UI_FIXTURE_SCHEMA = "leshy.device_lock.protected_ui_fixture.v1"
+
+
+def protected_ui_fixture_command(
+        device: PassiveSerial, operation: str) -> dict[str, Any]:
+    if operation not in ("begin", "cleanup"):
+        raise ValueError("protected UI fixture operation must be begin or cleanup")
+    return query(
+        device,
+        f"device-lock.protected-ui-fixture {operation}".encode("ascii"),
+        PROTECTED_UI_FIXTURE_SCHEMA,
+        "protected_ui_fixture",
+    )
+
+
+def protected_ui_fixture_failures(
+        report: dict[str, Any], label: str, *, operation: str,
+        status: str, active: bool) -> list[str]:
+    expected: dict[str, Any] = {
+        "operation": operation,
+        "status": status,
+        "active": active,
+        "ram_only_admission": True,
+        "protected_ui_only": True,
+        "credential_written": False,
+        "data_key_replaced": False,
+        "product_namespace_written_or_erased": False,
+        "whole_nvs_read_or_copied": False,
+        "radio_touched": False,
+    }
+    return [
+        f"{label}.{key}: {report.get(key)!r} != {wanted!r}"
+        for key, wanted in expected.items() if report.get(key) != wanted
+    ]
+
+
+class TemporaryProtectedUiAdmissionHil:
+    """RAM-only protected-UI lease that preserves the product data key."""
+
+    def __init__(self, device: PassiveSerial, app_identity: str) -> None:
+        self.device = device
+        self.app_identity = app_identity
+        self.run_id = secrets.token_hex(16)
+        self.sessions: list[dict[str, Any]] = []
+        self.begin_report: dict[str, Any] = {}
+        self.cleanup_report: dict[str, Any] = {}
+        self.hil_started = False
+        self.hil_ended = False
+        self.fixture_started = False
+        self.cleanup_proven = False
+
+    def rebind(self, device: PassiveSerial) -> None:
+        self.device = device
+
+    def start(self) -> dict[str, Any]:
+        self.sessions.append(
+            begin_hil(self.device, self.run_id, self.app_identity))
+        self.hil_started = True
+        self.fixture_started = True
+        self.begin_report = protected_ui_fixture_command(self.device, "begin")
+        failures = protected_ui_fixture_failures(
+            self.begin_report, "fixture_begin", operation="begin",
+            status="begun", active=True)
+        if failures:
+            raise RuntimeError("; ".join(failures))
+        return home_device(self.device)
+
+    def close(self) -> None:
+        failures: list[str] = []
+        if self.fixture_started and not self.cleanup_proven:
+            self.cleanup_report = protected_ui_fixture_command(
+                self.device, "cleanup")
+            # Reset clears the RAM lease.  Re-authenticate only to obtain an
+            # explicit idempotent cleanup record before ending the HIL session.
+            if self.cleanup_report.get("status") == "hil_session_required":
+                self.sessions.append(
+                    begin_hil(self.device, self.run_id, self.app_identity))
+                self.hil_started = True
+                self.hil_ended = False
+                self.cleanup_report = protected_ui_fixture_command(
+                    self.device, "cleanup")
+            failures.extend(protected_ui_fixture_failures(
+                self.cleanup_report, "fixture_cleanup", operation="cleanup",
+                status="cleaned", active=False))
+            self.cleanup_proven = not failures
+        if (not self.fixture_started or self.cleanup_proven) and \
+                self.hil_started and not self.hil_ended:
+            self.sessions.append(end_hil(self.device, self.run_id))
+            self.hil_ended = True
+        if failures:
+            raise RuntimeError("; ".join(failures))
+
+    def evidence(self) -> dict[str, Any]:
+        return {
+            "active_at_end": self.cleanup_report.get("active"),
+            "begun": self.begin_report.get("status") == "begun",
+            "cleanup_proven": self.cleanup_proven,
+            "credential_written": False,
+            "data_key_replaced": False,
+            "hil_ended": self.hil_ended,
+            "product_namespace_written_or_erased": False,
+            "protected_ui_only": True,
+            "ram_only_admission": True,
+            "sessions": self.sessions,
+            "whole_nvs_read_or_copied": False,
+        }
 
 
 class TemporaryDeviceLockHil:
