@@ -81,6 +81,17 @@ def main() -> int:
             "Resource::Storage" in catalog and "Resource::RadioSpi" in catalog,
             "Targets must be a real saved-session Home product with exact leases")
     require(failures,
+            "TemporaryProtectedUiAdmissionHil" in evidence_runner and
+            "protected_ui.start()" in evidence_runner and
+            "protected_ui.close()" in evidence_runner and
+            '"device_lock_fixture": protected_ui.evidence()' in
+                evidence_runner and
+            "merge-base" in evidence_runner and
+            "descended from firmware source" in evidence_runner,
+            "Targets evidence HIL must use disposable RAM-only Device Lock "
+            "admission, prove cleanup and bind a clean descendant harness to "
+            "the exact firmware source")
+    require(failures,
             "TargetsProductRuntime* targetsProductRuntime = nullptr" in entry and
             "new (std::nothrow) TargetsProductRuntime" in entry and
             "delete targetsProductRuntime" in entry and

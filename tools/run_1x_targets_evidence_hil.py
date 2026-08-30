@@ -24,6 +24,7 @@ from run_1x_product_survey_hil import (
     query,
 )
 from run_1x_ui_typography_hil import normalize_home
+from temporary_device_lock_hil import TemporaryProtectedUiAdmissionHil
 
 
 SCHEMA = "leshy.targets_evidence_hil.run.v1"
@@ -104,8 +105,13 @@ def main() -> int:
         ["git", "status", "--porcelain", "--untracked-files=all"],
         cwd=root, check=True, stdout=subprocess.PIPE, text=True,
     ).stdout.strip()
-    if head != args.source_commit or status:
-        parser.error("exact HIL requires clean committed HEAD")
+    source_is_ancestor = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", args.source_commit, head],
+        cwd=root, check=False,
+    ).returncode == 0
+    if not source_is_ancestor or status:
+        parser.error(
+            "exact HIL requires clean committed HEAD descended from firmware source")
     try:
         checked_stack_frames = stack_frames(args.elf)
     except (FileNotFoundError, subprocess.CalledProcessError, ValueError) as error:
@@ -122,10 +128,13 @@ def main() -> int:
     rows: list[dict[str, Any]] = []
     evidence_details: list[dict[str, Any]] = []
     cleanup: dict[str, Any] = {"attempted": False}
+    protected_ui: TemporaryProtectedUiAdmissionHil | None = None
     record: dict[str, Any] = {
         "schema": SCHEMA,
         "status": "in_progress",
         "source_commit": args.source_commit,
+        "firmware_source_commit": args.source_commit,
+        "harness_commit": head,
         "candidate": {
             "version": args.expected_version,
             "firmware_sha256": sha256_file(candidate),
@@ -160,6 +169,14 @@ def main() -> int:
             if current_generation < 2:
                 raise RuntimeError("Targets evidence delta needs a Session pair")
             baseline_generation = current_generation - 1
+
+            # Targets is protected by Device Lock.  Full-regression HIL must
+            # not silently depend on a user's product credential, nor write a
+            # disposable credential/data key into the product namespace.  Use
+            # the shared RAM-only protected-UI admission and prove cleanup.
+            protected_ui = TemporaryProtectedUiAdmissionHil(
+                device, app_identity)
+            protected_ui.start()
 
             home = normalize_home(device)
             for _ in range(5):
@@ -283,6 +300,7 @@ def main() -> int:
                            "leshy.input.frontend.v1", "state")
             require(inputs, "input", status="ready", read_errors=0,
                     queue_drops=0)
+            protected_ui.close()
             cleanup = best_effort_cleanup(device)
             if not cleanup.get("complete"):
                 raise RuntimeError("final cleanup state is unproven")
@@ -299,6 +317,7 @@ def main() -> int:
             "trace": trace,
             "screens": screens,
             "cleanup": cleanup,
+            "device_lock_fixture": protected_ui.evidence(),
             "flash_count": 0 if args.reuse_exact_flash else 1,
             "exact_flash_reused": args.reuse_exact_flash,
             "storage_write_calls": 0,
@@ -317,6 +336,9 @@ def main() -> int:
             try:
                 with PassiveSerial(args.port, 115200, timeout=0.25) as device:
                     synchronize_console(device, 10.0)
+                    if protected_ui is not None:
+                        protected_ui.rebind(device)
+                        protected_ui.close()
                     cleanup = best_effort_cleanup(device)
             except Exception as cleanup_error:
                 cleanup = {"attempted": True, "complete": False,
@@ -326,6 +348,8 @@ def main() -> int:
         record.update({"status": "failed", "error": str(error),
                        "trace": trace, "screens": screens, "rows": rows,
                        "cleanup": cleanup,
+                       "device_lock_fixture": None if protected_ui is None
+                       else protected_ui.evidence(),
                        "flash_count": 0 if args.reuse_exact_flash else 1,
                        "exact_flash_reused": args.reuse_exact_flash,
                        "storage_write_calls": 0,
