@@ -48,6 +48,10 @@ def passing_result(
             "effective_dwell_seconds": case.minimum_dwell_seconds,
             "dwell_samples": dwell_samples,
             "home_settled": home,
+            **({"feature_state": {
+                "schema": runner.TARGETS_SCHEMA, "kind": "state",
+                "page_open": True, "lease_mask": case.lease_mask,
+            }} if case.item_id == "targets" else {}),
         })
     return {
         "schema": runner.RUN_SCHEMA,
@@ -343,6 +347,15 @@ class RetainedContractTests(unittest.TestCase):
         result = passing_result()
         result["menus"][3]["home_settled"]["lease_mask"] = 9
         self.assertTrue(runner.result_contract_failures(result))
+
+    def test_missing_open_targets_product_state_is_rejected(self) -> None:
+        result = passing_result()
+        targets = next(menu for menu in result["menus"]
+                       if menu["id"] == "targets")
+        targets.pop("feature_state")
+        failures = runner.result_contract_failures(result)
+        self.assertTrue(any("targets.feature_state" in failure
+                            for failure in failures))
 
     def test_incomplete_terminal_cleanup_is_rejected(self) -> None:
         result = passing_result()

@@ -58,6 +58,7 @@ from run_1x_product_survey_hil import (
 
 RUN_SCHEMA = "leshy.top_level_menu_smoke_hil.run.v1"
 UI_SCHEMA = "leshy.ui.v1"
+TARGETS_SCHEMA = "leshy.targets.product.v1"
 HIL_SESSION_SCHEMA = "leshy.hil.session.v1"
 BOARD_ID = "board-01"
 BOARD_PORT = "/dev/cu.usbmodem2101"
@@ -263,6 +264,15 @@ def wait_clean_home(device: PassiveSerial, case: MenuCase,
     return actions, settled
 
 
+def capture_feature_state(device: PassiveSerial,
+                          case: MenuCase) -> dict[str, Any] | None:
+    """Retain a read-only product diagnostic while its page is still open."""
+    if case.item_id == "targets":
+        return read_only_query(
+            device, b"targets.state", TARGETS_SCHEMA, "state")
+    return None
+
+
 def result_contract_failures(result: dict[str, Any]) -> list[str]:
     """Fail closed on incomplete/malleable retained menu-smoke evidence."""
     failures: list[str] = []
@@ -375,6 +385,15 @@ def result_contract_failures(result: dict[str, Any]) -> list[str]:
             ble_failure = ble_begin_evidence_failure(samples)
             if ble_failure is not None:
                 failures.append(f"{label}: {ble_failure}")
+        feature_state = record.get("feature_state")
+        if case.item_id == "targets":
+            failures.extend(expect(
+                feature_state if isinstance(feature_state, dict) else {}, {
+                    "schema": TARGETS_SCHEMA, "kind": "state",
+                    "page_open": True, "lease_mask": case.lease_mask,
+                }, f"{label}.feature_state"))
+        elif feature_state not in (None, {}):
+            failures.append(f"{label}.feature_state: unexpected")
         settled = record.get("home_settled")
         failures.extend(expect(settled if isinstance(settled, dict) else {}, {
             "page": "home", "selected_id": case.item_id,
@@ -639,6 +658,9 @@ def main() -> int:
                                 bool)
                         ]
                         record["failures"].extend(dwell_failures)
+                        feature_state = capture_feature_state(device, case)
+                        if feature_state is not None:
+                            record["feature_state"] = feature_state
                         if args.capture_screens:
                             screen = capture(
                                 device, frames_dir,
