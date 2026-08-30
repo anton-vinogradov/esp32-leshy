@@ -17,9 +17,13 @@ SCHEMA = "leshy.product_home_hil.run.v1"
 LEGACY_HOME_ITEMS = [
     "wifi", "ble", "spectrum24", "subghz", "capture", "library", "device",
 ]
-CURRENT_HOME_ITEMS = [
+TARGETS_HOME_ITEMS = [
     "wifi", "ble", "spectrum24", "subghz", "capture", "targets",
     "library", "device",
+]
+CURRENT_HOME_ITEMS = [
+    "wifi", "ble", "spectrum24", "subghz", "capture", "targets",
+    "library", "lab", "device",
 ]
 SCREENS = {
     "home_top": "home-top",
@@ -45,6 +49,7 @@ IDENTITY_SCREENS = {"home_en": "home-en"}
 NRF_MODE_SCREENS = {"nrf_modes": "nrf-modes"}
 SUBGHZ_MODE_SCREENS = {"subghz_modes": "subghz-modes"}
 TARGETS_SCREENS = {"targets": "targets"}
+LAB_SCREENS = {"lab": "lab"}
 
 
 def digest(path: Path) -> str:
@@ -160,7 +165,8 @@ def main() -> int:
             run.get("gate_eligible") is True and not run.get("failures"),
             "run is not a clean flashed pass")
     home_items = run.get("home_items")
-    require(failures, home_items in (LEGACY_HOME_ITEMS, CURRENT_HOME_ITEMS),
+    require(failures, home_items in (
+                LEGACY_HOME_ITEMS, TARGETS_HOME_ITEMS, CURRENT_HOME_ITEMS),
             "Home item order/content mismatch")
     candidate = run.get("candidate", {})
     firmware = root / "firmware.bin"
@@ -358,8 +364,10 @@ def main() -> int:
     identity_contract = scope.get("home_identity") == \
         "bilingual_brand_and_version"
     expected_screens = dict(SCREENS)
-    if home_items == CURRENT_HOME_ITEMS:
+    if home_items in (TARGETS_HOME_ITEMS, CURRENT_HOME_ITEMS):
         expected_screens.update(TARGETS_SCREENS)
+    if home_items == CURRENT_HOME_ITEMS:
+        expected_screens.update(LAB_SCREENS)
     if "nrf_modes" in screens:
         expected_screens.update(NRF_MODE_SCREENS)
     if "subghz_modes" in screens:

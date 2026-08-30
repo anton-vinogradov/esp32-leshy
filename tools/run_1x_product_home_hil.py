@@ -32,7 +32,7 @@ NRF_SCHEMA = "leshy.nrf24.spectrum.v1"
 CC_SCHEMA = "leshy.cc1101.spectrum.v1"
 HOME_ITEMS = (
     "wifi", "ble", "spectrum24", "subghz", "capture", "targets",
-    "library", "device",
+    "library", "lab", "device",
 )
 WATERFALL_ROWS = 224
 WATERFALL_GRAPH_Y = 54
@@ -513,7 +513,8 @@ def main() -> int:
                     (4, "capture", "capture", "capture", 11),
                     (5, "targets", "targets", "targets", 13),
                     (6, "library", "library", "library", 5),
-                    (7, "device", "device", "device", 1),
+                    (7, "lab", "lab", "lab", 1),
+                    (8, "device", "device", "device", 1),
                 ):
                     home_selection(device, index)
                     opened = action(device, "right")
