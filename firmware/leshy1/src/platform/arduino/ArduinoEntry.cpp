@@ -24766,6 +24766,13 @@ bool selectionCanRepaintInPlace(UiAction action) {
         (action == UiAction::Select || action == UiAction::Right)) {
         return true;
     }
+    if (uiController.page() == kDeviceLockPage) {
+        const DeviceLockView view = deviceLockController.view();
+        return (view == DeviceLockView::EnterPin ||
+                view == DeviceLockView::ConfirmPin) &&
+            (action == UiAction::Up || action == UiAction::Down ||
+             action == UiAction::Select || action == UiAction::Right);
+    }
     if (action != UiAction::Up && action != UiAction::Down) return false;
     if (uiController.isRoot()) return true;
     if (uiController.page() == 2) {
@@ -24802,13 +24809,6 @@ bool selectionCanRepaintInPlace(UiAction action) {
     }
     if (uiController.page() == 4) {
         return captureView == CaptureView::SourceMenu;
-    }
-    if (uiController.page() == kDeviceLockPage) {
-        const DeviceLockView view = deviceLockController.view();
-        return (view == DeviceLockView::EnterPin ||
-                view == DeviceLockView::ConfirmPin) &&
-            (action == UiAction::Up || action == UiAction::Down ||
-             action == UiAction::Select || action == UiAction::Right);
     }
     if (uiController.page() == kDevicePage) return true;
     return uiController.page() == 6 &&

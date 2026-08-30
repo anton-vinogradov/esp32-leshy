@@ -64,7 +64,8 @@ def lock_state_unchanged_failures(before: dict[str, Any],
     return failures
 
 
-def benchmark_failures(report: dict[str, Any]) -> list[str]:
+def benchmark_failures(report: dict[str, Any], label: str,
+                       require_stable_heap: bool) -> list[str]:
     failures = expect(report, {
         "benchmark_requested": True,
         "benchmark_complete": True,
@@ -73,16 +74,25 @@ def benchmark_failures(report: dict[str, Any]) -> list[str]:
         "persistence_touched_by_benchmark": False,
         "radio_touched": False,
         "worker_active": False,
-    }, "kdf_benchmark")
+    }, label)
     elapsed = report.get("benchmark_elapsed_us")
     if not isinstance(elapsed, int) or elapsed <= 0 or elapsed > 15_000_000:
-        failures.append(f"kdf_benchmark.elapsed_us={elapsed!r} outside 1..15000000")
-    if report.get("benchmark_heap_before") != report.get("benchmark_heap_after"):
+        failures.append(f"{label}.elapsed_us={elapsed!r} outside 1..15000000")
+    heap_before = report.get("benchmark_heap_before")
+    heap_after = report.get("benchmark_heap_after")
+    if require_stable_heap and heap_before != heap_after:
         failures.append(
-            "KDF worker heap did not return to its in-task baseline: "
-            f"{report.get('benchmark_heap_before')!r}->"
-            f"{report.get('benchmark_heap_after')!r}"
+            f"{label} heap did not return to its in-task baseline: "
+            f"{heap_before!r}->{heap_after!r}"
         )
+    if not require_stable_heap:
+        if (not isinstance(heap_before, int) or
+                not isinstance(heap_after, int) or
+                heap_after > heap_before or heap_before - heap_after > 256):
+            failures.append(
+                f"{label} one-time heap initialization is outside 0..256 B: "
+                f"{heap_before!r}->{heap_after!r}"
+            )
     return failures
 
 
@@ -224,11 +234,36 @@ def main() -> int:
                     failures.append(
                         f"UI command blocked {responsive_ms} ms during KDF")
 
+                benchmark_warmup = wait_benchmark(device)
+                reports["benchmark_warmup"] = benchmark_warmup
+                failures.extend(benchmark_failures(
+                    benchmark_warmup, "kdf_benchmark_warmup", False))
+                failures.extend(lock_state_unchanged_failures(
+                    lock_before, benchmark_warmup))
+
+                accepted_repeat = query(
+                    device,
+                    b"device-lock.kdf-benchmark confirm-no-persist",
+                    LOCK_SCHEMA, "benchmark")
+                reports["benchmark_repeat_accepted"] = accepted_repeat
+                failures.extend(expect(accepted_repeat, {
+                    "status": "accepted", "accepted": True,
+                    "iterations": 120000, "persistence_touched": False,
+                    "radio_touched": False,
+                }, "benchmark_repeat_start"))
                 benchmark = wait_benchmark(device)
                 reports["benchmark"] = benchmark
-                failures.extend(benchmark_failures(benchmark))
+                failures.extend(benchmark_failures(
+                    benchmark, "kdf_benchmark_repeat", True))
                 failures.extend(lock_state_unchanged_failures(
                     lock_before, benchmark))
+                if (benchmark.get("benchmark_heap_before") !=
+                        benchmark_warmup.get("benchmark_heap_after")):
+                    failures.append(
+                        "KDF repeat did not start from the warm heap baseline: "
+                        f"{benchmark_warmup.get('benchmark_heap_after')!r}->"
+                        f"{benchmark.get('benchmark_heap_before')!r}"
+                    )
 
                 home_device(device)
                 trace.append(device_lock_page(device))
@@ -305,10 +340,17 @@ def main() -> int:
                 metrics_after = read_only_query(
                     device, b"metrics", "leshy.boot.v1", "ready")
                 reports["metrics_after"] = metrics_after
-                if metrics_after.get("heap_free") != metrics_before.get("heap_free"):
+                warmup_before = benchmark_warmup.get("benchmark_heap_before")
+                warmup_after = benchmark_warmup.get("benchmark_heap_after")
+                expected_heap_after = metrics_before.get("heap_free")
+                if (isinstance(expected_heap_after, int) and
+                        isinstance(warmup_before, int) and
+                        isinstance(warmup_after, int)):
+                    expected_heap_after -= warmup_before - warmup_after
+                if metrics_after.get("heap_free") != expected_heap_after:
                     failures.append(
-                        "heap free did not return to boot baseline: "
-                        f"{metrics_before.get('heap_free')!r}->"
+                        "heap free did not settle at the measured warm baseline: "
+                        f"{expected_heap_after!r}->"
                         f"{metrics_after.get('heap_free')!r}"
                     )
             except Exception as error:

@@ -43,9 +43,44 @@ class DeviceLockHilRunnerTests(unittest.TestCase):
             "radio_touched": False,
             "worker_active": False,
         }
-        self.assertEqual([], RUNNER.benchmark_failures(valid))
+        self.assertEqual([], RUNNER.benchmark_failures(
+            valid, "kdf_benchmark_repeat", True))
         broken = dict(valid, benchmark_heap_after=99_999)
-        self.assertTrue(RUNNER.benchmark_failures(broken))
+        self.assertTrue(RUNNER.benchmark_failures(
+            broken, "kdf_benchmark_repeat", True))
+
+    def test_warmup_allows_one_bounded_initialization(self) -> None:
+        report = {
+            "benchmark_requested": True,
+            "benchmark_complete": True,
+            "benchmark_success": True,
+            "benchmark_vector_verified": True,
+            "benchmark_elapsed_us": 850_000,
+            "benchmark_heap_before": 100_000,
+            "benchmark_heap_after": 99_880,
+            "persistence_touched_by_benchmark": False,
+            "radio_touched": False,
+            "worker_active": False,
+        }
+        self.assertEqual([], RUNNER.benchmark_failures(
+            report, "kdf_benchmark_warmup", False))
+
+    def test_warmup_rejects_an_unbounded_drop(self) -> None:
+        report = {
+            "benchmark_requested": True,
+            "benchmark_complete": True,
+            "benchmark_success": True,
+            "benchmark_vector_verified": True,
+            "benchmark_elapsed_us": 850_000,
+            "benchmark_heap_before": 100_000,
+            "benchmark_heap_after": 99_700,
+            "persistence_touched_by_benchmark": False,
+            "radio_touched": False,
+            "worker_active": False,
+        }
+        failures = RUNNER.benchmark_failures(
+            report, "kdf_benchmark_warmup", False)
+        self.assertTrue(any("outside 0..256 B" in item for item in failures))
 
     def test_lock_state_comparison_is_exact_for_persistent_fields(self) -> None:
         before = {

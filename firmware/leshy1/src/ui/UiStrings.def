@@ -206,7 +206,7 @@ LESHY_UI_TEXT(DeviceLockSetupAction, Body, 196, "CREATE 6-DIGIT PIN", u8"СОЗ�
 LESHY_UI_TEXT(DeviceLockUnlockAction, Body, 196, "ENTER PIN", u8"ВВЕСТИ PIN")
 LESHY_UI_TEXT(DeviceLockLockAction, Body, 196, "LOCK NOW", u8"ЗАБЛОКИРОВАТЬ")
 LESHY_UI_TEXT(DeviceLockSetupNote, Meta, 196, "OK OR TOUCH", u8"OK ИЛИ КАСАНИЕ")
-LESHY_UI_TEXT(DeviceLockProtectedClosed, Meta, 212, "PROTECTED DATA STAYS CLOSED", u8"ЗАЩИЩЁННЫЕ ДАННЫЕ ЗАКРЫТЫ")
+LESHY_UI_TEXT(DeviceLockProtectedClosed, Meta, 212, "PROTECTED DATA STAYS CLOSED", u8"ДАННЫЕ ЗАКРЫТЫ")
 LESHY_UI_TEXT(DeviceLockAutoNote, Meta, 212, "AUTO-LOCK: 10 MIN IDLE", u8"АВТОБЛОК: 10 МИН БЕЗДЕЙСТВИЯ")
 LESHY_UI_TEXT(DeviceLockAttemptsFormat, Meta, 212, "FAILED ATTEMPTS: %u OF 5", u8"НЕВЕРНЫХ ПОПЫТОК: %u ИЗ 5")
 LESHY_UI_TEXT(DeviceLockRetryFormat, Body, 212, "TRY AGAIN IN %llu S", u8"ПОВТОР ЧЕРЕЗ %llu С")
