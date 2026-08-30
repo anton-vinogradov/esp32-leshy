@@ -16,9 +16,11 @@ def ui_state(case: runner.MenuCase, **overrides: Any) -> dict[str, Any]:
     return state
 
 
-def passing_result() -> dict[str, Any]:
+def passing_result(
+        cases: tuple[runner.MenuCase, ...] = runner.MENU_CASES,
+) -> dict[str, Any]:
     menus = []
-    for case in runner.MENU_CASES:
+    for case in cases:
         home = {
             "page": "home", "selected_id": case.item_id,
             "runtime_owner": "none", "lease_mask": 0,
@@ -60,6 +62,8 @@ def passing_result() -> dict[str, Any]:
             "isolated_device_lock_fixture": True,
             "pin_or_digest_retained": False,
             "product_lock_namespace_written_or_erased": False,
+            "coverage": "full" if cases == runner.MENU_CASES else "delta",
+            "requested_menu_ids": [case.item_id for case in cases],
         },
         "menus": menus,
         "device_lock_fixture": {
@@ -105,11 +109,13 @@ def passing_result() -> dict[str, Any]:
             "ui": {"page": "home", "runtime_owner": "none",
                    "lease_mask": 0},
         },
-        "catalog_boundary": {
+        "catalog_boundary": ({
             "page": "home", "selection": runner.MENU_CASES[-1].index,
             "selected_id": runner.MENU_CASES[-1].item_id,
             "changed": False, "runtime_owner": "none", "lease_mask": 0,
-        },
+        } if cases == runner.MENU_CASES else {
+            "checked": False, "reason": "delta_subset",
+        }),
         "screens": {},
     }
 
@@ -257,6 +263,24 @@ class RetainedContractTests(unittest.TestCase):
         }
         self.assertEqual([], runner.result_contract_failures(result))
 
+    def test_catalog_ordered_delta_screenshot_set_passes(self) -> None:
+        cases = runner.selected_menu_cases(["targets", "lab"])
+        result = passing_result(cases)
+        result["policy"]["screenshots_requested"] = True
+        result["screens"] = {
+            case.item_id: screen_record(case) for case in cases
+        }
+        self.assertEqual([], runner.result_contract_failures(result))
+
+    def test_delta_cannot_claim_full_or_reorder_catalog(self) -> None:
+        cases = runner.selected_menu_cases(["targets", "lab"])
+        result = passing_result(cases)
+        result["policy"]["requested_menu_ids"] = ["lab", "targets"]
+        self.assertTrue(runner.result_contract_failures(result))
+        result = passing_result(cases)
+        result["policy"]["coverage"] = "full"
+        self.assertTrue(runner.result_contract_failures(result))
+
     def test_missing_or_mismatched_screenshot_is_rejected(self) -> None:
         result = passing_result()
         result["policy"]["screenshots_requested"] = True
@@ -386,6 +410,15 @@ class RetainedContractTests(unittest.TestCase):
 
 
 class StaticSafetyPolicyTests(unittest.TestCase):
+    def test_delta_selection_is_unique_known_and_catalog_ordered(self) -> None:
+        selected = runner.selected_menu_cases(["lab", "targets"])
+        self.assertEqual(["targets", "lab"],
+                         [case.item_id for case in selected])
+        with self.assertRaises(ValueError):
+            runner.selected_menu_cases(["targets", "targets"])
+        with self.assertRaises(ValueError):
+            runner.selected_menu_cases(["unknown"])
+
     def test_catalog_covers_all_nine_current_home_entries(self) -> None:
         self.assertEqual(
             ["wifi", "ble", "spectrum24", "subghz", "capture",

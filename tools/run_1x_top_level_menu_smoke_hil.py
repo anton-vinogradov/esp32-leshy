@@ -115,6 +115,21 @@ MENU_CASES = (
 )
 
 
+def selected_menu_cases(requested: list[str] | None) -> tuple[MenuCase, ...]:
+    """Resolve a catalog-ordered strict delta or the complete default set."""
+    if not requested:
+        return MENU_CASES
+    if len(requested) != len(set(requested)):
+        raise ValueError("--only menu ids must be unique")
+    known = {case.item_id: case for case in MENU_CASES}
+    unknown = [item_id for item_id in requested if item_id not in known]
+    if unknown:
+        raise ValueError(f"unknown --only menu ids: {', '.join(unknown)}")
+    requested_set = set(requested)
+    return tuple(case for case in MENU_CASES
+                 if case.item_id in requested_set)
+
+
 def state_failures(case: MenuCase, state: dict[str, Any],
                    label: str) -> list[str]:
     """Return every page/owner/lease invariant violation for one sample."""
@@ -293,16 +308,41 @@ def result_contract_failures(result: dict[str, Any]) -> list[str]:
             if before_lock.get(key) != after_lock.get(key):
                 failures.append(
                     f"result.device_lock_fixture.product_continuity.{key}: changed")
+    all_ids = [case.item_id for case in MENU_CASES]
+    coverage = policy.get("coverage")
+    requested_ids = policy.get("requested_menu_ids")
+    expected_cases: tuple[MenuCase, ...] = ()
+    if coverage == "full":
+        if requested_ids != all_ids:
+            failures.append("result.policy: full coverage catalog mismatch")
+        else:
+            expected_cases = MENU_CASES
+    elif coverage == "delta":
+        if (not isinstance(requested_ids, list) or not requested_ids or
+                requested_ids == all_ids or len(requested_ids) !=
+                len(set(requested_ids))):
+            failures.append("result.policy: invalid strict delta subset")
+        else:
+            try:
+                expected_cases = selected_menu_cases(requested_ids)
+            except ValueError as error:
+                failures.append(f"result.policy: {error}")
+            if [case.item_id for case in expected_cases] != requested_ids:
+                failures.append(
+                    "result.policy: delta ids must follow catalog order")
+    else:
+        failures.append("result.policy: coverage must be full or delta")
+
     records = result.get("menus")
     if not isinstance(records, list):
         return failures + ["result.menus: missing"]
-    expected_ids = [case.item_id for case in MENU_CASES]
+    expected_ids = [case.item_id for case in expected_cases]
     actual_ids = [record.get("id") for record in records
                   if isinstance(record, dict)]
     if actual_ids != expected_ids:
         failures.append(
             f"result.menus: {actual_ids!r} != {expected_ids!r}")
-    for case, record in zip(MENU_CASES, records):
+    for case, record in zip(expected_cases, records):
         label = f"result.{case.item_id}"
         if not isinstance(record, dict):
             failures.append(f"{label}: invalid record")
@@ -345,7 +385,7 @@ def result_contract_failures(result: dict[str, Any]) -> list[str]:
         if not isinstance(screens, dict) or list(screens) != expected_ids:
             failures.append("result.screens: complete catalog-order set missing")
         else:
-            for case in MENU_CASES:
+            for case in expected_cases:
                 screen = screens.get(case.item_id, {})
                 label = f"result.screens.{case.item_id}"
                 if not isinstance(screen, dict):
@@ -413,11 +453,16 @@ def result_contract_failures(result: dict[str, Any]) -> list[str]:
     failures.extend(expect(post.get("ui", {}), {
         "page": "home", "runtime_owner": "none", "lease_mask": 0,
     }, "result.post_hil_end.ui"))
-    failures.extend(expect(result.get("catalog_boundary", {}), {
-        "page": "home", "selection": MENU_CASES[-1].index,
-        "selected_id": MENU_CASES[-1].item_id, "changed": False,
-        "runtime_owner": "none", "lease_mask": 0,
-    }, "result.catalog_boundary"))
+    if coverage == "full":
+        failures.extend(expect(result.get("catalog_boundary", {}), {
+            "page": "home", "selection": MENU_CASES[-1].index,
+            "selected_id": MENU_CASES[-1].item_id, "changed": False,
+            "runtime_owner": "none", "lease_mask": 0,
+        }, "result.catalog_boundary"))
+    else:
+        failures.extend(expect(result.get("catalog_boundary", {}), {
+            "checked": False, "reason": "delta_subset",
+        }, "result.catalog_boundary"))
     return failures
 
 
@@ -461,8 +506,12 @@ def main() -> int:
     parser.add_argument("--sample-seconds", type=float,
                         default=DEFAULT_SAMPLE_SECONDS)
     parser.add_argument("--capture-screens", action="store_true")
+    parser.add_argument(
+        "--only", action="append", choices=[case.item_id for case in MENU_CASES],
+        help="repeat for a strict catalog-ordered delta; default covers all menus")
     args = parser.parse_args()
     validate_args(parser, args)
+    cases = selected_menu_cases(args.only)
 
     args.output.mkdir(parents=True)
     candidate = args.output / "firmware.bin"
@@ -552,7 +601,7 @@ def main() -> int:
                 if unlocked_cleanup.get("complete") is not True:
                     raise RuntimeError("unlocked fixture did not return Home")
 
-                for case in MENU_CASES:
+                for case in cases:
                     record: dict[str, Any] = {
                         "id": case.item_id, "index": case.index,
                         "expected_page": case.page,
@@ -616,16 +665,20 @@ def main() -> int:
                         f"{case.item_id}: {failure}"
                         for failure in record["failures"])
 
-                # Prove that the executable catalog has no untested tenth
-                # entry.  Down on the last declared row must be a no-op.
-                catalog_boundary = action(device, "down")
-                trace.append(catalog_boundary)
-                failures.extend(expect(catalog_boundary, {
-                    "page": "home", "selection": MENU_CASES[-1].index,
-                    "selected_id": MENU_CASES[-1].item_id,
-                    "changed": False, "runtime_owner": "none",
-                    "lease_mask": 0,
-                }, "catalog_boundary"))
+                if cases == MENU_CASES:
+                    # Full mode alone proves that the executable catalog has
+                    # no untested tenth entry. Down on the last row is a no-op.
+                    catalog_boundary = action(device, "down")
+                    trace.append(catalog_boundary)
+                    failures.extend(expect(catalog_boundary, {
+                        "page": "home", "selection": MENU_CASES[-1].index,
+                        "selected_id": MENU_CASES[-1].item_id,
+                        "changed": False, "runtime_owner": "none",
+                        "lease_mask": 0,
+                    }, "catalog_boundary"))
+                else:
+                    catalog_boundary = {
+                        "checked": False, "reason": "delta_subset"}
 
                 input_state = read_only_query(
                     device, b"input.state",
@@ -730,6 +783,8 @@ def main() -> int:
             "pin_or_digest_retained": False,
             "product_lock_namespace_written_or_erased": False,
             "screenshots_requested": args.capture_screens,
+            "coverage": "full" if cases == MENU_CASES else "delta",
+            "requested_menu_ids": [case.item_id for case in cases],
             "requested_dwell_seconds": args.dwell_seconds,
             "sample_seconds": args.sample_seconds,
         },
