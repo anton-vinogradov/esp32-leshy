@@ -18,6 +18,7 @@ CONTROLLER_H = ROOT / "firmware/leshy1/src/apps/device/DeviceLockController.h"
 CONTROLLER_CPP = ROOT / "firmware/leshy1/src/apps/device/DeviceLockController.cpp"
 CONTROLLER_TESTS = ROOT / "tests/native/device_lock_controller_tests.cpp"
 ENTRY = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
+PERSISTENCE_RUNNER = ROOT / "tools/run_1x_device_lock_persistence_hil.py"
 
 
 def require(text: str, marker: str, label: str, failures: list[str]) -> None:
@@ -36,6 +37,7 @@ def main() -> int:
     controller = CONTROLLER_CPP.read_text(encoding="utf-8")
     controller_tests = CONTROLLER_TESTS.read_text(encoding="utf-8")
     entry = ENTRY.read_text(encoding="utf-8")
+    persistence_runner = PERSISTENCE_RUNNER.read_text(encoding="utf-8")
     failures: list[str] = []
 
     for marker, label in (
@@ -164,6 +166,8 @@ def main() -> int:
         ("xQueueCreate(", "bounded KDF completion queue"),
         ("xTaskCreatePinnedToCore(", "background KDF task"),
         ("deviceLockWorkerRequest.clear()", "worker PIN wipe"),
+        ("deviceLock.completeBlockingOperation(startedUs, finishedUs)",
+         "post-KDF retry and unlock timing boundary"),
         ("renderDeviceLockPinCells();", "local PIN cell repaint"),
         ("renderInteractiveScreen(!lastUiActionUsedIncrementalRender)",
          "touch incremental repaint"),
@@ -179,6 +183,21 @@ def main() -> int:
         ("benchmark_vector_verified", "exact PBKDF2 HIL vector report"),
     ):
         require(entry, marker, label, failures)
+
+    for marker, label in (
+        ("NVS_OFFSET = 0x9000", "exact NVS transaction boundary"),
+        ("two independent NVS backup reads differ", "double-read backup"),
+        ("restore_flash(", "verified NVS restoration"),
+        ("wipe_pin(correct_pin)", "ephemeral correct PIN wipe"),
+        ("wipe_pin(wrong_pin)", "ephemeral wrong PIN wipe"),
+        ("pin_or_digest_retained\": False", "PIN evidence exclusion"),
+        ("private_nvs_in_public_manifest\": False",
+         "private NVS evidence exclusion"),
+        ("mac_wifi\": False", "Mac Wi-Fi exclusion"),
+        ("clone\": False", "clone exclusion"),
+        ("cardputer\": False", "Cardputer exclusion"),
+    ):
+        require(persistence_runner, marker, label, failures)
 
     for marker, label in (
         ("testConfigureRequiresStrongMatchingConfirmationAndClearsSubmission",

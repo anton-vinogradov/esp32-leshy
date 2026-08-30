@@ -12794,6 +12794,10 @@ void runDeviceLockWorker(void*) {
     std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     if (startedUs == 0U) startedUs = 1U;
+    const bool productBlockingOperation =
+        event.mode == DeviceLockWorkerMode::Product &&
+        (deviceLockWorkerRequest.intent == DeviceLockIntent::Configure ||
+         deviceLockWorkerRequest.intent == DeviceLockIntent::Unlock);
     if (event.mode == DeviceLockWorkerMode::KdfBenchmark) {
         // A fixed diagnostic vector exercises the production 120k-round KDF
         // without reading or changing the owner's credential. Every byte is
@@ -12845,9 +12849,13 @@ void runDeviceLockWorker(void*) {
             deviceLockWorkerRequest.pin.data(),
             deviceLockWorkerRequest.pinLength, startedUs);
     }
-    deviceLockWorkerRequest.clear();
     const std::uint64_t finishedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
+    if (productBlockingOperation &&
+        !deviceLock.completeBlockingOperation(startedUs, finishedUs)) {
+        event.success = false;
+    }
+    deviceLockWorkerRequest.clear();
     event.elapsedUs = finishedUs >= startedUs ? finishedUs - startedUs : 0U;
     event.heapAfter = ESP.getFreeHeap();
     event.minimumHeapAfter = ESP.getMinFreeHeap();

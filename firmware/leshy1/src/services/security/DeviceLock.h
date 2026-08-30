@@ -145,6 +145,12 @@ public:
                    std::uint64_t nowUs);
     bool unlock(const char* pin, std::size_t pinLength,
                 std::uint64_t nowUs);
+    // configure()/unlock() timestamp their state before the synchronous
+    // verifier runs. A production caller that executes a blocking verifier
+    // must immediately shift retry/session deadlines to the actual completion
+    // boundary so KDF time cannot consume either security interval.
+    bool completeBlockingOperation(std::uint64_t startedUs,
+                                   std::uint64_t finishedUs);
     void lock();
     bool recordActivity(std::uint64_t nowUs);
     bool service(std::uint64_t nowUs);

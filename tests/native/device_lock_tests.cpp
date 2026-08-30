@@ -275,6 +275,42 @@ void testTimeoutClockRollbackAndSystemBoundaryRevoke() {
     CHECK(lock.state() == DeviceLockState::Locked);
 }
 
+void testBlockingVerifierTimeCannotConsumeRetryOrUnlockIntervals() {
+    MemoryStore store;
+    FakeCrypto crypto;
+    DeviceLock lock(store, crypto);
+    constexpr std::uint64_t configureStartedUs = 100U;
+    constexpr std::uint64_t configureFinishedUs = 7500100U;
+    configure(lock, configureStartedUs);
+    CHECK(lock.completeBlockingOperation(configureStartedUs,
+                                         configureFinishedUs));
+    CHECK(!lock.service(configureFinishedUs + kDeviceLockIdleTimeoutUs - 1U));
+    CHECK(lock.state() == DeviceLockState::Unlocked);
+    CHECK(lock.service(configureFinishedUs + kDeviceLockIdleTimeoutUs));
+    CHECK(lock.state() == DeviceLockState::Locked);
+
+    constexpr std::uint64_t wrongStartedUs = 20000000U;
+    constexpr std::uint64_t wrongFinishedUs = 27500000U;
+    CHECK(!lock.unlock("804281", 6, wrongStartedUs));
+    CHECK(lock.completeBlockingOperation(wrongStartedUs, wrongFinishedUs));
+    CHECK(lock.audit(wrongFinishedUs).retryRemainingUs ==
+          DeviceLock::retryDelayUs(1));
+    CHECK(!lock.service(wrongFinishedUs +
+                        DeviceLock::retryDelayUs(1) - 1U));
+    CHECK(lock.state() == DeviceLockState::RetryDelay);
+    CHECK(lock.service(wrongFinishedUs + DeviceLock::retryDelayUs(1)));
+    CHECK(lock.state() == DeviceLockState::Locked);
+
+    constexpr std::uint64_t unlockStartedUs = 40000000U;
+    constexpr std::uint64_t unlockFinishedUs = 47500000U;
+    CHECK(lock.unlock("704281", 6, unlockStartedUs));
+    CHECK(lock.completeBlockingOperation(unlockStartedUs, unlockFinishedUs));
+    CHECK(!lock.service(unlockFinishedUs + kDeviceLockIdleTimeoutUs - 1U));
+    CHECK(lock.state() == DeviceLockState::Unlocked);
+    CHECK(lock.service(unlockFinishedUs + kDeviceLockIdleTimeoutUs));
+    CHECK(lock.state() == DeviceLockState::Locked);
+}
+
 void testDestructiveRecoveryOrderingAndFailures() {
     MemoryStore store;
     FakeCrypto crypto;
@@ -371,6 +407,7 @@ int main() {
     testWrongPinPersistsBackoffAcrossResetAndEndsRecoveryOnly();
     testSuccessfulUnlockClearsPersistentFailuresOnlyAfterSave();
     testTimeoutClockRollbackAndSystemBoundaryRevoke();
+    testBlockingVerifierTimeCannotConsumeRetryOrUnlockIntervals();
     testDestructiveRecoveryOrderingAndFailures();
     testCorruptOrMissingExpectedCredentialFailsClosed();
     testCredentialRecordIsVersionedExactAndCorruptionDetecting();

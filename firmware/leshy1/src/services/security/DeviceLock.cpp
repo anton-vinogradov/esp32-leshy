@@ -340,6 +340,23 @@ bool DeviceLock::unlock(const char* pin, std::size_t pinLength,
     return true;
 }
 
+bool DeviceLock::completeBlockingOperation(std::uint64_t startedUs,
+                                           std::uint64_t finishedUs) {
+    if (finishedUs < startedUs) {
+        lock();
+        lastFailure_ = DeviceLockFailure::ClockRollback;
+        return false;
+    }
+    const std::uint64_t elapsedUs = finishedUs - startedUs;
+    if (state_ == DeviceLockState::RetryDelay) {
+        retryUntilUs_ = saturatingAdd(retryUntilUs_, elapsedUs);
+    } else if (state_ == DeviceLockState::Unlocked) {
+        unlockedAtUs_ = saturatingAdd(unlockedAtUs_, elapsedUs);
+        lastActivityUs_ = saturatingAdd(lastActivityUs_, elapsedUs);
+    }
+    return true;
+}
+
 void DeviceLock::lock() {
     clearUnlockSession();
     if (credential_.valid()) {
