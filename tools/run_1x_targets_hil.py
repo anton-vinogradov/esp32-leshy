@@ -24,6 +24,7 @@ from run_1x_product_survey_hil import (
     committed_failures,
     expect,
     paused_failures,
+    paused_cycle_failures,
     query,
     running_failures,
     setup_failures,
@@ -73,10 +74,10 @@ def run_survey_cycle(device: PassiveSerial, before_generation: int,
             survey_source_selected_count=2)
     started = action(device, "select")
     trace.append(started)
-    running = wait_ui_state(
+    cycle = wait_ui_state(
         device,
         lambda state: (
-            state.get("survey_product_status") == "running" and
+            state.get("survey_product_status") in ("running", "paused") and
             state.get("survey_product_scan_cycles", 0) >= 1 and
             state.get("survey_scan_accepted", 0) >= 1 and
             state.get("survey_ble_scan_accepted", 0) >= 1 and
@@ -85,27 +86,33 @@ def run_survey_cycle(device: PassiveSerial, before_generation: int,
         20.0,
         "Targets precursor Survey did not collect observations",
     )
-    trace.append(running)
-    failures = running_failures(running, EXPECTED_CID, "wifi")
+    trace.append(cycle)
+    if cycle.get("survey_product_status") == "paused":
+        failures = paused_cycle_failures(cycle, EXPECTED_CID, "wifi")
+    else:
+        failures = running_failures(cycle, EXPECTED_CID, "wifi")
     if failures:
         raise RuntimeError("; ".join(failures))
-    require(running, "combined visit", survey_source_selected_mask=3,
+    require(cycle, "combined visit", survey_source_selected_mask=3,
             survey_source_selected_count=2,
             survey_product_selected_source_mask=3,
             survey_product_active_source_mask=3)
-    observations = int(running["survey_observations"])
-    scan_cycles = int(running["survey_product_scan_cycles"])
-    trace.append(action(device, "up"))
-    paused = wait_ui_state(
-        device,
-        lambda state: (
-            state.get("survey_product_status") == "paused" and
-            state.get("survey_product_source_active") is False
-        ),
-        20.0,
-        "Targets precursor Survey did not pause",
-    )
-    trace.append(paused)
+    observations = int(cycle["survey_observations"])
+    scan_cycles = int(cycle["survey_product_scan_cycles"])
+    if cycle.get("survey_product_status") == "paused":
+        paused = cycle
+    else:
+        trace.append(action(device, "up"))
+        paused = wait_ui_state(
+            device,
+            lambda state: (
+                state.get("survey_product_status") == "paused" and
+                state.get("survey_product_source_active") is False
+            ),
+            20.0,
+            "Targets precursor Survey did not pause",
+        )
+        trace.append(paused)
     failures = paused_failures(paused, observations, scan_cycles, "wifi")
     if failures:
         raise RuntimeError("; ".join(failures))

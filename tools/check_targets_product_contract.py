@@ -347,6 +347,11 @@ def main() -> int:
             '"git", "status", "--porcelain"' in runner and
             "--reuse-exact-flash" in runner and
             "--reuse-existing-pair" in runner and
+            'state.get("survey_product_status") in ("running", "paused")'
+                in runner and
+            "paused_cycle_failures(cycle, EXPECTED_CID, \"wifi\")"
+                in runner and
+            'if cycle.get("survey_product_status") == "paused"' in runner and
             '"survey_cycles_executed": 0 if args.reuse_existing_pair else 2'
                 in runner and
             "checked_stack_frames = stack_frames(args.elf)" in runner and
