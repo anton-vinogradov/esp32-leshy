@@ -1,0 +1,31 @@
+{
+  "accepted_raw_run_sha256": "50dfbec6ec8c94278aa4e4037ec2d8481d194129a078d8eb9295d3fefa86d031",
+  "candidate": {
+    "app_elf_sha256": "d8155e1dd75b6c4b82e5ce08d41fec406eeee63475f1e2653b1f043d6aa892de",
+    "elf_sha256": "d8155e1dd75b6c4b82e5ce08d41fec406eeee63475f1e2653b1f043d6aa892de",
+    "firmware_bytes": 3552992,
+    "firmware_sha256": "fff7ac4b2b6c9ab66370a6b3bd0cd5c2b205d55ad55028debefebde94a969615",
+    "map_sha256": "0f1161041f1812c44fdf42c9dfdbd2c579a02a5f107ccca8a9e56251c8c59150",
+    "version": "1.0.0-dev.306"
+  },
+  "factory_sha256": "069648d2fde7cc6e4f2c4ec44ef23e1a0f1c6a0b88a6127d3ecdf5bc9c185786",
+  "firmware_source_commit": "41bf103008202e742598dfd3e092b28aeda45d95",
+  "runner_commit": "959ff6a281e930107481f0d247c12f38a2b4ea94",
+  "runner_sha256": "6c37de1c6cc4ddabd2c03d5220b07f65453f1f6b9f679b44e7fabcaa3b829b27",
+  "schema": "leshy.automation_trust_ui_hil.provenance.v1",
+  "source_sha256": {
+    "firmware/leshy1/platformio.ini": "cacf7cc1667210aa7c4a219bc6a0cc98670ea336ae89203a70bc3a019dab751c",
+    "firmware/leshy1/src/apps/automation/AutomationTrustBundle.cpp": "ab9a78ab456303ba643d426306862c3f9b899198195e0065ae26bf91d5f50806",
+    "firmware/leshy1/src/apps/automation/AutomationTrustBundle.h": "56ae7fe7c159aa1e4661435956aa37192ab69942ba40f8a67d242ad2e647e42f",
+    "firmware/leshy1/src/apps/automation/AutomationTrustStore.cpp": "61631b82a09f6cbf034c71f9bb879e396d0f59ac5082a6f88b517a5fbaeedc30",
+    "firmware/leshy1/src/apps/automation/AutomationTrustStore.h": "91cf60ec019738e7dc23c40496ff3de65db82e07844c5cfe9b3218fa48ae77f4",
+    "firmware/leshy1/src/platform/arduino/ArduinoAutomationTrust.cpp": "fa010b76d8c11abbf5e307e41116c8149fe2e4992160e2d5ab7849cf327adde5",
+    "firmware/leshy1/src/platform/arduino/ArduinoAutomationTrust.h": "fb2068ea94949392082be91dbbe47d12941106122b3ae54e01501b9b0b2f3af8",
+    "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp": "21588129de1b156d9443f4b3fa23e9afd04665149ee6995119c0988930200ea4",
+    "firmware/leshy1/src/platform/arduino/BoardAutomationTrustBundleReader.cpp": "fc84ae14bec20da0213f555d68af7e8adc4f7b0f6661fb81ec830b92b75dea83",
+    "firmware/leshy1/src/platform/arduino/BoardAutomationTrustBundleReader.h": "1ea3d041d3406dfe2b72a565373275bac132818a491d3c8bc7a20704ef30f3ce",
+    "firmware/leshy1/src/ui/UiStrings.def": "4c0a0d86c1aa20e4cc7602e9f887dab2ad31979d416cdd4434af17777d4d97c2",
+    "tools/check_automation_hid_foundation.py": "be72b96916f2ffcf7d409af2520690033b13354304ff213ec8675c4895548f21",
+    "tools/run_1x_automation_trust_ui_hil.py": "6c37de1c6cc4ddabd2c03d5220b07f65453f1f6b9f679b44e7fabcaa3b829b27"
+  }
+}

@@ -1674,6 +1674,23 @@ real mbedTLS P-256 verification and production wiring; it adds no resident packa
 private key, HID queue or execution engine. Focused host and build checks pass; no
 physical heap claim is made and cadence remains 1/15.
 
+Owner-visible Automation trust UI bound `RB-M219`: exact physical
+`1.0.0-dev.306` at firmware source
+`41bf103008202e742598dfd3e092b28aeda45d95` uses 233,304 B static RAM,
+3,552,484 B linked flash and 3,552,992/3,618,528 B app/factory images, leaving
+641,312 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`fff7ac4b2b6c9ab66370a6b3bd0cd5c2b205d55ad55028debefebde94a969615`/
+`069648d2fde7cc6e4f2c4ec44ef23e1a0f1c6a0b88a6127d3ecdf5bc9c185786`/
+`d8155e1dd75b6c4b82e5ce08d41fec406eeee63475f1e2653b1f043d6aa892de`/
+`0f1161041f1812c44fdf42c9dfdbd2c579a02a5f107ccca8a9e56251c8c59150`.
+Against dev.304 this is +256 B static RAM, +5,968 B linked flash and +6,320 B
+app/factory, with 6,320 B less OTA headroom. The delta funds the protected Device
+list/import/revoke presentation, fixed 128-byte public-bundle reader, state telemetry
+and EN/RU strings; it adds no resident private key, package, HID queue or execution
+engine. Physical boot reports 145,500 B total heap, 71,196 B free and 71,004 B minimum.
+The accepted read-only import keeps trust count/generation unchanged and ends with
+zero output and lease; cadence advances to 2/15.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

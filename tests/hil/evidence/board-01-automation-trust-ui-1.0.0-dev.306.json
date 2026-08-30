@@ -1,0 +1,106 @@
+{
+  "board": "board-01",
+  "bundle": "tests/hil/evidence/board-01-automation-trust-ui-1.0.0-dev.306",
+  "candidate": {
+    "app_elf_sha256": "d8155e1dd75b6c4b82e5ce08d41fec406eeee63475f1e2653b1f043d6aa892de",
+    "elf_sha256": "d8155e1dd75b6c4b82e5ce08d41fec406eeee63475f1e2653b1f043d6aa892de",
+    "firmware_bytes": 3552992,
+    "firmware_sha256": "fff7ac4b2b6c9ab66370a6b3bd0cd5c2b205d55ad55028debefebde94a969615",
+    "map_sha256": "0f1161041f1812c44fdf42c9dfdbd2c579a02a5f107ccca8a9e56251c8c59150",
+    "version": "1.0.0-dev.306"
+  },
+  "cleanup": {
+    "device_lock_product_restored": true,
+    "hil_active": false,
+    "language_restored": true,
+    "lease_mask": 0,
+    "page": "home",
+    "runtime_owner": "none"
+  },
+  "evidence_ids": [
+    "E-BUILD-208",
+    "E-AUTO-183",
+    "E-HIL-216",
+    "E-UX-069",
+    "RB-M219"
+  ],
+  "factory_sha256": "069648d2fde7cc6e4f2c4ec44ef23e1a0f1c6a0b88a6127d3ecdf5bc9c185786",
+  "firmware_source_commit": "41bf103008202e742598dfd3e092b28aeda45d95",
+  "import": {
+    "button_path_checked": true,
+    "mutation_confirmed": false,
+    "name": "automation-owner.lhak",
+    "read_status": "open_failed",
+    "result": "bundle_read_failed",
+    "root": "/leshy/automation/v1",
+    "sd_files_written": 0,
+    "sd_mount": "read_only",
+    "touch_path_checked": true
+  },
+  "lineage": {
+    "accepted_run_flashes": 1,
+    "accepted_run_reused_installed_candidate": false,
+    "candidate_flashes": 1
+  },
+  "manifest_sha256": "b9fd843e5d30ba0e10bba4977adbc6d710d074817c19faeedad6599b99e697fb",
+  "raw_run_sha256": "50dfbec6ec8c94278aa4e4037ec2d8481d194129a078d8eb9295d3fefa86d031",
+  "runner_commit": "959ff6a281e930107481f0d247c12f38a2b4ea94",
+  "safe": {
+    "action_invocations": 0,
+    "forbidden_ports_touched": [],
+    "hid_reports": 0,
+    "private_key_used_or_stored": false,
+    "rf_transmit_attempts": 0,
+    "trust_namespace_written": false,
+    "wifi_host_touched": false
+  },
+  "schema": "leshy.automation_trust_ui_hil.summary.v1",
+  "stable_screens": {
+    "first_import_ru": {
+      "pair": [
+        "frames/trust-import-ru-a.png",
+        "frames/trust-import-ru-b.png"
+      ],
+      "png_sha256": "3ad5ef8db5d8bd70bce7b9e1e5233566809cfdca52158dadbe35c468e6164581",
+      "revision": 73,
+      "rgb565_sha256": "37eb39a74e831ce0fafbfa83f6853749a423b98cc55532169366f35274ec7e46"
+    },
+    "list_en": {
+      "pair": [
+        "frames/trust-list-en-a.png",
+        "frames/trust-list-en-b.png"
+      ],
+      "png_sha256": "2ea26bc2db05d88fc228d49faf6e8f47f44f3ef4f2d022f8bb09273a109a1e64",
+      "revision": 72,
+      "rgb565_sha256": "f77d6a6cb0cc68f9090c4638775fba04c8b98d41ed16dc9f5daae185a7bd3b16"
+    },
+    "list_ru": {
+      "pair": [
+        "frames/trust-list-ru-a.png",
+        "frames/trust-list-ru-b.png"
+      ],
+      "png_sha256": "512d3205efcffc7bc5ec3e3516fd16771fe59a32181e738f5e498647f7f34554",
+      "revision": 72,
+      "rgb565_sha256": "e30a4a06e07128a9d032eb3cfd35aa3b1499c8fd4e61efb15db9a607fae2d97a"
+    }
+  },
+  "status": "pass",
+  "trust": {
+    "all_keys_p256_and_id_bound": true,
+    "capacity": 4,
+    "count_after": 0,
+    "count_before": 0,
+    "execution_connected": false,
+    "generation_after": 0,
+    "generation_before": 0,
+    "load_status": "missing",
+    "private_key_stored": false,
+    "public_keys_only": true
+  },
+  "visual_review": {
+    "en_list_legible": true,
+    "ru_list_legible": true,
+    "ru_no_execution_status_single_line": true,
+    "static_frames_stable": true
+  }
+}

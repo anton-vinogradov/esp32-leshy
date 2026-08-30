@@ -1662,6 +1662,23 @@ app/factory/ELF/map —
 private key, queue HID и execution engine не добавлены. Focused host/build checks
 проходят; physical heap не заявляется, cadence остаётся 1/15.
 
+Bound owner-visible Automation trust UI `RB-M219`: exact physical
+`1.0.0-dev.306` на firmware source
+`41bf103008202e742598dfd3e092b28aeda45d95` использует 233 304 B static RAM,
+3 552 484 B linked flash и app/factory images 3 552 992/3 618 528 B, оставляя
+641 312 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`fff7ac4b2b6c9ab66370a6b3bd0cd5c2b205d55ad55028debefebde94a969615`/
+`069648d2fde7cc6e4f2c4ec44ef23e1a0f1c6a0b88a6127d3ecdf5bc9c185786`/
+`d8155e1dd75b6c4b82e5ce08d41fec406eeee63475f1e2653b1f043d6aa892de`/
+`0f1161041f1812c44fdf42c9dfdbd2c579a02a5f107ccca8a9e56251c8c59150`.
+Относительно dev.304 это +256 B static RAM, +5 968 B linked flash и +6 320 B
+app/factory с уменьшением OTA headroom на 6 320 B. Delta финансирует защищённое
+представление Device list/import/revoke, fixed reader public bundle 128 bytes,
+state telemetry и строки EN/RU; resident private key, package, queue HID и execution
+engine не добавлены. Physical boot сообщает heap total/free/minimum
+145 500/71 196/71 004 B. Accepted read-only import сохраняет count/generation trust,
+заканчивается с zero output/lease и двигает cadence до 2/15.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

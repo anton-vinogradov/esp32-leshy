@@ -7,11 +7,11 @@
 - **Workflow:** WF-08-A1/A2/A4
 - **Архитектура:** [ADR-002](adr/ADR-002-resource-policy.ru.md),
   [ADR-004](adr/ADR-004-action-boundary.ru.md)
-- **Состояние:** slices 1 и 2 приняты. Slice 3 имеет host/build checkpoint в
-  `1.0.0-dev.304`: product теперь восстанавливает bounded canonical trust store
-  публичных ключей P-256 из NVS и использует real verifier mbedTLS для passive
-  inspection. Видимый владельцу UI import/revoke, cold physical acceptance и всё
-  active execution ещё не приняты
+- **Состояние:** slices 1 и 2 приняты. Slice 3 имеет physical owner-UI checkpoint
+  `1.0.0-dev.306`: product восстанавливает bounded canonical trust store публичных
+  ключей P-256 из NVS, использует real verifier mbedTLS для passive inspection и
+  показывает защищённый list/import/revoke последним пунктом «Устройство». Positive
+  enrollment, cold restore/revocation и всё active execution ещё не приняты
 
 ## Результат для пользователя
 
@@ -89,10 +89,15 @@ passive Inspector к проверке ECDSA-P256/SHA-256 mbedTLS и canonical tr
 Store содержит максимум четыре публичных SEC1 point, labels и derived key ID 8 bytes;
 private key там никогда нет. Отсутствующий record восстанавливается как пустой готовый
 store, malformed record fail closed. Enrollment/revocation atomic, считает generations
-и требует одновременно unlocked state Device Lock и fresh confirmation. Пока нет
-owner-visible UI и physical cold test, эти mutation methods намеренно недостижимы из
-product UI, а execution остаётся disabled. Ни test double, ни локально придуманный
-checksum не может разрешить product package.
+и требует одновременно unlocked state Device Lock и fresh confirmation. Видимый
+владельцу route «Устройство» показывает максимум четыре public key и читает ровно
+`/leshy/automation/v1/automation-owner.lhak` с SD. Import проверяет public point и
+derived key ID до отдельного review; mutation требует fresh confirmation на 30 seconds.
+Exact physical dev.306 принимает список EN/RU, button/touch import и результат
+отсутствующего bundle без подтверждения mutation: count/generation trust не меняются,
+SD read-only, private-key/Action/HID/RF output остаётся zero, execution disabled.
+Positive enrollment и cold restore являются отдельным gate. Ни test double, ни
+локально придуманный checksum не может разрешить product package.
 
 Enrollment artifact — fixed public-only bundle `LHAK` v1 размером 128 bytes.
 Защищённый GitHub environment `automation-signing` хранит
@@ -127,9 +132,12 @@ inspection.
    Home/none/lease 0. Product namespace `/leshy/automation/v1` не изменяется.
 3. `in progress` — exact host/build dev.304 подключает real verifier P-256,
    canonical NVS store на четыре ключа, atomic authenticated mutation contract и
-   public-only enrollment bundle из GitHub. Owner-visible UI import/revoke, cold
-   restore и physical interaction Device Lock остаются открыты; execution всё ещё
-   disconnected.
+   public-only enrollment bundle из GitHub. Exact physical dev.306 добавляет последний
+   пункт «Устройство» для list/import/revoke, проверяет только fixed path public bundle
+   и принимает stable EN/RU missing-bundle path для buttons/touch с неизменным trust и
+   zero output в [machine-checked evidence](../../tests/hil/evidence/board-01-automation-trust-ui-1.0.0-dev.306.json).
+   Authenticated positive enrollment, cold restore, inspection trusted/unknown/invalid
+   и revocation остаются открыты; execution всё ещё disconnected.
 4. `planned` — execution named Action-only package через shared dispatcher, audit и
    cleanup timeout/cancel/panic.
 5. `planned` — USB HID на exact owned fixture, затем отдельно BLE HID; каждый получает

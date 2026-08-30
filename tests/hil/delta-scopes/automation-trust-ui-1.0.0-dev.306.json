@@ -1,0 +1,29 @@
+{
+  "schema": "leshy.hil_delta_review.v1",
+  "id": "automation-trust-ui-1.0.0-dev.306",
+  "rationale": "Physically accept only the new owner-visible Automation trust list/import/revoke route. The product reads one fixed public-only 128-byte bundle path from SD; the accepted run deliberately leaves that file absent and never confirms enrollment or revocation. Trust count/generation, product Device Lock, language and all outputs must remain unchanged. This delta adds no execution or HID path and does not touch the clone, Cardputer or Mac Wi-Fi.",
+  "reviewed_cross_cutting_sha256": {
+    "firmware/leshy1/platformio.ini": "cacf7cc1667210aa7c4a219bc6a0cc98670ea336ae89203a70bc3a019dab751c",
+    "firmware/leshy1/src/ui/UiStrings.def": "4c0a0d86c1aa20e4cc7602e9f887dab2ad31979d416cdd4434af17777d4d97c2",
+    "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp": "21588129de1b156d9443f4b3fa23e9afd04665149ee6995119c0988930200ea4",
+    "firmware/leshy1/src/platform/arduino/ArduinoAutomationTrust.cpp": "fa010b76d8c11abbf5e307e41116c8149fe2e4992160e2d5ab7849cf327adde5",
+    "firmware/leshy1/src/platform/arduino/BoardAutomationTrustBundleReader.cpp": "fc84ae14bec20da0213f555d68af7e8adc4f7b0f6661fb81ec830b92b75dea83"
+  },
+  "required_host_checks": [
+    "native trust record/bundle/signature tests under ASan/UBSan",
+    "source guard pins fixed read-only bundle path, four-key capacity, authentication and fresh confirmation",
+    "all 1040 EN/RU strings fit the generated Roboto Condensed fonts",
+    "runner source forbids clone, RF TX, host Wi-Fi, private keys and trust mutation",
+    "exact production build and resource budget"
+  ],
+  "required_hil_scenarios": [
+    "one changed-candidate flash on original board-01 only",
+    "isolated Device Lock unlock with exact product-state restore",
+    "public Device last-item navigation in EN and RU",
+    "button and real-touch fixed-path import with absent bundle",
+    "two byte-stable TFT captures for both lists and the Russian result",
+    "unchanged trust count/generation and no fresh confirmation",
+    "zero Action, HID, RF transmit, private-key and SD-write output",
+    "original language restored and final Home none lease zero"
+  ]
+}

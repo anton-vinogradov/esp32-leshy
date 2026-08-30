@@ -7,11 +7,11 @@
 - **Workflow:** WF-08-A1/A2/A4
 - **Architecture:** [ADR-002](adr/ADR-002-resource-policy.md),
   [ADR-004](adr/ADR-004-action-boundary.md)
-- **State:** slices 1 and 2 are accepted. Slice 3 has a host/build checkpoint in
-  `1.0.0-dev.304`: the product now restores a bounded canonical P-256 public-key
-  trust store from NVS and uses a real mbedTLS verifier for passive inspection. The
-  owner-visible import/revoke UI, cold physical acceptance and all active execution
-  remain unaccepted
+- **State:** slices 1 and 2 are accepted. Slice 3 has a physical owner-UI checkpoint
+  in `1.0.0-dev.306`: the product restores a bounded canonical P-256 public-key trust
+  store from NVS, uses a real mbedTLS verifier for passive inspection and exposes the
+  protected list/import/revoke route as the last Device item. Positive enrollment,
+  cold restore/revocation and all active execution remain unaccepted
 
 ## User outcome
 
@@ -90,9 +90,14 @@ trust record. The store contains at most four public SEC1 points, labels and der
 8-byte key IDs; it never contains a private key. Missing storage restores as an empty
 ready store, while malformed storage fails closed. Enrollment/revocation is atomic,
 generation-counted and requires both an unlocked Device Lock state and a fresh
-confirmation. Until the owner-visible UI and physical cold test exist, those mutation
-methods are deliberately unreachable from the product UI and execution remains
-disabled. No test double or locally invented checksum may promote a product package.
+confirmation. The owner-visible Device route lists at most four public keys and reads
+exactly `/leshy/automation/v1/automation-owner.lhak` from SD. Import validates the
+public point and derived key ID before a separate review; mutation still requires a
+fresh 30-second confirmation. Exact physical dev.306 accepts the EN/RU list, button
+and touch import paths and missing-bundle result without confirming mutation: trust
+count/generation remain unchanged, SD is read-only, private-key/Action/HID/RF output
+stays zero and execution remains disabled. Positive enrollment and cold restore are a
+separate gate. No test double or locally invented checksum may promote a package.
 
 An enrollment artifact is a fixed 128-byte public-only `LHAK` v1 bundle. The protected
 GitHub `automation-signing` environment keeps
@@ -127,9 +132,12 @@ inspection.
    Home/none/lease 0. The product `/leshy/automation/v1` namespace is never written.
 3. `in progress` — exact host/build dev.304 connects the real P-256 verifier,
    canonical four-key NVS store, atomic authenticated mutation contract and
-   GitHub-built public-only enrollment bundle. Owner-visible import/revoke UI, cold
-   restore and physical Device Lock interaction remain open; execution is still
-   disconnected.
+   GitHub-built public-only enrollment bundle. Exact physical dev.306 adds the final
+   Device item for list/import/revoke, validates only the fixed public bundle path and
+   accepts stable EN/RU button/touch missing-bundle behavior with unchanged trust and
+   zero output in [machine-checked evidence](../../tests/hil/evidence/board-01-automation-trust-ui-1.0.0-dev.306.json).
+   Authenticated positive enrollment, cold restore, trusted/unknown/invalid inspection
+   and revocation remain open; execution is still disconnected.
 4. `planned` — named Action-only package execution through the shared dispatcher,
    audit and timeout/cancel/panic cleanup.
 5. `planned` — USB HID on an exact owned fixture, then separately BLE HID; each gets a
