@@ -110,6 +110,8 @@
 #include "services/diagnostics/BootReport.h"
 #include "services/diagnostics/HilSession.h"
 #include "services/auth/WifiAuthenticationCapture.h"
+#include "services/ble/BleInspector.h"
+#include "services/ble/BleInspectorExport.h"
 #include "services/power/PowerSafetyPolicy.h"
 #include "services/targets/CorrelationService.h"
 #include "services/targets/SessionTargetAdmission.h"
@@ -310,6 +312,13 @@ using leshy1::services::guard::BleLiveRetentionDisposition;
 using leshy1::services::auth::WifiAuthenticationCaptureInput;
 using leshy1::services::auth::WifiAuthenticationCaptureOutcome;
 using leshy1::services::auth::WifiAuthenticationCaptureReport;
+using leshy1::services::ble::BleInspectorCapture;
+using leshy1::services::ble::BleInspectorCaptureCounters;
+using leshy1::services::ble::BleInspectorCaptureDisposition;
+using leshy1::services::ble::BleInspectorCaptureState;
+using leshy1::services::ble::BleInspectorExportStatus;
+using leshy1::services::ble::BleInspectorRawAdvertisement;
+using leshy1::services::ble::BleInspectorTarget;
 using leshy1::ui::WifiAuthenticationCaptureLiveProgress;
 using leshy1::ui::WifiAuthenticationCapturePersistence;
 using leshy1::ui::WifiAuthenticationCaptureUiFailure;
@@ -1548,11 +1557,13 @@ enum class BleProductView : std::uint8_t {
     None,
     Devices,
     DeviceDetail,
+    InspectorRaw,
 };
 const char* bleProductViewName(BleProductView view) {
     switch (view) {
         case BleProductView::Devices: return "devices";
         case BleProductView::DeviceDetail: return "device_detail";
+        case BleProductView::InspectorRaw: return "inspector_raw";
         case BleProductView::None:
         default: return "none";
     }
@@ -1567,6 +1578,86 @@ std::size_t bleDeviceSelection = 0;
 Observation bleDeviceDetail;
 Observation bleDeviceRenderedDetail;
 BleDeviceSignalStats bleDeviceDetailSignal;
+
+struct BleInspectorCaptureSummary final {
+    BleInspectorCaptureState state = BleInspectorCaptureState::Idle;
+    BleInspectorCaptureCounters counters{};
+    BleInspectorTarget target{};
+    BleInspectorRawAdvertisement latest{};
+    std::size_t records = 0U;
+    std::uint32_t revision = 0U;
+    bool latestPresent = false;
+};
+
+portMUX_TYPE bleInspectorCaptureMux = portMUX_INITIALIZER_UNLOCKED;
+BleInspectorCapture bleInspectorCapture;
+std::uint32_t bleInspectorUiRevision = 0U;
+std::uint32_t bleInspectorRenderedRevision = UINT32_MAX;
+std::uint32_t bleInspectorContentClears = 0U;
+std::uint32_t bleInspectorAtomicRowPushes = 0U;
+std::uint64_t nextBleInspectorUiRefreshUs = 0U;
+
+BleInspectorCaptureSummary bleInspectorCaptureSnapshot() {
+    BleInspectorCaptureSummary summary{};
+    portENTER_CRITICAL(&bleInspectorCaptureMux);
+    summary.state = bleInspectorCapture.state();
+    summary.counters = bleInspectorCapture.counters();
+    summary.target = bleInspectorCapture.target();
+    summary.records = bleInspectorCapture.size();
+    summary.revision = bleInspectorUiRevision;
+    if (summary.records != 0U) {
+        const BleInspectorRawAdvertisement* latest =
+            bleInspectorCapture.at(summary.records - 1U);
+        if (latest != nullptr) {
+            summary.latest = *latest;
+            summary.latestPresent = true;
+        }
+    }
+    portEXIT_CRITICAL(&bleInspectorCaptureMux);
+    return summary;
+}
+
+BleInspectorTarget bleInspectorTargetFromObservation(
+        const Observation& observation) {
+    BleInspectorTarget target{};
+    target.address = observation.identity;
+    target.addressType = observation.bleAdvertisement.addressType;
+    target.observedMonotonicUs = observation.monotonicUs;
+    return target;
+}
+
+bool beginBleInspectorCapture(const Observation& observation) {
+    const BleInspectorTarget target =
+        bleInspectorTargetFromObservation(observation);
+    bool begun = false;
+    portENTER_CRITICAL(&bleInspectorCaptureMux);
+    begun = bleInspectorCapture.begin(target);
+    if (begun) ++bleInspectorUiRevision;
+    portEXIT_CRITICAL(&bleInspectorCaptureMux);
+    if (begun) nextBleInspectorUiRefreshUs = 0U;
+    return begun;
+}
+
+bool freezeBleInspectorCapture() {
+    bool frozen = false;
+    portENTER_CRITICAL(&bleInspectorCaptureMux);
+    frozen = bleInspectorCapture.freeze();
+    if (frozen) ++bleInspectorUiRevision;
+    portEXIT_CRITICAL(&bleInspectorCaptureMux);
+    if (frozen) nextBleInspectorUiRefreshUs = 0U;
+    return frozen;
+}
+
+void resetBleInspectorCapture() {
+    portENTER_CRITICAL(&bleInspectorCaptureMux);
+    bleInspectorCapture.reset();
+    ++bleInspectorUiRevision;
+    portEXIT_CRITICAL(&bleInspectorCaptureMux);
+    bleInspectorRenderedRevision = UINT32_MAX;
+    bleInspectorContentClears = 0U;
+    bleInspectorAtomicRowPushes = 0U;
+    nextBleInspectorUiRefreshUs = 0U;
+}
 
 struct BleDeviceRowVisual final {
     bool present = false;
@@ -3388,6 +3479,19 @@ WifiRecordDisposition enqueueProductSurveyWorkerRecord(
 
 BleRecordDisposition enqueueProductSurveyWorkerBleRecord(
     const BleAdvertisementRecord& record, std::uint64_t monotonicUs, void*) {
+    portENTER_CRITICAL(&bleInspectorCaptureMux);
+    const BleInspectorCaptureDisposition inspectorDisposition =
+        bleInspectorCapture.ingest(record, monotonicUs);
+    if (inspectorDisposition == BleInspectorCaptureDisposition::Accepted &&
+        bleInspectorCapture.size() == BleInspectorCapture::kRecordCapacity) {
+        (void)bleInspectorCapture.freeze();
+    }
+    if (inspectorDisposition == BleInspectorCaptureDisposition::Accepted ||
+        inspectorDisposition == BleInspectorCaptureDisposition::InvalidRecord ||
+        inspectorDisposition == BleInspectorCaptureDisposition::CapacityReached) {
+        ++bleInspectorUiRevision;
+    }
+    portEXIT_CRITICAL(&bleInspectorCaptureMux);
     Observation observation;
     if (!leshy1::drivers::ble::normalizePassiveRecord(
             record, monotonicUs, &observation)) {
@@ -6149,7 +6253,10 @@ void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
         lastRuntimeEvent = "wifi_menu";
     } else if (returnHome && !uiController.isRoot() &&
                uiController.page() == 2) {
-        if (returnFromBle) bleProductView = BleProductView::None;
+        if (returnFromBle) {
+            bleProductView = BleProductView::None;
+            resetBleInspectorCapture();
+        }
         uiController.apply(UiAction::Back,
                            static_cast<std::uint8_t>(appCatalog.size()), false);
     }
@@ -11291,7 +11398,7 @@ bool beginLiveMetaTextRow(std::uint16_t foreground,
     return true;
 }
 
-void pushLiveMetaTextRow(const char* text, std::uint16_t foreground,
+bool pushLiveMetaTextRow(const char* text, std::uint16_t foreground,
                          std::int16_t top) {
     constexpr std::int16_t kLocalTextTop = 2;
     if (beginLiveMetaTextRow(foreground, Palette::Canvas)) {
@@ -11301,7 +11408,7 @@ void pushLiveMetaTextRow(const char* text, std::uint16_t foreground,
         liveMetaTextRowSprite.pushSprite(
             Layout::Edge, top - kLocalTextTop);
         ++bleDeviceAtomicTextRowPushes;
-        return;
+        return true;
     }
 
     ++bleDeviceDirectTextRowFallbacks;
@@ -11311,6 +11418,7 @@ void pushLiveMetaTextRow(const char* text, std::uint16_t foreground,
     display.setTextColor(foreground, Palette::Canvas);
     setUiCursor(UiTextRole::Meta, 14, top);
     display.print(text);
+    return false;
 }
 
 enum class NavigationKey : std::uint8_t {
@@ -11349,8 +11457,18 @@ NavigationFooter navigationFooterForCurrentState() {
     if (uiController.page() == 1) return {back, {}, {}};
 
     if (uiController.page() == 2) {
+        if (bleProductView == BleProductView::InspectorRaw) {
+            const BleInspectorCaptureSummary summary =
+                bleInspectorCaptureSnapshot();
+            return {
+                {NavigationKey::Left, UiTextId::NavInfo}, {},
+                {NavigationKey::RightAndSelect,
+                 summary.state == BleInspectorCaptureState::Running
+                     ? UiTextId::NavFreeze : UiTextId::NavAgain}};
+        }
         if (bleProductView == BleProductView::DeviceDetail) {
-            return {{NavigationKey::Left, UiTextId::NavList}, {}, {}};
+            return {{NavigationKey::Left, UiTextId::NavList}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavInspect}};
         }
         if (bleProductView == BleProductView::Devices) {
             return {back, choose, enter};
@@ -13954,6 +14072,118 @@ void renderBleDeviceDetail(bool clearContent) {
     renderBleDeviceDetailData();
 }
 
+void renderBleInspectorBodyRow(const char* text, std::uint16_t tone,
+                               std::int16_t rowY, bool atomic) {
+    if (atomic && beginLiveTextRow(UiTextRole::Body, tone, Palette::Canvas)) {
+        setLiveTextRowCursor(UiTextRole::Body, 2, 4);
+        liveTextRowSprite.print(text);
+        pushLiveTextRow(Layout::Edge, rowY);
+        ++bleInspectorAtomicRowPushes;
+        return;
+    }
+    if (atomic) {
+        display.fillRect(Layout::Edge, rowY, Layout::ContentWidth,
+                         kLiveTextRowHeight, Palette::Canvas);
+    }
+    display.setTextColor(tone, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, 14, rowY + 4);
+    display.print(text);
+}
+
+void renderBleInspectorMetaRow(const char* text, std::uint16_t tone,
+                               std::int16_t textTop, bool atomic) {
+    if (atomic) {
+        if (pushLiveMetaTextRow(text, tone, textTop)) {
+            ++bleInspectorAtomicRowPushes;
+        }
+        return;
+    }
+    display.setTextColor(tone, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, textTop);
+    display.print(text);
+}
+
+void renderBleInspectorRawData(bool force) {
+    const BleInspectorCaptureSummary summary = bleInspectorCaptureSnapshot();
+    if (!force && bleInspectorRenderedRevision == summary.revision) return;
+    if (force) {
+        display.fillRect(0, Layout::ContentTop, Layout::ScreenWidth,
+                         Layout::FooterDividerY - Layout::ContentTop,
+                         Palette::Canvas);
+        ++bleInspectorContentClears;
+    }
+    const bool atomic = !force;
+    char line[96] = {};
+    renderBleInspectorBodyRow(
+        tr(summary.state == BleInspectorCaptureState::Frozen
+               ? UiTextId::BleInspectorFrozen
+               : UiTextId::BleInspectorReceiving),
+        summary.state == BleInspectorCaptureState::Frozen
+            ? Palette::Warning : Palette::Positive,
+        30, atomic);
+    std::snprintf(line, sizeof(line),
+                  tr(UiTextId::BleInspectorAddressFormat),
+                  summary.target.address[0], summary.target.address[1],
+                  summary.target.address[2], summary.target.address[3],
+                  summary.target.address[4], summary.target.address[5],
+                  static_cast<unsigned>(summary.target.addressType));
+    renderBleInspectorMetaRow(line, Palette::TextSecondary, 58, atomic);
+    std::snprintf(line, sizeof(line), tr(UiTextId::BleInspectorCountFormat),
+                  static_cast<unsigned>(summary.records),
+                  static_cast<unsigned>(BleInspectorCapture::kRecordCapacity));
+    renderBleInspectorBodyRow(line, Palette::Focus, 74, atomic);
+    std::snprintf(
+        line, sizeof(line), tr(UiTextId::BleInspectorAccountingFormat),
+        static_cast<unsigned long>(summary.counters.differentTarget),
+        static_cast<unsigned long>(summary.counters.invalid),
+        static_cast<unsigned long>(summary.counters.dropped));
+    renderBleInspectorMetaRow(
+        line, summary.counters.dropped == 0U
+            ? Palette::TextMuted : Palette::Warning,
+        104, atomic);
+    if (summary.latestPresent) {
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::BleInspectorLatestFormat),
+                      static_cast<int>(summary.latest.rssiDbm),
+                      static_cast<unsigned>(summary.latest.eventType),
+                      static_cast<unsigned>(summary.latest.payloadLength));
+    } else {
+        std::snprintf(line, sizeof(line), "%s",
+                      tr(UiTextId::BleInspectorEmpty));
+    }
+    renderBleInspectorMetaRow(line, Palette::TextSecondary, 126, atomic);
+    renderBleInspectorMetaRow(tr(UiTextId::BleInspectorPayload),
+                              Palette::TextMuted, 150, atomic);
+    constexpr char kHex[] = "0123456789ABCDEF";
+    for (std::size_t row = 0U; row < 4U; ++row) {
+        char payload[17] = {};
+        std::size_t chars = 0U;
+        const std::size_t firstByte = row * 8U;
+        if (summary.latestPresent) {
+            for (std::size_t byte = firstByte;
+                 byte < summary.latest.payloadLength &&
+                 byte < firstByte + 8U; ++byte) {
+                payload[chars++] = kHex[summary.latest.payload[byte] >> 4U];
+                payload[chars++] =
+                    kHex[summary.latest.payload[byte] & 0x0fU];
+            }
+        }
+        std::snprintf(line, sizeof(line), "%02u  %s",
+                      static_cast<unsigned>(firstByte), payload);
+        renderBleInspectorMetaRow(
+            line, chars == 0U ? Palette::TextMuted : Palette::Positive,
+            static_cast<std::int16_t>(172 + row * 20U), atomic);
+    }
+    renderBleInspectorMetaRow(tr(UiTextId::BleInspectorExportHint),
+                              Palette::TextMuted, 260, atomic);
+    bleInspectorRenderedRevision = summary.revision;
+}
+
+void renderBleInspectorRaw(bool clearContent) {
+    renderHeader(tr(UiTextId::BleInspectorTitle), clearContent);
+    renderBleInspectorRawData(clearContent);
+}
+
 std::size_t wifiDeviceFirstVisible(std::size_t selection) {
     return selection < kVisibleWifiNetworkRows
         ? 0 : selection - kVisibleWifiNetworkRows + 1U;
@@ -16024,6 +16254,10 @@ void renderWifiAuthenticationCapture(bool clearContent) {
 
 void renderInventoryPage(bool clearContent) {
     char line[96] = {};
+    if (bleProductView == BleProductView::InspectorRaw) {
+        renderBleInspectorRaw(clearContent);
+        return;
+    }
     if (bleProductView == BleProductView::DeviceDetail) {
         renderBleDeviceDetail(clearContent);
         return;
@@ -17639,6 +17873,32 @@ bool renderSelectionDelta() {
         }
         renderDeviceRow(renderedUi.deviceSelection, currentFirst);
         renderDeviceRow(deviceSelection, currentFirst);
+        return true;
+    }
+
+    if (uiController.page() == 2 &&
+        bleProductView == BleProductView::InspectorRaw &&
+        renderedUi.bleProductView ==
+            static_cast<std::uint8_t>(BleProductView::InspectorRaw)) {
+        const BleInspectorCaptureSummary summary =
+            bleInspectorCaptureSnapshot();
+        if (bleInspectorRenderedRevision != summary.revision) {
+            std::uint64_t nowUs =
+                static_cast<std::uint64_t>(esp_timer_get_time());
+            if (nowUs == 0U) nowUs = 1U;
+            if (nextBleInspectorUiRefreshUs != 0U &&
+                nowUs < nextBleInspectorUiRefreshUs) {
+                return true;
+            }
+            nextBleInspectorUiRefreshUs =
+                nowUs + kBleDeviceUiRefreshPeriodUs;
+            renderBleInspectorRawData(false);
+            renderHeaderStatus();
+            renderNavigationFooter();
+        }
+        // Duplicate advertisements for other devices still wake the shared
+        // survey loop. The selected-target capture revision determines the
+        // exact delta; never fall through to a full-screen repaint.
         return true;
     }
 
@@ -22715,6 +22975,7 @@ bool startBleDevicesProduct() {
     bleDeviceDetail = {};
     bleDeviceRenderedDetail = {};
     bleDeviceDetailSignal = {};
+    resetBleInspectorCapture();
     bleDeviceRenderedRadar = {};
     nextBleDeviceUiRefreshUs = 0U;
     bleDeviceUiRefreshPending = false;
@@ -23304,6 +23565,11 @@ bool selectionCanRepaintInPlace(UiAction action) {
         wifiProductView == WifiProductView::AuthenticationCapture) {
         return true;
     }
+    if (uiController.page() == 2 &&
+        bleProductView == BleProductView::InspectorRaw &&
+        (action == UiAction::Select || action == UiAction::Right)) {
+        return true;
+    }
     if (action != UiAction::Up && action != UiAction::Down) return false;
     if (uiController.isRoot()) return true;
     if (uiController.page() == 2) {
@@ -23403,12 +23669,39 @@ bool applyUiAction(UiAction action, bool render = true) {
     if (!wasRoot && uiController.page() == 2) {
         bool handled = false;
         bool changed = false;
-        if (bleProductView == BleProductView::DeviceDetail) {
+        if (bleProductView == BleProductView::InspectorRaw) {
+            handled = true;
+            if (action == UiAction::Back || action == UiAction::Left) {
+                (void)freezeBleInspectorCapture();
+                bleProductView = BleProductView::DeviceDetail;
+                lastRuntimeEvent = "ble_device_detail";
+                changed = true;
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                const BleInspectorCaptureSummary summary =
+                    bleInspectorCaptureSnapshot();
+                if (summary.state == BleInspectorCaptureState::Running) {
+                    changed = freezeBleInspectorCapture();
+                    if (changed) lastRuntimeEvent = "ble_inspector_frozen";
+                } else {
+                    changed = beginBleInspectorCapture(*liveBleDeviceDetail());
+                    if (changed) lastRuntimeEvent = "ble_inspector_receiving";
+                }
+            }
+        } else if (bleProductView == BleProductView::DeviceDetail) {
             handled = true;
             if (action == UiAction::Back || action == UiAction::Left) {
                 bleProductView = BleProductView::Devices;
                 lastRuntimeEvent = "ble_devices";
                 changed = true;
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                if (beginBleInspectorCapture(*liveBleDeviceDetail())) {
+                    bleInspectorRenderedRevision = UINT32_MAX;
+                    bleProductView = BleProductView::InspectorRaw;
+                    lastRuntimeEvent = "ble_inspector_receiving";
+                    changed = true;
+                }
             }
         } else if (bleProductView == BleProductView::Devices) {
             handled = true;
@@ -23456,6 +23749,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                     // A terminal unavailable BLE view owns no worker or lease;
                     // only this explicit user Back action closes it.
                     bleProductView = BleProductView::None;
+                    resetBleInspectorCapture();
                     surveyPipeline.resetToSetup();
                     changed = uiController.apply(
                         action,
@@ -31326,6 +31620,99 @@ void emitBleDeviceDetailState(Stream& reply) {
     reply.println(line);
 }
 
+void emitBleInspectorCaptureState(Stream& reply) {
+    const BleInspectorCaptureSummary summary = bleInspectorCaptureSnapshot();
+    std::uint32_t identityHash = 0U;
+    if (leshy1::services::ble::validBleInspectorTarget(summary.target)) {
+        identityHash = 2166136261U;
+        for (const std::uint8_t byte : summary.target.address) {
+            identityHash ^= byte;
+            identityHash *= 16777619U;
+        }
+    }
+    auto& line = diagnosticJson;
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.ble.inspector.state.v1\",\"kind\":\"state\","
+        "\"view\":\"%s\",\"capture_state\":\"%s\","
+        "\"passive\":true,\"receive_only\":true,"
+        "\"selected_identity_hash\":%lu,\"address_type\":%u,"
+        "\"records\":%u,\"capacity\":%u,\"observed\":%lu,"
+        "\"accepted\":%lu,\"different_target\":%lu,"
+        "\"invalid\":%lu,\"dropped\":%lu,"
+        "\"latest_present\":%s,\"latest_rssi_dbm\":%d,"
+        "\"latest_event_type\":%u,\"latest_payload_length\":%u,"
+        "\"export_ready\":%s,\"content_clears\":%lu,"
+        "\"atomic_row_pushes\":%lu,"
+        "\"atomic_row_allocation_failures\":%lu,"
+        "\"direct_row_fallbacks\":%lu,\"gatt_started\":false}",
+        bleProductViewName(bleProductView),
+        summary.state == BleInspectorCaptureState::Running
+            ? "running" : (summary.state == BleInspectorCaptureState::Frozen
+                ? "frozen" : "idle"),
+        static_cast<unsigned long>(identityHash),
+        static_cast<unsigned>(summary.target.addressType),
+        static_cast<unsigned>(summary.records),
+        static_cast<unsigned>(BleInspectorCapture::kRecordCapacity),
+        static_cast<unsigned long>(summary.counters.observed),
+        static_cast<unsigned long>(summary.counters.accepted),
+        static_cast<unsigned long>(summary.counters.differentTarget),
+        static_cast<unsigned long>(summary.counters.invalid),
+        static_cast<unsigned long>(summary.counters.dropped),
+        summary.latestPresent ? "true" : "false",
+        summary.latestPresent ? static_cast<int>(summary.latest.rssiDbm) : 0,
+        summary.latestPresent
+            ? static_cast<unsigned>(summary.latest.eventType) : 0U,
+        summary.latestPresent
+            ? static_cast<unsigned>(summary.latest.payloadLength) : 0U,
+        summary.state == BleInspectorCaptureState::Frozen
+            ? "true" : "false",
+        static_cast<unsigned long>(bleInspectorContentClears),
+        static_cast<unsigned long>(bleInspectorAtomicRowPushes),
+        static_cast<unsigned long>(
+            bleDeviceAtomicTextRowAllocationFailures),
+        static_cast<unsigned long>(bleDeviceDirectTextRowFallbacks));
+    reply.println(line);
+}
+
+void emitBleInspectorCaptureExport(Stream& reply) {
+    auto& line = diagnosticJson;
+    std::size_t size = 0U;
+    const auto emitError = [&](BleInspectorExportStatus status) {
+        std::snprintf(
+            line, sizeof(line),
+            "{\"schema\":\"leshy.ble.inspector.capture.v1\","
+            "\"kind\":\"error\",\"status\":\"%s\","
+            "\"complete\":false}",
+            leshy1::services::ble::bleInspectorExportStatusName(status));
+        reply.println(line);
+    };
+    BleInspectorExportStatus status =
+        leshy1::services::ble::formatBleInspectorExportHeader(
+            bleInspectorCapture, line, sizeof(line), &size);
+    if (status != BleInspectorExportStatus::Formatted) {
+        emitError(status);
+        return;
+    }
+    reply.println(line);
+    for (std::size_t index = 0U; index < bleInspectorCapture.size(); ++index) {
+        status = leshy1::services::ble::formatBleInspectorExportRecord(
+            bleInspectorCapture, index, line, sizeof(line), &size);
+        if (status != BleInspectorExportStatus::Formatted) {
+            emitError(status);
+            return;
+        }
+        reply.println(line);
+    }
+    status = leshy1::services::ble::formatBleInspectorExportEnd(
+        bleInspectorCapture, line, sizeof(line), &size);
+    if (status != BleInspectorExportStatus::Formatted) {
+        emitError(status);
+        return;
+    }
+    reply.println(line);
+}
+
 bool commandAllowedDuringSafetyStop(const char* command) {
     if (command == nullptr) return false;
     return std::strncmp(command, "hil.begin ", 10) == 0 ||
@@ -31996,6 +32383,10 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitWifiAuthenticationPersistenceState(reply);
     } else if (std::strcmp(command, "ble.device.detail") == 0) {
         emitBleDeviceDetailState(reply);
+    } else if (std::strcmp(command, "ble.inspector.state") == 0) {
+        emitBleInspectorCaptureState(reply);
+    } else if (std::strcmp(command, "ble.inspector.export.raw") == 0) {
+        emitBleInspectorCaptureExport(reply);
     } else if (std::strcmp(command, "survey.browser") == 0) {
         emitSurveyBrowser(reply);
     } else if (std::strcmp(command, "survey.field-visit") == 0) {

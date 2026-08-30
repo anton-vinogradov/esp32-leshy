@@ -1,8 +1,10 @@
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <type_traits>
 
 #include "services/ble/BleInspector.h"
+#include "services/ble/BleInspectorExport.h"
 
 #define CHECK(condition)                                                        \
     do {                                                                        \
@@ -146,6 +148,41 @@ void testRawCaptureRejectsMalformedAndReportsCapacityLoss() {
     CHECK(capture.at(BleInspectorCapture::kRecordCapacity) == nullptr);
 }
 
+void testFrozenRawCaptureHasVersionedExactExport() {
+    BleInspectorCapture capture;
+    CHECK(capture.begin(targetFixture()));
+    auto record = advertisementFixture();
+    CHECK(capture.ingest(record, 1100000ULL) ==
+          BleInspectorCaptureDisposition::Accepted);
+    char line[512] = {};
+    std::size_t size = 0U;
+    CHECK(formatBleInspectorExportHeader(capture, line, sizeof(line), &size) ==
+          BleInspectorExportStatus::NotFrozen);
+    CHECK(capture.freeze());
+    CHECK(formatBleInspectorExportHeader(capture, line, sizeof(line), &size) ==
+          BleInspectorExportStatus::Formatted);
+    CHECK(size == std::strlen(line));
+    CHECK(std::strstr(line, "leshy.ble.inspector.capture.v1") != nullptr);
+    CHECK(std::strstr(line, "\"complete\":false") != nullptr);
+    CHECK(std::strstr(line, "90:70:69:0D:15:E0") != nullptr);
+    CHECK(std::strstr(line, "\"records\":1") != nullptr);
+    CHECK(formatBleInspectorExportRecord(
+              capture, 0U, line, sizeof(line), &size) ==
+          BleInspectorExportStatus::Formatted);
+    CHECK(std::strstr(line, "\"payload_hex\":\"04FF4C0012\"") != nullptr);
+    CHECK(std::strstr(line, "\"event_type\":3") != nullptr);
+    CHECK(std::strstr(line, "\"rssi_dbm\":-51") != nullptr);
+    CHECK(formatBleInspectorExportRecord(
+              capture, 1U, line, sizeof(line), &size) ==
+          BleInspectorExportStatus::InvalidArgument);
+    CHECK(formatBleInspectorExportEnd(capture, line, sizeof(line), &size) ==
+          BleInspectorExportStatus::Formatted);
+    CHECK(std::strstr(line, "\"kind\":\"end\"") != nullptr);
+    CHECK(std::strstr(line, "\"complete\":true") != nullptr);
+    CHECK(formatBleInspectorExportHeader(capture, line, 8U, &size) ==
+          BleInspectorExportStatus::BufferTooSmall);
+}
+
 void testGattRequiresFreshExactPermissionConfirmationAndSeparateLease() {
     leshy1::kernel::runtime::ResourceBroker broker;
     FakeTransport transport;
@@ -283,6 +320,7 @@ static_assert(sizeof(BleGattInspector) <= 3072U);
 int main() {
     testRawCaptureCopiesOnlyExactSelectedPackets();
     testRawCaptureRejectsMalformedAndReportsCapacityLoss();
+    testFrozenRawCaptureHasVersionedExactExport();
     testGattRequiresFreshExactPermissionConfirmationAndSeparateLease();
     testGattHappyPathPreservesMetadataAndBackCleansPendingConnection();
     testGattNeverFallsBackToUnexpectedIdentity();

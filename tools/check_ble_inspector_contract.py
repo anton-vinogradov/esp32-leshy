@@ -8,7 +8,9 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = ROOT / "firmware/leshy1/src/services/ble/BleInspector.h"
 SOURCE = ROOT / "firmware/leshy1/src/services/ble/BleInspector.cpp"
+EXPORT = ROOT / "firmware/leshy1/src/services/ble/BleInspectorExport.cpp"
 PASSIVE = ROOT / "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.cpp"
+PRODUCT = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 
 
 def require(text: str, marker: str, label: str) -> None:
@@ -19,6 +21,8 @@ def require(text: str, marker: str, label: str) -> None:
 header = HEADER.read_text(encoding="utf-8")
 source = SOURCE.read_text(encoding="utf-8")
 passive = PASSIVE.read_text(encoding="utf-8")
+export = EXPORT.read_text(encoding="utf-8")
+product = PRODUCT.read_text(encoding="utf-8")
 
 transport_match = re.search(
     r"class BleGattInspectorTransport \{(?P<body>.*?)\n\};",
@@ -60,7 +64,29 @@ for marker, label in (
 ):
     require(source + header, marker, label)
 
+for marker, label in (
+    ('"leshy.ble.inspector.capture.v1"', "versioned raw export schema"),
+    ("BleInspectorCaptureState::Frozen", "immutable export boundary"),
+    ('"\\\"complete\\\":false', "fail-closed incomplete stream header"),
+    ('\\"payload_hex\\"', "exact payload export"),
+):
+    require(export, marker, label)
+
+for marker, label in (
+    ("BleProductView::InspectorRaw", "visible product view"),
+    ("beginBleInspectorCapture(*liveBleDeviceDetail())", "selected detail entry"),
+    ("bleInspectorCapture.ingest(record, monotonicUs)", "scanner capture handoff"),
+    ("bleInspectorCapture.size() == BleInspectorCapture::kRecordCapacity", "zero-drop automatic freeze"),
+    ('"ble.inspector.export.raw"', "local raw export action"),
+    ("renderBleInspectorRawData(false)", "incremental inspector repaint"),
+    ("nowUs + kBleDeviceUiRefreshPeriodUs", "bounded inspector refresh cadence"),
+    ('\\"atomic_row_allocation_failures\\"', "atomic repaint failure telemetry"),
+    ('\\"direct_row_fallbacks\\"', "direct repaint fallback telemetry"),
+):
+    require(product, marker, label)
+
 print(
-    "BLE Inspector contract passed: exact selected raw advertisements, explicit "
-    "enumeration-only permission, exact peer binding and fail-closed disconnect"
+    "BLE Inspector contract passed: exact selected raw capture/export, incremental "
+    "product UI, explicit enumeration-only permission, exact peer binding and "
+    "fail-closed disconnect"
 )

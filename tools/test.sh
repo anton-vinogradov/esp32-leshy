@@ -129,6 +129,7 @@ run_opaque_evidence_check() {
     "$repo_dir/tests/native/ble_inspector_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/kernel/runtime/ResourceBroker.cpp" \
     "$repo_dir/firmware/leshy1/src/services/ble/BleInspector.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/ble/BleInspectorExport.cpp" \
     -o "$test_tmp/ble_inspector_tests"
 
 "$test_tmp/ble_inspector_tests"
