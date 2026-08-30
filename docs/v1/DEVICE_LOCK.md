@@ -15,9 +15,12 @@ reset-resistant retry. Exact physical `1.0.0-dev.281` then accepts all five wron
 attempts through cold-restored `recovery_only`, the complete protected-deny/safe-allow
 operation matrix, an opaque real Library launch denial, content-free export denial,
 non-destructive reset preview, erase-before-credential destructive recovery and
-explicit fixture cleanup. Access control is still not a claim of encrypted stored
-content; authenticated encryption at rest is the only open CAP-052 implementation
-gate.
+explicit fixture cleanup. Exact physical `1.0.0-dev.283` adds authenticated encrypted
+product storage: a PIN-wrapped random data key, chunked `LENC` AES-256-GCM files,
+path/header/chunk binding, ciphertext separation, exact-size validation and
+authenticated read-only cold reopen. This closes the CAP-052 implementation boundary;
+power-cut, signed-update/recovery interaction and privacy review remain release
+hardening rather than missing product functionality.
 
 ## User contract
 
@@ -53,18 +56,25 @@ backup, companion and sensitive settings require `unlocked`.
 - verifier: PBKDF2-HMAC-SHA-256, 120,000 iterations;
 - salt: 16 bytes from the ESP32-S3 hardware RNG;
 - verifier: 32 bytes, compared in constant time;
-- record: fixed 68-byte little-endian `LDLK` schema v1 with generation, persistent
-  failure count, reserved-byte validation and CRC32 transport-corruption check;
-- storage: NVS namespace `leshy1-lock`, credential `credential.v1` and an
-  independent `enrolled.v1` latch;
+- record: fixed 128-byte little-endian `LDLK` schema v2 with generation, persistent
+  failure count, wrapped data-key material, reserved-byte validation and CRC32
+  transport-corruption check;
+- storage: NVS namespace `leshy1-lock`, credential `credential.v2`, bootstrap key
+  `data-key.v1` and an independent `enrolled.v1` latch;
 - publication order: credential commit, then latch commit;
 - destructive clear order: protected data, credential commit, then latch commit.
 
 The latch distinguishes a genuinely virgin device from a missing expected
 credential. It cannot defeat a complete physical flash erase. Protection against
-offline reading of stored evidence requires the planned authenticated-encryption
-envelope and signed update/recovery chain; access-control wiring alone is not
-represented as data-at-rest encryption.
+offline reading of stored evidence uses a random 256-bit data key. Before PIN setup,
+that key is bootstrapped in NVS so normal product storage is encrypted immediately.
+PIN configuration derives independent verifier and wrapping-key domains from the
+120,000-round PBKDF2 master, wraps the data key with AES-256-GCM, durably publishes
+the v2 credential and erases the bootstrap copy. Lock, reset, watchdog and update
+boundaries erase the volatile data-key copy. Protected Session files use a disjoint
+`enc-` namespace and a 32-byte `LENC` header; each 256-byte plaintext chunk has its
+own nonce and 16-byte authentication tag, with file path, header and chunk index in
+the AAD. Legacy plaintext files are never interpreted as encrypted heads.
 
 Physical persistence HIL uses the separate disposable namespace
 `leshy1-lock-hil`. Every boot defaults to the product namespace; a surviving HIL
@@ -85,6 +95,7 @@ virgin product state again after a final cold boot.
 4. `done` — physical fifth-attempt `recovery_only`, cold restore, destructive
    recovery ordering, safe-operation matrix and real protected UI/export denial
    without returned content (`dev.281`).
-5. `next` — authenticated-encryption key envelope and protected-data storage.
+5. `done` — authenticated-encryption key envelope, encrypted product storage,
+   physical ciphertext separation and authenticated exact-CID cold reopen (`dev.283`).
 6. `planned` — destructive recovery/power-cut matrix, signed update/recovery
    interaction, privacy review and release HIL.

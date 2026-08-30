@@ -51,3 +51,4 @@ python3 "$repo_dir/tools/check_device_lock_hil_acceptance.py"
 python3 "$repo_dir/tools/check_device_lock_persistence_hil_acceptance.py"
 python3 \
     "$repo_dir/tools/check_device_lock_recovery_admission_hil_acceptance.py"
+python3 "$repo_dir/tools/check_protected_storage_hil_evidence.py"

@@ -1497,6 +1497,24 @@ UI/export и ordering factory reset не требуют retained dynamic payload
 namespace стёрт, а product namespace cold-reopen-ится virgin, поэтому `RB-M208`
 по-прежнему не резервирует и не заявляет encrypted protected data at rest.
 
+Bound authenticated protected storage `RB-M209`: exact physical
+`1.0.0-dev.283` на source `695b2e9fc09ca9f34aa2175b5866972b54c224e3`
+использует 231 488 B static RAM и app image 3 512 320 B, оставляя 681 984 B в
+OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`28dee1f8a715396b5c7846f3e90ba6bb910bc91dba6752e68950b56d15800482`/
+`21f4f1ba5e17b51da32fb40871a93c71600ce6ac56fd81a90a84beeeae17900b`/
+`380a98d6106843417d417f916622cf697ff2f4b0a72dd6366dc791ea43c36325`/
+`da413356e51f281f36b0d23bb6d5cf25f65811a26b5290893d734a89320d18bd`.
+Fixed resident delta поверх dev.281 — 496 B static RAM и 10 752 B padded app.
+Он финансирует credential/data-key boundary v2, adapters AES-GCM и bounded encrypted
+workspace SessionStore; whole file или unbounded evidence buffer в resident memory
+нет. Physical sample 615 bytes plaintext занимает 695 bytes: один header 32 bytes
+плюс tag 16 bytes на каждый chunk 256 bytes. Exact physical run commits с zero
+queue/append drops и cold-reopen-ит предыдущую generation с zero physical writes,
+завершаясь Home/none/lease 0. Synchronous path dev.282 fail-closed trip-нул task
+watchdog 5 s; dev.283 checkpoint-ит каждую bounded phase и chunk 256 bytes без
+увеличения watchdog deadline.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

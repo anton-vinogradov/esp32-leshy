@@ -1511,6 +1511,24 @@ dynamic payload. The isolated namespace is erased and the product namespace cold
 reopens virgin, so `RB-M208` still does not fund or claim encrypted protected data
 at rest.
 
+Authenticated protected-storage bound `RB-M209`: exact physical
+`1.0.0-dev.283` at source `695b2e9fc09ca9f34aa2175b5866972b54c224e3`
+uses 231,488 B static RAM and a 3,512,320 B app image, leaving 681,984 B in the
+4 MiB OTA slot. The app/factory/ELF/map SHA-256 values are
+`28dee1f8a715396b5c7846f3e90ba6bb910bc91dba6752e68950b56d15800482`/
+`21f4f1ba5e17b51da32fb40871a93c71600ce6ac56fd81a90a84beeeae17900b`/
+`380a98d6106843417d417f916622cf697ff2f4b0a72dd6366dc791ea43c36325`/
+`da413356e51f281f36b0d23bb6d5cf25f65811a26b5290893d734a89320d18bd`.
+The fixed resident delta beyond dev.281 is 496 B static RAM and 10,752 B padded
+app. It funds the v2 credential/data-key boundary, AES-GCM adapters and bounded
+encrypted SessionStore workspace; no whole file or unbounded evidence buffer is
+resident. A 615-byte plaintext physical sample occupies 695 bytes: one 32-byte
+header plus a 16-byte tag per 256-byte chunk. The exact physical run commits with
+zero queue/append drops and cold-reopens the prior generation with zero physical
+writes, ending Home/none/lease 0. The dev.282 synchronous path tripped the 5 s task
+watchdog fail closed; dev.283 checkpoints each bounded phase and 256-byte chunk
+without increasing the watchdog deadline.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

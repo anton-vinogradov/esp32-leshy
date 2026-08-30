@@ -15,9 +15,12 @@ reset-resistant retry. Exact physical `1.0.0-dev.281` затем принима�
 неверных попыток до cold-restored `recovery_only`, полную matrix
 protected-deny/safe-allow, непрозрачный отказ реального запуска Library, export без
 возврата content, non-destructive preview reset, destructive recovery с erase до
-credential и explicit cleanup fixture. Access control всё ещё не выдаётся за
-encryption сохранённого content; authenticated encryption at rest остаётся
-единственным открытым implementation gate CAP-052.
+credential и explicit cleanup fixture. Exact physical `1.0.0-dev.283` добавляет
+authenticated encrypted product storage: PIN-wrapped random data key, chunked files
+`LENC` AES-256-GCM, binding path/header/chunk, ciphertext separation, exact-size
+validation и authenticated read-only cold reopen. Implementation boundary CAP-052
+закрыт; power-cut, взаимодействие signed update/recovery и privacy review остаются
+release hardening, а не отсутствующей product functionality.
 
 ## Пользовательский контракт
 
@@ -53,17 +56,25 @@ companion и sensitive settings требуют `unlocked`.
 - verifier: PBKDF2-HMAC-SHA-256, 120 000 iterations;
 - salt: 16 bytes из hardware RNG ESP32-S3;
 - verifier: 32 bytes с constant-time comparison;
-- record: fixed little-endian `LDLK` schema v1 размером 68 bytes с generation,
-  persistent failure count, проверкой reserved bytes и CRC32;
-- storage: NVS namespace `leshy1-lock`, credential `credential.v1` и независимый
-  latch `enrolled.v1`;
+- record: fixed little-endian `LDLK` schema v2 размером 128 bytes с generation,
+  persistent failure count, wrapped data-key material, проверкой reserved bytes и
+  CRC32;
+- storage: NVS namespace `leshy1-lock`, credential `credential.v2`, bootstrap key
+  `data-key.v1` и независимый latch `enrolled.v1`;
 - порядок публикации: commit credential, затем commit latch;
 - destructive clear: protected data, commit удаления credential, затем commit latch.
 
 Latch отличает действительно virgin device от пропавшего expected credential. Он
-не может противостоять полному physical erase flash. Защита сохранённого evidence
-от offline чтения требует planned authenticated-encryption envelope и signed chain
-update/recovery; один access-control не выдаётся за data-at-rest encryption.
+не может противостоять полному physical erase flash. Для offline-защиты сохранённого
+evidence используется случайный 256-bit data key. До setup PIN key bootstrapped в
+NVS, поэтому normal product storage сразу encrypted. При настройке PIN из master
+PBKDF2 120 000 rounds выводятся независимые domains verifier и wrapping key, data key
+wrap-ится AES-256-GCM, credential v2 durable публикуется, bootstrap copy стирается.
+Lock, reset, watchdog и update boundaries стирают volatile copy data key. Protected
+Session files используют отдельный namespace `enc-` и 32-byte header `LENC`; каждый
+plaintext chunk 256 bytes получает отдельные nonce и authentication tag 16 bytes,
+а AAD связывает path, header и chunk index. Legacy plaintext files никогда не
+интерпретируются как encrypted heads.
 
 Physical HIL persistence использует отдельный disposable namespace
 `leshy1-lock-hil`. Каждый boot по умолчанию выбирает product namespace; surviving
@@ -84,6 +95,7 @@ explicit cleanup. Runner не читает и не копирует весь par
 4. `done` — physical `recovery_only` на пятой попытке, cold restore, ordering
    destructive recovery, matrix safe operations и реальные отказы protected
    UI/export без возврата content (`dev.281`).
-5. `next` — authenticated-encryption key envelope и storage protected data.
+5. `done` — authenticated-encryption key envelope, encrypted product storage,
+   physical ciphertext separation и authenticated cold reopen exact CID (`dev.283`).
 6. `planned` — destructive recovery/power-cut matrix, взаимодействие signed
    update/recovery, privacy review и release HIL.
