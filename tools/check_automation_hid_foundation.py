@@ -58,6 +58,7 @@ TRUST_BOARD_READER_SOURCE = (
 TRUST_BUILDER = ROOT / "tools/build_automation_trust_bundle.py"
 TRUST_WORKFLOW = ROOT / ".github/workflows/automation-trust-bundle.yml"
 PHYSICAL_HIL_RUNNER = ROOT / "tools/run_1x_automation_inspector_hil.py"
+TRUST_UI_HIL_RUNNER = ROOT / "tools/run_1x_automation_trust_ui_hil.py"
 TEST = ROOT / "tests/native/automation_package_tests.cpp"
 DOC = ROOT / "docs/v1/AUTOMATION_HID.md"
 DOC_RU = ROOT / "docs/v1/AUTOMATION_HID.ru.md"
@@ -87,6 +88,7 @@ def main() -> int:
     trust_builder = TRUST_BUILDER.read_text(encoding="utf-8")
     trust_workflow = TRUST_WORKFLOW.read_text(encoding="utf-8")
     physical_hil_runner = PHYSICAL_HIL_RUNNER.read_text(encoding="utf-8")
+    trust_ui_hil_runner = TRUST_UI_HIL_RUNNER.read_text(encoding="utf-8")
     test = TEST.read_text(encoding="utf-8")
     docs = DOC.read_text(encoding="utf-8")
     docs_ru = DOC_RU.read_text(encoding="utf-8")
@@ -302,6 +304,32 @@ def main() -> int:
     for token in required_runner:
         if token not in physical_hil_runner:
             failures.append(f"missing physical Inspector runner guard: {token}")
+
+    required_trust_ui_runner = (
+        'BOARD_PORT = "/dev/cu.usbmodem2101"',
+        'FORBIDDEN_PORTS = {"/dev/cu.usbmodem1101"}',
+        '"trust_mutation_confirmed": False',
+        '"trust_namespace_written": False',
+        '"sd_mount": "read_only"',
+        '"sd_files_written": 0',
+        '"private_key_used_or_stored": False',
+        '"radio_tx_commands": 0',
+        '"wifi_host_touched": False',
+        '"full_hil": False',
+        '"delta_only": True',
+        '"--skip-flash"',
+        '"installed_candidate_reused"',
+        'set_language(device, "en")',
+        'set_language(device, "ru")',
+        'device_lock_fixture_command(device, "cleanup")',
+        'wipe_pin(lock_pin)',
+        'generation=trust_before["generation"]',
+        'count=trust_before["count"]',
+        'action_invocations=0, hid_reports=0, rf_transmit_attempts=0',
+    )
+    for token in required_trust_ui_runner:
+        if token not in trust_ui_hil_runner:
+            failures.append(f"missing physical trust UI runner guard: {token}")
 
     required_tests = (
         "testTrustedActionPackageIsInspectedWithoutExecution",
