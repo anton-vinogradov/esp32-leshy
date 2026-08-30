@@ -46,8 +46,34 @@ def passing_result() -> dict[str, Any]:
             "mac_wifi_or_ble_controlled": False,
             "manual_button_presses": 0,
             "product_storage_writes_measured": False,
+            "isolated_device_lock_fixture": True,
+            "pin_or_digest_retained": False,
+            "product_lock_namespace_written_or_erased": False,
         },
         "menus": menus,
+        "device_lock_fixture": {
+            "begin": {
+                "status": "begun", "active": True,
+                "product_namespace_written_or_erased": False,
+            },
+            "unlocked": {
+                "status": "unlocked", "protected_access": True,
+                "persistence_fixture_active": True,
+            },
+            "cleanup": {
+                "status": "cleaned", "active": False,
+                "product_restored": True,
+                "product_namespace_written_or_erased": False,
+            },
+            "product_before": {
+                "status": "unconfigured", "credential_generation": 0,
+                "failed_attempts": 0,
+            },
+            "product_after": {
+                "status": "unconfigured", "credential_generation": 0,
+                "failed_attempts": 0,
+            },
+        },
         "cleanup_after": {"complete": True},
         "safe_outputs": {
             "buzzer_inactive": True, "nrf_ce_inactive": True,

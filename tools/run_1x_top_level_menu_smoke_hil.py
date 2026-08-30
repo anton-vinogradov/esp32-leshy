@@ -36,6 +36,14 @@ from run_1x_airspace_guard_hil import (
     read_only_query,
     robust_cleanup,
 )
+from run_1x_device_lock_hil import LOCK_SCHEMA, device_lock_page, home_device
+from run_1x_device_lock_persistence_hil import (
+    enter_pin,
+    ephemeral_pin,
+    fixture_command,
+    wait_lock_state,
+    wipe_pin,
+)
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_home_hil import stabilized_boot_metrics
 from run_1x_product_survey_hil import (
@@ -232,7 +240,35 @@ def result_contract_failures(result: dict[str, Any]) -> list[str]:
         "mac_wifi_or_ble_controlled": False,
         "manual_button_presses": 0,
         "product_storage_writes_measured": False,
+        "isolated_device_lock_fixture": True,
+        "pin_or_digest_retained": False,
+        "product_lock_namespace_written_or_erased": False,
     }, "result.policy"))
+    lock_fixture = result.get("device_lock_fixture", {})
+    if not isinstance(lock_fixture, dict):
+        lock_fixture = {}
+    failures.extend(expect(lock_fixture.get("begin", {}), {
+        "status": "begun", "active": True,
+        "product_namespace_written_or_erased": False,
+    }, "result.device_lock_fixture.begin"))
+    failures.extend(expect(lock_fixture.get("unlocked", {}), {
+        "status": "unlocked", "protected_access": True,
+        "persistence_fixture_active": True,
+    }, "result.device_lock_fixture.unlocked"))
+    failures.extend(expect(lock_fixture.get("cleanup", {}), {
+        "status": "cleaned", "active": False,
+        "product_restored": True,
+        "product_namespace_written_or_erased": False,
+    }, "result.device_lock_fixture.cleanup"))
+    before_lock = lock_fixture.get("product_before", {})
+    after_lock = lock_fixture.get("product_after", {})
+    if not isinstance(before_lock, dict) or not isinstance(after_lock, dict):
+        failures.append("result.device_lock_fixture.product_continuity: missing")
+    else:
+        for key in ("status", "credential_generation", "failed_attempts"):
+            if before_lock.get(key) != after_lock.get(key):
+                failures.append(
+                    f"result.device_lock_fixture.product_continuity.{key}: changed")
     records = result.get("menus")
     if not isinstance(records, list):
         return failures + ["result.menus: missing"]
@@ -386,9 +422,12 @@ def main() -> int:
     hil_end: dict[str, Any] = {}
     post_hil_end: dict[str, Any] = {}
     catalog_boundary: dict[str, Any] = {}
+    device_lock_fixture: dict[str, Any] = {}
     flash_completed = False
     candidate_verified = False
     hil_started = False
+    lock_fixture_started = False
+    lock_pin = ephemeral_pin()
 
     try:
         if args.flash:
@@ -420,6 +459,31 @@ def main() -> int:
                 hil_begin = begin_hil_session(
                     device, run_id, app_identity, args.expected_version)
                 hil_started = True
+                device_lock_fixture["product_before"] = read_only_query(
+                    device, b"device-lock.state", LOCK_SCHEMA, "state")
+                device_lock_fixture["begin"] = fixture_command(
+                    device, "begin")
+                lock_fixture_started = True
+                if device_lock_fixture["begin"].get("status") != "begun":
+                    raise RuntimeError("isolated Device Lock fixture unavailable")
+                home_device(device)
+                device_lock_page(device)
+                opened = action(device, "right")
+                if opened.get("runtime_event") != "device_lock_editor_opened":
+                    raise RuntimeError("Device Lock fixture editor did not open")
+                enter_pin(device, lock_pin)
+                enter_pin(device, lock_pin)
+                device_lock_fixture["unlocked"] = wait_lock_state(
+                    device,
+                    lambda state: state.get("status") == "unlocked",
+                    "isolated menu-smoke unlock")
+                if device_lock_fixture["unlocked"].get(
+                        "protected_access") is not True:
+                    raise RuntimeError("isolated Device Lock did not unlock")
+                unlocked_cleanup = robust_cleanup(device)
+                device_lock_fixture["unlocked_home"] = unlocked_cleanup
+                if unlocked_cleanup.get("complete") is not True:
+                    raise RuntimeError("unlocked fixture did not return Home")
 
                 for case in MENU_CASES:
                     record: dict[str, Any] = {
@@ -475,7 +539,7 @@ def main() -> int:
                         f"{case.item_id}: {failure}"
                         for failure in record["failures"])
 
-                # Prove that the executable catalog has no untested ninth
+                # Prove that the executable catalog has no untested tenth
                 # entry.  Down on the last declared row must be a no-op.
                 catalog_boundary = action(device, "down")
                 trace.append(catalog_boundary)
@@ -512,6 +576,18 @@ def main() -> int:
                 cleanup_after = robust_cleanup(device)
                 if cleanup_after.get("complete") is not True:
                     failures.append("cleanup_after: Home/zero lease unproven")
+                if lock_fixture_started:
+                    try:
+                        device_lock_fixture["cleanup"] = fixture_command(
+                            device, "cleanup")
+                        lock_fixture_started = False
+                        device_lock_fixture["product_after"] = read_only_query(
+                            device, b"device-lock.state", LOCK_SCHEMA,
+                            "state")
+                    except Exception as error:
+                        failures.append(
+                            "device_lock_fixture_cleanup: "
+                            f"{type(error).__name__}: {error}")
                 if hil_started:
                     try:
                         hil_end = end_hil_session(device, run_id, app_identity)
@@ -534,6 +610,8 @@ def main() -> int:
                             f"hil_session_end: {type(error).__name__}: {error}")
     except Exception as error:
         failures.append(f"runner: {type(error).__name__}: {error}")
+    finally:
+        wipe_pin(lock_pin)
 
     result = {
         "schema": RUN_SCHEMA,
@@ -558,6 +636,9 @@ def main() -> int:
             "mac_wifi_or_ble_controlled": False,
             "manual_button_presses": 0,
             "product_storage_writes_measured": False,
+            "isolated_device_lock_fixture": True,
+            "pin_or_digest_retained": False,
+            "product_lock_namespace_written_or_erased": False,
             "requested_dwell_seconds": args.dwell_seconds,
             "sample_seconds": args.sample_seconds,
         },
@@ -572,6 +653,7 @@ def main() -> int:
         "input": input_state,
         "safe_outputs": safe_outputs,
         "menus": menus,
+        "device_lock_fixture": device_lock_fixture,
         "catalog_boundary": catalog_boundary,
         "trace": trace,
         "cleanup_before": cleanup_before,
