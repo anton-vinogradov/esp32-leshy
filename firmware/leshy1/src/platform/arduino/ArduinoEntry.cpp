@@ -2187,6 +2187,8 @@ struct ProductBootRecoveryState final {
     bool mountedReadOnly = false;
     bool readOnlyGuaranteed = false;
     bool rootExists = false;
+    std::uint64_t cardCapacityBytes = 0;
+    std::uint64_t cachedFreeBytes = 0;
     bool opened = false;
     bool catalogAdmitted = false;
     bool cleanupComplete = false;
@@ -2206,10 +2208,10 @@ ProductBootRecoveryState productBootRecovery;
 bool knownProductSessionRootExists(const char* fingerprint) {
     // Product boot already authenticated this exact CID and opened the
     // versioned root through the read-only driver. Runtime write admission can
-    // reuse that immutable process-lifetime fact; openExistingWritable()
-    // still verifies the actual directory before any write. Avoiding a new
-    // f_stat here also prevents a stalled removable medium from starving the
-    // core-0 idle task until the independent hardware watchdog resets it.
+    // reuse that immutable process-lifetime fact. The first real FatFs file
+    // operation still fails closed if the directory is no longer accessible.
+    // Avoiding a new f_stat here also prevents a stalled removable medium from
+    // starving the core-0 idle task until the hardware watchdog resets it.
     return fingerprint != nullptr && fingerprint[0] != '\0' &&
         productBootRecovery.enrolled &&
         productBootRecovery.fingerprintMatched &&
@@ -4285,95 +4287,19 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
         return report;
     }
 
-    report.filesystemAttempted = true;
-    heartbeatProductSurveyPreparation();
-    bool filesystemMounted = false;
-    for (std::uint8_t attempt = 1;
-         attempt <=
-             leshy1::storage::kProductStartMaximumFilesystemAttempts;
-         ++attempt) {
-        if (productSurveyCancelRequested()) {
-            report.status = "cancelled";
-            return report;
-        }
-        report.filesystemMountAttempts = attempt;
-        publishProductSurveyPreparationStage("filesystem_mount");
-        filesystemMounted = productSurveyFilesystem.begin();
-        recordProductSurveyMountOutcome(filesystemMounted);
-        report.filesystemMountError = productSurveyFilesystem.mountError();
-        report.filesystemMountStage =
-            productSurveyFilesystem.mountStageName();
-        report.filesystemBusInitializeError =
-            productSurveyFilesystem.busInitializeError();
-        report.filesystemHeapFreeBeforeBus =
-            productSurveyFilesystem.heapFreeBeforeBus();
-        report.filesystemHeapLargestBeforeBus =
-            productSurveyFilesystem.heapLargestBeforeBus();
-        report.filesystemHeapFreeBeforeVfs =
-            productSurveyFilesystem.heapFreeBeforeVfs();
-        report.filesystemHeapLargestBeforeVfs =
-            productSurveyFilesystem.heapLargestBeforeVfs();
-        report.filesystemDriveAvailableBeforeVfs =
-            productSurveyFilesystem.driveAvailableBeforeVfs();
-        if (filesystemMounted) {
-            break;
-        }
-        report.filesystemMountLastFailureError = report.filesystemMountError;
-        leshy1::storage::ProductStartFilesystemRetryEvidence evidence;
-        evidence.explicitStart = true;
-        evidence.enrolled = true;
-        evidence.expectedFingerprintValid =
-            exactCidFingerprint(report.expectedFingerprint);
-        evidence.requiredResourcesHeld =
-            (ownedResources & required) == required;
-        evidence.identityValid =
-            identity.status == leshy1::storage::SdTransportRunStatus::Valid;
-        evidence.identityCleanupComplete = report.identityCleanupComplete;
-        evidence.observedFingerprintMatches =
-            std::strcmp(report.expectedFingerprint,
-                        report.observedFingerprint) == 0;
-        evidence.mountAttempted = true;
-        evidence.mountSucceeded = false;
-        evidence.mountError = report.filesystemMountError;
-        evidence.filesystemCleanupComplete =
-            productSurveyFilesystem.cleanupComplete();
-        evidence.filesystemStillMounted = productSurveyFilesystem.mounted();
-        evidence.storeCurrentlyOpen =
-            report.backendOpen || productSurveyFilesystem.mounted();
-        evidence.radioCurrentlyActive =
-            report.sourceActive || productSurveyScanActive();
-        evidence.cancelRequested = productSurveyCancelRequested();
-        if (!leshy1::storage::shouldRetryProductStartFilesystem(
-                evidence, attempt)) {
-            break;
-        }
-        report.filesystemMountTransientRetries = attempt;
-        ulTaskNotifyTake(
-            pdTRUE,
-            pdMS_TO_TICKS(
-                leshy1::storage::productStartFilesystemRetryDelayMs(
-                    attempt)));
-        heartbeatProductSurveyPreparation();
-    }
-    if (!filesystemMounted) {
-        report.status = productSurveyCancelRequested()
-            ? "cancelled" : "mount_failed";
-        return report;
-    }
-    heartbeatProductSurveyPreparation();
-    if (productSurveyCancelRequested()) {
-        report.status = "cancelled";
-        return report;
-    }
-    publishProductSurveyPreparationStage("filesystem_metadata");
-    publishProductSurveyPreparationStage("filesystem_capacity");
-    report.cardCapacityBytes = productSurveyFilesystem.cardCapacityBytes();
-    publishProductSurveyPreparationStage("filesystem_free_cache");
-    report.cachedFreeBytes = productSurveyFilesystem.cachedFreeBytes();
+    // Cold boot already mounted this exact enrolled card read-only, recovered
+    // the catalog and retained its immutable geometry plus the FAT FSInfo free
+    // hint. Explicit Start re-reads CID physically, then reuses that evidence
+    // for admission. There is deliberately no pre-scan writable mount: Wi-Fi
+    // and BLE run with the SD stack absent, and Stop performs the one exact-CID
+    // writable mount needed for the atomic commit.
+    publishProductSurveyPreparationStage("boot_storage_evidence");
+    report.cardCapacityBytes = productBootRecovery.cardCapacityBytes;
+    report.cachedFreeBytes = productBootRecovery.cachedFreeBytes;
     const bool capacityMatched =
         report.cardCapacityBytes != 0 &&
-        report.cardCapacityBytes == identity.identity.capacityBytes;
-    publishProductSurveyPreparationStage("filesystem_root_evidence");
+        report.cardCapacityBytes == identity.identity.capacityBytes &&
+        productBootRecovery.cleanupComplete;
     const bool rootExists = knownProductSessionRootExists(
         report.observedFingerprint);
 
@@ -4431,32 +4357,10 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
         return report;
     }
 
-    // Validate the writable store before starting Wi-Fi/BLE, then release the
-    // FAT/SDSPI stack completely.  The radio stacks and SDSPI both depend on
-    // scarce DMA-capable internal heap on this no-PSRAM board and must not have
-    // overlapping lifetimes.  The exact CID is checked again and the store is
-    // reopened only after both scanners have stopped, immediately before the
-    // atomic terminal commit.
-    report.storeOpenAttempted = true;
-    heartbeatProductSurveyPreparation();
-    publishProductSurveyPreparationStage("store_open");
-    if (!productSurveyStore.selectDrive(productSurveyFilesystem.driveNumber()) ||
-        !productSurveyStore.openExistingWritable(storePermit)) {
-        report.status = "store_open_failed";
-        return report;
-    }
-    heartbeatProductSurveyPreparation();
-    publishProductSurveyPreparationStage("storage_release");
-    productSurveyStore.end();
-    productSurveyFilesystem.end();
+    // Admission is policy-only. Keep the physical product store closed until
+    // both radio stacks have stopped and the terminal commit revalidates CID.
     surveyStoreRouter.bind(ramSessionStore);
     report.backendOpen = false;
-    if (!productSurveyFilesystem.cleanupComplete() ||
-        productSurveyFilesystem.mounted() ||
-        !surveyStoreRouter.boundTo(ramSessionStore)) {
-        report.status = "storage_release_failed";
-        return report;
-    }
     if (productSurveyCancelRequested()) {
         report.status = "cancelled";
         return report;
@@ -5566,6 +5470,7 @@ bool reopenProductSurveyBackendForCommit() {
     const leshy1::storage::ProductStorePermit storePermit =
         leshy1::storage::authorizeProductStore(media, storeRequest);
     productSurveyRuntime.storeStatus = storePermit.status;
+    productSurveyRuntime.storeOpenAttempted = true;
     if (!storePermit.allowed() ||
         !productSurveyStore.selectDrive(productSurveyFilesystem.driveNumber()) ||
         !productSurveyStore.openExistingWritable(storePermit)) {
@@ -7314,6 +7219,9 @@ void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
         mounted && filesystem.readOnlyGuaranteed();
     const std::uint64_t cardCapacity =
         mounted ? filesystem.cardCapacityBytes() : 0;
+    productBootRecovery.cardCapacityBytes = cardCapacity;
+    productBootRecovery.cachedFreeBytes =
+        mounted ? filesystem.cachedFreeBytes() : 0;
     const bool capacityMatched = mounted &&
         cardCapacity != 0 && cardCapacity == identity.identity.capacityBytes;
     productBootRecovery.rootExists = mounted && filesystem.exists(

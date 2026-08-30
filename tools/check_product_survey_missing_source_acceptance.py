@@ -242,20 +242,22 @@ def main() -> int:
         "consumeProductSurveySourceUnavailableInjection()",
         "productSurveySourceUnavailableVisible()",
         "report.sourceStartAttempted = false",
-        "report.storeOpenAttempted = true",
+        "productSurveyRuntime.storeOpenAttempted = true;",
         "releaseProductSurveyAfterTerminal(event.report.status, !keepVisible)",
         "source_unavailable_waiting_back",
     ):
         require(failures, marker in entry, f"firmware marker missing: {marker}")
-    source_boundary = entry[entry.find("report.sourceFailureInjected ="):
-                            entry.find("report.storeOpenAttempted = true")]
+    source_failure = entry.find("report.sourceFailureInjected =")
+    policy_only = entry.find(
+        "surveyStoreRouter.bind(ramSessionStore)", source_failure)
+    source_boundary = entry[source_failure:policy_only]
     require(failures,
             "if (report.sourceFailureInjected)" in source_boundary and
             "report.sourceStartAttempted = false" in source_boundary and
             "authorizeProductSurvey" in source_boundary and
             "return report;" in source_boundary and
             "openExistingWritable" not in source_boundary,
-            "source failure is not ordered before store open")
+            "source failure is not ordered before policy-only admission")
     for marker in (
         "LESHY_UI_TEXT(SurveyUnavailable,",
         "LESHY_UI_TEXT(SourceUnavailableReason,",

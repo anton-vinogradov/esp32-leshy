@@ -67,9 +67,10 @@ def main() -> int:
     preparation_start = entry.index("ProductSurveyWorkerReport prepareProductSurveyWorker(")
     preparation_end = entry.index("void runProductSurveyWorker(", preparation_start)
     preparation = entry[preparation_start:preparation_end]
-    if preparation.count("heartbeatProductSurveyPreparation();") < 8:
+    if preparation.count("heartbeatProductSurveyPreparation();") < 4:
         raise AssertionError(
-            "preparation lacks heartbeat coverage around identity/mount/scanners")
+            "preparation lacks heartbeat coverage around identity and "
+            "boot-evidence admission")
     if worker.count("heartbeatProductSurveyWorker();") < 5:
         raise AssertionError("worker lacks heartbeat coverage around waits/scans")
     scan_at = worker.index("wifiScanner.scan(")

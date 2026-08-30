@@ -779,61 +779,29 @@ def main() -> int:
             if marker not in product_start_body:
                 errors.append(f"product Survey start is missing bounded identity retry: {marker}")
         for marker in (
-            "kProductStartMaximumFilesystemAttempts",
-            "shouldRetryProductStartFilesystem",
-            "productStartFilesystemRetryDelayMs",
-            "productSurveyFilesystem.cleanupComplete()",
-            "productSurveyFilesystem.mounted()",
-            "report.filesystemMountTransientRetries = attempt",
-            "recordProductSurveyMountOutcome(filesystemMounted)",
-            "report.filesystemMountLastFailureError = report.filesystemMountError",
-            "evidence.storeCurrentlyOpen",
-            "evidence.radioCurrentlyActive",
+            'publishProductSurveyPreparationStage("boot_storage_evidence")',
+            "productBootRecovery.cardCapacityBytes",
+            "productBootRecovery.cachedFreeBytes",
+            "productBootRecovery.cleanupComplete",
+            "knownProductSessionRootExists(",
+            "authorizeProductStore(media, storeRequest)",
+            "surveyStoreRouter.bind(ramSessionStore)",
         ):
             if marker not in product_start_body:
                 errors.append(
-                    "product Survey start is missing fail-closed filesystem "
-                    f"remount retry/telemetry: {marker}"
+                    "product Survey start is missing authenticated boot storage "
+                    f"evidence admission: {marker}"
                 )
-        filesystem_attempts = product_start_body.find(
-            "kProductStartMaximumFilesystemAttempts"
-        )
-        cancellation_gate = product_start_body.find(
-            "if (productSurveyCancelRequested()) {", filesystem_attempts
-        )
-        filesystem_begin = product_start_body.find(
-            "productSurveyFilesystem.begin()", filesystem_attempts
-        )
-        if not (
-            filesystem_attempts >= 0
-            and filesystem_attempts < cancellation_gate < filesystem_begin
+        for forbidden_call in (
+            "productSurveyFilesystem.begin()",
+            "productSurveyStore.openExistingWritable(storePermit)",
+            "productSurveyFilesystem.end()",
         ):
-            errors.append(
-                "product Survey cancellation must be checked before every "
-                "filesystem remount attempt"
-            )
-        store_open = product_start_body.find(
-            "productSurveyStore.openExistingWritable(storePermit)"
-        )
-        store_release = product_start_body.find(
-            "productSurveyStore.end();", store_open
-        )
-        filesystem_release = product_start_body.find(
-            "productSurveyFilesystem.end();", store_release
-        )
-        source_admission = product_start_body.find(
-            "report.activeSourceMask = static_cast<std::uint8_t>("
-        )
-        if (
-            store_open < 0
-            or store_release < store_open
-            or filesystem_release < store_release
-            or source_admission < filesystem_release
-        ):
-            errors.append(
-                "product Survey must validate and fully release SDSPI storage "
-                "before radio stacks consume DMA-capable heap"
-            )
+            if forbidden_call in product_start_body:
+                errors.append(
+                    "product Survey start must keep writable SDSPI storage "
+                    f"closed until terminal commit: {forbidden_call}"
+                )
         if "wifiScanner->begin()" in product_start_body or \
                 "bleScanner->begin()" in product_start_body:
             errors.append(
@@ -1036,7 +1004,7 @@ def main() -> int:
         "consumeProductSurveySourceUnavailableInjection()",
         "productSurveySourceUnavailableVisible()",
         "report.sourceStartAttempted = false",
-        "report.storeOpenAttempted = true",
+        "productSurveyRuntime.storeOpenAttempted = true;",
         "releaseProductSurveyAfterTerminal(event.report.status, !keepVisible)",
         "source_unavailable_waiting_back",
         '\\"survey_product_source_start_attempted\\"',
@@ -1048,11 +1016,11 @@ def main() -> int:
                 f"product Survey missing-source evidence is missing: {marker}"
             )
     source_failure = entry.find("report.sourceFailureInjected =")
-    store_open = entry.find("report.storeOpenAttempted = true", source_failure)
-    if source_failure < 0 or store_open <= source_failure:
-        errors.append("missing-source/store-open ordering could not be inspected")
+    policy_only = entry.find("surveyStoreRouter.bind(ramSessionStore)", source_failure)
+    if source_failure < 0 or policy_only <= source_failure:
+        errors.append("missing-source/policy-only ordering could not be inspected")
     else:
-        source_boundary = entry[source_failure:store_open]
+        source_boundary = entry[source_failure:policy_only]
         for marker in (
             "if (report.sourceFailureInjected)",
             "report.sourceStartAttempted = false",
