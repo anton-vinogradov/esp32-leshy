@@ -194,7 +194,7 @@ calibrated range, исторический Target tracking или доказат
 | CAP-049 | Focused Wi-Fi authentication Capture распознаёт EAPOL/PMKID и complete/incomplete handshakes, затем экспортирует immutable PCAP и `hc22000` evidence | P1 | J-03, J-07, PR-015, PR-021 | S7 |
 | CAP-050 | Offline Field Survey объединяет Wi-Fi AP/station и BLE observations с optional GPS track, deduplication, сравнением повторного прохода и локальным WiGLE-compatible export | P1, GPS conditional | J-01, J-07, PR-022 | S7 |
 | CAP-051 | BLE Inspector сохраняет compatible raw packets и даёт явный permissioned connected-GATT mode с детерминированным disconnect и provenance | P1 | J-02, J-07, PR-023 | S7 |
-| CAP-052 | Device Lock даёт local PIN setup, bounded retry/recovery и защищает secrets/evidence, не блокируя safe cleanup или recovery | P0 до поставки sensitive data | J-05, J-08, PR-017, PR-024 | S7 |
+| CAP-052 | [Device Lock](DEVICE_LOCK.ru.md) даёт local PIN setup, bounded retry/recovery и защищает secrets/evidence, не блокируя safe cleanup или recovery | P0 до поставки sensitive data | J-05, J-08, PR-017, PR-024 | S7 |
 | CAP-053 | Устройство → Serial Console даёт bounded UART bridge и общий Actions CLI с явной конфигурацией, permissions, leases и cleanup | P1 | J-05, J-08, PR-012, PR-025 | S7 |
 | CAP-054 | Automation/HID запускает signed permissioned scripts с preview, ceilings, finite runtime и scoped USB/BLE HID; defensive BadUSB inspection по умолчанию пассивен | P1 | J-08, PR-013, PR-026 | S7 |
 | CAP-055 | Authorized wireless Lab содержит только именованные и отдельно принятые Wi-Fi/BLE/nRF fixture recipes с bounded region/power/channel/time и physical stop | P0 для любого shipped wireless TX | J-06, J-08, PR-013, PR-027 | S7 |

@@ -1437,6 +1437,20 @@ Compact acceptance сохраняет только hashes/counts и допуск
 raw runner; ambient identities, export payload, screenshots и дополнительный radio
 cycle не сохраняются.
 
+Bound foundation Device Lock `RB-M205`: exact host/build `1.0.0-dev.277` на source
+`4c4af42178e783d8d18e48e2a2ab301af41073a3` использует 230 800 B static RAM и
+3 484 208 B linked flash. Images app/factory занимают 3 484 704/3 550 240 B, SHA-256
+`7a4a5d148c91769677846b941bf4a8ad7077557d074fb03f86d4ab3dda49543f`/
+`b15e21c82d051d79ecb3311f900ebf1c6dd7c0bcdb6744a6dae53877a17d6eaa`;
+embedded ELF identity —
+`f00c54521d5593e8581ee4a271eb3f87eb69015da73d32adc8a8f612af8cc2bc`,
+map SHA — `a06094c9ae6bf955a51a516efa5fc04d42fab4d06feb268005f05b665db69b3d`.
+App оставляет 709 600 B в OTA slot 4 MiB. Реальное включение production boundary
+PBKDF2/NVS и boot restore стоит 120 B static RAM, 3 472 B linked flash и 3 808 B
+padded app поверх dev.276. Resident objects credential/state имеют fixed size; PIN
+или evidence buffer не сохраняются. Runtime latency KDF, transient heap и watchdog
+margin не заявляются до physical HIL dev.278 или новее.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

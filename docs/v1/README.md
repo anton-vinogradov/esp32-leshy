@@ -44,6 +44,8 @@ accepted decisions change.
   by the user workflow and release HIL
 - [Software Safety Supervisor](SAFETY_SUPERVISOR.md) — runtime watchdog, retained
   Safe Mode, emergency output quiesce, and explicit hardware limits
+- [Device Lock](DEVICE_LOCK.md) — local PIN, persistent retry, protected/safe
+  operation matrix, destructive recovery and honest data-at-rest limits
 - [Automated pre-release HIL](PRE_RELEASE_HIL.md) — proposed build-once,
   physical-test, promote-same-bytes pipeline with screenshots and attestation
 - [Two-board HIL and declarative scenarios](TWO_BOARD_HIL.md) — candidate/fixture

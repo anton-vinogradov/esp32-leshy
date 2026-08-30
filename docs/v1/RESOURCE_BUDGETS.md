@@ -1449,6 +1449,21 @@ run's corrected session-name oracle solely for its exact pinned one-error list a
 raw-runner SHA; no ambient identity, export payload, screenshot or extra radio cycle
 is retained.
 
+Device Lock foundation bound `RB-M205`: exact host/build `1.0.0-dev.277` at source
+`4c4af42178e783d8d18e48e2a2ab301af41073a3` uses 230,800 B static RAM and
+3,484,208 B linked flash. The app/factory images are 3,484,704/3,550,240 B with
+SHA-256 `7a4a5d148c91769677846b941bf4a8ad7077557d074fb03f86d4ab3dda49543f`/
+`b15e21c82d051d79ecb3311f900ebf1c6dd7c0bcdb6744a6dae53877a17d6eaa`;
+embedded ELF identity is
+`f00c54521d5593e8581ee4a271eb3f87eb69015da73d32adc8a8f612af8cc2bc`
+and map SHA is
+`a06094c9ae6bf955a51a516efa5fc04d42fab4d06feb268005f05b665db69b3d`.
+The app leaves 709,600 B in the 4 MiB OTA slot. Linking the actual production
+PBKDF2/NVS boundary and boot restore costs 120 B static RAM, 3,472 B linked flash
+and 3,808 B padded app beyond dev.276. The resident credential/state objects are
+fixed-size; no PIN or evidence buffer is retained. Runtime KDF latency, transient
+heap and watchdog margin remain unclaimed until physical dev.278-or-later HIL.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

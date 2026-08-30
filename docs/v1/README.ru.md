@@ -46,6 +46,8 @@
   пользователя и release HIL на одном test engine
 - [Программный Safety Supervisor](SAFETY_SUPERVISOR.ru.md) — runtime watchdog,
   retained Safe Mode, emergency quiesce outputs и явные hardware limits
+- [Device Lock](DEVICE_LOCK.ru.md) — local PIN, persistent retry, matrix
+  protected/safe operations, destructive recovery и честные data-at-rest limits
 - [Автоматический предрелизный HIL](PRE_RELEASE_HIL.ru.md) — proposed build-once,
   physical-test и promote-same-bytes pipeline с screenshots и attestation
 - [Двухплатный HIL и декларативные сценарии](TWO_BOARD_HIL.ru.md) — роли
