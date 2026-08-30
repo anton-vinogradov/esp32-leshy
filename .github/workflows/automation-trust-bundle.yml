@@ -1,0 +1,53 @@
+name: Build automation trust bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      label:
+        description: Owner-visible key label (1..24 printable ASCII bytes)
+        required: true
+        default: GitHub owner key
+
+permissions:
+  contents: read
+
+jobs:
+  build-public-bundle:
+    runs-on: ubuntu-latest
+    environment: automation-signing
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derive public key inside the protected job
+        env:
+          AUTOMATION_PRIVATE_KEY_PEM: ${{ secrets.LESHY_AUTOMATION_P256_PRIVATE_KEY_PEM }}
+          AUTOMATION_KEY_LABEL: ${{ inputs.label }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$AUTOMATION_PRIVATE_KEY_PEM"
+          trap 'rm -f "$RUNNER_TEMP/automation-private.pem" "$RUNNER_TEMP/automation-public.pem"' EXIT
+          printf '%s\n' "$AUTOMATION_PRIVATE_KEY_PEM" > "$RUNNER_TEMP/automation-private.pem"
+          openssl pkey -in "$RUNNER_TEMP/automation-private.pem" -pubout -out "$RUNNER_TEMP/automation-public.pem"
+          python3 tools/build_automation_trust_bundle.py \
+            --public-key "$RUNNER_TEMP/automation-public.pem" \
+            --label "$AUTOMATION_KEY_LABEL" \
+            --output automation-owner.lhak \
+            --metadata automation-owner.json
+      - name: Verify public-only artifact
+        run: |
+          set -euo pipefail
+          test "$(wc -c < automation-owner.lhak)" -eq 128
+          python3 - <<'PY'
+          import json
+          metadata = json.load(open("automation-owner.json", encoding="utf-8"))
+          assert metadata["contains_private_key"] is False
+          assert metadata["algorithm"] == "ecdsa_p256_sha256"
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: automation-owner-trust-bundle
+          path: |
+            automation-owner.lhak
+            automation-owner.json
+          if-no-files-found: error
+          retention-days: 14

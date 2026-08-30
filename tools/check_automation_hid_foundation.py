@@ -31,6 +31,26 @@ HIL_FIXTURE_SOURCE = (
 ARDUINO_ENTRY = (
     ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 )
+TRUST_HEADER = (
+    ROOT / "firmware/leshy1/src/apps/automation/AutomationTrustStore.h"
+)
+TRUST_SOURCE = (
+    ROOT / "firmware/leshy1/src/apps/automation/AutomationTrustStore.cpp"
+)
+TRUST_BUNDLE_HEADER = (
+    ROOT / "firmware/leshy1/src/apps/automation/AutomationTrustBundle.h"
+)
+TRUST_BUNDLE_SOURCE = (
+    ROOT / "firmware/leshy1/src/apps/automation/AutomationTrustBundle.cpp"
+)
+ARDUINO_TRUST_HEADER = (
+    ROOT / "firmware/leshy1/src/platform/arduino/ArduinoAutomationTrust.h"
+)
+ARDUINO_TRUST_SOURCE = (
+    ROOT / "firmware/leshy1/src/platform/arduino/ArduinoAutomationTrust.cpp"
+)
+TRUST_BUILDER = ROOT / "tools/build_automation_trust_bundle.py"
+TRUST_WORKFLOW = ROOT / ".github/workflows/automation-trust-bundle.yml"
 PHYSICAL_HIL_RUNNER = ROOT / "tools/run_1x_automation_inspector_hil.py"
 TEST = ROOT / "tests/native/automation_package_tests.cpp"
 DOC = ROOT / "docs/v1/AUTOMATION_HID.md"
@@ -48,6 +68,14 @@ def main() -> int:
     hil_fixture_header = HIL_FIXTURE_HEADER.read_text(encoding="utf-8")
     hil_fixture_source = HIL_FIXTURE_SOURCE.read_text(encoding="utf-8")
     arduino_entry = ARDUINO_ENTRY.read_text(encoding="utf-8")
+    trust_header = TRUST_HEADER.read_text(encoding="utf-8")
+    trust_source = TRUST_SOURCE.read_text(encoding="utf-8")
+    trust_bundle_header = TRUST_BUNDLE_HEADER.read_text(encoding="utf-8")
+    trust_bundle_source = TRUST_BUNDLE_SOURCE.read_text(encoding="utf-8")
+    arduino_trust_header = ARDUINO_TRUST_HEADER.read_text(encoding="utf-8")
+    arduino_trust_source = ARDUINO_TRUST_SOURCE.read_text(encoding="utf-8")
+    trust_builder = TRUST_BUILDER.read_text(encoding="utf-8")
+    trust_workflow = TRUST_WORKFLOW.read_text(encoding="utf-8")
     physical_hil_runner = PHYSICAL_HIL_RUNNER.read_text(encoding="utf-8")
     test = TEST.read_text(encoding="utf-8")
     docs = DOC.read_text(encoding="utf-8")
@@ -92,6 +120,51 @@ def main() -> int:
     for token in forbidden_source:
         if token in header or token in source:
             failures.append(f"passive foundation contains forbidden path: {token}")
+
+    trust_contract = "\n".join(
+        (trust_header, trust_source, trust_bundle_header, trust_bundle_source,
+         arduino_trust_header, arduino_trust_source)
+    )
+    required_trust = (
+        "kAutomationTrustMaximumKeys = 4U",
+        "AutomationTrustMutationAuthorization",
+        "AuthenticationRequired",
+        "ConfirmationRequired",
+        "encodeAutomationTrustRecord",
+        "decodeAutomationTrustRecord",
+        'std::memcmp(bytes, "LHAK", 4U)',
+        "kAutomationTrustBundleBytes = 128U",
+        'kNamespace = "leshy1-auto"',
+        'kTrustRecordKey = "trust.v1"',
+        "mbedtls_ecp_check_pubkey",
+        "mbedtls_ecdsa_verify",
+        "MBEDTLS_ECP_DP_SECP256R1",
+        "deriveAutomationP256KeyId",
+        "findAutomationTrustedKey",
+        "&automationSignatureVerifier",
+    )
+    joined_trust_product = trust_contract + "\n" + arduino_entry
+    for token in required_trust:
+        if token not in joined_trust_product:
+            failures.append(f"missing real trust boundary token: {token}")
+    for token in (
+        "PRIVATE KEY", "privateKey", "private_key", "ActionDispatcher",
+        "USBHID", "Keyboard.", "Mouse.", "BLEHID", "execute(",
+    ):
+        if token in trust_contract:
+            failures.append(f"trust boundary contains forbidden authority: {token}")
+    for token in (
+        "LESHY_AUTOMATION_P256_PRIVATE_KEY_PEM",
+        "environment: automation-signing",
+        "openssl pkey",
+        "build_automation_trust_bundle.py",
+        "contains_private_key",
+        "retention-days: 14",
+    ):
+        if token not in trust_workflow + "\n" + trust_builder:
+            failures.append(f"missing GitHub trust workflow token: {token}")
+    if "write_bytes(bundle)" not in trust_builder or "public_key_sha256" not in trust_builder:
+        failures.append("public-only trust bundle builder is incomplete")
 
     required_product = (
         (controller_header, "AutomationPackageCatalog"),

@@ -95,6 +95,7 @@
 #include "platform/arduino/BoardShieldReceiverProbe.h"
 #include "platform/arduino/ArduinoFsSessionStoreIo.h"
 #include "platform/arduino/ArduinoCompanionWebService.h"
+#include "platform/arduino/ArduinoAutomationTrust.h"
 #include "platform/arduino/ArduinoDeviceLockSecurity.h"
 #include "platform/arduino/ArduinoLittleFsSessionStoreIo.h"
 #include "platform/arduino/ArduinoSerialConsoleEndpoint.h"
@@ -553,6 +554,11 @@ SurveySession& littleFsResetSession = surveySession;
 LibraryController libraryController;
 AutomationPackageCatalog automationPackageCatalog;
 AutomationInspectorController automationInspectorController;
+leshy1::platform::arduino::NvsAutomationTrustStore automationTrustBackend;
+leshy1::apps::automation::AutomationTrustStore automationTrustStore(
+    automationTrustBackend);
+leshy1::platform::arduino::MbedTlsAutomationSignatureVerifier
+    automationSignatureVerifier(automationTrustStore);
 BoardAutomationPackageStatus automationCatalogStatus =
     BoardAutomationPackageStatus::DirectoryUnavailable;
 std::uint32_t automationCatalogOmittedEntries = 0U;
@@ -2987,7 +2993,7 @@ void inspectSelectedAutomationPackage() {
         automationInspectorController.inspect(
             selected->name.data(), selected->size,
             reinterpret_cast<const std::uint8_t*>(diagnosticJson), bytesRead,
-            kAutomationActionApiVersion, nullptr);
+            kAutomationActionApiVersion, &automationSignatureVerifier);
     } else {
         automationInspectorController.rejectSource(
             selected->name.data(), selected->size,
@@ -36842,6 +36848,7 @@ void setup() {
     // UI setup and protected-operation admission are the next CAP-052 slice.
     deviceLockRestoreSucceeded = deviceLock.restore(
         static_cast<std::uint64_t>(esp_timer_get_time()));
+    const bool automationTrustRestoreSucceeded = automationTrustStore.restore();
 
     interfaceSettingsController.restore(loadUiBrightnessIndex(), loadUiTheme());
     antennaStatusController.restoreBrightness(
@@ -36935,6 +36942,15 @@ void setup() {
                                    : CapabilityState::Fault,
         "pbkdf2_sha256_nvs_record_v1",
         leshy1::services::security::deviceLockStateName(deviceLock.state())});
+    inventory.add({
+        "security.automation_trust",
+        automationTrustRestoreSucceeded ? CapabilityState::Declared
+                                        : CapabilityState::Fault,
+        "ecdsa_p256_sha256_nvs_trust_v1",
+        automationTrustRestoreSucceeded
+            ? leshy1::apps::automation::automationTrustLoadStatusName(
+                  automationTrustStore.loadStatus())
+            : "restore_failed_closed"});
     inventory.add({"input.pcf8574",
                    bootMetrics.inputDetected ? CapabilityState::Detected
                                              : CapabilityState::Unknown,

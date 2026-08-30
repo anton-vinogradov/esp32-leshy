@@ -7,6 +7,8 @@
 
 #include "apps/automation/AutomationPackage.h"
 #include "apps/automation/AutomationInspectorController.h"
+#include "apps/automation/AutomationTrustBundle.h"
+#include "apps/automation/AutomationTrustStore.h"
 
 using namespace leshy1::apps::automation;
 
@@ -129,6 +131,80 @@ public:
     std::array<std::uint8_t, kAutomationKeyIdBytes> expectedKey{};
     std::array<std::uint8_t, kAutomationSignatureBytes> expectedSignature{};
 };
+
+class MemoryTrustBackend final : public AutomationTrustStoreBackend {
+public:
+    AutomationTrustLoadStatus load(AutomationTrustSnapshot* output) override {
+        ++loads;
+        if (output == nullptr) return AutomationTrustLoadStatus::Error;
+        *output = stored;
+        return loadStatus;
+    }
+
+    bool save(const AutomationTrustSnapshot& snapshot) override {
+        ++saves;
+        if (!saveAllowed) return false;
+        stored = snapshot;
+        loadStatus = AutomationTrustLoadStatus::Loaded;
+        return true;
+    }
+
+    AutomationTrustSnapshot stored{};
+    AutomationTrustLoadStatus loadStatus = AutomationTrustLoadStatus::Missing;
+    bool saveAllowed = true;
+    int loads = 0;
+    int saves = 0;
+};
+
+AutomationTrustedKey trustedKey(std::uint8_t seed, const char* label) {
+    AutomationTrustedKey key{};
+    for (std::size_t index = 0U; index < key.keyId.size(); ++index) {
+        key.keyId[index] = static_cast<std::uint8_t>(seed + index);
+    }
+    key.publicKey[0] = 0x04U;
+    for (std::size_t index = 1U; index < key.publicKey.size(); ++index) {
+        key.publicKey[index] = static_cast<std::uint8_t>(seed + index * 3U);
+    }
+    std::strncpy(key.label.data(), label, kAutomationTrustLabelBytes);
+    key.label[kAutomationTrustLabelBytes] = '\0';
+    return key;
+}
+
+std::uint32_t testCrc32(const std::uint8_t* bytes, std::size_t size) {
+    std::uint32_t crc = 0xffffffffU;
+    for (std::size_t index = 0U; index < size; ++index) {
+        crc ^= bytes[index];
+        for (std::uint8_t bit = 0U; bit < 8U; ++bit) {
+            const std::uint32_t mask =
+                static_cast<std::uint32_t>(0U - (crc & 1U));
+            crc = (crc >> 1U) ^ (0xedb88320U & mask);
+        }
+    }
+    return ~crc;
+}
+
+AutomationTrustBundle trustBundle(const AutomationTrustedKey& key) {
+    AutomationTrustBundle bundle{};
+    std::memcpy(bundle.data(), "LHAK", 4U);
+    bundle[4U] = 1U;
+    bundle[5U] = static_cast<std::uint8_t>(
+        AutomationSignatureAlgorithm::EcdsaP256Sha256);
+    bundle[6U] = static_cast<std::uint8_t>(bundle.size() & 0xffU);
+    bundle[7U] = static_cast<std::uint8_t>(bundle.size() >> 8U);
+    std::memcpy(bundle.data() + 8U, key.keyId.data(), key.keyId.size());
+    std::memcpy(bundle.data() + 16U, key.publicKey.data(),
+                key.publicKey.size());
+    std::memcpy(bundle.data() + 81U, key.label.data(),
+                kAutomationTrustLabelBytes);
+    const std::uint32_t crc = testCrc32(bundle.data(), bundle.size() - 4U);
+    bundle[bundle.size() - 4U] = static_cast<std::uint8_t>(crc & 0xffU);
+    bundle[bundle.size() - 3U] =
+        static_cast<std::uint8_t>((crc >> 8U) & 0xffU);
+    bundle[bundle.size() - 2U] =
+        static_cast<std::uint8_t>((crc >> 16U) & 0xffU);
+    bundle[bundle.size() - 1U] = static_cast<std::uint8_t>(crc >> 24U);
+    return bundle;
+}
 
 std::vector<std::uint8_t> validActionPackage() {
     PackageBuilder builder(
@@ -493,6 +569,131 @@ void testInspectorCatalogAndSourceFailuresAreBounded() {
                               nullptr));
 }
 
+void testTrustStoreRequiresAuthenticationAndPersistsAtomically() {
+    MemoryTrustBackend backend;
+    AutomationTrustStore store(backend);
+    CHECK(store.restore());
+    CHECK(store.ready());
+    CHECK(store.loadStatus() == AutomationTrustLoadStatus::Missing);
+    CHECK(store.snapshot().count == 0U);
+
+    const AutomationTrustedKey owner = trustedKey(0x10U, "GitHub owner key");
+    AutomationTrustMutationAuthorization authorization{};
+    CHECK(store.enroll(owner, authorization) ==
+          AutomationTrustMutationStatus::AuthenticationRequired);
+    authorization.deviceUnlocked = true;
+    CHECK(store.enroll(owner, authorization) ==
+          AutomationTrustMutationStatus::ConfirmationRequired);
+    authorization.confirmationFresh = true;
+    CHECK(store.enroll(owner, authorization) ==
+          AutomationTrustMutationStatus::Applied);
+    CHECK(store.snapshot().count == 1U);
+    CHECK(store.snapshot().generation == 1U);
+    CHECK(backend.saves == 1);
+    CHECK(findAutomationTrustedKey(store.snapshot(), owner.keyId) != nullptr);
+    CHECK(store.enroll(owner, authorization) ==
+          AutomationTrustMutationStatus::DuplicateKey);
+
+    AutomationTrustedKey conflict = owner;
+    conflict.publicKey[12U] ^= 1U;
+    CHECK(store.enroll(conflict, authorization) ==
+          AutomationTrustMutationStatus::KeyIdConflict);
+    CHECK(store.snapshot().count == 1U);
+
+    backend.saveAllowed = false;
+    const AutomationTrustedKey second = trustedKey(0x40U, "rotation key");
+    CHECK(store.enroll(second, authorization) ==
+          AutomationTrustMutationStatus::PersistenceFailed);
+    CHECK(store.snapshot().count == 1U);
+    CHECK(findAutomationTrustedKey(store.snapshot(), second.keyId) == nullptr);
+    CHECK(store.revoke(owner.keyId, authorization) ==
+          AutomationTrustMutationStatus::PersistenceFailed);
+    CHECK(store.snapshot().count == 1U);
+
+    backend.saveAllowed = true;
+    CHECK(store.revoke(owner.keyId, authorization) ==
+          AutomationTrustMutationStatus::Applied);
+    CHECK(store.snapshot().count == 0U);
+    CHECK(store.snapshot().generation == 2U);
+    CHECK(store.revoke(owner.keyId, authorization) ==
+          AutomationTrustMutationStatus::NotFound);
+}
+
+void testTrustRecordCodecRejectsEveryMutationAndNoncanonicalState() {
+    AutomationTrustSnapshot snapshot{};
+    snapshot.generation = 7U;
+    snapshot.count = 2U;
+    snapshot.keys[0] = trustedKey(0x20U, "primary");
+    snapshot.keys[1] = trustedKey(0x60U, "backup");
+    CHECK(validAutomationTrustSnapshot(snapshot));
+
+    AutomationTrustRecord record{};
+    CHECK(encodeAutomationTrustRecord(snapshot, &record));
+    AutomationTrustSnapshot decoded{};
+    CHECK(decodeAutomationTrustRecord(record, &decoded));
+    CHECK(decoded.schemaVersion == snapshot.schemaVersion);
+    CHECK(decoded.generation == snapshot.generation);
+    CHECK(decoded.count == snapshot.count);
+    CHECK(decoded.keys[0].keyId == snapshot.keys[0].keyId);
+    CHECK(decoded.keys[0].publicKey == snapshot.keys[0].publicKey);
+    CHECK(decoded.keys[0].label == snapshot.keys[0].label);
+    CHECK(decoded.keys[1].keyId == snapshot.keys[1].keyId);
+
+    for (std::size_t index = 0U; index < record.size(); ++index) {
+        AutomationTrustRecord changed = record;
+        changed[index] ^= 1U;
+        CHECK(!decodeAutomationTrustRecord(changed, &decoded));
+    }
+
+    snapshot.keys[1].keyId = snapshot.keys[0].keyId;
+    CHECK(!validAutomationTrustSnapshot(snapshot));
+    CHECK(!encodeAutomationTrustRecord(snapshot, &record));
+    snapshot = {};
+    snapshot.count = 1U;
+    snapshot.keys[0] = trustedKey(0x30U, "missing generation");
+    CHECK(!validAutomationTrustSnapshot(snapshot));
+}
+
+void testTrustRestoreFailsClosedOnCorruption() {
+    MemoryTrustBackend backend;
+    backend.loadStatus = AutomationTrustLoadStatus::Corrupt;
+    backend.stored.generation = 1U;
+    backend.stored.count = 1U;
+    backend.stored.keys[0] = trustedKey(0x22U, "must not load");
+    AutomationTrustStore store(backend);
+    CHECK(!store.restore());
+    CHECK(!store.ready());
+    CHECK(store.snapshot().count == 0U);
+    const AutomationTrustMutationAuthorization authorized{true, true};
+    CHECK(store.enroll(trustedKey(0x44U, "blocked"), authorized) ==
+          AutomationTrustMutationStatus::StoreUnavailable);
+}
+
+void testTrustBundleIsCanonicalAndMutationClosed() {
+    const AutomationTrustedKey expected =
+        trustedKey(0x31U, "GitHub Actions key");
+    const AutomationTrustBundle bundle = trustBundle(expected);
+    AutomationTrustedKey parsed{};
+    CHECK(parseAutomationTrustBundle(bundle.data(), bundle.size(), &parsed) ==
+          AutomationTrustBundleStatus::Parsed);
+    CHECK(parsed.keyId == expected.keyId);
+    CHECK(parsed.publicKey == expected.publicKey);
+    CHECK(parsed.label == expected.label);
+
+    for (std::size_t index = 0U; index < bundle.size(); ++index) {
+        AutomationTrustBundle changed = bundle;
+        changed[index] ^= 1U;
+        CHECK(parseAutomationTrustBundle(
+                  changed.data(), changed.size(), &parsed) !=
+              AutomationTrustBundleStatus::Parsed);
+    }
+    CHECK(parseAutomationTrustBundle(
+              bundle.data(), bundle.size() - 1U, &parsed) ==
+          AutomationTrustBundleStatus::LengthMismatch);
+    CHECK(parseAutomationTrustBundle(nullptr, bundle.size(), &parsed) ==
+          AutomationTrustBundleStatus::InvalidArgument);
+}
+
 }  // namespace
 
 int main() {
@@ -504,6 +705,10 @@ int main() {
     testAdmissionOrderBindsAuthenticationPermissionAndTarget();
     testPassiveInspectorRetainsSummaryButNeverPackageBytes();
     testInspectorCatalogAndSourceFailuresAreBounded();
+    testTrustStoreRequiresAuthenticationAndPersistsAtomically();
+    testTrustRecordCodecRejectsEveryMutationAndNoncanonicalState();
+    testTrustRestoreFailsClosedOnCorruption();
+    testTrustBundleIsCanonicalAndMutationClosed();
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
         return EXIT_FAILURE;

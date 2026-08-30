@@ -15,8 +15,11 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/tests/native/automation_package_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/automation/AutomationInspectorController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/automation/AutomationPackage.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/automation/AutomationTrustBundle.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/automation/AutomationTrustStore.cpp" \
     -o "$test_tmp/automation_package_tests"
 
 "$test_tmp/automation_package_tests"
+PYTHONPATH="$repo_dir/tools" python3 "$repo_dir/tools/test_automation_trust_bundle.py"
 python3 "$repo_dir/tools/check_automation_hid_foundation.py"
 python3 "$repo_dir/tools/check_automation_inspector_hil_acceptance.py"
