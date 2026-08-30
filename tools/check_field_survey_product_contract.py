@@ -32,9 +32,17 @@ def main() -> None:
         "? FieldSurveyTracker::kSessionId",
         "field-visit session identity",
     )
-    if entry.count("completeFieldSurveyVisit(surveySession);") != 3:
+    # Normal stop and explicit paused commit now converge on one asynchronous
+    # worker terminal instead of duplicating the result mutation in two UI
+    # branches. The second call is the isolated incomplete-session HIL negative.
+    if (
+        entry.count("completeFieldSurveyVisit(surveySession);") != 2
+        or "ProductSurveyWorkerEventKind::Committed" not in entry
+        or "sendProductSurveyCommitWorkerEvent(status)" not in entry
+    ):
         raise SystemExit(
-            "FAIL: field survey result must cover normal/paused commit and HIL negative"
+            "FAIL: field survey result must converge normal/paused worker "
+            "commit and retain the HIL negative"
         )
     require(
         entry,

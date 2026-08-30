@@ -901,7 +901,9 @@ def main() -> int:
                 )
 
     commit_reopen = entry.find("bool reopenProductSurveyBackendForCommit()")
-    product_stop = entry.find("SurveyPipelineStatus stopProductSurvey()")
+    product_stop = entry.find(
+        "SurveyPipelineStatus stopProductSurvey()", commit_reopen
+    )
     if commit_reopen < 0 or product_stop <= commit_reopen:
         errors.append("product Survey terminal exact-media reopen is missing")
     else:
@@ -985,7 +987,7 @@ def main() -> int:
                 "product Survey must re-identify/reopen exact media before commit"
             )
         commit_boundary = entry.find(
-            "void serviceProductSurveyCommitBoundary()", product_start
+            "bool serviceProductSurveyCommitBoundary()", product_start
         )
         commit_boundary_body = entry[
             commit_boundary:entry.find(
@@ -993,18 +995,46 @@ def main() -> int:
             )
         ] if commit_boundary >= 0 else ""
         if (
-            "feedRuntimeSafetyWatchdog();" not in commit_boundary_body
-            or "vTaskDelay(1);" not in commit_boundary_body
+            "heartbeatProductSurveyWorker();" not in commit_boundary_body
+            or "ProductSurveyWorkerControl::Committing" not in commit_boundary_body
+            or "vTaskDelay(pdMS_TO_TICKS(1U));" not in commit_boundary_body
         ):
             errors.append(
-                "product Survey terminal commit is missing cooperative "
-                "Task-WDT stage boundaries"
+                "product Survey terminal commit is missing supervised worker "
+                "stage boundaries"
+            )
+        if "feedRuntimeSafetyWatchdog();" in commit_boundary_body:
+            errors.append(
+                "product Survey worker commit must not impersonate the loop "
+                "Task-WDT owner"
             )
         if product_stop_action.count(
-                "serviceProductSurveyCommitBoundary();") < 4:
+                "serviceProductSurveyCommitBoundary()") < 4:
             errors.append(
                 "product Survey commit must yield between backend, codec and "
                 "cleanup stages"
+            )
+        for marker in (
+            "ProductSurveyWorkerControl::CommitRequested",
+            "ProductSurveyWorkerControl::Committing",
+            "armProductSurveyWorkerDeadline(commitStartedUs)",
+            "sendProductSurveyCommitWorkerEvent(status)",
+            "productSurveyStore(\n    sdSessionStoreIoWorkspace, "
+            "serviceProductSurveyCommitBoundary",
+        ):
+            if marker not in entry:
+                errors.append(
+                    "product Survey terminal commit is missing asynchronous "
+                    f"worker supervision: {marker}"
+                )
+        paused_commit = entry.find("bool commitPausedProductSurvey()")
+        paused_commit_end = entry.find(
+            "bool applyProductSurveyTimelineStatus(", paused_commit
+        )
+        paused_commit_body = entry[paused_commit:paused_commit_end]
+        if "stopProductSurvey();" in paused_commit_body:
+            errors.append(
+                "paused Survey UI action must not execute the physical commit"
             )
         if "esp_task_wdt_delete" in logical_commit_body:
             errors.append(

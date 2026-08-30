@@ -960,11 +960,14 @@ completeFieldSurveyVisit(const SurveySession& session) {
 ArduinoFsSessionStoreWorkspace sdSessionStoreIoWorkspace;
 RamSessionStoreIo ramSessionStore;
 leshy1::storage::SessionStoreIoRouter surveyStoreRouter(ramSessionStore);
+bool serviceProductSurveyCommitBoundary();
+bool productSurveyCommitSupervisionActive = false;
 // Every physical-store path owns Storage+RadioSpi exclusively and closes its
 // adapter before releasing that lease. Product and diagnostic paths therefore
 // share one 4.4 KiB I/O workspace safely.
 ArduinoFsSessionStoreIo productSurveyStore(
-    sdSessionStoreIoWorkspace, nullptr, &protectedDataCipher, &deviceLock);
+    sdSessionStoreIoWorkspace, serviceProductSurveyCommitBoundary,
+    &protectedDataCipher, &deviceLock);
 BoardSdFilesystem productSurveyFilesystem;
 SurveyWorkflow surveyWorkflow(surveyController, surveyStoreRouter,
                               sessionStoreWorkspace(), librarySession,
@@ -2062,6 +2065,7 @@ bool bleSelectedDeviceConnectable();
 bool beginBleGattAfterSurvey();
 void serviceBleGattProduct();
 void serviceWifiAuthenticationCapture();
+SurveyPipelineStatus stopProductSurvey();
 std::uint64_t nextCaptureUiRefreshUs = 0;
 enum class CaptureView : std::uint8_t {
     SourceMenu,
@@ -2465,6 +2469,8 @@ enum class ProductSurveyWorkerControl : std::uint8_t {
     Paused,
     PauseRequested,
     StopRequested,
+    CommitRequested,
+    Committing,
     CancelRequested,
 };
 
@@ -2475,6 +2481,8 @@ enum class ProductSurveyWorkerEventKind : std::uint8_t {
     SourceUnavailable,
     Paused,
     Stopped,
+    Committed,
+    CommitFailed,
     Cancelled,
     Failed,
 };
@@ -2689,6 +2697,7 @@ struct ProductSurveyWorkerEvent final {
     std::uint16_t scanDropped = 0;
     SourceWindowState failureState = SourceWindowState::Fault;
     SourceWindowReason failureReason = SourceWindowReason::DriverFault;
+    SurveyPipelineStatus commitStatus = SurveyPipelineStatus::Ready;
 };
 
 struct ProductSurveyPreparationSnapshot final {
@@ -4192,6 +4201,18 @@ void sendProductSurveyWorkerEvent(
     xQueueSend(productSurveyWorkerEvents, &event, portMAX_DELAY);
 }
 
+void sendProductSurveyCommitWorkerEvent(SurveyPipelineStatus status) {
+    if (productSurveyWorkerEvents == nullptr) return;
+    ProductSurveyWorkerEvent event;
+    event.kind = status == SurveyPipelineStatus::Committed
+        ? ProductSurveyWorkerEventKind::Committed
+        : ProductSurveyWorkerEventKind::CommitFailed;
+    event.commitStatus = status;
+    event.eventUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (event.eventUs == 0U) event.eventUs = 1U;
+    xQueueSend(productSurveyWorkerEvents, &event, portMAX_DELAY);
+}
+
 void cleanupProductSurveyWorkerHardware(
     ProductSurveyWorkerReport* report) {
     if (report == nullptr) return;
@@ -4599,6 +4620,29 @@ void runProductSurveyWorker(void*) {
             guardControl ==
                 AirspaceGuardBleWorkerControl::CancelRequested) {
             runAirspaceGuardBleWorker();
+            continue;
+        }
+        if (productSurveyControl() ==
+                ProductSurveyWorkerControl::CommitRequested) {
+            if (!transitionProductSurveyControl(
+                    ProductSurveyWorkerControl::CommitRequested,
+                    ProductSurveyWorkerControl::Committing)) {
+                continue;
+            }
+            std::uint64_t commitStartedUs =
+                static_cast<std::uint64_t>(esp_timer_get_time());
+            if (commitStartedUs == 0U) commitStartedUs = 1U;
+            const bool supervised =
+                armProductSurveyWorkerDeadline(commitStartedUs);
+            __atomic_store_n(&productSurveyCommitSupervisionActive,
+                             supervised, __ATOMIC_RELEASE);
+            const SurveyPipelineStatus status = supervised
+                ? stopProductSurvey()
+                : SurveyPipelineStatus::WorkflowRejected;
+            __atomic_store_n(&productSurveyCommitSupervisionActive, false,
+                             __ATOMIC_RELEASE);
+            if (supervised) disarmProductSurveyWorkerDeadline();
+            sendProductSurveyCommitWorkerEvent(status);
             continue;
         }
         if (productSurveyControl() != ProductSurveyWorkerControl::Starting) {
@@ -5326,17 +5370,23 @@ bool startProductSurvey() {
     return true;
 }
 
-void serviceProductSurveyCommitBoundary() {
-    // Terminal commit is intentionally synchronous so the Survey session and
-    // its codec remain single-owner.  SD identification, FAT mount, atomic
-    // write and unmount are nevertheless separate bounded operations.  Feed
-    // only after one operation has returned, then yield to the idle tasks,
-    // preserving the Task-WDT as protection against a call that actually
-    // hangs while avoiding a false reset when several healthy stages together
-    // take longer than the watchdog interval.
-    feedRuntimeSafetyWatchdog();
-    vTaskDelay(1);
-    feedRuntimeSafetyWatchdog();
+bool serviceProductSurveyCommitBoundary() {
+    // The product adapter is also reused by read-only boot/recovery paths.
+    // Outside the explicit terminal worker there is no commit deadline to
+    // service, so its progress callback is deliberately transparent.
+    if (!__atomic_load_n(&productSurveyCommitSupervisionActive,
+                         __ATOMIC_ACQUIRE)) {
+        return true;
+    }
+    if (productSurveyControl() != ProductSurveyWorkerControl::Committing ||
+        safetySupervisor.latched()) {
+        return false;
+    }
+    const bool accepted = heartbeatProductSurveyWorker();
+    if (accepted) vTaskDelay(pdMS_TO_TICKS(1U));
+    return accepted &&
+        productSurveyControl() == ProductSurveyWorkerControl::Committing &&
+        !safetySupervisor.latched();
 }
 
 bool reopenProductSurveyBackendForCommit() {
@@ -5355,7 +5405,7 @@ bool reopenProductSurveyBackendForCommit() {
                     productSurveyRuntime.expectedFingerprint) != 0) {
         return false;
     }
-    serviceProductSurveyCommitBoundary();
+    if (!serviceProductSurveyCommitBoundary()) return false;
 
     leshy1::storage::SdTransportRunResult identity;
     for (std::uint8_t attempt = 1;
@@ -5375,7 +5425,7 @@ bool reopenProductSurveyBackendForCommit() {
                 identityTransport, policy);
             identityTransport.end();
         }
-        serviceProductSurveyCommitBoundary();
+        if (!serviceProductSurveyCommitBoundary()) return false;
         productSurveyRuntime.identityAttempts = attempt;
         productSurveyRuntime.identityTransientRetries =
             static_cast<std::uint8_t>(attempt - 1U);
@@ -5408,7 +5458,7 @@ bool reopenProductSurveyBackendForCommit() {
         }
         vTaskDelay(pdMS_TO_TICKS(
             leshy1::storage::productStartIdentityRetryDelayMs(attempt)));
-        serviceProductSurveyCommitBoundary();
+        if (!serviceProductSurveyCommitBoundary()) return false;
     }
     if (!productSurveyRuntime.identityCleanupComplete ||
         identity.status != leshy1::storage::SdTransportRunStatus::Valid ||
@@ -5435,9 +5485,9 @@ bool reopenProductSurveyBackendForCommit() {
              leshy1::storage::kProductStartMaximumFilesystemAttempts;
          ++attempt) {
         productSurveyRuntime.filesystemMountAttempts = attempt;
-        serviceProductSurveyCommitBoundary();
+        if (!serviceProductSurveyCommitBoundary()) return false;
         filesystemMounted = productSurveyFilesystem.begin();
-        serviceProductSurveyCommitBoundary();
+        if (!serviceProductSurveyCommitBoundary()) return false;
         recordProductSurveyMountOutcome(filesystemMounted);
         productSurveyRuntime.filesystemMountError =
             productSurveyFilesystem.mountError();
@@ -5498,10 +5548,10 @@ bool reopenProductSurveyBackendForCommit() {
         productSurveyRuntime.filesystemMountTransientRetries = attempt;
         vTaskDelay(pdMS_TO_TICKS(
             leshy1::storage::productStartFilesystemRetryDelayMs(attempt)));
-        serviceProductSurveyCommitBoundary();
+        if (!serviceProductSurveyCommitBoundary()) return false;
     }
     if (!filesystemMounted) return false;
-    serviceProductSurveyCommitBoundary();
+    if (!serviceProductSurveyCommitBoundary()) return false;
     productSurveyRuntime.cardCapacityBytes =
         productSurveyFilesystem.cardCapacityBytes();
     productSurveyRuntime.cachedFreeBytes =
@@ -5535,13 +5585,13 @@ bool reopenProductSurveyBackendForCommit() {
         leshy1::storage::authorizeProductStore(media, storeRequest);
     productSurveyRuntime.storeStatus = storePermit.status;
     productSurveyRuntime.storeOpenAttempted = true;
-    serviceProductSurveyCommitBoundary();
+    if (!serviceProductSurveyCommitBoundary()) return false;
     if (!storePermit.allowed() ||
         !productSurveyStore.selectDrive(productSurveyFilesystem.driveNumber()) ||
         !productSurveyStore.openExistingWritable(storePermit)) {
         return false;
     }
-    serviceProductSurveyCommitBoundary();
+    if (!serviceProductSurveyCommitBoundary()) return false;
     surveyStoreRouter.bind(productSurveyStore);
     productSurveyRuntime.backendOpen = true;
     productSurveyRuntime.cleanupComplete = false;
@@ -5550,18 +5600,23 @@ bool reopenProductSurveyBackendForCommit() {
 
 SurveyPipelineStatus stopProductSurvey() {
     if (!reopenProductSurveyBackendForCommit()) {
-        serviceProductSurveyCommitBoundary();
+        (void)serviceProductSurveyCommitBoundary();
         const bool cleanup = closeProductSurveyBackend();
-        serviceProductSurveyCommitBoundary();
+        (void)serviceProductSurveyCommitBoundary();
         productSurveyRuntime.status = cleanup
             ? "commit_backend_failed" : "cleanup_failed";
         lastRuntimeEvent = productSurveyRuntime.status;
         return SurveyPipelineStatus::WorkflowRejected;
     }
-    serviceProductSurveyCommitBoundary();
-    const SurveyPipelineStatus status = surveyPipeline.stopAndCommit(
+    if (!serviceProductSurveyCommitBoundary()) {
+        closeProductSurveyBackend();
+        return SurveyPipelineStatus::WorkflowRejected;
+    }
+    SurveyPipelineStatus status = surveyPipeline.stopAndCommit(
         static_cast<std::uint64_t>(esp_timer_get_time()));
-    serviceProductSurveyCommitBoundary();
+    if (!serviceProductSurveyCommitBoundary()) {
+        status = SurveyPipelineStatus::WorkflowRejected;
+    }
     // Retain the exact terminal boundary before release/reset returns the UI
     // to Setup. HIL can therefore distinguish codec, recovery, backend and
     // workspace-lifetime failures instead of seeing only `commit_failed`.
@@ -5575,13 +5630,15 @@ SurveyPipelineStatus stopProductSurvey() {
     productSurveyRuntime.commitSessionSize = static_cast<std::uint16_t>(
         surveySession.size());
     const bool cleanup = closeProductSurveyBackend();
-    serviceProductSurveyCommitBoundary();
+    if (!serviceProductSurveyCommitBoundary()) {
+        status = SurveyPipelineStatus::WorkflowRejected;
+    }
     productSurveyRuntime.status =
         status == SurveyPipelineStatus::Committed
             ? (cleanup ? "committed" : "cleanup_failed")
             : (cleanup ? "commit_failed" : "cleanup_failed");
     lastRuntimeEvent = productSurveyRuntime.status;
-    return status;
+    return cleanup ? status : SurveyPipelineStatus::WorkflowRejected;
 }
 
 void releaseProductSurveyAfterTerminal(const char* status, bool returnHome);
@@ -5591,7 +5648,8 @@ bool requestProductSurveyWorkerStop(bool cancel) {
         static_cast<std::uint64_t>(esp_timer_get_time());
     const ProductSurveyWorkerControl control = productSurveyControl();
     if (control != ProductSurveyWorkerControl::Starting &&
-        control != ProductSurveyWorkerControl::Running) {
+        control != ProductSurveyWorkerControl::Running &&
+        control != ProductSurveyWorkerControl::Committing) {
         return false;
     }
     const bool scanWasActive = productSurveyScanActive();
@@ -5637,18 +5695,20 @@ bool commitPausedProductSurvey() {
     if (productSurveyControl() != ProductSurveyWorkerControl::Paused) {
         return false;
     }
-    const SurveyPipelineStatus committed = stopProductSurvey();
-    if (committed == SurveyPipelineStatus::Committed) {
-        if (wifiProductView == WifiProductView::Visit) {
-            completeFieldSurveyVisit(surveySession);
-        }
-        constexpr ProductSurveyWorkerControl terminalControl =
-            ProductSurveyWorkerControl::Idle;
-        setProductSurveyControl(terminalControl);
-        return true;
+    if (!transitionProductSurveyControl(
+            ProductSurveyWorkerControl::Paused,
+            ProductSurveyWorkerControl::CommitRequested)) {
+        return false;
     }
-    releaseProductSurveyAfterTerminal("commit_failed", true);
-    return false;
+    productSurveyRuntime.status = "committing";
+    lastRuntimeEvent = "product_survey_committing";
+    if (productSurveyWorkerTaskHandle == nullptr) {
+        setProductSurveyControl(ProductSurveyWorkerControl::Paused);
+        productSurveyRuntime.status = "paused";
+        return false;
+    }
+    xTaskNotifyGive(productSurveyWorkerTaskHandle);
+    return true;
 }
 
 bool applyProductSurveyTimelineStatus(
@@ -6878,6 +6938,8 @@ void serviceProductSurveyWorker() {
         const bool terminalEvent =
             event.kind == ProductSurveyWorkerEventKind::Paused ||
             event.kind == ProductSurveyWorkerEventKind::Stopped ||
+            event.kind == ProductSurveyWorkerEventKind::Committed ||
+            event.kind == ProductSurveyWorkerEventKind::CommitFailed ||
             event.kind == ProductSurveyWorkerEventKind::Cancelled ||
             event.kind == ProductSurveyWorkerEventKind::Failed;
         const bool deferCancelledTerminal =
@@ -6893,20 +6955,39 @@ void serviceProductSurveyWorker() {
         if (xQueueReceive(productSurveyWorkerEvents, &event, 0) != pdTRUE) {
             break;
         }
-        applyProductSurveyWorkerReport(event.report);
-        productSurveyRuntime.bleBegin =
-            productSurveyBleBeginDiagnosticSnapshot();
-        if (event.kind != ProductSurveyWorkerEventKind::ScanStarted) {
-            productSurveyRuntime.scan = event.scan;
-            productSurveyRuntime.bleScan = event.bleScan;
-            productSurveyRuntime.scanCycles = event.scanCycles;
-            if (event.source == RadioKind::Wifi) {
-                productSurveyRuntime.wifiScanCycles = event.sourceScanCycles;
-            } else {
-                productSurveyRuntime.bleScanCycles = event.sourceScanCycles;
+        const bool commitEvent =
+            event.kind == ProductSurveyWorkerEventKind::Committed ||
+            event.kind == ProductSurveyWorkerEventKind::CommitFailed;
+        if (!commitEvent) {
+            applyProductSurveyWorkerReport(event.report);
+            productSurveyRuntime.bleBegin =
+                productSurveyBleBeginDiagnosticSnapshot();
+            if (event.kind != ProductSurveyWorkerEventKind::ScanStarted) {
+                productSurveyRuntime.scan = event.scan;
+                productSurveyRuntime.bleScan = event.bleScan;
+                productSurveyRuntime.scanCycles = event.scanCycles;
+                if (event.source == RadioKind::Wifi) {
+                    productSurveyRuntime.wifiScanCycles = event.sourceScanCycles;
+                } else {
+                    productSurveyRuntime.bleScanCycles = event.sourceScanCycles;
+                }
             }
         }
-        if (event.kind == ProductSurveyWorkerEventKind::Prepared) {
+        if (event.kind == ProductSurveyWorkerEventKind::Committed) {
+            if (event.commitStatus == SurveyPipelineStatus::Committed) {
+                if (wifiProductView == WifiProductView::Visit) {
+                    completeFieldSurveyVisit(surveySession);
+                }
+                setProductSurveyControl(ProductSurveyWorkerControl::Idle);
+                render = true;
+            } else {
+                releaseProductSurveyAfterTerminal("commit_failed", true);
+                render = false;
+            }
+        } else if (event.kind == ProductSurveyWorkerEventKind::CommitFailed) {
+            releaseProductSurveyAfterTerminal("commit_failed", true);
+            render = false;
+        } else if (event.kind == ProductSurveyWorkerEventKind::Prepared) {
             std::uint64_t startedUs = event.eventUs;
             if (startedUs == 0) startedUs = 1;
             const char* sessionId = wifiProductView == WifiProductView::Visit
@@ -7089,18 +7170,17 @@ void serviceProductSurveyWorker() {
             const bool timelineComplete = sourceStopped &&
                 archiveFinalized ==
                     leshy1::services::survey::SessionTimelineStatus::Finalized;
-            const SurveyPipelineStatus stopped = timelineComplete
-                ? stopProductSurvey() : SurveyPipelineStatus::WorkflowRejected;
-            if (!timelineComplete ||
-                stopped != SurveyPipelineStatus::Committed) {
+            if (!timelineComplete) {
                 releaseProductSurveyAfterTerminal("commit_failed", true);
                 render = false;
             } else {
-                if (wifiProductView == WifiProductView::Visit) {
-                    completeFieldSurveyVisit(surveySession);
+                setProductSurveyControl(ProductSurveyWorkerControl::Paused);
+                if (!commitPausedProductSurvey()) {
+                    releaseProductSurveyAfterTerminal("commit_failed", true);
+                    render = false;
+                } else {
+                    render = true;
                 }
-                setProductSurveyControl(ProductSurveyWorkerControl::Idle);
-                render = true;
             }
         } else if (event.kind == ProductSurveyWorkerEventKind::Cancelled) {
             const bool windowClosed = closeProductSurveyScanWindow(event);
