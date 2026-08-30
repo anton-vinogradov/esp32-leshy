@@ -10,12 +10,14 @@ Device Lock — локальная граница безопасности дл�
 
 Exact physical `1.0.0-dev.278` принимает responsive on-device status/PIN editor и
 watchdog-cooperative production PBKDF2 поверх foundation dev.277. Exact physical
-`1.0.0-dev.280` затем принимает isolated enrollment PIN, cold restore locked,
-полные post-KDF задержки 5/15 секунд, cold restore retry, unlock generation 4 и
-explicit cleanup, одновременно доказывая virgin product namespace. Existing
-protected actions ещё не проходят admission через boundary, physical path
-`recovery_only` пятой попытки не принят, а access control не выдаётся за encryption
-сохранённого content.
+`1.0.0-dev.280` принимает isolated enrollment PIN, cold restore locked и
+reset-resistant retry. Exact physical `1.0.0-dev.281` затем принимает все пять
+неверных попыток до cold-restored `recovery_only`, полную matrix
+protected-deny/safe-allow, непрозрачный отказ реального запуска Library, export без
+возврата content, non-destructive preview reset, destructive recovery с erase до
+credential и explicit cleanup fixture. Access control всё ещё не выдаётся за
+encryption сохранённого content; authenticated encryption at rest остаётся
+единственным открытым implementation gate CAP-052.
 
 ## Пользовательский контракт
 
@@ -79,8 +81,9 @@ explicit cleanup. Runner не читает и не копирует весь par
    radio mutation (`dev.278`).
 3. `done` — physical enrollment PIN, cold restore credential, reset-resistant
    задержки 5/15 секунд и explicit cleanup isolated fixture (`dev.280`).
-4. `next` — physical `recovery_only` на пятой попытке, ordering destructive recovery
-   и HIL safe operations; admission каждого protected UI/export/backup/companion/settings
-   action через access matrix и authenticated-encryption key envelope.
-5. `planned` — destructive recovery/power-cut matrix, взаимодействие signed
+4. `done` — physical `recovery_only` на пятой попытке, cold restore, ordering
+   destructive recovery, matrix safe operations и реальные отказы protected
+   UI/export без возврата content (`dev.281`).
+5. `next` — authenticated-encryption key envelope и storage protected data.
+6. `planned` — destructive recovery/power-cut matrix, взаимодействие signed
    update/recovery, privacy review и release HIL.

@@ -1494,6 +1494,23 @@ free/minimum heap after four 7.47–7.48 s KDFs, two cold retry restores and exp
 fixture cleanup. The runner retains no PIN/digest or NVS image and performs no
 product-namespace write, so this bound does not claim encrypted data at rest.
 
+Device Lock recovery/admission bound `RB-M208`: exact physical
+`1.0.0-dev.281` at source `4abf92b10e55adfdd1287962bc7da6f14fad8f92` uses
+230,992 B static RAM and a 3,501,568 B app image, leaving 692,736 B in the 4 MiB
+OTA slot. The app/factory/ELF/map SHA-256 values are
+`d5f77b79bd5f550fd3657a21fde6052b3b136622ce665e9bc9ebe805f7904c26`/
+`e9587b4fbdf67b00de2dc01431d3fa84d98d83b175baecdfdccbc38fb53f18c1`/
+`100d0d498e27c06b0a6d0c06489de0d6ff904a205c9ac315d3999b6a09415e0e`/
+`2398e9ab553b2511a74914e5df22c53f7fd78e8834debb3ec96495ee12fd47d7`.
+One fresh original-board run executes six 120,000-round KDFs in
+7,475,299…7,488,007 us, all four full post-KDF retry gates and one cold
+`recovery_only` restore. Final free/minimum heap is 74,308/74,080 B with zero
+input errors/drops, runtime owner none and lease 0. The complete protected/safe
+matrix, actual UI/export denials and factory-reset ordering require no retained
+dynamic payload. The isolated namespace is erased and the product namespace cold
+reopens virgin, so `RB-M208` still does not fund or claim encrypted protected data
+at rest.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

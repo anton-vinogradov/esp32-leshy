@@ -1481,6 +1481,22 @@ selector namespace HIL и flags continuity cleanup; production по умолча
 restore retry и explicit cleanup fixture. Runner не сохраняет PIN/digest или image
 NVS и не пишет product namespace, поэтому этот bound не заявляет encrypted data at rest.
 
+Bound recovery/admission Device Lock `RB-M208`: exact physical
+`1.0.0-dev.281` на source `4abf92b10e55adfdd1287962bc7da6f14fad8f92` использует
+230 992 B static RAM и app image 3 501 568 B, оставляя 692 736 B в OTA slot
+4 MiB. SHA-256 app/factory/ELF/map —
+`d5f77b79bd5f550fd3657a21fde6052b3b136622ce665e9bc9ebe805f7904c26`/
+`e9587b4fbdf67b00de2dc01431d3fa84d98d83b175baecdfdccbc38fb53f18c1`/
+`100d0d498e27c06b0a6d0c06489de0d6ff904a205c9ac315d3999b6a09415e0e`/
+`2398e9ab553b2511a74914e5df22c53f7fd78e8834debb3ec96495ee12fd47d7`.
+Один fresh run original board выполняет шесть KDF по 120 000 rounds за
+7 475 299…7 488 007 us, все четыре полные post-KDF retry gates и один cold restore
+`recovery_only`. Final free/minimum heap — 74 308/74 080 B при zero errors/drops
+input, runtime owner none и lease 0. Полная matrix protected/safe, реальные отказы
+UI/export и ordering factory reset не требуют retained dynamic payload. Isolated
+namespace стёрт, а product namespace cold-reopen-ится virgin, поэтому `RB-M208`
+по-прежнему не резервирует и не заявляет encrypted protected data at rest.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

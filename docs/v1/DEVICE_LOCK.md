@@ -10,12 +10,14 @@ panic, cleanup, update recovery or a destructive factory reset.
 
 Exact physical `1.0.0-dev.278` accepts the responsive on-device status/PIN editor
 and watchdog-cooperative production PBKDF2 path over the dev.277 foundation. Exact
-physical `1.0.0-dev.280` then accepts isolated PIN enrollment, cold locked restore,
-full post-KDF 5/15-second retry intervals, cold retry restore, generation-4 unlock
-and explicit cleanup while proving the product namespace remains virgin. Existing
-protected actions are not yet admitted through the boundary, the fifth-attempt
-`recovery_only` path is not physically accepted, and access control is not a claim
-of encrypted stored content.
+physical `1.0.0-dev.280` accepts isolated PIN enrollment, cold locked restore and
+reset-resistant retry. Exact physical `1.0.0-dev.281` then accepts all five wrong
+attempts through cold-restored `recovery_only`, the complete protected-deny/safe-allow
+operation matrix, an opaque real Library launch denial, content-free export denial,
+non-destructive reset preview, erase-before-credential destructive recovery and
+explicit fixture cleanup. Access control is still not a claim of encrypted stored
+content; authenticated encryption at rest is the only open CAP-052 implementation
+gate.
 
 ## User contract
 
@@ -80,8 +82,9 @@ virgin product state again after a final cold boot.
    radio mutation (`dev.278`).
 3. `done` — physical PIN enrollment, cold credential restore, reset-resistant
    5/15-second retry delay and explicit isolated-fixture cleanup (`dev.280`).
-4. `next` — physical fifth-attempt `recovery_only`, destructive recovery ordering,
-   and safe-operation HIL; route every protected UI/export/backup/companion/settings action
-   through the access matrix and add an authenticated-encryption key envelope.
-5. `planned` — destructive recovery/power-cut matrix, signed update/recovery
+4. `done` — physical fifth-attempt `recovery_only`, cold restore, destructive
+   recovery ordering, safe-operation matrix and real protected UI/export denial
+   without returned content (`dev.281`).
+5. `next` — authenticated-encryption key envelope and protected-data storage.
+6. `planned` — destructive recovery/power-cut matrix, signed update/recovery
    interaction, privacy review and release HIL.

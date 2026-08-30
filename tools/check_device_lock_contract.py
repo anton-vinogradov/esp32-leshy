@@ -21,6 +21,10 @@ ENTRY = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 PERSISTENCE_RUNNER = ROOT / "tools/run_1x_device_lock_persistence_hil.py"
 RECOVERY_RUNNER = ROOT / (
     "tools/run_1x_device_lock_recovery_admission_hil.py")
+RECOVERY_RETAINER = ROOT / (
+    "tools/retain_1x_device_lock_recovery_admission_hil.py")
+RECOVERY_ACCEPTANCE = ROOT / (
+    "tools/check_device_lock_recovery_admission_hil_acceptance.py")
 
 
 def require(text: str, marker: str, label: str, failures: list[str]) -> None:
@@ -41,6 +45,8 @@ def main() -> int:
     entry = ENTRY.read_text(encoding="utf-8")
     persistence_runner = PERSISTENCE_RUNNER.read_text(encoding="utf-8")
     recovery_runner = RECOVERY_RUNNER.read_text(encoding="utf-8")
+    recovery_retainer = RECOVERY_RETAINER.read_text(encoding="utf-8")
+    recovery_acceptance = RECOVERY_ACCEPTANCE.read_text(encoding="utf-8")
     failures: list[str] = []
 
     for marker, label in (
@@ -254,6 +260,17 @@ def main() -> int:
         ("cardputer\": False", "Cardputer exclusion"),
     ):
         require(recovery_runner, marker, label, failures)
+
+    for marker, label in (
+        ("pass_recovery_admission_slice", "retained recovery/admission gate"),
+        ("credential_generation_sequence", "exact persisted generations"),
+        ("safe_operations_always_allowed", "safe operation acceptance"),
+        ("protected_erase_before_credential_clear",
+         "destructive ordering acceptance"),
+        ("encrypted protected data at rest", "honest remaining boundary"),
+    ):
+        require(recovery_retainer + recovery_acceptance,
+                marker, label, failures)
 
     for marker, label in (
         ("testConfigureRequiresStrongMatchingConfirmationAndClearsSubmission",
