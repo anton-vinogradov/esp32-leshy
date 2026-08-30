@@ -11,6 +11,7 @@ SOURCE = ROOT / "firmware/leshy1/src/services/ble/BleInspector.cpp"
 EXPORT = ROOT / "firmware/leshy1/src/services/ble/BleInspectorExport.cpp"
 PASSIVE = ROOT / "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.cpp"
 PRODUCT = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
+HIL = ROOT / "tools/run_1x_ble_inspector_hil.py"
 
 
 def require(text: str, marker: str, label: str) -> None:
@@ -23,6 +24,7 @@ source = SOURCE.read_text(encoding="utf-8")
 passive = PASSIVE.read_text(encoding="utf-8")
 export = EXPORT.read_text(encoding="utf-8")
 product = PRODUCT.read_text(encoding="utf-8")
+hil = HIL.read_text(encoding="utf-8")
 
 transport_match = re.search(
     r"class BleGattInspectorTransport \{(?P<body>.*?)\n\};",
@@ -84,6 +86,15 @@ for marker, label in (
     ('\\"direct_row_fallbacks\\"', "direct repaint fallback telemetry"),
 ):
     require(product, marker, label)
+
+for marker, label in (
+    ("performed_before_application_flash", "pre-flash identity proof"),
+    ("expected_fingerprint", "expected CID preflight"),
+    ("observed_fingerprint", "observed CID preflight"),
+    ("mounted_read_only", "read-only storage preflight"),
+    ("cardputer_touched\": False", "Cardputer isolation evidence"),
+):
+    require(hil, marker, label)
 
 print(
     "BLE Inspector contract passed: exact selected raw capture/export, incremental "

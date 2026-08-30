@@ -52,13 +52,28 @@ def preflight_exact_board(port: str, expected_cid: str) -> dict[str, Any]:
         recovery = query(
             device, b"storage.product.boot-recovery",
             "leshy.storage.product_boot_recovery.v1", "state")
-    if recovery.get("cid") != expected_cid:
+    expected = recovery.get("expected_fingerprint")
+    observed = recovery.get("observed_fingerprint")
+    if (expected != expected_cid or observed != expected_cid or
+            recovery.get("fingerprint_matched") is not True or
+            recovery.get("mounted_read_only") is not True or
+            recovery.get("read_only_guaranteed") is not True or
+            recovery.get("write_enabled") is not False):
         raise RuntimeError(
-            f"pre-flash CID mismatch: {recovery.get('cid')!r} != "
-            f"{expected_cid!r}")
+            "pre-flash exact read-only identity contract failed: "
+            f"expected={expected!r}, observed={observed!r}, "
+            f"matched={recovery.get('fingerprint_matched')!r}, "
+            f"mounted_read_only={recovery.get('mounted_read_only')!r}, "
+            f"read_only_guaranteed={recovery.get('read_only_guaranteed')!r}, "
+            f"write_enabled={recovery.get('write_enabled')!r}")
     return {
         "performed_before_application_flash": True,
-        "cid": recovery.get("cid"),
+        "expected_cid": expected,
+        "observed_cid": observed,
+        "fingerprint_matched": recovery.get("fingerprint_matched"),
+        "mounted_read_only": recovery.get("mounted_read_only"),
+        "read_only_guaranteed": recovery.get("read_only_guaranteed"),
+        "write_enabled": recovery.get("write_enabled"),
         "generation": recovery.get("generation"),
         "port": port,
     }
