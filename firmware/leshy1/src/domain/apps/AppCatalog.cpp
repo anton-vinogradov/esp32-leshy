@@ -108,8 +108,14 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory,
                            : kernel::runtime::Resource::UiForeground |
                                  kernel::runtime::Resource::Storage};
 
-    // Service functions remain the final entry. Planned Lab work stays in the
-    // documented roadmap until there is a usable screen behind it.
+    // Lab starts with a passive package inspector. Storage is acquired only
+    // around an explicit bounded read, so merely opening the page owns UI and
+    // cannot touch the radio bus.
+    items_[size_++] = {
+        "lab", "LAB", "automation package inspection", 8, true, false,
+        kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)};
+
+    // Service functions remain the final entry.
     items_[size_++] = {
         "device", "DEVICE", "settings / checks / information", 9, true, false,
         kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)};

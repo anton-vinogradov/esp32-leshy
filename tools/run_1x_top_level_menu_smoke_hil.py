@@ -86,7 +86,7 @@ class MenuCase:
 
 # This order is the user-visible AppCatalog order, not an independently curated
 # subset.  Adding/removing/reordering a Home entry must update this executable
-# contract; an unnoticed ninth entry therefore fails closed at the final Home
+# contract; an unnoticed tenth entry therefore fails closed at the final Home
 # boundary instead of silently receiving no smoke coverage.
 MENU_CASES = (
     MenuCase(0, "wifi", "survey", "wifi", 15,
@@ -99,7 +99,8 @@ MENU_CASES = (
     MenuCase(4, "capture", "capture", "capture", 11),
     MenuCase(5, "targets", "targets", "targets", 13),
     MenuCase(6, "library", "library", "library", 5),
-    MenuCase(7, "device", "device", "device", 1),
+    MenuCase(7, "lab", "lab", "lab", 1),
+    MenuCase(8, "device", "device", "device", 1),
 )
 
 

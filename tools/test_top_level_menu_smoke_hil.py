@@ -69,7 +69,8 @@ def passing_result() -> dict[str, Any]:
                    "lease_mask": 0},
         },
         "catalog_boundary": {
-            "page": "home", "selection": 7, "selected_id": "device",
+            "page": "home", "selection": runner.MENU_CASES[-1].index,
+            "selected_id": runner.MENU_CASES[-1].item_id,
             "changed": False, "runtime_owner": "none", "lease_mask": 0,
         },
     }
@@ -305,12 +306,12 @@ class RetainedContractTests(unittest.TestCase):
 
 
 class StaticSafetyPolicyTests(unittest.TestCase):
-    def test_catalog_covers_all_eight_current_home_entries(self) -> None:
+    def test_catalog_covers_all_nine_current_home_entries(self) -> None:
         self.assertEqual(
             ["wifi", "ble", "spectrum24", "subghz", "capture",
-             "targets", "library", "device"],
+             "targets", "library", "lab", "device"],
             [case.item_id for case in runner.MENU_CASES])
-        self.assertEqual(list(range(8)),
+        self.assertEqual(list(range(9)),
                          [case.index for case in runner.MENU_CASES])
 
     def test_clone_and_cardputer_ports_are_not_admitted_by_policy(self) -> None:

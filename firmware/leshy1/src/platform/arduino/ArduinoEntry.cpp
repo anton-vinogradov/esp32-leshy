@@ -35,6 +35,7 @@
 
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
+#include "apps/automation/AutomationInspectorController.h"
 #include "apps/guard/AirspaceGuardController.h"
 #include "apps/auth/WifiAuthenticationCaptureController.h"
 #include "apps/auth/WifiAuthenticationArtifactPolicy.h"
@@ -98,6 +99,7 @@
 #include "platform/arduino/ArduinoLittleFsSessionStoreIo.h"
 #include "platform/arduino/ArduinoSerialConsoleEndpoint.h"
 #include "platform/arduino/BoardSdFilesystem.h"
+#include "platform/arduino/BoardAutomationPackageReader.h"
 #include "platform/arduino/BoardStorageAdapter.h"
 #include "platform/arduino/BoardTouchInput.h"
 #include "platform/arduino/BoardBlePassiveScanner.h"
@@ -180,6 +182,16 @@ using leshy1::apps::library::LibraryEntry;
 using leshy1::apps::library::LibraryView;
 using leshy1::apps::library::SessionCatalog;
 using leshy1::apps::library::SessionIntegrity;
+using leshy1::apps::automation::AutomationInspectorController;
+using leshy1::apps::automation::AutomationInspectorModel;
+using leshy1::apps::automation::AutomationInspectorSourceStatus;
+using leshy1::apps::automation::AutomationPackageCatalog;
+using leshy1::apps::automation::AutomationPackageCatalogEntry;
+using leshy1::apps::automation::AutomationPackageKind;
+using leshy1::apps::automation::AutomationParseStatus;
+using leshy1::apps::automation::AutomationPolicyStatus;
+using leshy1::apps::automation::AutomationTargetClass;
+using leshy1::apps::automation::AutomationTrustStatus;
 using leshy1::apps::guard::AirspaceGuardController;
 using leshy1::apps::guard::AirspaceGuardView;
 using leshy1::apps::auth::WifiAuthenticationCaptureAction;
@@ -373,6 +385,8 @@ using leshy1::platform::arduino::ArduinoFsSessionStoreIo;
 using leshy1::platform::arduino::ArduinoFsSessionStoreWorkspace;
 using leshy1::platform::arduino::ArduinoLittleFsSessionStoreIo;
 using leshy1::platform::arduino::BoardSdFilesystem;
+using leshy1::platform::arduino::BoardAutomationPackageReader;
+using leshy1::platform::arduino::BoardAutomationPackageStatus;
 using leshy1::platform::arduino::BoardStorageAdapter;
 using leshy1::platform::arduino::BoardTouchInput;
 using leshy1::platform::arduino::TouchCalibrationSource;
@@ -529,6 +543,13 @@ SurveySession librarySession;
 // permanently reserving another 10 KiB on N16 boards without PSRAM.
 SurveySession& littleFsResetSession = surveySession;
 LibraryController libraryController;
+AutomationPackageCatalog automationPackageCatalog;
+AutomationInspectorController automationInspectorController;
+BoardAutomationPackageStatus automationCatalogStatus =
+    BoardAutomationPackageStatus::DirectoryUnavailable;
+std::uint32_t automationCatalogOmittedEntries = 0U;
+bool automationCatalogRefreshPending = false;
+bool automationInspectionPending = false;
 SessionCatalog sessionCatalog;
 struct TargetsProductRuntime final {
     TargetCatalog* catalogStorage = nullptr;
@@ -983,6 +1004,8 @@ constexpr std::uint8_t kAboutPage = 10;
 constexpr std::uint8_t kPowerPage = 11;
 constexpr std::uint8_t kDeviceLockPage = 12;
 constexpr std::uint8_t kSerialConsolePage = 13;
+constexpr std::uint8_t kAutomationInspectorPage = 14;
+constexpr std::uint16_t kAutomationActionApiVersion = 1U;
 constexpr std::uint8_t kDeviceItemCount = 7;
 std::uint8_t deviceSelection = 0;
 enum class SerialConsoleUiView : std::uint8_t {
@@ -1102,7 +1125,7 @@ bool deviceLockOperationAllowed(
 
 bool deviceLockProtectedPage(std::uint8_t page) {
     return page == 2U || page == 3U || page == 4U || page == 5U ||
-        page == 7U || page == 8U;
+        page == 7U || page == 8U || page == kAutomationInspectorPage;
 }
 
 void noteDeviceLockAdmissionBlocked() {
@@ -2776,6 +2799,131 @@ SdPhysicalEvidenceWorkspace sdPhysicalEvidence;
 // main loop. Reuse their largest scratch line instead of reserving a second 5 KiB
 // buffer that would permanently reduce the no-PSRAM product heap.
 auto& diagnosticJson = sdPhysicalEvidence.line;
+
+constexpr leshy1::kernel::runtime::ResourceMask kAutomationStorageResources =
+    leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+    leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+
+void clearAutomationPackageScratch() {
+    volatile char* cursor = diagnosticJson;
+    for (std::size_t index = 0U;
+         index < leshy1::apps::automation::kAutomationMaximumPackageBytes;
+         ++index) {
+        cursor[index] = '\0';
+    }
+}
+
+bool automationStorageReady() {
+    return !productSurveyFilesystem.mounted() &&
+        !productSurveyStore.ready() &&
+        resourceBroker.acquire(AppRuntime::kForegroundOwner,
+                               kAutomationStorageResources);
+}
+
+void releaseAutomationStorage() {
+    resourceBroker.release(AppRuntime::kForegroundOwner,
+                           kAutomationStorageResources);
+}
+
+BoardAutomationPackageStatus scanAutomationPackageCatalog() {
+    automationPackageCatalog.clear();
+    automationCatalogOmittedEntries = 0U;
+    if (!automationStorageReady()) {
+        return BoardAutomationPackageStatus::ScanFailed;
+    }
+    BoardSdFilesystem filesystem;
+    BoardAutomationPackageStatus status =
+        BoardAutomationPackageStatus::DirectoryUnavailable;
+    if (filesystem.beginReadOnly() && filesystem.readOnlyGuaranteed()) {
+        BoardAutomationPackageReader reader(sdSessionStoreIoWorkspace);
+        status = reader.scan(filesystem.driveNumber(),
+                             &automationPackageCatalog,
+                             &automationCatalogOmittedEntries);
+    }
+    filesystem.end();
+    if (!filesystem.cleanupComplete()) {
+        status = BoardAutomationPackageStatus::ScanFailed;
+    }
+    releaseAutomationStorage();
+    return status;
+}
+
+void inspectSelectedAutomationPackage() {
+    const AutomationPackageCatalogEntry* selected =
+        automationPackageCatalog.selected();
+    if (selected == nullptr) {
+        automationInspectorController.clear();
+        return;
+    }
+    if (selected->size >
+        leshy1::apps::automation::kAutomationMaximumPackageBytes) {
+        automationInspectorController.rejectSource(
+            selected->name.data(), selected->size,
+            AutomationInspectorSourceStatus::TooLarge);
+        return;
+    }
+    clearAutomationPackageScratch();
+    BoardAutomationPackageStatus status =
+        BoardAutomationPackageStatus::ReadFailed;
+    std::size_t bytesRead = 0U;
+    if (automationStorageReady()) {
+        BoardSdFilesystem filesystem;
+        if (filesystem.beginReadOnly() && filesystem.readOnlyGuaranteed()) {
+            BoardAutomationPackageReader reader(sdSessionStoreIoWorkspace);
+            status = reader.read(
+                filesystem.driveNumber(), *selected,
+                reinterpret_cast<std::uint8_t*>(diagnosticJson),
+                leshy1::apps::automation::kAutomationMaximumPackageBytes,
+                &bytesRead);
+        }
+        filesystem.end();
+        if (!filesystem.cleanupComplete()) {
+            status = BoardAutomationPackageStatus::ReadFailed;
+            bytesRead = 0U;
+        }
+        releaseAutomationStorage();
+    }
+    if (status == BoardAutomationPackageStatus::Ready) {
+        automationInspectorController.inspect(
+            selected->name.data(), selected->size,
+            reinterpret_cast<const std::uint8_t*>(diagnosticJson), bytesRead,
+            kAutomationActionApiVersion, nullptr);
+    } else {
+        automationInspectorController.rejectSource(
+            selected->name.data(), selected->size,
+            status == BoardAutomationPackageStatus::TooLarge
+                ? AutomationInspectorSourceStatus::TooLarge
+                : AutomationInspectorSourceStatus::ReadFailed);
+    }
+    clearAutomationPackageScratch();
+}
+
+void serviceAutomationPackageUi() {
+    if (!appRuntime.running() ||
+        std::strcmp(appRuntime.activeApp(), "lab") != 0) {
+        automationCatalogRefreshPending = false;
+        automationInspectionPending = false;
+        return;
+    }
+    if (automationCatalogRefreshPending && uiController.page() == 8U) {
+        automationCatalogRefreshPending = false;
+        automationCatalogStatus = scanAutomationPackageCatalog();
+        lastRuntimeEvent =
+            leshy1::platform::arduino::boardAutomationPackageStatusName(
+                automationCatalogStatus);
+        renderInteractiveScreen(true);
+        return;
+    }
+    if (automationInspectionPending &&
+        uiController.page() == kAutomationInspectorPage) {
+        automationInspectionPending = false;
+        inspectSelectedAutomationPackage();
+        lastRuntimeEvent =
+            leshy1::apps::automation::automationInspectorSourceStatusName(
+                automationInspectorController.model().sourceStatus);
+        renderInteractiveScreen(true);
+    }
+}
 
 struct StoredGenerationEvidence final {
     std::uint32_t expectedSegmentCrc = 0;
@@ -12259,6 +12407,15 @@ NavigationFooter navigationFooterForCurrentState() {
         return {{NavigationKey::Left, UiTextId::NavList}, {},
                 {NavigationKey::RightAndSelect, UiTextId::NavActions}};
     }
+    if (uiController.page() == 8U) {
+        return automationCatalogRefreshPending ||
+                       automationPackageCatalog.size() == 0U
+            ? NavigationFooter{back, {}, {}}
+            : NavigationFooter{back, choose, enter};
+    }
+    if (uiController.page() == kAutomationInspectorPage) {
+        return {back, {}, {}};
+    }
     if (uiController.page() == kDeviceLockPage) {
         const DeviceLockView view = deviceLockController.view();
         if (view == DeviceLockView::Working) return {};
@@ -12663,7 +12820,7 @@ UiTextId homeNote(const AppMenuItem& item) {
         return item.enabled ? UiTextId::NoteTargetsReady
                             : UiTextId::NoteTargetsUnavailable;
     }
-    if (std::strcmp(item.id, "lab") == 0) return UiTextId::NoteLabPlanned;
+    if (std::strcmp(item.id, "lab") == 0) return UiTextId::NoteLabReady;
     if (std::strcmp(item.id, "device") == 0) return UiTextId::NoteDevice;
     return UiTextId::Ready;
 }
@@ -12698,6 +12855,175 @@ void renderHome(bool clearContent) {
     for (std::uint8_t i = first; i < end; ++i) {
         renderHomeRow(i, first);
     }
+}
+
+void formatAutomationPackageDisplayName(const char* source, char* output,
+                                        std::size_t capacity) {
+    if (output == nullptr || capacity == 0U) return;
+    output[0] = '\0';
+    if (source == nullptr) return;
+    constexpr std::size_t kVisibleCharacters = 25U;
+    const std::size_t length = std::strlen(source);
+    if (length <= kVisibleCharacters) {
+        std::snprintf(output, capacity, "%s", source);
+        return;
+    }
+    std::snprintf(output, capacity, "%.*s...", 22, source);
+}
+
+void renderAutomationPackageRow(std::uint8_t index) {
+    const AutomationPackageCatalogEntry* entry =
+        automationPackageCatalog.get(index);
+    if (entry == nullptr) return;
+    char label[32] = {};
+    char note[64] = {};
+    formatAutomationPackageDisplayName(entry->name.data(), label,
+                                       sizeof(label));
+    if (index + 1U == AutomationPackageCatalog::kCapacity &&
+        automationCatalogOmittedEntries != 0U) {
+        std::snprintf(note, sizeof(note),
+                      tr(UiTextId::AutomationLibraryOmittedFormat),
+                      static_cast<unsigned long>(
+                          automationCatalogOmittedEntries));
+    } else {
+        std::snprintf(note, sizeof(note),
+                      tr(UiTextId::AutomationPackageBytesFormat),
+                      static_cast<unsigned long>(entry->size));
+    }
+    const bool bounded = entry->size <=
+        leshy1::apps::automation::kAutomationMaximumPackageBytes;
+    renderMenuRow(Components::homeRow(index), label, note,
+                  automationPackageCatalog.selection() == index, true,
+                  bounded ? Tone::Positive : Tone::Warning);
+}
+
+void renderAutomationLibraryPage(bool clearContent) {
+    renderHeader(tr(UiTextId::AutomationLibraryTitle), clearContent);
+    if (automationCatalogRefreshPending) {
+        renderMetric(0, tr(UiTextId::AutomationLibraryLoading),
+                     Tone::Neutral);
+        renderMetric(2, tr(UiTextId::AutomationLibraryReadOnly),
+                     Tone::Positive);
+        return;
+    }
+    if (automationCatalogStatus != BoardAutomationPackageStatus::Ready) {
+        renderMetric(0, tr(UiTextId::AutomationLibraryNoMedia),
+                     Tone::Warning);
+        renderMetric(2, tr(UiTextId::AutomationLibraryPath), Tone::Muted);
+        renderMetric(4, tr(UiTextId::AutomationLibraryReadOnly),
+                     Tone::Positive);
+        return;
+    }
+    if (automationPackageCatalog.size() == 0U) {
+        renderMetric(0, tr(UiTextId::AutomationLibraryEmpty), Tone::Muted);
+        renderMetric(2, tr(UiTextId::AutomationLibraryPath), Tone::Neutral);
+        renderMetric(4, tr(UiTextId::AutomationLibraryReadOnly),
+                     Tone::Positive);
+        return;
+    }
+    for (std::uint8_t index = 0U;
+         index < automationPackageCatalog.size(); ++index) {
+        renderAutomationPackageRow(index);
+    }
+}
+
+UiTextId automationInspectorHeadline(const AutomationInspectorModel& model) {
+    if (model.sourceStatus == AutomationInspectorSourceStatus::TooLarge) {
+        return UiTextId::AutomationInspectorTooLarge;
+    }
+    if (model.sourceStatus == AutomationInspectorSourceStatus::ReadFailed) {
+        return UiTextId::AutomationInspectorReadFailed;
+    }
+    if (model.inspection.parseStatus != AutomationParseStatus::Parsed) {
+        return UiTextId::AutomationInspectorRejected;
+    }
+    if (model.inspection.policyStatus != AutomationPolicyStatus::Ready) {
+        return UiTextId::AutomationInspectorPolicyRejected;
+    }
+    if (model.inspection.trustStatus ==
+        AutomationTrustStatus::VerifiedTrusted) {
+        return UiTextId::AutomationInspectorVerified;
+    }
+    if (model.inspection.trustStatus ==
+        AutomationTrustStatus::MissingSignature) {
+        return UiTextId::AutomationInspectorUnsigned;
+    }
+    return UiTextId::AutomationInspectorUntrusted;
+}
+
+UiTextId automationInspectorKind(const AutomationInspectorModel& model) {
+    switch (model.inspection.kind) {
+        case AutomationPackageKind::ActionScript:
+            return UiTextId::AutomationInspectorActionKind;
+        case AutomationPackageKind::UsbHid:
+            return UiTextId::AutomationInspectorUsbKind;
+        case AutomationPackageKind::BleHid:
+            return UiTextId::AutomationInspectorBleKind;
+    }
+    return UiTextId::AutomationInspectorActionKind;
+}
+
+void renderAutomationInspectorPage(bool clearContent) {
+    renderHeader(tr(UiTextId::AutomationInspectorTitle), clearContent);
+    if (automationInspectionPending) {
+        renderMetric(0, tr(UiTextId::AutomationInspectorLoading),
+                     Tone::Neutral);
+        renderMetric(6, tr(UiTextId::AutomationInspectorNoOutput),
+                     Tone::Positive);
+        return;
+    }
+    const AutomationInspectorModel& model =
+        automationInspectorController.model();
+    char line[96] = {};
+    char name[32] = {};
+    formatAutomationPackageDisplayName(model.sourceName.data(), name,
+                                       sizeof(name));
+    renderMetric(0, tr(automationInspectorHeadline(model)),
+                 model.inspection.executionEligible ? Tone::Positive
+                                                     : Tone::Warning);
+    std::snprintf(line, sizeof(line), "%s · %lu B", name,
+                  static_cast<unsigned long>(model.sourceSize));
+    renderMetric(1, line, Tone::Neutral);
+
+    if (model.sourceStatus == AutomationInspectorSourceStatus::Inspected &&
+        model.inspection.parseStatus == AutomationParseStatus::Parsed) {
+        renderMetric(2, tr(automationInspectorKind(model)), Tone::Neutral);
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::AutomationInspectorCountsFormat),
+                      static_cast<unsigned>(model.inspection.observedSteps),
+                      static_cast<unsigned>(model.inspection.activeEvents));
+        renderMetric(3, line);
+        std::snprintf(
+            line, sizeof(line),
+            tr(UiTextId::AutomationInspectorLimitsFormat),
+            static_cast<unsigned long>(model.inspection.runtimeCeilingMs /
+                                       1000U),
+            static_cast<unsigned>(model.inspection.outputCeilingBytes));
+        renderMetric(4, line);
+        if (model.inspection.policyStatus != AutomationPolicyStatus::Ready) {
+            std::snprintf(
+                line, sizeof(line),
+                tr(UiTextId::AutomationInspectorPolicyFormat),
+                leshy1::apps::automation::automationPolicyStatusName(
+                    model.inspection.policyStatus));
+        } else {
+            std::snprintf(
+                line, sizeof(line),
+                tr(UiTextId::AutomationInspectorTrustFormat),
+                leshy1::apps::automation::automationTrustStatusName(
+                    model.inspection.trustStatus));
+        }
+        renderMetric(5, line, Tone::Muted);
+    } else {
+        std::snprintf(
+            line, sizeof(line),
+            tr(UiTextId::AutomationInspectorParseFormat),
+            leshy1::apps::automation::automationParseStatusName(
+                model.inspection.parseStatus));
+        renderMetric(3, line, Tone::Danger);
+    }
+    renderMetric(7, tr(UiTextId::AutomationInspectorNoOutput),
+                 Tone::Positive);
 }
 
 std::uint8_t deviceFirstVisible(std::uint8_t selection) {
@@ -19331,6 +19657,12 @@ struct UiRenderSnapshot final {
     std::uint8_t libraryView = 0;
     std::size_t librarySelection = 0;
     std::size_t librarySize = 0;
+    std::uint8_t automationCatalogStatus = 0;
+    std::size_t automationSelection = 0;
+    std::size_t automationSize = 0;
+    bool automationCatalogPending = false;
+    std::uint32_t automationInspectorRevision = 0U;
+    bool automationInspectionPending = false;
     std::uint8_t targetsView = 0;
     std::size_t targetsSelection = 0;
     std::size_t targetsSize = 0;
@@ -19403,6 +19735,12 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         static_cast<std::uint8_t>(libraryController.view()),
         libraryController.selection(),
         libraryController.size(),
+        static_cast<std::uint8_t>(automationCatalogStatus),
+        automationPackageCatalog.selection(),
+        automationPackageCatalog.size(),
+        automationCatalogRefreshPending,
+        automationInspectorController.model().revision,
+        automationInspectionPending,
         targetsProductRuntime == nullptr
             ? static_cast<std::uint8_t>(0)
             : static_cast<std::uint8_t>(
@@ -19462,6 +19800,22 @@ bool renderSelectionDelta() {
         }
         renderDeviceRow(renderedUi.deviceSelection, currentFirst);
         renderDeviceRow(deviceSelection, currentFirst);
+        return true;
+    }
+
+    if (uiController.page() == 8U) {
+        const bool contentChanged =
+            renderedUi.automationCatalogStatus !=
+                static_cast<std::uint8_t>(automationCatalogStatus) ||
+            renderedUi.automationSize != automationPackageCatalog.size() ||
+            renderedUi.automationCatalogPending !=
+                automationCatalogRefreshPending;
+        if (contentChanged) return false;
+        const std::size_t current = automationPackageCatalog.selection();
+        if (renderedUi.automationSelection == current) return false;
+        renderAutomationPackageRow(static_cast<std::uint8_t>(
+            renderedUi.automationSelection));
+        renderAutomationPackageRow(static_cast<std::uint8_t>(current));
         return true;
     }
 
@@ -20100,6 +20454,10 @@ void renderInteractiveScreen(bool clearContent) {
             renderSelfTestPage(clearContent);
         } else if (uiController.page() == 7) {
             renderTargetsPage(clearContent);
+        } else if (uiController.page() == 8U) {
+            renderAutomationLibraryPage(clearContent);
+        } else if (uiController.page() == kAutomationInspectorPage) {
+            renderAutomationInspectorPage(clearContent);
         } else if (uiController.page() == kDevicePage) {
             renderDevicePage(clearContent);
         } else if (uiController.page() == kPowerPage) {
@@ -25452,6 +25810,7 @@ bool selectionCanRepaintInPlace(UiAction action) {
     }
     if (action != UiAction::Up && action != UiAction::Down) return false;
     if (uiController.isRoot()) return true;
+    if (uiController.page() == 8U) return true;
     if (uiController.page() == 2) {
         if (bleProductView == BleProductView::InspectorMenu) return true;
         if (bleProductView == BleProductView::Devices) return true;
@@ -25570,6 +25929,26 @@ bool applyUiAction(UiAction action, bool render = true) {
         noteDeviceLockAdmissionBlocked();
         uiController.recordHandledAction(action);
         return finish(false);
+    }
+    if (!wasRoot && uiController.page() == 8U &&
+        action != UiAction::Back && action != UiAction::Left) {
+        bool changed = false;
+        if (action == UiAction::Up) {
+            changed = automationPackageCatalog.previous();
+        } else if (action == UiAction::Down) {
+            changed = automationPackageCatalog.next();
+        } else if ((action == UiAction::Select || action == UiAction::Right) &&
+                   !automationCatalogRefreshPending &&
+                   automationPackageCatalog.selected() != nullptr) {
+            automationInspectorController.clear();
+            automationInspectionPending = true;
+            changed = uiController.openChild(kAutomationInspectorPage);
+            if (!changed) automationInspectionPending = false;
+            lastRuntimeEvent = changed ? "automation_inspector_loading"
+                                       : "automation_inspector_open_failed";
+        }
+        uiController.recordHandledAction(action);
+        return finish(changed);
     }
     if (!wasRoot && uiController.page() == 2) {
         bool handled = false;
@@ -27327,6 +27706,17 @@ bool applyUiAction(UiAction action, bool render = true) {
             deviceSelection = 0;
         }
         if (openable && selected != nullptr &&
+            std::strcmp(selected->id, "lab") == 0) {
+            automationPackageCatalog.clear();
+            automationInspectorController.clear();
+            automationCatalogStatus =
+                BoardAutomationPackageStatus::DirectoryUnavailable;
+            automationCatalogOmittedEntries = 0U;
+            automationCatalogRefreshPending = true;
+            automationInspectionPending = false;
+            lastRuntimeEvent = "automation_library_loading";
+        }
+        if (openable && selected != nullptr &&
             std::strcmp(selected->id, "capture") == 0) {
             captureView = CaptureView::SourceMenu;
             captureSourceSelection = 0;
@@ -27431,6 +27821,12 @@ bool applyUiAction(UiAction action, bool render = true) {
         lastRuntimeEvent = rollbackEvent;
     } else if (!wasRoot && uiController.isRoot() && changed) {
         if (pageBefore == 7) releaseTargetsProduct();
+        if (pageBefore == 8U) {
+            automationCatalogRefreshPending = false;
+            automationInspectionPending = false;
+            automationPackageCatalog.clear();
+            automationInspectorController.clear();
+        }
         appRuntime.stop();
         lastRuntimeEvent = "stopped";
     }
@@ -27450,6 +27846,17 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                 TouchTargetLayout::HomeRows, point, first,
                 static_cast<std::uint8_t>(appCatalog.size())),
             uiController.selection(),
+        };
+    }
+    if (uiController.page() == 8U &&
+        !automationCatalogRefreshPending &&
+        automationCatalogStatus == BoardAutomationPackageStatus::Ready &&
+        automationPackageCatalog.size() != 0U) {
+        return {
+            leshy1::ui::hitTouchTarget(
+                TouchTargetLayout::HomeRows, point, 0U,
+                static_cast<std::uint8_t>(automationPackageCatalog.size())),
+            static_cast<std::uint8_t>(automationPackageCatalog.selection()),
         };
     }
     if (uiController.page() == 2) {
@@ -36114,6 +36521,7 @@ void loop() {
         quiesceBleGattOnSafetyStop();
     }
     if (!safetySupervisor.latched()) {
+        serviceAutomationPackageUi();
         serviceProductSurveyWorker();
         serviceBleGattProduct();
         serviceWifiDevicesProduct();

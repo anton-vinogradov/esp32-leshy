@@ -13,6 +13,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     -fsanitize=address,undefined -fno-omit-frame-pointer \
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/automation_package_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/automation/AutomationInspectorController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/automation/AutomationPackage.cpp" \
     -o "$test_tmp/automation_package_tests"
 

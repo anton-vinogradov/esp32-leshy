@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "apps/automation/AutomationPackage.h"
+#include "apps/automation/AutomationInspectorController.h"
 
 using namespace leshy1::apps::automation;
 
@@ -419,6 +420,79 @@ void testAdmissionOrderBindsAuthenticationPermissionAndTarget() {
           AutomationAdmissionStatus::ConfirmationMismatch);
 }
 
+void testPassiveInspectorRetainsSummaryButNeverPackageBytes() {
+    const std::vector<std::uint8_t> package = validActionPackage();
+    AutomationInspectorController controller;
+    CHECK(controller.inspect("owned-check.lhau",
+                             static_cast<std::uint32_t>(package.size()),
+                             package.data(), package.size(), 1U, nullptr));
+    const AutomationInspectorModel& model = controller.model();
+    CHECK(model.sourceStatus == AutomationInspectorSourceStatus::Inspected);
+    CHECK(std::strcmp(model.sourceName.data(), "owned-check.lhau") == 0);
+    CHECK(model.sourceSize == package.size());
+    CHECK(model.inspection.parseStatus == AutomationParseStatus::Parsed);
+    CHECK(model.inspection.policyStatus == AutomationPolicyStatus::Ready);
+    CHECK(model.inspection.trustStatus ==
+          AutomationTrustStatus::VerifierUnavailable);
+    CHECK(!model.inspection.executionEligible);
+    CHECK(model.inspection.actionsInvoked == 0U);
+    CHECK(model.inspection.hidReportsEmitted == 0U);
+    CHECK(model.inspection.resourcesAcquired == 0U);
+
+    const std::uint32_t inspectedRevision = model.revision;
+    controller.clear();
+    CHECK(controller.model().sourceStatus ==
+          AutomationInspectorSourceStatus::Empty);
+    CHECK(controller.model().sourceName[0] == '\0');
+    CHECK(controller.model().sourceSize == 0U);
+    CHECK(controller.model().revision != inspectedRevision);
+}
+
+void testInspectorCatalogAndSourceFailuresAreBounded() {
+    AutomationPackageCatalog catalog;
+    CHECK(catalog.add("z-last.LHAU", 64U));
+    CHECK(catalog.add("a-first.lhau", 128U));
+    CHECK(!catalog.add("../escape.lhau", 128U));
+    CHECK(!catalog.add("not-a-package.bin", 128U));
+    CHECK(!catalog.add("a-first.lhau", 128U));
+    CHECK(catalog.size() == 2U);
+    CHECK(std::strcmp(catalog.get(0U)->name.data(), "a-first.lhau") == 0);
+    CHECK(std::strcmp(catalog.get(1U)->name.data(), "z-last.LHAU") == 0);
+    CHECK(catalog.selected() == catalog.get(0U));
+    CHECK(catalog.next());
+    CHECK(catalog.selected() == catalog.get(1U));
+    CHECK(!catalog.next());
+    CHECK(catalog.previous());
+    CHECK(!catalog.previous());
+    CHECK(catalog.add("b.lhau", 0U));
+    CHECK(catalog.add("c.lhau", 1U));
+    CHECK(catalog.add("d.lhau", 2U));
+    CHECK(!catalog.add("z-omitted.lhau", 2U));
+    CHECK(catalog.add("00-earliest.lhau", 3U));
+    CHECK(catalog.size() == AutomationPackageCatalog::kCapacity);
+    CHECK(std::strcmp(catalog.get(0U)->name.data(), "00-earliest.lhau") == 0);
+    CHECK(std::strcmp(catalog.get(3U)->name.data(), "c.lhau") == 0);
+
+    AutomationInspectorController controller;
+    CHECK(controller.rejectSource(
+        "large.lhau", kAutomationMaximumPackageBytes + 1U,
+        AutomationInspectorSourceStatus::TooLarge));
+    CHECK(controller.model().sourceStatus ==
+          AutomationInspectorSourceStatus::TooLarge);
+    CHECK(controller.model().inspection.parseStatus ==
+          AutomationParseStatus::TooLarge);
+    CHECK(!controller.model().inspection.executionEligible);
+    CHECK(controller.rejectSource(
+        "broken.lhau", 100U,
+        AutomationInspectorSourceStatus::ReadFailed));
+    CHECK(controller.model().sourceStatus ==
+          AutomationInspectorSourceStatus::ReadFailed);
+    CHECK(!controller.rejectSource(
+        "empty.lhau", 0U, AutomationInspectorSourceStatus::Empty));
+    CHECK(!controller.inspect("bad/name.lhau", 0U, nullptr, 0U, 1U,
+                              nullptr));
+}
+
 }  // namespace
 
 int main() {
@@ -428,6 +502,8 @@ int main() {
     testMutationAndFramingFailClosed();
     testPolicyRejectsPrivilegeKindAndBounds();
     testAdmissionOrderBindsAuthenticationPermissionAndTarget();
+    testPassiveInspectorRetainsSummaryButNeverPackageBytes();
+    testInspectorCatalogAndSourceFailuresAreBounded();
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
         return EXIT_FAILURE;
