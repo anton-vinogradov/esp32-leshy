@@ -1086,6 +1086,22 @@ bool BoardBleGattInspectorTransport::connected() const {
     return connected_.load(std::memory_order_acquire);
 }
 
+bool BoardBleGattInspectorTransport::connecting() const {
+    return connecting_.load(std::memory_order_acquire);
+}
+
+bool BoardBleGattInspectorTransport::disconnected() const {
+    return disconnected_.load(std::memory_order_acquire);
+}
+
+bool BoardBleGattInspectorTransport::cleanupRequested() const {
+    return cleanupRequested_.load(std::memory_order_acquire);
+}
+
+std::uint32_t BoardBleGattInspectorTransport::forcedCleanupCount() const {
+    return forcedCleanupCount_.load(std::memory_order_acquire);
+}
+
 bool BoardBleGattInspectorTransport::armHilFault(
     BoardBleGattHilFault fault) {
     if (fault == BoardBleGattHilFault::None) return false;
@@ -1167,6 +1183,7 @@ bool BoardBleGattInspectorTransport::startConnect(
     disconnected_.store(false, std::memory_order_release);
     remoteDisconnectPending_.store(false, std::memory_order_release);
     cleanupRequested_.store(false, std::memory_order_release);
+    cleanupRequestedAtUs_.store(0U, std::memory_order_release);
     connecting_.store(true, std::memory_order_release);
     const int started = ble_gap_connect(
         processOwnAddressType.load(std::memory_order_acquire), &peer,
@@ -1202,6 +1219,12 @@ bool BoardBleGattInspectorTransport::startServiceDiscovery() {
 services::ble::BleGattDisconnectStatus
 BoardBleGattInspectorTransport::requestDisconnect() {
     cleanupRequested_.store(true, std::memory_order_release);
+    std::uint64_t requestedAtUs = monotonicUs();
+    if (requestedAtUs == 0U) requestedAtUs = 1U;
+    std::uint64_t unset = 0U;
+    (void)cleanupRequestedAtUs_.compare_exchange_strong(
+        unset, requestedAtUs, std::memory_order_acq_rel,
+        std::memory_order_acquire);
     if (connecting_.load(std::memory_order_acquire)) {
         const int result = ble_gap_conn_cancel();
         const bool accepted = result == 0 || result == BLE_HS_EALREADY;
@@ -1230,9 +1253,34 @@ BoardBleGattInspectorTransport::requestDisconnect() {
 
 services::ble::BleGattDisconnectStatus
 BoardBleGattInspectorTransport::pollDisconnect() {
-    if (connecting_.load(std::memory_order_acquire) ||
-        connected_.load(std::memory_order_acquire)) {
-        return services::ble::BleGattDisconnectStatus::Pending;
+    const bool transportActive =
+        connecting_.load(std::memory_order_acquire) ||
+        connected_.load(std::memory_order_acquire);
+    if (transportActive) {
+        if (!cleanupRequested_.load(std::memory_order_acquire)) {
+            return services::ble::BleGattDisconnectStatus::Pending;
+        }
+        const std::uint64_t requestedAtUs = cleanupRequestedAtUs_.load(
+            std::memory_order_acquire);
+        const std::uint64_t nowUs = monotonicUs();
+        const std::uint64_t graceUs =
+            static_cast<std::uint64_t>(kDisconnectGraceMs) * 1000ULL;
+        if (requestedAtUs == 0U || nowUs < requestedAtUs ||
+            nowUs - requestedAtUs < graceUs) {
+            return services::ble::BleGattDisconnectStatus::Pending;
+        }
+        // NimBLE does not guarantee a CONNECT callback after an accepted
+        // ble_gap_conn_cancel(). A missing callback used to leave the product
+        // forever in cleanup_pending with the ESP RF lease held. After a
+        // bounded grace period the host task is the remaining authority: mark
+        // the GAP operation quiescent and tear down the whole one-shot host.
+        // No other BLE owner can coexist because the GATT inspector still
+        // owns the broker lease until pollCleanup() observes this result.
+        connecting_.store(false, std::memory_order_release);
+        connected_.store(false, std::memory_order_release);
+        disconnected_.store(true, std::memory_order_release);
+        connectionHandle_ = BLE_HS_CONN_HANDLE_NONE;
+        forcedCleanupCount_.fetch_add(1U, std::memory_order_acq_rel);
     }
     if (!hostReady_) {
         return services::ble::BleGattDisconnectStatus::Disconnected;
@@ -1246,6 +1294,7 @@ BoardBleGattInspectorTransport::pollDisconnect() {
     hostReady_ = false;
     connectionHandle_ = BLE_HS_CONN_HANDLE_NONE;
     cleanupRequested_.store(false, std::memory_order_release);
+    cleanupRequestedAtUs_.store(0U, std::memory_order_release);
     updateHeapMinimum();
     return services::ble::BleGattDisconnectStatus::Disconnected;
 }

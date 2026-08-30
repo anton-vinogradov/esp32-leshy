@@ -166,6 +166,9 @@ def terminal_failure(device: PassiveSerial, expected_failure: str,
         "target_present": True,
         "host_ready": False,
         "connected": False,
+        "transport_connecting": False,
+        "transport_disconnected": True,
+        "cleanup_requested": False,
         "cleanup_complete": True,
         "owns_radio": False,
         "esp_rf_owner": 0,
@@ -237,6 +240,9 @@ def run_failed_cleanup(
         "failure": "none",
         "host_ready": True,
         "connected": True,
+        "transport_connecting": False,
+        "transport_disconnected": False,
+        "cleanup_requested": False,
         "cleanup_complete": False,
         "owns_radio": True,
         "esp_rf_owner": 6,
@@ -317,6 +323,9 @@ def main() -> int:
     parser.add_argument("--flash-baud", type=int, default=460800)
     parser.add_argument("--external-ble-label", required=True)
     parser.add_argument("--external-ble-executable", required=True, type=Path)
+    parser.add_argument(
+        "--only", choices=("all", "timeout"), default="all",
+        help="run the complete matrix or the focused timeout regression")
     args = parser.parse_args()
     if not args.firmware.is_file():
         parser.error("--firmware must name an existing app image")
@@ -423,16 +432,19 @@ def main() -> int:
                     ("resource-conflict", "resource_conflict",
                      "resource_busy", "none"),
                 )
+                if args.only == "timeout":
+                    definitions = (definitions[1],)
                 for request, canonical, failure, cleanup_cause in definitions:
                     scenarios.append(run_preconnect_fault(
                         device, args.external_ble_label, request, canonical,
                         failure, cleanup_cause, consumed, frames, trace,
                         screens))
                     consumed += 1
-                scenarios.append(run_failed_cleanup(
-                    device, args.external_ble_label, consumed, frames, trace,
-                    screens))
-                consumed += 1
+                if args.only == "all":
+                    scenarios.append(run_failed_cleanup(
+                        device, args.external_ble_label, consumed, frames,
+                        trace, screens))
+                    consumed += 1
                 recovery_success = run_recovery_success(
                     device, args.external_ble_label, consumed, trace)
             except Exception as error:
@@ -479,8 +491,10 @@ def main() -> int:
                 if stderr:
                     fixture["stderr"] = stderr
 
+    expected_scenarios = 4 if args.only == "all" else 1
     passed = (
-        candidate_verified and not failures and len(scenarios) == 4 and
+        candidate_verified and not failures and
+        len(scenarios) == expected_scenarios and
         bool(recovery_success) and bool(hil_end) and
         deterministic_ble_fixture_succeeded(fixture)
     )
@@ -517,13 +531,16 @@ def main() -> int:
         "cleanup_before": cleanup_before,
         "cleanup_after": cleanup_after,
         "scope": {
+            "run_mode": args.only,
             "single_flash_or_exact_reuse": candidate_verified,
-            "scenario_order": [
-                "wrong-peer", "timeout", "resource-conflict",
-                "failed-cleanup", "recovery-success",
-            ],
+            "scenario_order": (
+                ["wrong-peer", "timeout", "resource-conflict",
+                 "failed-cleanup", "recovery-success"]
+                if args.only == "all" else
+                ["timeout", "recovery-success"]
+            ),
             "manual_button_presses": 0,
-            "screenshots_automatic": len(screens) == 4,
+            "screenshots_automatic": len(screens) == expected_scenarios,
             "enumeration_only": True,
             "characteristic_reads": 0,
             "characteristic_writes": 0,

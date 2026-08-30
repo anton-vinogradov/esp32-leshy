@@ -124,6 +124,9 @@ for marker, label in (
     ("BoardBleGattHilFault::DisconnectFailure",
      "one-shot disconnect-failure fault"),
     ("hilFaultConsumedCount_", "fault-consumption evidence"),
+    ("kDisconnectGraceMs", "bounded cancelled-connect cleanup grace"),
+    ("forcedCleanupCount_", "missing-callback forced cleanup evidence"),
+    ("nowUs - requestedAtUs < graceUs", "bounded cleanup deadline"),
 ):
     require(passive, marker, label)
 
@@ -176,6 +179,7 @@ for marker, label in (
      "resource-conflict scenario"),
     ("run_failed_cleanup", "failed-cleanup scenario"),
     ("run_recovery_success", "post-negative recovery success"),
+    ('choices=("all", "timeout")', "focused timeout regression mode"),
     ('"characteristic_reads": 0', "zero characteristic reads"),
     ('"characteristic_writes": 0', "zero characteristic writes"),
     ('"subscriptions": 0', "zero subscriptions"),

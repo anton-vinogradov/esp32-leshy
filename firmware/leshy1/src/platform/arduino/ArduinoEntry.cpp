@@ -32533,6 +32533,8 @@ void emitBleGattInspectorState(Stream& reply) {
         "\"services\":%u,\"service_capacity\":%u,"
         "\"characteristics\":%u,\"characteristic_capacity\":%u,"
         "\"host_ready\":%s,\"connected\":%s,"
+        "\"transport_connecting\":%s,\"transport_disconnected\":%s,"
+        "\"cleanup_requested\":%s,\"forced_cleanup_count\":%lu,"
         "\"cleanup_complete\":%s,\"owns_radio\":%s,"
         "\"esp_rf_owner\":%u,\"gatt_owner\":%u,"
         "\"heap_free_before\":%lu,\"heap_largest_before\":%lu,"
@@ -32563,6 +32565,10 @@ void emitBleGattInspectorState(Stream& reply) {
         static_cast<unsigned>(BleGattInspector::kCharacteristicCapacity),
         bleGattTransport.hostReady() ? "true" : "false",
         bleGattTransport.connected() ? "true" : "false",
+        bleGattTransport.connecting() ? "true" : "false",
+        bleGattTransport.disconnected() ? "true" : "false",
+        bleGattTransport.cleanupRequested() ? "true" : "false",
+        static_cast<unsigned long>(bleGattTransport.forcedCleanupCount()),
         bleGattTransport.cleanupComplete() ? "true" : "false",
         bleGattTransport.ownsRadio() ? "true" : "false",
         static_cast<unsigned>(owner),
