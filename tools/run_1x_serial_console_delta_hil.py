@@ -280,10 +280,13 @@ def main() -> int:
                 page = open_serial_console(device, trace)
                 failures.extend(expect(page, {
                     "page": "serial_console",
-                    "runtime_owner": "none",
-                    "lease_mask": 0,
+                    "runtime_owner": "device",
+                    "lease_mask": 1,
                     "render_mode": "full",
                 }, "serial_console_page"))
+                if int(page.get("lease_mask", -1)) & ((1 << 5) | (1 << 6)):
+                    failures.append(
+                        "Serial Console page acquired Console or Mux56")
                 screens["stock_conflict"] = capture(
                     device, frames, "stock-conflict")
 
@@ -292,8 +295,8 @@ def main() -> int:
                 failures.extend(expect(unchanged, {
                     "page": "serial_console",
                     "changed": False,
-                    "runtime_owner": "none",
-                    "lease_mask": 0,
+                    "runtime_owner": "device",
+                    "lease_mask": 1,
                 }, "stock_ui_rejected"))
 
                 reports["cancel"] = query(
