@@ -1726,6 +1726,24 @@ this completes the FF-0 review and advances focused cadence to 5/15; it does not
 replace the dev.302 periodic full checkpoint or claim nested-feature, flicker,
 calibrated-RF or release-endurance acceptance.
 
+Atomic Wi-Fi-device Radar bound `RB-M223`: exact physical `1.0.0-dev.312` at
+firmware source `a2964985eff8bd33d8c429d4ec37350446d56834` uses 233,760 B
+static RAM, 3,565,108 B linked flash and 3,565,616/3,631,152 B app/factory
+images, leaving 628,688 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256
+values are `1805260181a6246bb8d919141d812ddd63a80641cd46609d509400632ef35e5c`/
+`897d8bda7c86d74e9ca17a6aea1291850fe1efdaf02abce61ef56ea532108ddb`/
+`f46083a165a4859a4795b91425a69aea773ce6c09feb899e7962103e30a6a2b7`/
+`b4141963c3688776c963aa383a3ab021a7bb5b1ae63b51833c7e2c87f98c790d`.
+Against dev.311 this is +128 B static RAM, +1,928 B linked flash, +1,936 B
+app/factory and 1,936 B less OTA headroom. The delta funds allocation-free visual
+state, atomic detail rows and machine-observable repaint counters. Two complete
+monitor lifecycles keep heap byte-invariant at 68,836 B; content clear/full repaint
+remain 1→1, identity/chrome change by 0 pixels and only 49 live-data pixels change.
+Storage remains 8/54 with zero writes, the disposable HIL Device Lock namespace is
+removed, and final owner/lease is none/0. Cadence advances to 6/15; this accepts the
+Wi-Fi-device part of FF-1 without claiming calibrated distance or the remaining
+Targets/cross-radio review.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

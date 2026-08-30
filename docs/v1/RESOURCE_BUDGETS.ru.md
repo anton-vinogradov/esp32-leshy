@@ -1714,6 +1714,24 @@ Automation dev.309 это завершает review FF-0 и двигает focus
 не заменяет periodic full checkpoint dev.302 и не заявляет acceptance nested
 features, полного устранения flicker, calibrated RF или release endurance.
 
+Bound atomic Wi-Fi-device Radar `RB-M223`: exact physical `1.0.0-dev.312` на
+firmware source `a2964985eff8bd33d8c429d4ec37350446d56834` использует 233 760 B
+static RAM, 3 565 108 B linked flash и app/factory images 3 565 616/3 631 152 B,
+оставляя 628 688 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`1805260181a6246bb8d919141d812ddd63a80641cd46609d509400632ef35e5c`/
+`897d8bda7c86d74e9ca17a6aea1291850fe1efdaf02abce61ef56ea532108ddb`/
+`f46083a165a4859a4795b91425a69aea773ce6c09feb899e7962103e30a6a2b7`/
+`b4141963c3688776c963aa383a3ab021a7bb5b1ae63b51833c7e2c87f98c790d`.
+Относительно dev.311 это +128 B static RAM, +1 928 B linked flash, +1 936 B
+app/factory и на 1 936 B меньше OTA headroom. Delta оплачивает allocation-free
+visual state, atomic detail rows и machine-observable repaint counters. Два полных
+monitor lifecycle сохраняют heap byte-invariant на 68 836 B; content clear/full
+repaint остаются 1→1, identity/chrome меняются на 0 pixels, меняются только 49
+live-data pixels. Storage остаётся 8/54 с zero writes, disposable HIL namespace
+Device Lock удалён, final owner/lease — none/0. Cadence двигается до 6/15; принимается
+Wi-Fi-device часть FF-1 без заявления calibrated distance или оставшегося
+Targets/cross-radio review.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

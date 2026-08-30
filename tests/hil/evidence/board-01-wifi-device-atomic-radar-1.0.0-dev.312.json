@@ -1,0 +1,137 @@
+{
+  "automation": {
+    "accepted_manifest_sha256": "dbb490b50a4f9dbc0adbd0ce255a6b1b2e5283416fc2d5aca0aefc03ae20997d",
+    "accepted_run_sha256": "2a6dc5b1cf3cce91af828b3d10de3916d23d03e42288aa3b2e56992fd7cbb322",
+    "ambient_frames_retained": false,
+    "automatic_screenshots": 6,
+    "checker_sha256": "c4c54ef073d4add68c64911a432f90d04dc71864b58907b8f826117ff23be363",
+    "contract_sha256": "1accebfd054ddfabdda43877ec7fa45e840f99d0fda7c3d0e712a00dbe804953",
+    "fresh_flash_predecessor_reason": "unconfigured Device Lock state was not isolated by v3 harness",
+    "fresh_flash_predecessor_rejected": true,
+    "fresh_flash_predecessor_run_sha256": "3c8c8558a968760b829fc7624a90fbb44a931fa36dc4284e1d4ce976312ea862",
+    "independent_checker_output": "{\"channel_hops\": 35, \"chrome_changed_pixels\": 0, \"final_lease_mask\": 0, \"identity_changed_pixels\": 0, \"live_detail_changed_pixels\": 49, \"oui_records\": 39984, \"status\": \"pass\", \"unique_devices\": 1, \"version\": \"1.0.0-dev.312\"}",
+    "manual_button_presses": 0,
+    "runner_sha256": "4ead75b137012b88700a9524d29fee47292694c405df94aa13daa09adca804a2",
+    "screen_digests": {
+      "wifi_device_detail_first": {
+        "png_sha256": "53eccd47da693d2d3dcd909cabfaa7605025ba827831063fd4fbb55e88815856",
+        "rgb565_sha256": "dbb2522b49aff8e0e66e8a76d4917c2579db94857a521c4a9ed26796b19683f4"
+      },
+      "wifi_device_detail_second": {
+        "png_sha256": "f1c958770ef91a0a6fad70a31c452fe7f56fc0271d5ff9a40a93f45b7834b036",
+        "rgb565_sha256": "ddb0961e946b9bd2c56ef305d3649c3820726b854e97fa602ef7705d989573f3"
+      },
+      "wifi_devices_first": {
+        "png_sha256": "68604bb989f719d6fef5a80533b2150ee139a839ac01e81676d187ef282fbdca",
+        "rgb565_sha256": "cfdd4d2ef07b0c207676542cef6a2b2974bf483e706c4f4cbfcdf09b28677b11"
+      },
+      "wifi_devices_second": {
+        "png_sha256": "3f8c4909fb2da308a8e29a0b1760b085022005aae6ee5192480adcb446d7d2d9",
+        "rgb565_sha256": "0d8bb78aaec86ed32bb2f2275754bf093a9d44145c10c1a6fe145bc1f575f759"
+      },
+      "wifi_menu": {
+        "png_sha256": "3e7ceeb2e084f16916755403b36612bd3e88a1cfe50fb59e62de178a4587d093",
+        "rgb565_sha256": "ca7c3d9a415e78f1243c2757da793c573eaa243015ac4493ca46a286873fdaff"
+      },
+      "wifi_menu_after": {
+        "png_sha256": "616e06729b6f777d23291ad03ac68ba678e37bb4168483d75a12b84a0d2a05df",
+        "rgb565_sha256": "7b9f17a3583b3d46ff45053441eafc3d13aee699149984417b289011bf91121b"
+      }
+    }
+  },
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "f46083a165a4859a4795b91425a69aea773ce6c09feb899e7962103e30a6a2b7",
+    "elf_sha256": "f46083a165a4859a4795b91425a69aea773ce6c09feb899e7962103e30a6a2b7",
+    "factory_bytes": 3631152,
+    "factory_sha256": "897d8bda7c86d74e9ca17a6aea1291850fe1efdaf02abce61ef56ea532108ddb",
+    "firmware_bytes": 3565616,
+    "firmware_sha256": "1805260181a6246bb8d919141d812ddd63a80641cd46609d509400632ef35e5c",
+    "firmware_source_commit": "a2964985eff8bd33d8c429d4ec37350446d56834",
+    "harness_commit": "69515a1bf23c25d77443acec53af8e6932b0bde6",
+    "linked_flash_bytes": 3565108,
+    "map_sha256": "b4141963c3688776c963aa383a3ab021a7bb5b1ae63b51833c7e2c87f98c790d",
+    "ota_free_bytes": 628688,
+    "static_ram_bytes": 233760,
+    "version": "1.0.0-dev.312"
+  },
+  "cid": "FE343253440000002000000055019CB7",
+  "evidence_ids": [
+    "E-BUILD-212",
+    "E-AUTO-187",
+    "E-HIL-220",
+    "E-UX-071",
+    "RB-M223"
+  ],
+  "privacy": {
+    "ambient_identifiers_retained": false,
+    "frames_retained": false,
+    "note": "Ambient device identities and frame pixels remain local; only digests and aggregate machine-checked facts are committed.",
+    "raw_run_retained": false
+  },
+  "schema": "leshy.wifi_device_atomic_radar.acceptance.v1",
+  "scope": {
+    "accepts": [
+      "FF-1 Wi-Fi device facts plus channel-locked live radar",
+      "identity-stable atomic content-only live updates",
+      "Device Lock state-independent automated delta HIL"
+    ],
+    "does_not_accept": [
+      "FF-1 BLE or Targets radar/localize",
+      "calibrated distance or RF accuracy",
+      "periodic full HIL or release endurance"
+    ],
+    "focused_cadence": "6/15",
+    "next": "FF-1 Targets radar/localize delta, then cross-radio review"
+  },
+  "status": "pass",
+  "verified": {
+    "active_probe_allowed": false,
+    "atomic_row_allocation_failures": 0,
+    "buzzer_inactive": true,
+    "channel_hops": 35,
+    "channels_listened": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13
+    ],
+    "chrome_changed_pixels": 0,
+    "content_clears_after": 1,
+    "content_clears_before": 1,
+    "delta_repaints_after": 2,
+    "delta_repaints_before": 1,
+    "device_lock_fixture_cleanup_proven": true,
+    "direct_row_fallbacks": 0,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "full_repaints_after": 1,
+    "full_repaints_before": 1,
+    "heap_free_after_bytes": 68836,
+    "heap_free_before_bytes": 68836,
+    "identity_changed_pixels": 0,
+    "identity_stable": true,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "list_chrome_changed_pixels": 0,
+    "live_changed_pixels": 49,
+    "oui_records": 39984,
+    "passive_receive_only": true,
+    "physical_sd_write_calls": 0,
+    "product_device_lock_namespace_mutated": false,
+    "signal_samples_after": 32,
+    "signal_samples_before": 29,
+    "two_complete_lifecycles": true,
+    "unique_devices": 1
+  }
+}
