@@ -762,6 +762,20 @@ const char* boardBleBeginStageName(BoardBleBeginStage stage) {
     return "unknown";
 }
 
+const char* boardBleGattHilFaultName(BoardBleGattHilFault fault) {
+    switch (fault) {
+        case BoardBleGattHilFault::None: return "none";
+        case BoardBleGattHilFault::UnexpectedPeer:
+            return "unexpected_peer";
+        case BoardBleGattHilFault::Timeout: return "timeout";
+        case BoardBleGattHilFault::ResourceConflict:
+            return "resource_conflict";
+        case BoardBleGattHilFault::DisconnectFailure:
+            return "disconnect_failure";
+    }
+    return "none";
+}
+
 bool BoardBlePassiveScanner::begin() {
     beginDiagnostic_ = {};
     beginDiagnostic_.heapFreeBefore = static_cast<std::uint32_t>(
@@ -1072,6 +1086,56 @@ bool BoardBleGattInspectorTransport::connected() const {
     return connected_.load(std::memory_order_acquire);
 }
 
+bool BoardBleGattInspectorTransport::armHilFault(
+    BoardBleGattHilFault fault) {
+    if (fault == BoardBleGattHilFault::None) return false;
+    std::uint8_t expected =
+        static_cast<std::uint8_t>(BoardBleGattHilFault::None);
+    return armedHilFault_.compare_exchange_strong(
+        expected, static_cast<std::uint8_t>(fault),
+        std::memory_order_acq_rel, std::memory_order_acquire);
+}
+
+void BoardBleGattInspectorTransport::clearHilFault() {
+    armedHilFault_.store(
+        static_cast<std::uint8_t>(BoardBleGattHilFault::None),
+        std::memory_order_release);
+    lastConsumedHilFault_.store(
+        static_cast<std::uint8_t>(BoardBleGattHilFault::None),
+        std::memory_order_release);
+}
+
+bool BoardBleGattInspectorTransport::consumeHilFault(
+    BoardBleGattHilFault fault) {
+    if (fault == BoardBleGattHilFault::None) return false;
+    std::uint8_t expected = static_cast<std::uint8_t>(fault);
+    if (!armedHilFault_.compare_exchange_strong(
+            expected, static_cast<std::uint8_t>(BoardBleGattHilFault::None),
+            std::memory_order_acq_rel, std::memory_order_acquire)) {
+        return false;
+    }
+    lastConsumedHilFault_.store(static_cast<std::uint8_t>(fault),
+                                std::memory_order_release);
+    hilFaultConsumedCount_.fetch_add(1U, std::memory_order_acq_rel);
+    return true;
+}
+
+BoardBleGattHilFault BoardBleGattInspectorTransport::armedHilFault() const {
+    return static_cast<BoardBleGattHilFault>(
+        armedHilFault_.load(std::memory_order_acquire));
+}
+
+BoardBleGattHilFault
+BoardBleGattInspectorTransport::lastConsumedHilFault() const {
+    return static_cast<BoardBleGattHilFault>(
+        lastConsumedHilFault_.load(std::memory_order_acquire));
+}
+
+std::uint32_t
+BoardBleGattInspectorTransport::hilFaultConsumedCount() const {
+    return hilFaultConsumedCount_.load(std::memory_order_acquire);
+}
+
 bool BoardBleGattInspectorTransport::startConnect(
     const services::ble::BleInspectorTarget& target) {
     if (hostReady_ || connecting_.load(std::memory_order_acquire) ||
@@ -1140,17 +1204,25 @@ BoardBleGattInspectorTransport::requestDisconnect() {
     cleanupRequested_.store(true, std::memory_order_release);
     if (connecting_.load(std::memory_order_acquire)) {
         const int result = ble_gap_conn_cancel();
-        return result == 0 || result == BLE_HS_EALREADY
-            ? services::ble::BleGattDisconnectStatus::Pending
-            : services::ble::BleGattDisconnectStatus::Failed;
+        const bool accepted = result == 0 || result == BLE_HS_EALREADY;
+        if (accepted && consumeHilFault(
+                BoardBleGattHilFault::DisconnectFailure)) {
+            return services::ble::BleGattDisconnectStatus::Failed;
+        }
+        return accepted ? services::ble::BleGattDisconnectStatus::Pending
+                        : services::ble::BleGattDisconnectStatus::Failed;
     }
     if (connected_.load(std::memory_order_acquire) &&
         connectionHandle_ != BLE_HS_CONN_HANDLE_NONE) {
         const int result = ble_gap_terminate(
             connectionHandle_, BLE_ERR_REM_USER_CONN_TERM);
-        return result == 0 || result == BLE_HS_ENOTCONN
-            ? services::ble::BleGattDisconnectStatus::Pending
-            : services::ble::BleGattDisconnectStatus::Failed;
+        const bool accepted = result == 0 || result == BLE_HS_ENOTCONN;
+        if (accepted && consumeHilFault(
+                BoardBleGattHilFault::DisconnectFailure)) {
+            return services::ble::BleGattDisconnectStatus::Failed;
+        }
+        return accepted ? services::ble::BleGattDisconnectStatus::Pending
+                        : services::ble::BleGattDisconnectStatus::Failed;
     }
     return hostReady_ ? services::ble::BleGattDisconnectStatus::Pending
                       : services::ble::BleGattDisconnectStatus::Disconnected;
@@ -1190,6 +1262,26 @@ bool BoardBleGattInspectorTransport::service(std::uint64_t nowMonotonicUs) {
         }
 
     }
+    {
+        GattInspectorLock gattLock;
+        if (inspector_ != nullptr &&
+            (inspector_->state() ==
+                 services::ble::BleGattInspectorState::Connecting ||
+             inspector_->state() ==
+                 services::ble::BleGattInspectorState::Discovering) &&
+            consumeHilFault(BoardBleGattHilFault::Timeout)) {
+            const std::uint64_t injectedNowUs =
+                nowMonotonicUs <=
+                    UINT64_MAX -
+                        services::ble::BleGattInspector::
+                            kConnectedSessionTimeoutUs
+                ? nowMonotonicUs +
+                    services::ble::BleGattInspector::
+                        kConnectedSessionTimeoutUs
+                : UINT64_MAX;
+            changed = inspector_->tick(injectedNowUs) || changed;
+        }
+    }
     changed = tick(nowMonotonicUs) || changed;
     return changed;
 }
@@ -1221,6 +1313,9 @@ int BoardBleGattInspectorTransport::handleGapEvent(void* rawEvent) {
                               address.begin());
             addressType = description.peer_id_addr.type;
         }
+        const bool injectUnexpectedPeer = consumeHilFault(
+            BoardBleGattHilFault::UnexpectedPeer);
+        if (injectUnexpectedPeer) address[0] ^= 1U;
         GattInspectorLock gattLock;
         if (inspector_ != nullptr) {
             (void)inspector_->onConnected(

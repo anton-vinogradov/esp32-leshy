@@ -13,6 +13,7 @@ PASSIVE = ROOT / "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.cp
 PRODUCT = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 HIL = ROOT / "tools/run_1x_ble_inspector_hil.py"
 GATT_HIL = ROOT / "tools/run_1x_ble_gatt_hil.py"
+GATT_NEGATIVE_HIL = ROOT / "tools/run_1x_ble_gatt_negative_hil.py"
 
 
 def require(text: str, marker: str, label: str) -> None:
@@ -27,6 +28,7 @@ export = EXPORT.read_text(encoding="utf-8")
 product = PRODUCT.read_text(encoding="utf-8")
 hil = HIL.read_text(encoding="utf-8")
 gatt_hil = GATT_HIL.read_text(encoding="utf-8")
+gatt_negative_hil = GATT_NEGATIVE_HIL.read_text(encoding="utf-8")
 
 transport_match = re.search(
     r"class BleGattInspectorTransport \{(?P<body>.*?)\n\};",
@@ -102,6 +104,10 @@ for marker, label in (
     ("renderBleGattInspectorData(false)", "incremental GATT repaint"),
     ("ble.device.hil-select-label-fnv1a64", "exact fixture selector"),
     ("BleDeviceNavigationOrder::labelHash", "private fixture label binding"),
+    ("ble.inspector.gatt.hil-fault ", "HIL-session negative lifecycle seam"),
+    ("hilSession.active()", "negative lifecycle HIL-session gate"),
+    ("bleGattTransport.clearHilFault()", "HIL boundary fault clear"),
+    ("ble_gatt_cleanup_failed_visible", "visible failed-cleanup result"),
 ):
     require(product, marker, label)
 
@@ -113,6 +119,11 @@ for marker, label in (
     ("remoteDisconnectPending_", "remote disconnect cleanup handoff"),
     ("xSemaphoreCreateRecursiveMutexStatic", "non-allocating task mutex"),
     ("xSemaphoreTakeRecursive", "callback-safe recursive serialization"),
+    ("BoardBleGattHilFault::UnexpectedPeer", "one-shot wrong-peer fault"),
+    ("BoardBleGattHilFault::Timeout", "one-shot timeout fault"),
+    ("BoardBleGattHilFault::DisconnectFailure",
+     "one-shot disconnect-failure fault"),
+    ("hilFaultConsumedCount_", "fault-consumption evidence"),
 ):
     require(passive, marker, label)
 
@@ -153,6 +164,27 @@ for marker, label in (
     ("compare_complete_frames", "stable card no-repaint proof"),
 ):
     require(gatt_hil, marker, label)
+
+for marker, label in (
+    ("preflight_exact_board", "pre-flash exact board identity proof"),
+    ("run_preconnect_fault", "shared pre-connect negative runner"),
+    ('("wrong-peer", "unexpected_peer", "unexpected_peer",',
+     "wrong-peer scenario"),
+    ('("timeout", "timeout", "timeout", "timeout")',
+     "timeout scenario"),
+    ('("resource-conflict", "resource_conflict",',
+     "resource-conflict scenario"),
+    ("run_failed_cleanup", "failed-cleanup scenario"),
+    ("run_recovery_success", "post-negative recovery success"),
+    ('"characteristic_reads": 0', "zero characteristic reads"),
+    ('"characteristic_writes": 0', "zero characteristic writes"),
+    ('"subscriptions": 0', "zero subscriptions"),
+    ('"pairings": 0', "zero pairings"),
+    ('"host_wifi_control_calls": 0', "host Wi-Fi isolation"),
+    ('"clone_touched": False', "clone isolation"),
+    ('"cardputer_touched": False', "Cardputer isolation"),
+):
+    require(gatt_negative_hil, marker, label)
 
 print(
     "BLE Inspector contract passed: exact selected raw capture/export, incremental "

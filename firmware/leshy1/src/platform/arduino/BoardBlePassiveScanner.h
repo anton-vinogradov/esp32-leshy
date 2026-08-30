@@ -40,6 +40,19 @@ enum class BoardBleBeginStage : std::uint8_t {
 
 const char* boardBleBeginStageName(BoardBleBeginStage stage);
 
+// One-shot physical-HIL faults for the connected CAP-051 lifecycle. They are
+// armed only by an active HIL session in ArduinoEntry and never add a pairing,
+// characteristic read/write or subscription operation to the product API.
+enum class BoardBleGattHilFault : std::uint8_t {
+    None,
+    UnexpectedPeer,
+    Timeout,
+    ResourceConflict,
+    DisconnectFailure,
+};
+
+const char* boardBleGattHilFaultName(BoardBleGattHilFault fault);
+
 // Bounded, PII-free evidence for the most recent controller/host bootstrap.
 // The exact native error and internal-heap snapshots make an unavailable BLE
 // receiver diagnosable without exposing any observed radio identity.
@@ -147,6 +160,12 @@ public:
     bool ownsRadio() const;
     bool hostReady() const;
     bool connected() const;
+    bool armHilFault(BoardBleGattHilFault fault);
+    void clearHilFault();
+    bool consumeHilFault(BoardBleGattHilFault fault);
+    BoardBleGattHilFault armedHilFault() const;
+    BoardBleGattHilFault lastConsumedHilFault() const;
+    std::uint32_t hilFaultConsumedCount() const;
     std::uint32_t heapFreeBefore() const { return heapFreeBefore_; }
     std::uint32_t heapLargestBefore() const { return heapLargestBefore_; }
     std::uint32_t heapFreeAfterInit() const { return heapFreeAfterInit_; }
@@ -184,6 +203,11 @@ private:
     std::atomic_bool disconnected_{true};
     std::atomic_bool remoteDisconnectPending_{false};
     std::atomic_bool cleanupRequested_{false};
+    std::atomic<std::uint8_t> armedHilFault_{
+        static_cast<std::uint8_t>(BoardBleGattHilFault::None)};
+    std::atomic<std::uint8_t> lastConsumedHilFault_{
+        static_cast<std::uint8_t>(BoardBleGattHilFault::None)};
+    std::atomic<std::uint32_t> hilFaultConsumedCount_{0U};
     bool hostReady_ = false;
     std::uint32_t heapFreeBefore_ = 0U;
     std::uint32_t heapLargestBefore_ = 0U;

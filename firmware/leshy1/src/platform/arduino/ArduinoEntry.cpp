@@ -365,6 +365,8 @@ using leshy1::platform::arduino::BoardTouchInput;
 using leshy1::platform::arduino::TouchCalibrationSource;
 using leshy1::platform::arduino::BoardBlePassiveScanner;
 using leshy1::platform::arduino::BoardBleGattInspectorTransport;
+using leshy1::platform::arduino::BoardBleGattHilFault;
+using leshy1::platform::arduino::boardBleGattHilFaultName;
 using leshy1::platform::arduino::BoardBlePassiveScanResult;
 using leshy1::platform::arduino::BoardBleBeginDiagnostic;
 using leshy1::platform::arduino::BleRecordDisposition;
@@ -422,6 +424,7 @@ constexpr leshy1::kernel::runtime::ResourceOwner kSdIdentificationOwner = 2;
 constexpr leshy1::kernel::runtime::ResourceOwner kWifiIngressOwner = 3;
 constexpr leshy1::kernel::runtime::ResourceOwner kBootCatalogOwner = 4;
 constexpr leshy1::kernel::runtime::ResourceOwner kLittleFsHilOwner = 5;
+constexpr leshy1::kernel::runtime::ResourceOwner kBleGattHilConflictOwner = 7;
 constexpr std::size_t kSdThroughputSamples = 32;
 constexpr std::size_t kWifiIngressMaxSamples = 32;
 constexpr std::uint64_t kWifiIngressP99EncodedBytesPerSecond = 546;
@@ -23524,10 +23527,19 @@ bool beginBleGattAfterSurvey() {
         const bool closed = bleGattTransport.back(nowUs);
         return closed && finishBleGattToHome();
     }
+    const bool injectResourceConflict = bleGattTransport.consumeHilFault(
+        BoardBleGattHilFault::ResourceConflict);
+    const bool conflictLeaseHeld = injectResourceConflict &&
+        resourceBroker.acquire(kBleGattHilConflictOwner, radio);
     const bool started = bleGattTransport.confirm(
         bleGattConfirmationToken, nowUs);
+    if (injectResourceConflict) {
+        resourceBroker.releaseAll(kBleGattHilConflictOwner);
+    }
     lastRuntimeEvent = started ? "ble_gatt_connecting"
-                               : "ble_gatt_connect_start_failed";
+        : (injectResourceConflict && conflictLeaseHeld
+            ? "ble_gatt_resource_conflict_injected"
+            : "ble_gatt_connect_start_failed");
     return started;
 }
 
@@ -23558,13 +23570,23 @@ void serviceBleGattProduct() {
         bleGattFactSelection = totalFacts - 1U;
     }
     if (bleGattReturnAfterCleanup &&
-        (after == BleGattInspectorState::Complete ||
-         after == BleGattInspectorState::Failed) &&
+        after == BleGattInspectorState::Complete &&
         bleGattTransport.cleanupComplete()) {
         if (finishBleGattToHome()) {
             renderInteractiveScreen(true);
             return;
         }
+    }
+    if (bleGattReturnAfterCleanup &&
+        after == BleGattInspectorState::Failed &&
+        bleGattTransport.cleanupComplete()) {
+        // A failed disconnect must remain visible. Releasing the lease is
+        // necessary, but silently returning Home would hide the failure the
+        // user (and release HIL) needs to diagnose. A second Back performs the
+        // ordinary clean return after the failure card has been observable.
+        bleGattReturnAfterCleanup = false;
+        lastRuntimeEvent = "ble_gatt_cleanup_failed_visible";
+        changed = true;
     }
     if (changed && bleProductView == BleProductView::InspectorGatt) {
         renderInteractiveScreen(false);
@@ -30503,6 +30525,8 @@ void emitHilSessionBegin(Stream& reply, const char* command) {
     }
     char line[384] = {};
     if (status == HilSessionStatus::Begun) {
+        bleGattTransport.clearHilFault();
+        resourceBroker.releaseAll(kBleGattHilConflictOwner);
         wifiAuthenticationSyntheticHilFixture.resetForSession();
         wifiAuthenticationPersistenceHilFixture.resetForSession();
         clearWifiAuthenticationSyntheticHilState();
@@ -30554,6 +30578,8 @@ void emitHilSessionEnd(Stream& reply, const char* command) {
     }
     const HilSessionStatus status = hilSession.end(sessionId);
     if (status == HilSessionStatus::Ended) {
+        bleGattTransport.clearHilFault();
+        resourceBroker.releaseAll(kBleGattHilConflictOwner);
         clearWebCompanionHilEntropy();
         setAirspaceGuardBleCapacityDropInjection(false);
         clearWifiAuthenticationSurveyTerminalHold();
@@ -32513,6 +32539,9 @@ void emitBleGattInspectorState(Stream& reply) {
         "\"heap_free_after_init\":%lu,"
         "\"heap_largest_after_init\":%lu,\"heap_minimum\":%lu,"
         "\"content_clears\":%lu,\"row_repaints\":%lu,"
+        "\"hil_fault_armed\":\"%s\","
+        "\"hil_fault_last_consumed\":\"%s\","
+        "\"hil_fault_consumed_count\":%lu,"
         "\"enumeration_only\":true,\"pairing_allowed\":false,"
         "\"read_allowed\":false,\"write_allowed\":false,"
         "\"subscribe_allowed\":false,\"read_only_query\":true}",
@@ -32544,7 +32573,76 @@ void emitBleGattInspectorState(Stream& reply) {
         static_cast<unsigned long>(bleGattTransport.heapLargestAfterInit()),
         static_cast<unsigned long>(bleGattTransport.heapMinimum()),
         static_cast<unsigned long>(bleGattContentClears),
-        static_cast<unsigned long>(bleGattRowRepaints));
+        static_cast<unsigned long>(bleGattRowRepaints),
+        boardBleGattHilFaultName(bleGattTransport.armedHilFault()),
+        boardBleGattHilFaultName(bleGattTransport.lastConsumedHilFault()),
+        static_cast<unsigned long>(
+            bleGattTransport.hilFaultConsumedCount()));
+    reply.println(line);
+}
+
+void emitBleGattHilFault(Stream& reply, const char* command) {
+    constexpr const char* prefix = "ble.inspector.gatt.hil-fault ";
+    const char* requested = command + std::strlen(prefix);
+    BoardBleGattHilFault fault = BoardBleGattHilFault::None;
+    if (std::strcmp(requested, "wrong-peer") == 0) {
+        fault = BoardBleGattHilFault::UnexpectedPeer;
+    } else if (std::strcmp(requested, "timeout") == 0) {
+        fault = BoardBleGattHilFault::Timeout;
+    } else if (std::strcmp(requested, "resource-conflict") == 0) {
+        fault = BoardBleGattHilFault::ResourceConflict;
+    } else if (std::strcmp(requested, "failed-cleanup") == 0) {
+        fault = BoardBleGattHilFault::DisconnectFailure;
+    }
+    const bool clear = std::strcmp(requested, "clear") == 0;
+    const bool inspect = std::strcmp(requested, "state") == 0;
+    const BleGattInspectorState state = bleGattTransport.state();
+    const bool preConnectFault =
+        fault == BoardBleGattHilFault::UnexpectedPeer ||
+        fault == BoardBleGattHilFault::Timeout ||
+        fault == BoardBleGattHilFault::ResourceConflict;
+    const bool safeState = hilSession.active() &&
+        bleProductView == BleProductView::InspectorGatt &&
+        !bleGattWaitingForSurveyStop &&
+        ((preConnectFault &&
+          (state == BleGattInspectorState::PermissionReview ||
+           state == BleGattInspectorState::AwaitingConfirmation)) ||
+         (fault == BoardBleGattHilFault::DisconnectFailure &&
+          state == BleGattInspectorState::Ready));
+    const char* status = "invalid_request";
+    if (inspect) {
+        status = "state";
+    } else if (clear && hilSession.active()) {
+        bleGattTransport.clearHilFault();
+        resourceBroker.releaseAll(kBleGattHilConflictOwner);
+        status = "cleared";
+    } else if (fault != BoardBleGattHilFault::None && safeState &&
+               bleGattTransport.armHilFault(fault)) {
+        status = "armed";
+    } else if (fault != BoardBleGattHilFault::None) {
+        status = "unsafe_state";
+    }
+    auto& line = diagnosticJson;
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.ble.inspector.gatt_hil_fault.v1\","
+        "\"kind\":\"state\",\"status\":\"%s\","
+        "\"requested\":\"%s\",\"armed\":\"%s\","
+        "\"last_consumed\":\"%s\",\"consumed_count\":%lu,"
+        "\"hil_active\":%s,\"view\":\"%s\",\"gatt_state\":\"%s\","
+        "\"one_shot\":true,\"enumeration_only\":true,"
+        "\"pairing_allowed\":false,\"read_allowed\":false,"
+        "\"write_allowed\":false,\"subscribe_allowed\":false,"
+        "\"storage_mounted\":false,\"storage_written\":false,"
+        "\"physical_write_calls\":0}",
+        status, requested,
+        boardBleGattHilFaultName(bleGattTransport.armedHilFault()),
+        boardBleGattHilFaultName(bleGattTransport.lastConsumedHilFault()),
+        static_cast<unsigned long>(
+            bleGattTransport.hilFaultConsumedCount()),
+        hilSession.active() ? "true" : "false",
+        bleProductViewName(bleProductView),
+        leshy1::services::ble::bleGattInspectorStateName(state));
     reply.println(line);
 }
 
@@ -33287,6 +33385,10 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitBleInspectorCaptureState(reply);
     } else if (std::strcmp(command, "ble.inspector.gatt.state") == 0) {
         emitBleGattInspectorState(reply);
+    } else if (std::strncmp(
+                   command, "ble.inspector.gatt.hil-fault ",
+                   std::strlen("ble.inspector.gatt.hil-fault ")) == 0) {
+        emitBleGattHilFault(reply, command);
     } else if (std::strcmp(command, "ble.inspector.export.raw") == 0) {
         emitBleInspectorCaptureExport(reply);
     } else if (std::strcmp(command, "survey.browser") == 0) {
@@ -34009,6 +34111,7 @@ void setup() {
               "\"wifi.network.detail\","
               "\"wifi.network.hil-select-label-fnv1a64 <16-hex-hash>\","
               "\"ble.device.hil-select-label-fnv1a64 <16-hex-hash>\","
+              "\"ble.inspector.gatt.hil-fault wrong-peer|timeout|resource-conflict|failed-cleanup|state|clear\","
               "\"wifi.authentication.state\","
               "\"wifi.authentication.persistence.state\","
               "\"companion.web.hil-seed <32-hex-entropy>\","
