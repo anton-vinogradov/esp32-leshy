@@ -776,6 +776,11 @@ def main() -> int:
     parser.add_argument("--firmware", required=True, type=Path)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument(
+        "--source-commit",
+        help=("full firmware source commit; mandatory when reusing an exact "
+              "already-flashed candidate"),
+    )
+    parser.add_argument(
         "--expected-cid",
         help=(
             "exact enrolled card CID; when omitted it is discovered fail-closed "
@@ -784,6 +789,10 @@ def main() -> int:
     )
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash", action="store_true")
+    parser.add_argument(
+        "--reuse-exact-flash", action="store_true",
+        help="reuse the installed candidate after exact version/app identity proof",
+    )
     parser.add_argument("--flash-offset", type=lambda value: int(value, 0), default=0x10000)
     parser.add_argument("--flash-baud", type=int, default=460800)
     parser.add_argument("--boot-seconds", type=float, default=20.0)
@@ -812,6 +821,15 @@ def main() -> int:
         parser.error(f"output must not exist: {args.output}")
     if args.expected_cid is not None and not valid_cid(args.expected_cid):
         parser.error("--expected-cid must be exactly 32 uppercase hexadecimal characters")
+    if args.flash and args.reuse_exact_flash:
+        parser.error("--flash and --reuse-exact-flash are mutually exclusive")
+    if args.reuse_exact_flash and (
+            args.source_commit is None or len(args.source_commit) != 40 or
+            any(character not in "0123456789abcdef"
+                for character in args.source_commit)):
+        parser.error(
+            "--reuse-exact-flash requires a full lowercase --source-commit"
+        )
     if args.post_flash_settle < 0 or args.post_flash_settle > 10:
         parser.error("--post-flash-settle must be between 0 and 10 seconds")
 
@@ -1183,14 +1201,21 @@ def main() -> int:
         "run_id": run_id,
         "runner_source_sha256": runner_source_sha256,
         "passed": not failures,
-        "gate_eligible": flash_completed and not failures,
+        "gate_eligible": (
+            (flash_completed or args.reuse_exact_flash) and not failures
+        ),
         "failures": failures,
         "candidate": {
             "firmware_sha256": firmware_sha,
             "app_elf_sha256": app_identity,
             "version": args.expected_version,
+            "source_commit": args.source_commit,
             "flash_requested": args.flash,
             "flashed": flash_completed,
+            "flash_mode": (
+                "fresh" if flash_completed else
+                "reuse_exact" if args.reuse_exact_flash else "none"
+            ),
         },
         "expected_cid": expected_cid,
         "boot_before": {"ready": before_ready, "recovery": before_recovery,

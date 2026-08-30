@@ -107,11 +107,28 @@ def verify_product_bundle(bundle: Path, candidate: Path,
             any(character not in "0123456789abcdef" for character in run_id)):
         failures.append("invalid product run ID")
     candidate_record = run.get("candidate", {})
+    flash_mode = candidate_record.get("flash_mode")
+    if flash_mode is None:
+        # Historical bundles predate explicit exact-reuse accounting and were
+        # accepted only when the runner itself completed a fresh flash.
+        expected_flashed = True
+    elif flash_mode == "fresh":
+        expected_flashed = True
+    elif flash_mode == "reuse_exact":
+        expected_flashed = False
+        source_commit = candidate_record.get("source_commit")
+        if (not isinstance(source_commit, str) or len(source_commit) != 40 or
+                any(character not in "0123456789abcdef"
+                    for character in source_commit)):
+            failures.append("exact-reuse candidate source commit is invalid")
+    else:
+        expected_flashed = False
+        failures.append(f"unsupported product candidate flash mode: {flash_mode!r}")
     expected_candidate = {
         "firmware_sha256": candidate_hash,
         "app_elf_sha256": candidate_app,
         "version": expected_version,
-        "flashed": True,
+        "flashed": expected_flashed,
     }
     for field, expected in expected_candidate.items():
         if candidate_record.get(field) != expected:

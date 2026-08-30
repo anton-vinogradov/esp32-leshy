@@ -37,6 +37,11 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
         )
         self.assertIn('"flashed": flash_completed', source)
         self.assertNotIn('"flashed": args.flash', source)
+        self.assertIn(
+            '(flash_completed or args.reuse_exact_flash) and not failures',
+            source,
+        )
+        self.assertIn('"reuse_exact" if args.reuse_exact_flash else "none"', source)
 
     def test_boot_acceptance_requires_bounded_input_probe_accounting(self) -> None:
         ready = {
