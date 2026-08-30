@@ -11,6 +11,11 @@ namespace leshy1::platform::arduino {
 constexpr const char* kAutomationPackageLibraryRoot =
     "/leshy/automation/v1";
 
+// Product reads stay in the fixed Library namespace. Physical HIL may select
+// one exact StorageGuard scratch directory so the same read-only adapter and
+// UI path can inspect disposable packages without touching user data.
+bool validAutomationPackageLibraryRoot(const char* root);
+
 enum class BoardAutomationPackageStatus : std::uint8_t {
     Ready,
     InvalidArgument,
@@ -31,8 +36,9 @@ const char* boardAutomationPackageStatusName(
 class BoardAutomationPackageReader final {
 public:
     explicit BoardAutomationPackageReader(
-        ArduinoFsSessionStoreWorkspace& workspace)
-        : workspace_(workspace) {}
+        ArduinoFsSessionStoreWorkspace& workspace,
+        const char* root = kAutomationPackageLibraryRoot)
+        : workspace_(workspace), root_(root) {}
 
     BoardAutomationPackageStatus scan(
         std::uint8_t driveNumber,
@@ -51,6 +57,7 @@ private:
                     std::size_t capacity) const;
 
     ArduinoFsSessionStoreWorkspace& workspace_;
+    const char* root_ = kAutomationPackageLibraryRoot;
 };
 
 }  // namespace leshy1::platform::arduino

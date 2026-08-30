@@ -1,0 +1,24 @@
+{
+  "schema": "leshy.hil_delta_review.v1",
+  "id": "automation-inspector-1.0.0-dev.303",
+  "rationale": "Physically accept the already implemented passive Automation Inspector through the public nested UI. The only write adapter is a HIL-only exact-CID StorageGuard fixture below one disposable /leshy-hil/<run-id> directory; the product /leshy/automation/v1 namespace remains read-only and untouched. The version-only platformio.ini change is reviewed as non-behavioral. This delta does not add a trust store, execution, HID output or RF transmit path.",
+  "reviewed_cross_cutting_sha256": {
+    "firmware/leshy1/platformio.ini": "af5924fd4049d14ec0860e2bd1300b017262bd7c4b2091f477d615ab7dd1f4d3"
+  },
+  "required_host_checks": [
+    "native parser, policy, trust and admission tests under ASan/UBSan",
+    "source guard separates passive product reader from the bounded HIL mutation adapter",
+    "exact fixed fixture names, file and directory barriers, unknown-entry rejection and partial-create cleanup",
+    "EN/RU contract documentation and Python runner syntax",
+    "exact production build and resource budget"
+  ],
+  "required_hil_scenarios": [
+    "one changed-candidate flash on original board-01 only",
+    "exact enrolled SD CID and one new disposable scratch directory",
+    "public Lab to Automation Inspector navigation with two exact catalog entries",
+    "malformed package is rejected and unsigned valid package remains non-executable",
+    "two byte-stable TFT captures for malformed and unsigned summaries in EN and RU",
+    "zero Action invocations, HID reports, resources acquired and RF transmit attempts",
+    "exact fixture cleanup, product namespace untouched, original language restored and final Home none lease zero"
+  ]
+}

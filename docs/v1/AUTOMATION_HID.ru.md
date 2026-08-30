@@ -102,11 +102,16 @@ inspection.
 
 1. `done` — canonical parser, passive summary, interface verifier, strict ordering
    policy/admission и mutation/ceiling/permission/target negative host tests.
-2. `implemented / physical nested gate next` — bounded discovery package на SD и
-   compact EN/RU UI Лаборатория → Automation Inspector; malformed и unsigned packages
-   можно посмотреть, но нельзя запустить. Exact dev.289 host/build удерживает каждую
-   EN/RU label в измеренном pixel budget; exact dev.288 физически принимает top-level
-   route Lab и zero-output boundary, но ещё не nested `.lhau` summary frames.
+2. `implemented / physical nested delta prepared` — bounded discovery package на SD
+   и compact EN/RU UI Лаборатория → Automation Inspector; malformed и unsigned
+   packages можно посмотреть, но нельзя запустить. Exact dev.289 host/build удерживает
+   каждую EN/RU label в измеренном pixel budget; exact dev.288 физически принимает
+   top-level route Lab и zero-output boundary. Delta dev.303 создаёт только fixed
+   `malformed.lhau` и `unsigned.lhau` внутри одного exact-CID каталога StorageGuard
+   `/leshy-hil/<run-id>`, проходит public nested UI на EN/RU, требует две byte-stable
+   frames для каждого результата и zero output Action/HID/resource, а затем удаляет
+   exact fixture до разрешения `hil.end`. Product namespace `/leshy/automation/v1`
+   не изменяется; execution и RF transmit не запускаются.
 3. `planned` — real P-256 trust adapter и owner-visible enrollment/revocation keys;
    cold restore и interaction Device Lock.
 4. `planned` — execution named Action-only package через shared dispatcher, audit и

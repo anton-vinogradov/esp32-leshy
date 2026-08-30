@@ -1,9 +1,32 @@
 #include "BoardAutomationPackageReader.h"
 
 #include <cstdio>
+#include <cstring>
 #include <limits>
 
 namespace leshy1::platform::arduino {
+
+bool validAutomationPackageLibraryRoot(const char* root) {
+    if (root == nullptr) return false;
+    if (std::strcmp(root, kAutomationPackageLibraryRoot) == 0) return true;
+    const std::size_t prefixSize = std::strlen(storage::kScratchRoot);
+    if (std::strncmp(root, storage::kScratchRoot, prefixSize) != 0) {
+        return false;
+    }
+    const char* token = root + prefixSize;
+    if (token[0] == '\0') return false;
+    for (std::size_t index = 0U; index <= storage::kRunIdMax; ++index) {
+        const char value = token[index];
+        if (value == '\0') return index != 0U;
+        if (index == storage::kRunIdMax) return false;
+        const bool alphaNumeric =
+            (value >= 'a' && value <= 'z') ||
+            (value >= 'A' && value <= 'Z') ||
+            (value >= '0' && value <= '9');
+        if (!alphaNumeric && value != '-' && value != '_') return false;
+    }
+    return false;
+}
 
 const char* boardAutomationPackageStatusName(
     BoardAutomationPackageStatus status) {
@@ -26,12 +49,12 @@ const char* boardAutomationPackageStatusName(
 bool BoardAutomationPackageReader::formatRoot(
     std::uint8_t driveNumber, char* output, std::size_t capacity) const {
     if (driveNumber >= FF_VOLUMES || driveNumber > 9U || output == nullptr ||
-        capacity == 0U) {
+        capacity == 0U || !validAutomationPackageLibraryRoot(root_)) {
         return false;
     }
     const int written = std::snprintf(
         output, capacity, "%u:%s", static_cast<unsigned>(driveNumber),
-        kAutomationPackageLibraryRoot);
+        root_);
     return written > 0 && static_cast<std::size_t>(written) < capacity;
 }
 
@@ -40,12 +63,12 @@ bool BoardAutomationPackageReader::formatFile(
     std::size_t capacity) const {
     if (!apps::automation::validAutomationPackageName(name) ||
         driveNumber >= FF_VOLUMES || driveNumber > 9U || output == nullptr ||
-        capacity == 0U) {
+        capacity == 0U || !validAutomationPackageLibraryRoot(root_)) {
         return false;
     }
     const int written = std::snprintf(
         output, capacity, "%u:%s/%s", static_cast<unsigned>(driveNumber),
-        kAutomationPackageLibraryRoot, name);
+        root_, name);
     return written > 0 && static_cast<std::size_t>(written) < capacity;
 }
 
