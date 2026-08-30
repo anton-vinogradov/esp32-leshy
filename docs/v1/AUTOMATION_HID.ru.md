@@ -7,10 +7,11 @@
 - **Workflow:** WF-08-A1/A2/A4
 - **Архитектура:** [ADR-002](adr/ADR-002-resource-policy.ru.md),
   [ADR-004](adr/ADR-004-action-boundary.ru.md)
-- **Состояние:** slices 1 и 2 приняты. Exact physical `1.0.0-dev.303` доказывает
-  passive nested route package на real exact-CID SD со stable EN/RU TFT evidence,
-  zero output Action/HID/resource/RF и complete cleanup scratch/Device Lock. Real
-  trust P-256 и active execution ещё не приняты
+- **Состояние:** slices 1 и 2 приняты. Slice 3 имеет host/build checkpoint в
+  `1.0.0-dev.304`: product теперь восстанавливает bounded canonical trust store
+  публичных ключей P-256 из NVS и использует real verifier mbedTLS для passive
+  inspection. Видимый владельцу UI import/revoke, cold physical acceptance и всё
+  active execution ещё не приняты
 
 ## Результат для пользователя
 
@@ -83,9 +84,21 @@ signature, unknown signer, invalid signature, unavailable verifier, unsupported
 algorithm или incompatible API остаются inspectable, но fail closed для execution.
 
 Первый host/build slice использует injected verifier contract, чтобы tests доказали
-exact byte span и ordering. Product execution остаётся disabled до подключения real
-P-256 verifier и owner-visible workflow trust-store с physical acceptance. Ни test
-double, ни локально придуманный checksum не может разрешить product package.
+exact byte span и ordering. Exact host/build `1.0.0-dev.304` подключает production
+passive Inspector к проверке ECDSA-P256/SHA-256 mbedTLS и canonical trust record NVS.
+Store содержит максимум четыре публичных SEC1 point, labels и derived key ID 8 bytes;
+private key там никогда нет. Отсутствующий record восстанавливается как пустой готовый
+store, malformed record fail closed. Enrollment/revocation atomic, считает generations
+и требует одновременно unlocked state Device Lock и fresh confirmation. Пока нет
+owner-visible UI и physical cold test, эти mutation methods намеренно недостижимы из
+product UI, а execution остаётся disabled. Ни test double, ни локально придуманный
+checksum не может разрешить product package.
+
+Enrollment artifact — fixed public-only bundle `LHAK` v1 размером 128 bytes.
+Защищённый GitHub environment `automation-signing` хранит
+`LESHY_AUTOMATION_P256_PRIVATE_KEY_PEM` как secret, выводит public key внутри job и
+загружает только `.lhak` плюс public metadata JSON. Временный private file удаляется
+trap job и никогда не попадает в commit или artifact.
 
 ## Boundary execution
 
@@ -112,8 +125,11 @@ inspection.
    `hil.end`. [Machine-checked evidence](../../tests/hil/evidence/board-01-automation-inspector-1.0.0-dev.303.json)
    связывает single-flash lineage, hashes candidate, exact CID и final
    Home/none/lease 0. Product namespace `/leshy/automation/v1` не изменяется.
-3. `planned` — real P-256 trust adapter и owner-visible enrollment/revocation keys;
-   cold restore и interaction Device Lock.
+3. `in progress` — exact host/build dev.304 подключает real verifier P-256,
+   canonical NVS store на четыре ключа, atomic authenticated mutation contract и
+   public-only enrollment bundle из GitHub. Owner-visible UI import/revoke, cold
+   restore и physical interaction Device Lock остаются открыты; execution всё ещё
+   disconnected.
 4. `planned` — execution named Action-only package через shared dispatcher, audit и
    cleanup timeout/cancel/panic.
 5. `planned` — USB HID на exact owned fixture, затем отдельно BLE HID; каждый получает

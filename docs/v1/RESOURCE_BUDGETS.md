@@ -1659,6 +1659,21 @@ the isolated Device Lock KDF and nested inspection run. The final lease is zero 
 all scratch data is removed. This focused delta advances cadence to 1/15; it does not
 replace the dev.302 full checkpoint or claim real trust/execution.
 
+Real passive P-256 trust foundation bound `RB-M218`: exact host/build
+`1.0.0-dev.304` at source `96a55a4d46f3171690cb3778d99acc2a95cbd0c2`
+uses 233,048 B static RAM, 3,546,516 B linked flash and
+3,546,672/3,612,208 B app/factory images, leaving 647,632 B in the 4 MiB OTA
+slot. App/factory/ELF/map SHA-256 values are
+`31aa125abb98b5ec3ad9f3c9d20d08ea13cb8910238bf43eeacd3dfb77af1c45`/
+`c26e5349f9747ef268841139592f47288bbd034703adc2c130979f19f303fd94`/
+`a0e288aea0a96574675e65f264042dbf30dd55999c6b9e3e6866a537ec6c538b`/
+`1a7cede1af9897f43205d6413a749bc10f025a332c84c0bb59569b8d9a0d2c08`.
+Against dev.303 this is +424 B static RAM and +4,720 B linked/app/factory,
+with 4,720 B less OTA headroom. The delta funds a fixed four-key NVS record,
+real mbedTLS P-256 verification and production wiring; it adds no resident package,
+private key, HID queue or execution engine. Focused host and build checks pass; no
+physical heap claim is made and cadence remains 1/15.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

@@ -7,10 +7,11 @@
 - **Workflow:** WF-08-A1/A2/A4
 - **Architecture:** [ADR-002](adr/ADR-002-resource-policy.md),
   [ADR-004](adr/ADR-004-action-boundary.md)
-- **State:** slices 1 and 2 are accepted. Exact physical `1.0.0-dev.303` proves the
-  passive nested package route on real exact-CID SD with stable EN/RU TFT evidence,
-  zero Action/HID/resource/RF output and complete scratch/Device Lock cleanup. Real
-  P-256 trust and active execution remain unaccepted
+- **State:** slices 1 and 2 are accepted. Slice 3 has a host/build checkpoint in
+  `1.0.0-dev.304`: the product now restores a bounded canonical P-256 public-key
+  trust store from NVS and uses a real mbedTLS verifier for passive inspection. The
+  owner-visible import/revoke UI, cold physical acceptance and all active execution
+  remain unaccepted
 
 ## User outcome
 
@@ -83,9 +84,21 @@ signature, unknown signer, invalid signature, unavailable verifier, unsupported
 algorithm, or incompatible API remain inspectable but fail closed for execution.
 
 The first host/build slice uses an injected verifier contract so tests can prove the
-exact byte span and ordering. Production execution remains disabled until the real
-P-256 verifier and an owner-visible trust-store workflow are connected and physically
-accepted. No test double or locally invented checksum may promote a product package.
+exact byte span and ordering. Exact host/build `1.0.0-dev.304` connects the production
+passive Inspector to mbedTLS ECDSA-P256/SHA-256 verification and a canonical NVS
+trust record. The store contains at most four public SEC1 points, labels and derived
+8-byte key IDs; it never contains a private key. Missing storage restores as an empty
+ready store, while malformed storage fails closed. Enrollment/revocation is atomic,
+generation-counted and requires both an unlocked Device Lock state and a fresh
+confirmation. Until the owner-visible UI and physical cold test exist, those mutation
+methods are deliberately unreachable from the product UI and execution remains
+disabled. No test double or locally invented checksum may promote a product package.
+
+An enrollment artifact is a fixed 128-byte public-only `LHAK` v1 bundle. The protected
+GitHub `automation-signing` environment keeps
+`LESHY_AUTOMATION_P256_PRIVATE_KEY_PEM` as a secret, derives the public key inside the
+job and uploads only `.lhak` plus public JSON metadata. The private temporary file is
+removed by the job trap and is never committed or uploaded.
 
 ## Execution boundary
 
@@ -112,8 +125,11 @@ inspection.
    fixture before HIL ends. The [machine-checked evidence](../../tests/hil/evidence/board-01-automation-inspector-1.0.0-dev.303.json)
    binds the single-flash lineage, candidate hashes, exact CID and final
    Home/none/lease 0. The product `/leshy/automation/v1` namespace is never written.
-3. `planned` — real P-256 trust adapter and owner-visible key enrollment/revocation;
-   cold restore and Device Lock interaction.
+3. `in progress` — exact host/build dev.304 connects the real P-256 verifier,
+   canonical four-key NVS store, atomic authenticated mutation contract and
+   GitHub-built public-only enrollment bundle. Owner-visible import/revoke UI, cold
+   restore and physical Device Lock interaction remain open; execution is still
+   disconnected.
 4. `planned` — named Action-only package execution through the shared dispatcher,
    audit and timeout/cancel/panic cleanup.
 5. `planned` — USB HID on an exact owned fixture, then separately BLE HID; each gets a
