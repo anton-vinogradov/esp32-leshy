@@ -294,6 +294,22 @@ characteristic read/write или subscription отсутствуют. User workf
 квалифицирован: product UI/export, live NimBLE adapter и focused physical cleanup HIL
 остаются открыты.
 
+Exact physical `1.0.0-dev.270` продвигает CAP-051 по
+`E-BUILD-190`/`E-AUTO-165`/`E-HIL-203`/`E-UX-060`/`RB-M201`. Отклонённый candidate
+dev.269 вернулся из Bluetooth в Home до одного live scan после добавления raw capture
+1 856 B как resident; он всё же освободил Home/none/lease 0 и сохранён как negative.
+Dev.270 overlays этот capture с взаимоисключающим event Airspace Guard и возвращает
+потерянную heap. Один fresh-flash exact-CID run остаётся на BLE route полный bounded
+window 15 265 ms, открывает «RAW пакеты» selected device, принимает два exact selected
+records/36 bytes, freeze-ит и проверяет versioned stream в памяти с zero
+invalid/drop/allocation/fallback counters, автоматически проверяет hashes четырёх TFT
+frames и выходит Home/none/lease 0 с safety armed.
+[Privacy-minimal acceptance](../../tests/hil/evidence/board-01-ble-inspector-1.0.0-dev.270.json)
+и [rejected predecessor](../../tests/hil/evidence/board-01-ble-inspector-1.0.0-dev.269-failed.json)
+не сохраняют raw address, payload или screenshot. Это принимает passive product path,
+но не connected GATT; его adapter, permission/cleanup UI и positive/negative physical
+matrix остаются открыты.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases. Physical

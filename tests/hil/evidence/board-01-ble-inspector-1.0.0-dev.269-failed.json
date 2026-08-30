@@ -1,0 +1,38 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "4ae9af54a1e434f4e05bc87ef1dee69106cf799a62d6370bfa9ed47f450c88fb",
+    "factory_sha256": "6e75ee882b5e57ef55ce92b30aa696e5257b4974fb828a46ade9f6ddb55109c2",
+    "firmware_sha256": "872713b9ea1e8aeed1c3d642326e1ad93d11d74f3298c0207b43869a0927caea",
+    "map_sha256": "2143bf14b8e5ba795cbe2d16bf437c0a321a24674858752d87eb1cdfbb2ae1ba",
+    "source_commit": "ee5d41e2c7a6680b9a2d718fb1783e147e3912d4",
+    "version": "1.0.0-dev.269"
+  },
+  "evidence": {
+    "raw_artifact_index_sha256": "9ca2e702a150dbf7d7a8ad4040dbc6e69099786c8f89fb55a7bd8f8cf0a44b3c",
+    "raw_run_sha256": "114e329bf22556d19f3ece4dcc1e03ff34040aa49ecc085a7924096f08137f98",
+    "run_id": "4583422824e6aa28c8149a67988ec443"
+  },
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "observed": {
+    "boot_heap_free": 72020,
+    "boot_heap_min_free": 71748,
+    "boot_heap_total": 145188,
+    "cleanup_complete": true,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "gate_eligible": false,
+    "live_ble_reached": false,
+    "preflight_before_flash": true,
+    "route_bounced_home": true,
+    "single_application_flash": true
+  },
+  "privacy": {
+    "raw_ble_addresses_retained": false,
+    "raw_payload_retained": false,
+    "screenshots_retained": false
+  },
+  "schema": "leshy.ble_inspector_hil.rejected.v1",
+  "status": "failed_ble_entry_bounced_home"
+}

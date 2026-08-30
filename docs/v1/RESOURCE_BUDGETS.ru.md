@@ -1361,6 +1361,28 @@ SHA-256 ELF/map —
 integration обязан выбрать для bounded objects явный non-stack lifetime и повторно
 измерить live NimBLE heap до physical admission.
 
+Bound passive product BLE Inspector `RB-M201`: exact physical `1.0.0-dev.270` на
+source `cd542afac79f696a2cdcf3d7abe4bd18f3bc4a82` использует 231 760 B static RAM,
+лишь на 24 B больше `RB-M200`. Отклонённый dev.269 сделал raw capture 1 856 B
+resident, поднял static RAM до 233 616 B, снизил boot heap total до 145 188 B и
+возвращал Bluetooth route в Home до live scan. Dev.270 помещает capture с explicit
+lifetime в union с уже resident BLE event Airspace Guard 4,6 KiB; runtime guards
+запрещают simultaneous ownership. Linked flash — 3 462 848 B. Размеры app/factory —
+3 463 344/3 528 880 B с SHA-256
+`b4a97811ec6b36fd623e471e866b69dc2659a49c1dab6934c1b35dc156cb4c37`/
+`b504f9e68006bc0c4c26b29575fca771006a44b928da652f8ea5b3f1113d1b47`;
+SHA-256 ELF/map —
+`ea4321b7ff7e5ca31b1f58183fe821e18baa358e948d9fda90e50214ed848d62`/
+`db96451afd033fb264826ba413df4d70d276bb63fe0db010606cf7e01a094d7b`.
+В OTA slot 4 MiB остаётся 730 960 B, на 206 672 B выше mandatory floor. Physical
+boot heap total/free/min — 147 044/73 876/73 604 B. Stable entry sample сообщает
+1 816 B free/1 012 B largest после старта NimBLE; после заполнения catalog на 32
+device telemetry достигает 572 B/500 B. Этого достаточно только для принятого
+passive capture. Live GATT нельзя допускать, пока memory passive scan/catalog не
+освобождена или переиспользована и connected lifecycle не измерен заново. Compact
+[acceptance](../../tests/hil/evidence/board-01-ble-inspector-1.0.0-dev.270.json)
+сохраняет только hashes/counts; raw BLE addresses, payloads и screenshots исключены.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

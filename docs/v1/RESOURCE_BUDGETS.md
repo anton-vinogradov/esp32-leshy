@@ -1372,6 +1372,28 @@ The 4 MiB OTA slot retains 733,520 B, 209,232 B above the mandatory floor. Produ
 integration must choose explicit non-stack lifetime for these bounded objects and
 re-measure live NimBLE heap before physical admission.
 
+BLE Inspector passive product bound `RB-M201`: exact physical
+`1.0.0-dev.270` at source `cd542afac79f696a2cdcf3d7abe4bd18f3bc4a82`
+uses 231,760 B static RAM, only 24 B above `RB-M200`. Rejected dev.269 had made the
+1,856 B raw capture resident, raised static RAM to 233,616 B, reduced boot heap total
+to 145,188 B and bounced the Bluetooth route to Home before a live scan. Dev.270
+places that capture under explicit lifetime in a union with the already resident
+4.6 KiB Airspace Guard BLE event; runtime guards forbid simultaneous ownership.
+Linked flash is 3,462,848 B. App/factory sizes are 3,463,344/3,528,880 B with
+SHA-256 `b4a97811ec6b36fd623e471e866b69dc2659a49c1dab6934c1b35dc156cb4c37`/
+`b504f9e68006bc0c4c26b29575fca771006a44b928da652f8ea5b3f1113d1b47`;
+ELF/map SHA-256 are
+`ea4321b7ff7e5ca31b1f58183fe821e18baa358e948d9fda90e50214ed848d62`/
+`db96451afd033fb264826ba413df4d70d276bb63fe0db010606cf7e01a094d7b`.
+The 4 MiB OTA slot retains 730,960 B, 206,672 B above the mandatory floor. Physical
+boot heap total/free/min is 147,044/73,876/73,604 B. The stable entry sample reports
+1,816 B free/1,012 B largest after NimBLE start; after the 32-device catalog fills,
+telemetry reaches 572 B/500 B. This is sufficient only for the accepted passive
+capture. Live GATT may not be admitted until passive-scan/catalog memory is released
+or reused and the connected lifecycle is re-measured. The compact
+[acceptance](../../tests/hil/evidence/board-01-ble-inspector-1.0.0-dev.270.json)
+retains hashes/counts only; raw BLE addresses, payloads and screenshots are omitted.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

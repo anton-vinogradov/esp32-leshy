@@ -1,0 +1,98 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "ea4321b7ff7e5ca31b1f58183fe821e18baa358e948d9fda90e50214ed848d62",
+    "factory_sha256": "b504f9e68006bc0c4c26b29575fca771006a44b928da652f8ea5b3f1113d1b47",
+    "firmware_sha256": "b4a97811ec6b36fd623e471e866b69dc2659a49c1dab6934c1b35dc156cb4c37",
+    "map_sha256": "db96451afd033fb264826ba413df4d70d276bb63fe0db010606cf7e01a094d7b",
+    "source_commit": "cd542afac79f696a2cdcf3d7abe4bd18f3bc4a82",
+    "version": "1.0.0-dev.270"
+  },
+  "evidence": {
+    "checker_sha256": "4e8ab092c57a5d1bd90a4cbacd559aa9100a062d4e880a8dd2da317bfeaee5a6",
+    "raw_artifact_index_sha256": "3705b8a725c655450f3c2719af01d707cf90b4439c78b82f8458c73fb4f49e9f",
+    "raw_run_sha256": "a743d700814c9b21bafd85c4a44d5c9e1bfd8763bea8eeb30ea55b16310e0521",
+    "run_id": "2329aebe7922d040c0dc0aad8a5c1b12",
+    "runner_sha256": "4bf5f1c5e419468723ea3eda045b72dc825b9518216d27fff4cca11d13e16c6f",
+    "screenshots": {
+      "frozen": {
+        "png_sha256": "0e5d71a341848e4370823873336704f77b7d7cf7ababfdbce14b7f298144c2cd",
+        "rgb565_sha256": "338db37d61212da25bb859988fbff6607c72d3521f265bf209ab02fe28d70453"
+      },
+      "home_after": {
+        "png_sha256": "7f4e84695b5a881f59f9eefd552bcf4af4ce165b611ce9f0e62b9cb2a11292bc",
+        "rgb565_sha256": "d61fe5f826d1e86cf5b15a4071d7af2cc26d0848e59a80d60879fff3740b46b7"
+      },
+      "running_first": {
+        "png_sha256": "f20d20822711437500164d684adceb607605b3a0c9faae7264119c135406e00b",
+        "rgb565_sha256": "a870589340592d6f33e3aa59247a6b1f6cb9d2a0579f7ee6cdaa2e124ee321da"
+      },
+      "running_second": {
+        "png_sha256": "902f0f1c8a72cab920191420f12f8dbca50b70e631cc6e24c538df41b1e4596f",
+        "rgb565_sha256": "9393d0f57e2c08ae396fe5f2ba79451962e9877f454c65d1acbc92b8f211109c"
+      }
+    },
+    "source_guard_sha256": "15bfd77d97c35b52bb229988496632a54bc8c1bd9cb48109f50aa9902e1eee92"
+  },
+  "evidence_ids": [
+    "E-BUILD-190",
+    "E-AUTO-165",
+    "E-HIL-203",
+    "E-UX-060",
+    "RB-M201"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "privacy": {
+    "raw_ble_addresses_retained": false,
+    "raw_payload_retained": false,
+    "screenshot_hashes_retained": true,
+    "screenshots_retained": false
+  },
+  "schema": "leshy.ble_inspector_hil.acceptance.v1",
+  "scope": {
+    "cardputer_touched": false,
+    "clone_touched": false,
+    "incremental_rows_only": true,
+    "mac_wifi_touched": false,
+    "manual_button_presses": 0,
+    "passive_ble_only": true,
+    "raw_export_checked_in_memory": true,
+    "raw_private_evidence_retained": false,
+    "screenshots_automatic": true,
+    "selected_target_only": true,
+    "single_flash": true
+  },
+  "status": "pass_ble_inspector_receive_capture",
+  "verified": {
+    "atomic_row_allocation_failures": 0,
+    "atomic_row_pushes": 22,
+    "ble_begin_error": 0,
+    "ble_begin_stage": "ready",
+    "boot_heap_free": 73876,
+    "boot_heap_total": 147044,
+    "buzzer_inactive": true,
+    "content_clears": 1,
+    "direct_row_fallbacks": 0,
+    "dropped_records": 0,
+    "entry_scan_cycles": 5,
+    "entry_stability_ms": 15265,
+    "entry_stability_samples": 55,
+    "export_complete": true,
+    "export_stream_sha256": "7c913d7bd6045a2d8419ffc208abe6434d77ef19f35530cdd1141c8a95c572ae",
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "final_safety_state": "armed",
+    "gatt_started": false,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "invalid_records": 0,
+    "passive_only": true,
+    "payload_bytes": 36,
+    "preflight_before_flash": true,
+    "receive_only": true,
+    "records": 2,
+    "selected_target_stable": true,
+    "single_application_flash": true
+  }
+}

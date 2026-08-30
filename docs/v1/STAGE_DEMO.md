@@ -295,6 +295,22 @@ no pairing, characteristic read/write or subscription operation. This does not y
 qualify a user workflow: product UI/export, the live NimBLE adapter and focused
 physical cleanup HIL remain open.
 
+Exact physical `1.0.0-dev.270` advances CAP-051 through
+`E-BUILD-190`/`E-AUTO-165`/`E-HIL-203`/`E-UX-060`/`RB-M201`. The rejected dev.269
+candidate returned from Bluetooth to Home before one live scan after making the
+1,856 B raw capture resident; it still released Home/none/lease 0 and is preserved
+as a negative. Dev.270 overlays that capture with the mutually exclusive Airspace
+Guard event and restores the missing heap. One fresh-flash exact-CID run stays on
+the BLE route for the complete 15,265 ms bounded window, opens selected-device Raw
+packets, receives two exact selected records/36 bytes, freezes and validates the
+versioned stream in memory with zero invalid/drop/allocation/fallback counters,
+checks four TFT frame hashes automatically and exits Home/none/lease 0 with safety
+armed. [Privacy-minimal acceptance](../../tests/hil/evidence/board-01-ble-inspector-1.0.0-dev.270.json)
+and the [rejected predecessor](../../tests/hil/evidence/board-01-ble-inspector-1.0.0-dev.269-failed.json)
+retain no raw address, payload or screenshot. This accepts the passive product path,
+not connected GATT; its adapter, permission/cleanup UI and positive/negative physical
+matrix remain open.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases. Physical HIL is

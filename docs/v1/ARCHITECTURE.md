@@ -866,3 +866,17 @@ transport error all enter disconnect cleanup. Ownership is released only after t
 transport reports disconnected; otherwise the state and lease remain visibly
 `cleanup_pending`. Product integration must allocate the bounded capture/controller
 outside a worker stack and re-measure live NimBLE heap.
+
+Exact dev.270 implements the passive product lifetime without another resident
+buffer: a tagged union overlays `BleInspectorCapture` with the larger
+`AirspaceGuardBleWorkerEvent`, because Navigator permits only one of those foreground
+applications at a time. Placement construction/destruction happens only at Bluetooth
+entry/terminal exit under the capture critical section. Airspace worker admission,
+Airspace state diagnostics and Bluetooth entry each fail closed if the other member
+owns the workspace. The selected-device capture freezes before an over-capacity
+insert, so reaching record 32 does not manufacture a drop. TFT rendering is capped
+at 4 Hz, ignores other identities for repaint, clears content once and updates only
+atomic rows. Export is stream fail closed: the header is incomplete and only the
+terminal record declares completion. Live GATT must use a later disjoint lifecycle;
+the passive HIL leaves too little free heap to connect while its scan/catalog remain
+resident.

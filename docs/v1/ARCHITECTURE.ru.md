@@ -970,3 +970,17 @@ Unexpected identity, malformed/over-capacity discovery, timeout и transport err
 transport `disconnected`; иначе state и lease честно остаются `cleanup_pending`.
 Product integration должна выделять bounded capture/controller вне worker stack и
 повторно измерить live NimBLE heap.
+
+Exact dev.270 реализует passive product lifetime без нового resident buffer: tagged
+union overlays `BleInspectorCapture` с более крупным `AirspaceGuardBleWorkerEvent`,
+поскольку Navigator допускает только одно из этих foreground applications. Placement
+construction/destruction выполняется только при входе Bluetooth/terminal exit под
+critical section capture. Admission worker Airspace, diagnostics state Airspace и
+вход Bluetooth fail closed, если другим member владеет противоположный path.
+Selected-device capture freeze-ится до over-capacity insert, поэтому достижение record
+32 не создаёт искусственный drop. TFT renderer ограничен 4 Hz, игнорирует другие
+identity как repaint-trigger, очищает content один раз и обновляет только atomic rows.
+Export fail closed на уровне stream: header объявлен incomplete, и только terminal
+record объявляет completion. Live GATT обязан использовать следующий disjoint
+lifecycle; passive HIL оставляет слишком мало free heap для connect, пока resident
+scan/catalog не освобождены.
