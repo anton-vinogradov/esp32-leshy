@@ -1413,6 +1413,30 @@ retains exact hashes/counts and omits the fixture label, PID, BLE address, selec
 identity and screenshots. Physical wrong-peer, timeout, conflict and failed-cleanup
 paths remain mandatory before CAP-051 completion.
 
+BLE Inspector fail-closed matrix and recovery bound `RB-M203`: exact physical
+`1.0.0-dev.276` at source `6b5d27b2253bd7b335bab8754379a5ce51a0a5d2` uses
+230,680 B static RAM and 3,480,736 B linked flash. Its accepted app/factory images
+are 3,480,896/3,546,432 B with SHA-256
+`e98bf5e4825c438ec5629ffd05ddf58168552a42fef3d40969aa0b9c1206cae9`/
+`6a3f0463819066d4ae8ea8ab548491a0c58da76dcb7d073d56025a66b774c735`;
+the embedded ELF identity is
+`ae9782374b0a9b17da9e8d7a52c4ed86d9a71b74c10962660c79125d0e561dbd`
+and the map SHA is
+`dbddd1990055251ce6509ea7c176019608aeb289157489207a5348370d7d3bf3`.
+The app leaves 713,408 B in the 4 MiB OTA slot. Reducing the drained-at-5-ms passive
+callback queue from 64 to 32 reports returns 1,304 B static RAM; the full physical
+matrix reaches high-water 3/32 with zero drops. Fresh boot heap total/free is
+148,124/74,828 B. Steady recovery starts GATT with 73,308 B free and 32,756 B as
+the largest block; after NimBLE initialization it retains 1,540 B free and a
+1,480 B minimum while enumerating 5 services/7 characteristics. One fresh focused
+timeout→recovery run and one no-flash exact-reuse full matrix accept wrong peer,
+timeout, resource conflict and failed disconnect as visible terminal failures with
+complete cleanup, then accept positive recovery with zero pair/read/write/subscribe
+operations. The compact
+[acceptance](../../tests/hil/evidence/board-01-ble-gatt-negative-1.0.0-dev.276.json)
+retains hashes/counts only and omits fixture label/PID, raw address, selected identity
+and screenshots. This completes CAP-051 without using clone, Cardputer or Mac Wi-Fi.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

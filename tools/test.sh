@@ -136,6 +136,7 @@ run_opaque_evidence_check() {
 python3 "$repo_dir/tools/check_ble_inspector_contract.py"
 python3 "$repo_dir/tools/check_ble_inspector_acceptance.py"
 python3 "$repo_dir/tools/check_ble_gatt_acceptance.py"
+python3 "$repo_dir/tools/check_ble_gatt_negative_acceptance.py"
 
 "${CXX:-c++}" \
     -std=c++17 \

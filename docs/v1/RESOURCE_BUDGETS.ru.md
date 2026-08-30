@@ -1402,6 +1402,29 @@ characteristic pair/read/write/subscribe operations отсутствуют. Comp
 identity и screenshots. Physical paths wrong-peer, timeout, conflict и failed-cleanup
 обязательны до завершения CAP-051.
 
+Bound fail-closed matrix и recovery BLE Inspector `RB-M203`: exact physical
+`1.0.0-dev.276` на source `6b5d27b2253bd7b335bab8754379a5ce51a0a5d2`
+использует 230 680 B static RAM и 3 480 736 B linked flash. Принятые app/factory
+images занимают 3 480 896/3 546 432 B и имеют SHA-256
+`e98bf5e4825c438ec5629ffd05ddf58168552a42fef3d40969aa0b9c1206cae9`/
+`6a3f0463819066d4ae8ea8ab548491a0c58da76dcb7d073d56025a66b774c735`;
+embedded ELF identity —
+`ae9782374b0a9b17da9e8d7a52c4ed86d9a71b74c10962660c79125d0e561dbd`,
+map SHA — `dbddd1990055251ce6509ea7c176019608aeb289157489207a5348370d7d3bf3`.
+App оставляет 713 408 B в OTA slot 4 MiB. Уменьшение passive callback queue,
+drained каждые 5 ms, с 64 до 32 reports возвращает 1 304 B static RAM; полная
+physical matrix достигает high-water 3/32 с zero drops. Fresh boot heap total/free —
+148 124/74 828 B. Steady recovery начинает GATT с 73 308 B free и largest block
+32 756 B; после инициализации NimBLE остаются 1 540 B free и minimum 1 480 B при
+перечислении 5 services/7 characteristics. Один fresh focused timeout→recovery run
+и одна full matrix на no-flash exact reuse принимают wrong peer, timeout, resource
+conflict и failed disconnect как видимые terminal failures с complete cleanup,
+после чего принимают positive recovery с zero pair/read/write/subscribe operations.
+Compact [acceptance](../../tests/hil/evidence/board-01-ble-gatt-negative-1.0.0-dev.276.json)
+сохраняет только hashes/counts и исключает label fixture/PID, raw address, selected
+identity и screenshots. Это завершает CAP-051 без использования clone, Cardputer
+или Wi-Fi Mac.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты
