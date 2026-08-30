@@ -59,6 +59,8 @@ def main() -> int:
         "envelope_header_valid": True,
         "physical_size_exact": True,
         "ciphertext_differs": True,
+        "io_failure": "none",
+        "io_result": "ok",
         "queue_drops": 0,
         "append_drops": 0,
         "owned_after": 0,

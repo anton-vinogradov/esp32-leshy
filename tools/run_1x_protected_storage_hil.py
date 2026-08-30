@@ -171,7 +171,10 @@ def main() -> int:
                 "physical_size_exact": True,
                 "ciphertext_differs": True,
                 "io_failure": "none",
-                "io_result": "FR_OK",
+                # ArduinoFsSessionStoreIo exposes stable API names rather than
+                # the FatFs enum token; successful FRESULT is reported as
+                # "ok" by fresultName(FR_OK).
+                "io_result": "ok",
                 "enrollment_saved": True,
                 "owned_after": 0,
                 "identity_cleanup": True,
