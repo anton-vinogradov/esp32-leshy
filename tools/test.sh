@@ -14,8 +14,11 @@ if [[ $# -gt 0 ]]; then
         if [[ "$2" == "serial-console" ]]; then
             exec "$(cd "$(dirname "$0")" && pwd)/test-serial-console.sh"
         fi
+        if [[ "$2" == "automation-hid" ]]; then
+            exec "$(cd "$(dirname "$0")" && pwd)/test-automation-hid.sh"
+        fi
     fi
-    echo "usage: $0 [--only device-lock|serial-console]" >&2
+    echo "usage: $0 [--only automation-hid|device-lock|serial-console]" >&2
     exit 2
 fi
 
@@ -158,6 +161,7 @@ python3 "$repo_dir/tools/check_product_survey_terminal_acceptance.py"
 
 "$repo_dir/tools/test-device-lock.sh"
 "$repo_dir/tools/test-serial-console.sh"
+"$repo_dir/tools/test-automation-hid.sh"
 
 "${CXX:-c++}" \
     -std=c++17 \
