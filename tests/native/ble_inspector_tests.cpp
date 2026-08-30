@@ -285,6 +285,25 @@ void testGattTimeoutDisconnectFailureRemainsFailClosed() {
     CHECK(!inspector.ownsRadio());
 }
 
+void testGattHilTimeoutPreservesMonotonicCleanupContinuity() {
+    leshy1::kernel::runtime::ResourceBroker broker;
+    FakeTransport transport;
+    BleGattInspector inspector(broker, transport);
+    advanceToConnecting(&inspector);
+    transport.disconnectStatus = BleGattDisconnectStatus::Pending;
+    CHECK(inspector.timeoutForHil(1200000ULL));
+    CHECK(inspector.state() == BleGattInspectorState::CleanupPending);
+    CHECK(inspector.failure() == BleGattInspectorFailure::Timeout);
+    CHECK(inspector.cleanupCause() == BleGattInspectorFailure::Timeout);
+    CHECK(inspector.ownsRadio());
+    transport.pollStatus = BleGattDisconnectStatus::Disconnected;
+    CHECK(inspector.pollCleanup(1200001ULL));
+    CHECK(inspector.state() == BleGattInspectorState::Failed);
+    CHECK(inspector.failure() == BleGattInspectorFailure::Timeout);
+    CHECK(inspector.cleanupComplete());
+    CHECK(!inspector.ownsRadio());
+}
+
 void testGattResourceConflictAndStaleConfirmationFailClosed() {
     leshy1::kernel::runtime::ResourceBroker broker;
     FakeTransport transport;
@@ -359,6 +378,7 @@ int main() {
     testGattHappyPathPreservesMetadataAndBackCleansPendingConnection();
     testGattNeverFallsBackToUnexpectedIdentity();
     testGattTimeoutDisconnectFailureRemainsFailClosed();
+    testGattHilTimeoutPreservesMonotonicCleanupContinuity();
     testGattResourceConflictAndStaleConfirmationFailClosed();
     testGattConnectAndDiscoveryStartFailuresKeepHonestOwnership();
     std::puts("BLE Inspector tests passed");

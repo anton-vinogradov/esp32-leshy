@@ -375,6 +375,14 @@ bool BleGattInspector::tick(std::uint64_t nowMonotonicUs) {
     return false;
 }
 
+bool BleGattInspector::timeoutForHil(std::uint64_t nowMonotonicUs) {
+    if (!activeConnectionState() || !validEventTime(nowMonotonicUs)) {
+        return false;
+    }
+    return requestCleanup(BleGattInspectorFailure::Timeout, true,
+                          nowMonotonicUs);
+}
+
 bool BleGattInspector::pollCleanup(std::uint64_t nowMonotonicUs) {
     if (state_ != BleGattInspectorState::CleanupPending ||
         nowMonotonicUs < lastEventUs_) {

@@ -132,7 +132,6 @@ class BoardBleGattInspectorTransport final
     : public services::ble::BleGattInspectorTransport {
 public:
     static constexpr std::uint32_t kConnectTimeoutMs = 8000U;
-    static constexpr std::uint32_t kDisconnectGraceMs = 2000U;
 
     bool bind(services::ble::BleGattInspector* inspector);
     bool unbind();
@@ -164,7 +163,6 @@ public:
     bool connecting() const;
     bool disconnected() const;
     bool cleanupRequested() const;
-    std::uint32_t forcedCleanupCount() const;
     bool armHilFault(BoardBleGattHilFault fault);
     void clearHilFault();
     bool consumeHilFault(BoardBleGattHilFault fault);
@@ -208,8 +206,6 @@ private:
     std::atomic_bool disconnected_{true};
     std::atomic_bool remoteDisconnectPending_{false};
     std::atomic_bool cleanupRequested_{false};
-    std::atomic<std::uint64_t> cleanupRequestedAtUs_{0U};
-    std::atomic<std::uint32_t> forcedCleanupCount_{0U};
     std::atomic<std::uint8_t> armedHilFault_{
         static_cast<std::uint8_t>(BoardBleGattHilFault::None)};
     std::atomic<std::uint8_t> lastConsumedHilFault_{

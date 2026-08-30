@@ -184,6 +184,9 @@ public:
     bool onTransportError(std::uint64_t nowMonotonicUs);
     bool back(std::uint64_t nowMonotonicUs);
     bool tick(std::uint64_t nowMonotonicUs);
+    // HIL-only seam: exercise the real timeout cleanup path without advancing
+    // the monotonic clock beyond subsequent physical transport callbacks.
+    bool timeoutForHil(std::uint64_t nowMonotonicUs);
     bool pollCleanup(std::uint64_t nowMonotonicUs);
     bool reset();
 

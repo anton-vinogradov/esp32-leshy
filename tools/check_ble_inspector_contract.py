@@ -124,9 +124,8 @@ for marker, label in (
     ("BoardBleGattHilFault::DisconnectFailure",
      "one-shot disconnect-failure fault"),
     ("hilFaultConsumedCount_", "fault-consumption evidence"),
-    ("kDisconnectGraceMs", "bounded cancelled-connect cleanup grace"),
-    ("forcedCleanupCount_", "missing-callback forced cleanup evidence"),
-    ("nowUs - requestedAtUs < graceUs", "bounded cleanup deadline"),
+    ("timeoutForHil(nowMonotonicUs)",
+     "monotonic-continuous physical timeout seam"),
 ):
     require(passive, marker, label)
 
