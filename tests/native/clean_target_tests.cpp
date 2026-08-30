@@ -3028,6 +3028,19 @@ void testBleDeviceIntelligenceAccumulatesPassiveFactsAndSignal() {
         record, 4000, &observation));
     CHECK(catalog.upsert(observation));
     leshy1::apps::ble::BleDeviceNavigationOrder navigation;
+    const std::uint64_t ownerTagHash =
+        leshy1::apps::ble::BleDeviceNavigationOrder::labelHash(
+            *catalog.at(0));
+    CHECK(ownerTagHash != 0U);
+    std::size_t labelMatches = 0U;
+    CHECK(navigation.indexOfLabelHash(
+              catalog, ownerTagHash, &labelMatches) == 0U);
+    CHECK(labelMatches == 1U);
+    CHECK(navigation.indexOfLabelHash(
+              catalog, ownerTagHash ^ 1U, &labelMatches) == catalog.size());
+    CHECK(labelMatches == 0U);
+    CHECK(leshy1::apps::ble::BleDeviceNavigationOrder::labelHash(
+              *catalog.at(1)) == 0U);
     CHECK(navigation.lock(catalog));
     const std::uint32_t lockedOrder = navigation.orderHash(catalog);
     CHECK(navigation.at(catalog, 0)->identity[5] == 0xaa);

@@ -12,6 +12,7 @@ EXPORT = ROOT / "firmware/leshy1/src/services/ble/BleInspectorExport.cpp"
 PASSIVE = ROOT / "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.cpp"
 PRODUCT = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 HIL = ROOT / "tools/run_1x_ble_inspector_hil.py"
+GATT_HIL = ROOT / "tools/run_1x_ble_gatt_hil.py"
 
 
 def require(text: str, marker: str, label: str) -> None:
@@ -25,6 +26,7 @@ passive = PASSIVE.read_text(encoding="utf-8")
 export = EXPORT.read_text(encoding="utf-8")
 product = PRODUCT.read_text(encoding="utf-8")
 hil = HIL.read_text(encoding="utf-8")
+gatt_hil = GATT_HIL.read_text(encoding="utf-8")
 
 transport_match = re.search(
     r"class BleGattInspectorTransport \{(?P<body>.*?)\n\};",
@@ -91,8 +93,38 @@ for marker, label in (
     ("nowUs + kBleDeviceUiRefreshPeriodUs", "bounded inspector refresh cadence"),
     ('\\"atomic_row_allocation_failures\\"', "atomic repaint failure telemetry"),
     ('\\"direct_row_fallbacks\\"', "direct repaint fallback telemetry"),
+    ("BleProductView::InspectorMenu", "explicit Raw/GATT mode menu"),
+    ("BleProductView::InspectorGatt", "visible connected GATT product view"),
+    ("requestProductSurveyWorkerStop(true)", "passive host teardown before GATT"),
+    ("BoardBleGattInspectorTransport", "concrete NimBLE GATT transport"),
+    ('"ble.inspector.gatt.state"', "connected GATT diagnostic state"),
+    ("quiesceBleGattOnSafetyStop()", "latched safety cleanup"),
+    ("renderBleGattInspectorData(false)", "incremental GATT repaint"),
+    ("ble.device.hil-select-label-fnv1a64", "exact fixture selector"),
+    ("BleDeviceNavigationOrder::labelHash", "private fixture label binding"),
 ):
     require(product, marker, label)
+
+for marker, label in (
+    ("ble_gap_connect(", "NimBLE exact-peer connect"),
+    ("ble_gattc_disc_all_svcs(", "NimBLE service enumeration"),
+    ("ble_gattc_disc_all_chrs(", "NimBLE characteristic enumeration"),
+    ("shutdownProcessControllerObserver()", "complete NimBLE teardown"),
+    ("remoteDisconnectPending_", "remote disconnect cleanup handoff"),
+):
+    require(passive, marker, label)
+
+for forbidden, label in (
+    ("ble_gattc_read", "characteristic read"),
+    ("ble_gattc_write", "characteristic write"),
+    ("ble_gattc_subscribe", "notification subscription"),
+    ("ble_gap_security_initiate", "pairing/security initiation"),
+):
+    if forbidden in passive:
+        raise SystemExit(
+            f"BLE Inspector concrete transport gained forbidden {label}: "
+            f"{forbidden}"
+        )
 
 for marker, label in (
     ("performed_before_application_flash", "pre-flash identity proof"),
@@ -104,8 +136,23 @@ for marker, label in (
 ):
     require(hil, marker, label)
 
+for marker, label in (
+    ("preflight_exact_board", "pre-flash exact board identity proof"),
+    ("select_exact_fixture", "exact connectable fixture selection"),
+    ("begin_hil_session", "explicit HIL session"),
+    ('"characteristic_reads": 0', "zero characteristic reads"),
+    ('"characteristic_writes": 0', "zero characteristic writes"),
+    ('"subscriptions": 0', "zero subscriptions"),
+    ('"pairings": 0', "zero pairings"),
+    ('"host_wifi_control_calls": 0', "host Wi-Fi isolation"),
+    ('"clone_touched": False', "clone isolation"),
+    ('"cardputer_touched": False', "Cardputer isolation"),
+    ("compare_complete_frames", "stable card no-repaint proof"),
+):
+    require(gatt_hil, marker, label)
+
 print(
     "BLE Inspector contract passed: exact selected raw capture/export, incremental "
-    "product UI, explicit enumeration-only permission, exact peer binding and "
-    "fail-closed disconnect"
+    "Raw/GATT product UI, explicit enumeration-only permission, exact peer "
+    "binding, complete NimBLE teardown and fail-closed disconnect"
 )

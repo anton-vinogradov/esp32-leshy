@@ -243,6 +243,11 @@ def main() -> int:
                     "active": True, "passive": True,
                     "active_probe_allowed": False,
                 }, "selected_detail"))
+                modes_ui = action(device, "right")
+                trace.append(modes_ui)
+                if modes_ui.get("ble_product_view") != "inspector_menu":
+                    raise RuntimeError(
+                        f"Inspector mode menu did not open: {modes_ui!r}")
                 inspector_ui = action(device, "right")
                 trace.append(inspector_ui)
                 if inspector_ui.get("ble_product_view") != "inspector_raw":
@@ -302,6 +307,7 @@ def main() -> int:
                     "raw_identifiers_retained_by_runner": False,
                     "raw_payload_retained_by_runner": False,
                 }
+                trace.append(action(device, "left"))
                 trace.append(action(device, "left"))
                 trace.append(action(device, "left"))
                 trace.append(action(device, "left"))

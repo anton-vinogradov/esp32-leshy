@@ -14,8 +14,10 @@
 #include <freertos/portmacro.h>
 #include <freertos/task.h>
 #include <host/ble_gap.h>
+#include <host/ble_gatt.h>
 #include <host/ble_hs.h>
 #include <host/ble_hs_id.h>
+#include <host/ble_uuid.h>
 #include <host/util/util.h>
 #include <nimble/nimble_port.h>
 #include <nimble/nimble_port_freertos.h>
@@ -52,6 +54,7 @@ struct NimbleObserverState final {
 };
 
 NimbleObserverState nimbleObserver;
+portMUX_TYPE gattInspectorMux = portMUX_INITIALIZER_UNLOCKED;
 bool processControllerInitialized = false;
 std::atomic_bool processControllerAvailable{false};
 std::atomic_bool processNimbleSynced{false};
@@ -429,6 +432,60 @@ bool startPassiveScan(const drivers::ble::BleScanPlan& plan) {
 bool stopPassiveScan() {
     const int result = ble_gap_disc_cancel();
     return result == 0 || result == BLE_HS_EALREADY;
+}
+
+std::uint64_t monotonicUs() {
+    std::uint64_t value = static_cast<std::uint64_t>(esp_timer_get_time());
+    return value == 0U ? 1U : value;
+}
+
+services::ble::BleGattUuid copyGattUuid(const ble_uuid_t* source) {
+    services::ble::BleGattUuid result{};
+    if (source == nullptr) return result;
+    if (source->type == BLE_UUID_TYPE_16) {
+        const std::uint16_t value = BLE_UUID16(source)->value;
+        result.widthBytes = 2U;
+        result.bytes[0] = static_cast<std::uint8_t>(value);
+        result.bytes[1] = static_cast<std::uint8_t>(value >> 8U);
+    } else if (source->type == BLE_UUID_TYPE_32) {
+        const std::uint32_t value = BLE_UUID32(source)->value;
+        result.widthBytes = 4U;
+        for (std::size_t index = 0U; index < 4U; ++index) {
+            result.bytes[index] = static_cast<std::uint8_t>(
+                value >> (index * 8U));
+        }
+    } else if (source->type == BLE_UUID_TYPE_128) {
+        result.widthBytes = 16U;
+        std::copy_n(BLE_UUID128(source)->value, result.bytes.size(),
+                    result.bytes.begin());
+    }
+    return result;
+}
+
+int handleGattGapEvent(struct ble_gap_event* event, void* context) {
+    auto* transport = static_cast<BoardBleGattInspectorTransport*>(context);
+    return transport == nullptr ? BLE_HS_EINVAL
+                                : transport->handleGapEvent(event);
+}
+
+int handleGattServiceDiscovery(std::uint16_t connHandle,
+                               const struct ble_gatt_error* error,
+                               const struct ble_gatt_svc* service,
+                               void* context) {
+    auto* transport = static_cast<BoardBleGattInspectorTransport*>(context);
+    return transport == nullptr
+        ? BLE_HS_EINVAL
+        : transport->handleServiceDiscovery(connHandle, error, service);
+}
+
+int handleGattCharacteristicDiscovery(
+    std::uint16_t connHandle, const struct ble_gatt_error* error,
+    const struct ble_gatt_chr* characteristic, void* context) {
+    auto* transport = static_cast<BoardBleGattInspectorTransport*>(context);
+    return transport == nullptr
+        ? BLE_HS_EINVAL
+        : transport->handleCharacteristicDiscovery(
+              connHandle, error, characteristic);
 }
 
 void processAdvertisement(const RawAdvertisement& source,
@@ -809,6 +866,469 @@ bool BoardBlePassiveScanner::end() {
         !processNimbleHostRunning && !processControllerInitialized;
     beginDiagnostic_.cleanupComplete = cleanupComplete_;
     return cleanupComplete_;
+}
+
+bool BoardBleGattInspectorTransport::bind(
+    services::ble::BleGattInspector* inspector) {
+    if (inspector == nullptr) return false;
+    portENTER_CRITICAL(&gattInspectorMux);
+    const bool available = inspector_ == nullptr && !hostReady_ &&
+        !connecting_.load(std::memory_order_acquire) &&
+        !connected_.load(std::memory_order_acquire);
+    if (available) inspector_ = inspector;
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return available;
+}
+
+bool BoardBleGattInspectorTransport::unbind() {
+    portENTER_CRITICAL(&gattInspectorMux);
+    const bool clean = inspector_ != nullptr &&
+        inspector_->cleanupComplete() && !hostReady_ &&
+        !connecting_.load(std::memory_order_acquire) &&
+        !connected_.load(std::memory_order_acquire);
+    if (clean) inspector_ = nullptr;
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return clean;
+}
+
+bool BoardBleGattInspectorTransport::selectTarget(
+    const services::ble::BleInspectorTarget& target,
+    std::uint64_t nowMonotonicUs) {
+    portENTER_CRITICAL(&gattInspectorMux);
+    const bool selected = inspector_ != nullptr &&
+        inspector_->selectTarget(target, nowMonotonicUs);
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return selected;
+}
+
+bool BoardBleGattInspectorTransport::reviewPermission(
+    services::ble::BleGattInspectorPermission permission) {
+    portENTER_CRITICAL(&gattInspectorMux);
+    const bool reviewed = inspector_ != nullptr &&
+        inspector_->reviewPermission(permission);
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return reviewed;
+}
+
+std::uint64_t BoardBleGattInspectorTransport::confirmationToken() const {
+    portENTER_CRITICAL(&gattInspectorMux);
+    const std::uint64_t token = inspector_ == nullptr
+        ? 0U : inspector_->confirmationToken();
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return token;
+}
+
+bool BoardBleGattInspectorTransport::confirm(
+    std::uint64_t token, std::uint64_t nowMonotonicUs) {
+    portENTER_CRITICAL(&gattInspectorMux);
+    const bool confirmed = inspector_ != nullptr &&
+        inspector_->confirm(token, nowMonotonicUs);
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return confirmed;
+}
+
+bool BoardBleGattInspectorTransport::back(std::uint64_t nowMonotonicUs) {
+    portENTER_CRITICAL(&gattInspectorMux);
+    const bool changed = inspector_ != nullptr &&
+        inspector_->back(nowMonotonicUs);
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return changed;
+}
+
+bool BoardBleGattInspectorTransport::tick(std::uint64_t nowMonotonicUs) {
+    portENTER_CRITICAL(&gattInspectorMux);
+    const bool changed = inspector_ != nullptr &&
+        inspector_->tick(nowMonotonicUs);
+    portEXIT_CRITICAL(&gattInspectorMux);
+    updateHeapMinimum();
+    return changed;
+}
+
+services::ble::BleGattInspectorState
+BoardBleGattInspectorTransport::state() const {
+    portENTER_CRITICAL(&gattInspectorMux);
+    const auto value = inspector_ == nullptr
+        ? services::ble::BleGattInspectorState::Idle : inspector_->state();
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return value;
+}
+
+services::ble::BleGattInspectorFailure
+BoardBleGattInspectorTransport::failure() const {
+    portENTER_CRITICAL(&gattInspectorMux);
+    const auto value = inspector_ == nullptr
+        ? services::ble::BleGattInspectorFailure::None
+        : inspector_->failure();
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return value;
+}
+
+services::ble::BleGattInspectorFailure
+BoardBleGattInspectorTransport::cleanupCause() const {
+    portENTER_CRITICAL(&gattInspectorMux);
+    const auto value = inspector_ == nullptr
+        ? services::ble::BleGattInspectorFailure::None
+        : inspector_->cleanupCause();
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return value;
+}
+
+std::size_t BoardBleGattInspectorTransport::serviceCount() const {
+    portENTER_CRITICAL(&gattInspectorMux);
+    const std::size_t value = inspector_ == nullptr
+        ? 0U : inspector_->serviceCount();
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return value;
+}
+
+std::size_t BoardBleGattInspectorTransport::characteristicCount() const {
+    portENTER_CRITICAL(&gattInspectorMux);
+    const std::size_t value = inspector_ == nullptr
+        ? 0U : inspector_->characteristicCount();
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return value;
+}
+
+bool BoardBleGattInspectorTransport::copyService(
+    std::size_t index, services::ble::BleGattServiceFact* output) const {
+    if (output == nullptr) return false;
+    portENTER_CRITICAL(&gattInspectorMux);
+    const auto* source = inspector_ == nullptr
+        ? nullptr : inspector_->serviceAt(index);
+    if (source != nullptr) *output = *source;
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return source != nullptr;
+}
+
+bool BoardBleGattInspectorTransport::copyCharacteristic(
+    std::size_t index,
+    services::ble::BleGattCharacteristicFact* output) const {
+    if (output == nullptr) return false;
+    portENTER_CRITICAL(&gattInspectorMux);
+    const auto* source = inspector_ == nullptr
+        ? nullptr : inspector_->characteristicAt(index);
+    if (source != nullptr) *output = *source;
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return source != nullptr;
+}
+
+bool BoardBleGattInspectorTransport::copyTarget(
+    services::ble::BleInspectorTarget* output) const {
+    if (output == nullptr) return false;
+    portENTER_CRITICAL(&gattInspectorMux);
+    const bool available = inspector_ != nullptr &&
+        services::ble::validBleInspectorTarget(inspector_->target());
+    if (available) *output = inspector_->target();
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return available;
+}
+
+bool BoardBleGattInspectorTransport::cleanupComplete() const {
+    portENTER_CRITICAL(&gattInspectorMux);
+    const bool clean = inspector_ == nullptr || inspector_->cleanupComplete();
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return clean && !hostReady_ &&
+        !connecting_.load(std::memory_order_acquire) &&
+        !connected_.load(std::memory_order_acquire);
+}
+
+bool BoardBleGattInspectorTransport::ownsRadio() const {
+    portENTER_CRITICAL(&gattInspectorMux);
+    const bool owned = inspector_ != nullptr && inspector_->ownsRadio();
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return owned;
+}
+
+bool BoardBleGattInspectorTransport::hostReady() const {
+    return hostReady_ && BoardBlePassiveScanner::processControllerReady();
+}
+
+bool BoardBleGattInspectorTransport::connected() const {
+    return connected_.load(std::memory_order_acquire);
+}
+
+bool BoardBleGattInspectorTransport::startConnect(
+    const services::ble::BleInspectorTarget& target) {
+    if (hostReady_ || connecting_.load(std::memory_order_acquire) ||
+        connected_.load(std::memory_order_acquire)) {
+        return false;
+    }
+    heapFreeBefore_ = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    heapLargestBefore_ = static_cast<std::uint32_t>(
+        heap_caps_get_largest_free_block(
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    heapMinimum_ = heapFreeBefore_;
+    BoardBleBeginDiagnostic diagnostic{};
+    if (!initializeProcessControllerObserver(&diagnostic)) return false;
+    hostReady_ = true;
+    heapFreeAfterInit_ = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    heapLargestAfterInit_ = static_cast<std::uint32_t>(
+        heap_caps_get_largest_free_block(
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    updateHeapMinimum();
+
+    ble_addr_t peer{};
+    peer.type = target.addressType;
+    std::reverse_copy(target.address.begin(), target.address.end(), peer.val);
+    target_ = target;
+    connectionHandle_ = BLE_HS_CONN_HANDLE_NONE;
+    characteristicServiceIndex_ = 0U;
+    disconnected_.store(false, std::memory_order_release);
+    remoteDisconnectPending_.store(false, std::memory_order_release);
+    cleanupRequested_.store(false, std::memory_order_release);
+    connecting_.store(true, std::memory_order_release);
+    const int started = ble_gap_connect(
+        processOwnAddressType.load(std::memory_order_acquire), &peer,
+        static_cast<std::int32_t>(kConnectTimeoutMs), nullptr,
+        handleGattGapEvent, this);
+    if (started == 0) return true;
+    connecting_.store(false, std::memory_order_release);
+    disconnected_.store(true, std::memory_order_release);
+    cleanupRequested_.store(true, std::memory_order_release);
+    hostReady_ = !shutdownProcessControllerObserver();
+    if (!hostReady_) {
+        cleanupRequested_.store(false, std::memory_order_release);
+        return false;
+    }
+    // The host exists but could not be torn down synchronously. Keep the
+    // controller's radio lease and report the transport error on service();
+    // the ordinary fail-closed disconnect path will retry teardown before the
+    // lease can be released.
+    remoteDisconnectPending_.store(true, std::memory_order_release);
+    return true;
+}
+
+bool BoardBleGattInspectorTransport::startServiceDiscovery() {
+    if (!hostReady_ || !connected_.load(std::memory_order_acquire) ||
+        connectionHandle_ == BLE_HS_CONN_HANDLE_NONE) {
+        return false;
+    }
+    characteristicServiceIndex_ = 0U;
+    return ble_gattc_disc_all_svcs(
+        connectionHandle_, handleGattServiceDiscovery, this) == 0;
+}
+
+services::ble::BleGattDisconnectStatus
+BoardBleGattInspectorTransport::requestDisconnect() {
+    cleanupRequested_.store(true, std::memory_order_release);
+    if (connecting_.load(std::memory_order_acquire)) {
+        const int result = ble_gap_conn_cancel();
+        return result == 0 || result == BLE_HS_EALREADY
+            ? services::ble::BleGattDisconnectStatus::Pending
+            : services::ble::BleGattDisconnectStatus::Failed;
+    }
+    if (connected_.load(std::memory_order_acquire) &&
+        connectionHandle_ != BLE_HS_CONN_HANDLE_NONE) {
+        const int result = ble_gap_terminate(
+            connectionHandle_, BLE_ERR_REM_USER_CONN_TERM);
+        return result == 0 || result == BLE_HS_ENOTCONN
+            ? services::ble::BleGattDisconnectStatus::Pending
+            : services::ble::BleGattDisconnectStatus::Failed;
+    }
+    return hostReady_ ? services::ble::BleGattDisconnectStatus::Pending
+                      : services::ble::BleGattDisconnectStatus::Disconnected;
+}
+
+services::ble::BleGattDisconnectStatus
+BoardBleGattInspectorTransport::pollDisconnect() {
+    if (connecting_.load(std::memory_order_acquire) ||
+        connected_.load(std::memory_order_acquire)) {
+        return services::ble::BleGattDisconnectStatus::Pending;
+    }
+    if (!hostReady_) {
+        return services::ble::BleGattDisconnectStatus::Disconnected;
+    }
+    if (!cleanupRequested_.load(std::memory_order_acquire) ||
+        !disconnected_.load(std::memory_order_acquire)) {
+        return services::ble::BleGattDisconnectStatus::Pending;
+    }
+    const bool shutdown = shutdownProcessControllerObserver();
+    if (!shutdown) return services::ble::BleGattDisconnectStatus::Failed;
+    hostReady_ = false;
+    connectionHandle_ = BLE_HS_CONN_HANDLE_NONE;
+    cleanupRequested_.store(false, std::memory_order_release);
+    updateHeapMinimum();
+    return services::ble::BleGattDisconnectStatus::Disconnected;
+}
+
+bool BoardBleGattInspectorTransport::service(std::uint64_t nowMonotonicUs) {
+    bool changed = false;
+    if (remoteDisconnectPending_.exchange(false,
+                                          std::memory_order_acq_rel)) {
+        portENTER_CRITICAL(&gattInspectorMux);
+        if (inspector_ != nullptr &&
+            inspector_->state() != services::ble::BleGattInspectorState::
+                                      CleanupPending) {
+            changed = inspector_->onTransportError(nowMonotonicUs);
+        }
+        portEXIT_CRITICAL(&gattInspectorMux);
+    }
+    changed = tick(nowMonotonicUs) || changed;
+    return changed;
+}
+
+int BoardBleGattInspectorTransport::handleGapEvent(void* rawEvent) {
+    auto* event = static_cast<ble_gap_event*>(rawEvent);
+    if (event == nullptr) return 0;
+    if (event->type == BLE_GAP_EVENT_CONNECT) {
+        connecting_.store(false, std::memory_order_release);
+        if (event->connect.status != 0) {
+            disconnected_.store(true, std::memory_order_release);
+            cleanupRequested_.store(true, std::memory_order_release);
+            portENTER_CRITICAL(&gattInspectorMux);
+            if (inspector_ != nullptr) {
+                (void)inspector_->onConnectionRefused(monotonicUs());
+            }
+            portEXIT_CRITICAL(&gattInspectorMux);
+            return 0;
+        }
+        connectionHandle_ = event->connect.conn_handle;
+        connected_.store(true, std::memory_order_release);
+        disconnected_.store(false, std::memory_order_release);
+        std::array<std::uint8_t, 6> address{};
+        std::uint8_t addressType = target_.addressType;
+        ble_gap_conn_desc description{};
+        if (ble_gap_conn_find(connectionHandle_, &description) == 0) {
+            std::reverse_copy(description.peer_id_addr.val,
+                              description.peer_id_addr.val + 6U,
+                              address.begin());
+            addressType = description.peer_id_addr.type;
+        }
+        portENTER_CRITICAL(&gattInspectorMux);
+        if (inspector_ != nullptr) {
+            (void)inspector_->onConnected(
+                address, addressType, monotonicUs());
+        }
+        portEXIT_CRITICAL(&gattInspectorMux);
+        updateHeapMinimum();
+        return 0;
+    }
+    if (event->type == BLE_GAP_EVENT_DISCONNECT) {
+        connecting_.store(false, std::memory_order_release);
+        connected_.store(false, std::memory_order_release);
+        disconnected_.store(true, std::memory_order_release);
+        cleanupRequested_.store(true, std::memory_order_release);
+        connectionHandle_ = BLE_HS_CONN_HANDLE_NONE;
+        portENTER_CRITICAL(&gattInspectorMux);
+        const bool cleanupPending = inspector_ != nullptr &&
+            inspector_->state() ==
+                services::ble::BleGattInspectorState::CleanupPending;
+        portEXIT_CRITICAL(&gattInspectorMux);
+        if (!cleanupPending) {
+            remoteDisconnectPending_.store(true, std::memory_order_release);
+        }
+        return 0;
+    }
+    return 0;
+}
+
+int BoardBleGattInspectorTransport::handleServiceDiscovery(
+    std::uint16_t connHandle, const void* rawError, const void* rawService) {
+    const auto* error = static_cast<const ble_gatt_error*>(rawError);
+    const auto* service = static_cast<const ble_gatt_svc*>(rawService);
+    portENTER_CRITICAL(&gattInspectorMux);
+    if (inspector_ == nullptr || connHandle != connectionHandle_ ||
+        error == nullptr) {
+        portEXIT_CRITICAL(&gattInspectorMux);
+        return BLE_HS_EINVAL;
+    }
+    const std::uint64_t nowUs = monotonicUs();
+    if (error->status == 0 && service != nullptr) {
+        services::ble::BleGattServiceFact fact{};
+        fact.startHandle = service->start_handle;
+        fact.endHandle = service->end_handle;
+        fact.uuid = copyGattUuid(&service->uuid.u);
+        const bool accepted = inspector_->recordService(fact, nowUs);
+        portEXIT_CRITICAL(&gattInspectorMux);
+        updateHeapMinimum();
+        return accepted ? 0 : BLE_HS_EAPP;
+    }
+    if (error->status == BLE_HS_EDONE) {
+        characteristicServiceIndex_ = 0U;
+        portEXIT_CRITICAL(&gattInspectorMux);
+        const bool started = startNextCharacteristicDiscovery(nowUs);
+        updateHeapMinimum();
+        return started ? 0 : BLE_HS_EAPP;
+    }
+    (void)inspector_->onTransportError(nowUs);
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return BLE_HS_EAPP;
+}
+
+bool BoardBleGattInspectorTransport::startNextCharacteristicDiscovery(
+    std::uint64_t nowMonotonicUs) {
+    services::ble::BleGattServiceFact service{};
+    std::uint16_t connectionHandle = BLE_HS_CONN_HANDLE_NONE;
+    bool discoveryComplete = false;
+    bool servicePresent = false;
+    portENTER_CRITICAL(&gattInspectorMux);
+    if (inspector_ == nullptr) {
+        portEXIT_CRITICAL(&gattInspectorMux);
+        return false;
+    }
+    if (characteristicServiceIndex_ >= inspector_->serviceCount()) {
+        discoveryComplete = inspector_->onDiscoveryComplete(nowMonotonicUs);
+        portEXIT_CRITICAL(&gattInspectorMux);
+        return discoveryComplete;
+    }
+    const auto* source = inspector_->serviceAt(characteristicServiceIndex_);
+    servicePresent = source != nullptr;
+    if (servicePresent) service = *source;
+    connectionHandle = connectionHandle_;
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return servicePresent && connectionHandle != BLE_HS_CONN_HANDLE_NONE &&
+        ble_gattc_disc_all_chrs(
+        connectionHandle, service.startHandle, service.endHandle,
+        handleGattCharacteristicDiscovery, this) == 0;
+}
+
+int BoardBleGattInspectorTransport::handleCharacteristicDiscovery(
+    std::uint16_t connHandle, const void* rawError,
+    const void* rawCharacteristic) {
+    const auto* error = static_cast<const ble_gatt_error*>(rawError);
+    const auto* characteristic =
+        static_cast<const ble_gatt_chr*>(rawCharacteristic);
+    portENTER_CRITICAL(&gattInspectorMux);
+    if (inspector_ == nullptr || connHandle != connectionHandle_ ||
+        error == nullptr) {
+        portEXIT_CRITICAL(&gattInspectorMux);
+        return BLE_HS_EINVAL;
+    }
+    const std::uint64_t nowUs = monotonicUs();
+    if (error->status == 0 && characteristic != nullptr) {
+        const auto* service = inspector_->serviceAt(
+            characteristicServiceIndex_);
+        services::ble::BleGattCharacteristicFact fact{};
+        if (service != nullptr) {
+            fact.serviceStartHandle = service->startHandle;
+        }
+        fact.declarationHandle = characteristic->def_handle;
+        fact.valueHandle = characteristic->val_handle;
+        fact.properties = characteristic->properties;
+        fact.uuid = copyGattUuid(&characteristic->uuid.u);
+        const bool accepted = inspector_->recordCharacteristic(fact, nowUs);
+        portEXIT_CRITICAL(&gattInspectorMux);
+        updateHeapMinimum();
+        return accepted ? 0 : BLE_HS_EAPP;
+    }
+    if (error->status == BLE_HS_EDONE) {
+        ++characteristicServiceIndex_;
+        portEXIT_CRITICAL(&gattInspectorMux);
+        const bool started = startNextCharacteristicDiscovery(nowUs);
+        updateHeapMinimum();
+        return started ? 0 : BLE_HS_EAPP;
+    }
+    (void)inspector_->onTransportError(nowUs);
+    portEXIT_CRITICAL(&gattInspectorMux);
+    return BLE_HS_EAPP;
+}
+
+void BoardBleGattInspectorTransport::updateHeapMinimum() {
+    const std::uint32_t free = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    if (free < heapMinimum_) heapMinimum_ = free;
 }
 
 }  // namespace leshy1::platform::arduino

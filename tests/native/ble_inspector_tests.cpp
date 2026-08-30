@@ -311,6 +311,40 @@ void testGattResourceConflictAndStaleConfirmationFailClosed() {
     CHECK(!inspector.ownsRadio());
 }
 
+void testGattConnectAndDiscoveryStartFailuresKeepHonestOwnership() {
+    leshy1::kernel::runtime::ResourceBroker broker;
+    FakeTransport transport;
+    BleGattInspector inspector(broker, transport);
+    CHECK(inspector.selectTarget(targetFixture(), 1050000ULL));
+    CHECK(inspector.reviewPermission(
+        BleGattInspectorPermission::EnumerateServicesAndCharacteristics));
+    transport.connectStarts = false;
+    CHECK(!inspector.confirm(inspector.confirmationToken(), 1100000ULL));
+    CHECK(inspector.state() == BleGattInspectorState::Failed);
+    CHECK(inspector.failure() == BleGattInspectorFailure::ConnectStartFailed);
+    CHECK(!inspector.ownsRadio());
+    CHECK(inspector.cleanupComplete());
+
+    transport.connectStarts = true;
+    CHECK(inspector.reset());
+    advanceToConnecting(&inspector);
+    transport.discoveryStarts = false;
+    transport.disconnectStatus = BleGattDisconnectStatus::Pending;
+    CHECK(!inspector.onConnected(
+        targetFixture().address, targetFixture().addressType, 1200000ULL));
+    CHECK(inspector.state() == BleGattInspectorState::CleanupPending);
+    CHECK(inspector.failure() ==
+          BleGattInspectorFailure::DiscoveryStartFailed);
+    CHECK(inspector.ownsRadio());
+    CHECK(!inspector.cleanupComplete());
+    transport.pollStatus = BleGattDisconnectStatus::Disconnected;
+    CHECK(inspector.pollCleanup(1300000ULL));
+    CHECK(inspector.state() == BleGattInspectorState::Failed);
+    CHECK(inspector.failure() ==
+          BleGattInspectorFailure::DiscoveryStartFailed);
+    CHECK(!inspector.ownsRadio());
+}
+
 static_assert(std::is_trivially_copyable_v<BleInspectorRawAdvertisement>);
 static_assert(sizeof(BleInspectorCapture) <= 2048U);
 static_assert(sizeof(BleGattInspector) <= 3072U);
@@ -326,6 +360,7 @@ int main() {
     testGattNeverFallsBackToUnexpectedIdentity();
     testGattTimeoutDisconnectFailureRemainsFailClosed();
     testGattResourceConflictAndStaleConfirmationFailClosed();
+    testGattConnectAndDiscoveryStartFailuresKeepHonestOwnership();
     std::puts("BLE Inspector tests passed");
     return 0;
 }

@@ -1,9 +1,11 @@
 #pragma once
 
 #include <atomic>
+#include <array>
 #include <cstdint>
 
 #include "drivers/ble/BlePassiveContract.h"
+#include "services/ble/BleInspector.h"
 
 namespace leshy1::platform::arduino {
 
@@ -106,6 +108,86 @@ private:
     BoardBleBeginDiagnostic beginDiagnostic_{};
     static volatile bool activeScan_;
     static std::atomic_bool cancelRequested_;
+};
+
+// One-shot connected transport for CAP-051. The public virtual surface stays
+// limited to connect, metadata discovery and disconnect; pairing, reads,
+// writes and subscriptions are deliberately not representable. The concrete
+// helpers serialize the asynchronous NimBLE callbacks with the foreground
+// controller and expose only copied, bounded facts to the UI.
+class BoardBleGattInspectorTransport final
+    : public services::ble::BleGattInspectorTransport {
+public:
+    static constexpr std::uint32_t kConnectTimeoutMs = 8000U;
+
+    bool bind(services::ble::BleGattInspector* inspector);
+    bool unbind();
+    bool service(std::uint64_t nowMonotonicUs);
+
+    bool selectTarget(const services::ble::BleInspectorTarget& target,
+                      std::uint64_t nowMonotonicUs);
+    bool reviewPermission(
+        services::ble::BleGattInspectorPermission permission);
+    std::uint64_t confirmationToken() const;
+    bool confirm(std::uint64_t token, std::uint64_t nowMonotonicUs);
+    bool back(std::uint64_t nowMonotonicUs);
+    bool tick(std::uint64_t nowMonotonicUs);
+    services::ble::BleGattInspectorState state() const;
+    services::ble::BleGattInspectorFailure failure() const;
+    services::ble::BleGattInspectorFailure cleanupCause() const;
+    std::size_t serviceCount() const;
+    std::size_t characteristicCount() const;
+    bool copyService(std::size_t index,
+                     services::ble::BleGattServiceFact* output) const;
+    bool copyCharacteristic(
+        std::size_t index,
+        services::ble::BleGattCharacteristicFact* output) const;
+    bool copyTarget(services::ble::BleInspectorTarget* output) const;
+    bool cleanupComplete() const;
+    bool ownsRadio() const;
+    bool hostReady() const;
+    bool connected() const;
+    std::uint32_t heapFreeBefore() const { return heapFreeBefore_; }
+    std::uint32_t heapLargestBefore() const { return heapLargestBefore_; }
+    std::uint32_t heapFreeAfterInit() const { return heapFreeAfterInit_; }
+    std::uint32_t heapLargestAfterInit() const {
+        return heapLargestAfterInit_;
+    }
+    std::uint32_t heapMinimum() const { return heapMinimum_; }
+
+    bool startConnect(
+        const services::ble::BleInspectorTarget& target) override;
+    bool startServiceDiscovery() override;
+    services::ble::BleGattDisconnectStatus requestDisconnect() override;
+    services::ble::BleGattDisconnectStatus pollDisconnect() override;
+
+    int handleGapEvent(void* event);
+    int handleServiceDiscovery(std::uint16_t connHandle,
+                               const void* error, const void* service);
+    int handleCharacteristicDiscovery(std::uint16_t connHandle,
+                                      const void* error,
+                                      const void* characteristic);
+
+private:
+    bool startNextCharacteristicDiscovery(
+        std::uint64_t nowMonotonicUs);
+    void updateHeapMinimum();
+
+    services::ble::BleGattInspector* inspector_ = nullptr;
+    services::ble::BleInspectorTarget target_{};
+    std::uint16_t connectionHandle_ = 0xffffU;
+    std::size_t characteristicServiceIndex_ = 0U;
+    std::atomic_bool connecting_{false};
+    std::atomic_bool connected_{false};
+    std::atomic_bool disconnected_{true};
+    std::atomic_bool remoteDisconnectPending_{false};
+    std::atomic_bool cleanupRequested_{false};
+    bool hostReady_ = false;
+    std::uint32_t heapFreeBefore_ = 0U;
+    std::uint32_t heapLargestBefore_ = 0U;
+    std::uint32_t heapFreeAfterInit_ = 0U;
+    std::uint32_t heapLargestAfterInit_ = 0U;
+    std::uint32_t heapMinimum_ = UINT32_MAX;
 };
 
 }  // namespace leshy1::platform::arduino
