@@ -338,7 +338,7 @@ def export_failures(artifact: dict[str, Any], generation: int,
         failures.append("library_export.session: missing")
     else:
         failures.extend(expect(session, {
-            "id": "product-passive-live",
+            "id": "field-visit-live",
             "observations": observations,
             "dropped": 0,
         }, "library_export.session"))

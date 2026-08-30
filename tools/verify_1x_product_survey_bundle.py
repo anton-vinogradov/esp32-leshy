@@ -12,6 +12,15 @@ from typing import Any
 from esp_app_identity import app_elf_sha256
 
 
+FIELD_SESSION_ID = "field-visit-live"
+CORRECTED_ORACLE_FAILURES = [
+    "library_export.session.id: 'field-visit-live' != 'product-passive-live'",
+]
+CORRECTED_ORACLE_RUNNER_SHA256 = (
+    "6d10cbec20d7774615bd050d09532de3d308854169592de124f92679f767651d"
+)
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -25,6 +34,15 @@ def load_object(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"expected JSON object: {path}")
     return value
+
+
+def is_corrected_oracle_run(run: dict[str, Any]) -> bool:
+    return bool(
+        run.get("passed") is False and
+        run.get("gate_eligible") is False and
+        run.get("failures") == CORRECTED_ORACLE_FAILURES and
+        run.get("runner_source_sha256") == CORRECTED_ORACLE_RUNNER_SHA256
+    )
 
 
 def parse_hash_index(path: Path) -> dict[str, str]:
@@ -50,7 +68,9 @@ def parse_hash_index(path: Path) -> dict[str, str]:
 
 
 def verify_product_bundle(bundle: Path, candidate: Path,
-                          expected_version: str) -> dict[str, Any]:
+                          expected_version: str,
+                          expected_source_commit: str | None = None,
+                          allow_corrected_oracle: bool = False) -> dict[str, Any]:
     failures: list[str] = []
     required = ("run.json", "artifacts.sha256", "firmware.bin")
     missing = [name for name in required if not (bundle / name).is_file()]
@@ -100,8 +120,14 @@ def verify_product_bundle(bundle: Path, candidate: Path,
 
     if run.get("schema") != "leshy.product_survey_hil.run.v1":
         failures.append("invalid product run schema")
-    if run.get("passed") is not True or run.get("gate_eligible") is not True:
-        failures.append("product run is not passed and gate-eligible")
+    raw_passed = run.get("passed") is True and run.get("gate_eligible") is True
+    corrected_oracle = False
+    if not raw_passed:
+        corrected_oracle = bool(
+            allow_corrected_oracle and is_corrected_oracle_run(run)
+        )
+        if not corrected_oracle:
+            failures.append("product run is not passed and gate-eligible")
     run_id = run.get("run_id")
     if (not isinstance(run_id, str) or len(run_id) != 32 or
             any(character not in "0123456789abcdef" for character in run_id)):
@@ -121,6 +147,9 @@ def verify_product_bundle(bundle: Path, candidate: Path,
                 any(character not in "0123456789abcdef"
                     for character in source_commit)):
             failures.append("exact-reuse candidate source commit is invalid")
+        if (expected_source_commit is not None and
+                source_commit != expected_source_commit):
+            failures.append("exact-reuse candidate source commit mismatch")
     else:
         expected_flashed = False
         failures.append(f"unsupported product candidate flash mode: {flash_mode!r}")
@@ -174,24 +203,68 @@ def verify_product_bundle(bundle: Path, candidate: Path,
             after_recovery.get("integrity") != "valid"):
         failures.append("product cold recovery does not match committed Session")
 
+    if run.get("release_cycle") is True:
+        cycle = run.get("running", {})
+        paused = run.get("paused", {})
+        wifi = cycle.get("survey_scan_accepted")
+        ble = cycle.get("survey_ble_scan_accepted")
+        if (cycle.get("survey_product_status") != "paused" or
+                cycle.get("survey_product_source_active") is not False or
+                cycle.get("survey_pipeline_status") != "drained" or
+                cycle.get("survey_product_scan_cycles") != 1 or
+                not isinstance(wifi, int) or isinstance(wifi, bool) or
+                not isinstance(ble, int) or isinstance(ble, bool) or
+                wifi + ble != observations or
+                cycle.get("survey_observations") != observations or
+                cycle.get("survey_forwarded") != observations or
+                cycle.get("survey_dropped") != 0 or
+                cycle.get("survey_scan_dropped") != 0 or
+                cycle.get("survey_ble_scan_dropped") != 0 or
+                paused.get("survey_observations") != observations):
+            failures.append("release-cycle observation accounting is incomplete")
+        browser = run.get("paused_browser", {})
+        if (browser.get("view") != "list" or
+                browser.get("total") != observations or
+                browser.get("visible") != observations or
+                browser.get("radio_touched") is not False or
+                browser.get("storage_touched") is not False or
+                browser.get("read_only_query") is not True):
+            failures.append("release-cycle browser proof is incomplete")
+    else:
+        failures.append("product terminal bundle is not a release cycle")
+
     export = run.get("library_export", {})
     session = export.get("session", {})
     if (export.get("status") != "valid" or export.get("persistent") is not True or
             export.get("simulated") is not False or
             export.get("storage_backend") != "persistent_media" or
             export.get("generation") != committed.get("survey_generation") or
-            session.get("id") != "product-wifi-live" or
+            session.get("id") != FIELD_SESSION_ID or
             session.get("observations") != observations or
-            run.get("final_state", {}).get("lease_mask") != 0):
+            session.get("dropped") != 0 or
+            export.get("radio_touched") is not False or
+            run.get("final_state", {}).get("page") != "home" or
+            run.get("final_state", {}).get("runtime_owner") != "none" or
+            run.get("final_state", {}).get("lease_mask") != 0 or
+            run.get("cleanup_before_reboot", {}).get("complete") is not True or
+            run.get("cleanup_final", {}).get("complete") is not True):
         failures.append("persistent Library export/final cleanup is incomplete")
     captures = run.get("captures", {})
-    if set(captures) != {"setup", "running", "committed", "export"}:
+    if set(captures) != {"setup", "paused", "committed", "export"}:
         failures.append("product TFT capture set is incomplete")
+
+    before_ready = run.get("boot_before", {}).get("ready", {})
+    after_ready = run.get("boot_after", {}).get("ready", {})
+    if (before_ready.get("heap_total") != after_ready.get("heap_total") or
+            before_ready.get("heap_free") != after_ready.get("heap_free")):
+        failures.append("cold-reopen heap baseline changed")
 
     return {
         "schema": "leshy.product_survey.bundle_verification.v1",
         "verified": not failures,
         "release_eligible": False,
+        "raw_runner_passed": raw_passed,
+        "corrected_oracle_recheck": corrected_oracle,
         "candidate_sha256": candidate_hash,
         "candidate_app_elf_sha256": candidate_app,
         "expected_version": expected_version,
@@ -209,13 +282,20 @@ def main() -> int:
     parser.add_argument("--bundle", required=True, type=Path)
     parser.add_argument("--candidate", required=True, type=Path)
     parser.add_argument("--expected-version", required=True)
+    parser.add_argument("--expected-source-commit")
+    parser.add_argument(
+        "--allow-corrected-oracle", action="store_true",
+        help="accept only the pinned dev.276 field-visit session-ID oracle mismatch",
+    )
     args = parser.parse_args()
     if not args.bundle.is_dir():
         parser.error(f"bundle directory not found: {args.bundle}")
     if not args.candidate.is_file():
         parser.error(f"candidate not found: {args.candidate}")
     result = verify_product_bundle(
-        args.bundle.resolve(), args.candidate.resolve(), args.expected_version
+        args.bundle.resolve(), args.candidate.resolve(), args.expected_version,
+        expected_source_commit=args.expected_source_commit,
+        allow_corrected_oracle=args.allow_corrected_oracle,
     )
     print(json.dumps(result, sort_keys=True))
     return 0 if result["verified"] else 2

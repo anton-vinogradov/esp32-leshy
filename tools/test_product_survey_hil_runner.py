@@ -12,9 +12,9 @@ from typing import Any
 from unittest.mock import patch
 
 
-def load_runner() -> Any:
-    path = Path(__file__).with_name("run_1x_product_survey_hil.py")
-    spec = importlib.util.spec_from_file_location("product_survey_hil_runner", path)
+def load_tool(filename: str, module_name: str) -> Any:
+    path = Path(__file__).with_name(filename)
+    spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load {path}")
     module = importlib.util.module_from_spec(spec)
@@ -22,7 +22,10 @@ def load_runner() -> Any:
     return module
 
 
-RUNNER = load_runner()
+RUNNER = load_tool("run_1x_product_survey_hil.py", "product_survey_hil_runner")
+VERIFIER = load_tool(
+    "verify_1x_product_survey_bundle.py", "product_survey_bundle_verifier"
+)
 CID = "FE343253440000002000000055019CB7"
 
 
@@ -228,6 +231,33 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
         self.assertEqual([], RUNNER.paused_browser_failures(browser, 51))
         browser["selection"] = 51
         self.assertTrue(RUNNER.paused_browser_failures(browser, 51))
+
+    def test_library_export_requires_current_field_visit_identity(self) -> None:
+        artifact = {
+            "status": "valid", "generation": 176,
+            "integrity": "valid", "persistent": True,
+            "simulated": False, "storage_backend": "persistent_media",
+            "radio_touched": False,
+            "session": {
+                "id": "field-visit-live", "observations": 51, "dropped": 0,
+            },
+        }
+        self.assertEqual([], RUNNER.export_failures(artifact, 176, 51))
+        artifact["session"]["id"] = "product-passive-live"
+        self.assertTrue(RUNNER.export_failures(artifact, 176, 51))
+
+    def test_corrected_oracle_recheck_is_pinned_to_exact_failure_and_runner(self) -> None:
+        run = {
+            "passed": False, "gate_eligible": False,
+            "failures": list(VERIFIER.CORRECTED_ORACLE_FAILURES),
+            "runner_source_sha256": VERIFIER.CORRECTED_ORACLE_RUNNER_SHA256,
+        }
+        self.assertTrue(VERIFIER.is_corrected_oracle_run(run))
+        run["runner_source_sha256"] = "0" * 64
+        self.assertFalse(VERIFIER.is_corrected_oracle_run(run))
+        run["runner_source_sha256"] = VERIFIER.CORRECTED_ORACLE_RUNNER_SHA256
+        run["failures"].append("another failure")
+        self.assertFalse(VERIFIER.is_corrected_oracle_run(run))
 
     def test_boot_parser_ignores_noise_and_keeps_product_record(self) -> None:
         raw = (
