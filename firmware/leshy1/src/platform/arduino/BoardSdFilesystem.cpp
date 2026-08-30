@@ -9,6 +9,11 @@
 #include <esp_vfs_fat.h>
 #include <diskio_impl.h>
 #include <ff.h>
+// ESP-IDF's internal FatFs header is C-only but does not provide its own
+// extern-C guard when included from C++.
+extern "C" {
+#include <vfs_fat_internal.h>
+}
 
 extern "C" BYTE ff_diskio_get_pdrv_card(const sdmmc_card_t* card);
 
@@ -199,7 +204,13 @@ bool BoardSdFilesystem::beginWithMode(bool readOnly) {
         return false;
     }
     driveNumber_ = ff_diskio_get_pdrv_card(card_);
-    mounted_ = driveNumber_ < FF_VOLUMES && guardSharedChipSelect();
+    const vfs_fat_sd_ctx_t* mountContext =
+        get_vfs_fat_get_sd_ctx(card_);
+    filesystem_ = mountContext != nullptr &&
+            mountContext->pdrv == driveNumber_
+        ? mountContext->fs : nullptr;
+    mounted_ = driveNumber_ < FF_VOLUMES && filesystem_ != nullptr &&
+        guardSharedChipSelect();
     if (!mounted_) {
         mountError_ = ESP_ERR_INVALID_STATE;
         end();
@@ -240,6 +251,7 @@ void BoardSdFilesystem::end() {
         unmounted = esp_vfs_fat_sdcard_unmount(kSdMountPoint, card_) == ESP_OK;
         card_ = nullptr;
     }
+    filesystem_ = nullptr;
     if (previousDrive < FF_VOLUMES) {
         blockedWriteAttemptsAfterEnd_ = blockedWriteCounts[previousDrive];
         blockedWriteCounts[previousDrive] = 0;
@@ -283,17 +295,13 @@ std::uint64_t BoardSdFilesystem::cardCapacityBytes() const {
 }
 
 std::uint64_t BoardSdFilesystem::filesystemCapacityBytes() const {
-    if (!mounted_ || driveNumber_ >= FF_VOLUMES) return 0;
-    FATFS* filesystem = nullptr;
-    DWORD freeClusters = 0;
-    char drive[3] = {static_cast<char>('0' + driveNumber_), ':', '\0'};
-    if (f_getfree(drive, &freeClusters, &filesystem) != FR_OK ||
-        filesystem == nullptr) {
+    if (!mounted_ || driveNumber_ >= FF_VOLUMES || filesystem_ == nullptr ||
+        filesystem_->n_fatent < 2U) {
         return 0;
     }
-    return static_cast<std::uint64_t>(filesystem->csize) *
-           static_cast<std::uint64_t>(filesystem->n_fatent - 2U) *
-           fatSectorSize(filesystem);
+    return static_cast<std::uint64_t>(filesystem_->csize) *
+           static_cast<std::uint64_t>(filesystem_->n_fatent - 2U) *
+           fatSectorSize(filesystem_);
 }
 
 std::uint64_t BoardSdFilesystem::freeBytes() const {
@@ -311,20 +319,14 @@ std::uint64_t BoardSdFilesystem::freeBytes() const {
 }
 
 std::uint64_t BoardSdFilesystem::cachedFreeBytes() const {
-    if (!mounted_ || driveNumber_ >= FF_VOLUMES) return 0;
-    char root[4] = {static_cast<char>('0' + driveNumber_), ':', '/', '\0'};
-    FF_DIR directory{};
-    if (f_opendir(&directory, root) != FR_OK) return 0;
-    const FATFS* filesystem = directory.obj.fs;
-    std::uint64_t result = 0;
-    if (filesystem != nullptr && filesystem->n_fatent >= 2U &&
-        filesystem->free_clst <= filesystem->n_fatent - 2U) {
-        result = static_cast<std::uint64_t>(filesystem->csize) *
-                 static_cast<std::uint64_t>(filesystem->free_clst) *
-                 fatSectorSize(filesystem);
+    if (!mounted_ || driveNumber_ >= FF_VOLUMES || filesystem_ == nullptr ||
+        filesystem_->n_fatent < 2U ||
+        filesystem_->free_clst > filesystem_->n_fatent - 2U) {
+        return 0;
     }
-    f_closedir(&directory);
-    return result;
+    return static_cast<std::uint64_t>(filesystem_->csize) *
+           static_cast<std::uint64_t>(filesystem_->free_clst) *
+           fatSectorSize(filesystem_);
 }
 
 bool BoardSdFilesystem::exists(const char* path) const {

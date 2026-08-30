@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include <esp_err.h>
+#include <ff.h>
 #include <sdmmc_cmd.h>
 
 namespace leshy1::platform::arduino {
@@ -71,6 +72,10 @@ private:
     bool installReadOnlyDiskIo();
 
     sdmmc_card_t* card_ = nullptr;
+    // Owned by the ESP-IDF VFS mount and valid only while mounted_. Keeping
+    // this registration pointer avoids opening the root directory merely to
+    // read FatFs' already-cached FSInfo fields on every product remount.
+    FATFS* filesystem_ = nullptr;
     std::uint8_t driveNumber_ = 0xFF;
     bool busInitialized_ = false;
     bool mounted_ = false;

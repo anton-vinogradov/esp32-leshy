@@ -532,14 +532,26 @@ def main() -> int:
             "ff_diskio_get_pdrv_card",
             "guardSharedChipSelect",
             "cachedFreeBytes",
-            "filesystem->free_clst",
-            "f_opendir",
+            "filesystem_->free_clst",
+            "get_vfs_fat_get_sd_ctx",
+            "filesystem_",
         ):
             combined = filesystem_adapter + "\n" + (
                 physical_sd_filesystem.with_suffix(".h").read_text(encoding="utf-8")
             )
             if marker not in combined:
                 errors.append(f"guarded SD filesystem adapter is missing: {marker}")
+        cached_free_start = filesystem_adapter.find(
+            "std::uint64_t BoardSdFilesystem::cachedFreeBytes() const")
+        cached_free_end = filesystem_adapter.find(
+            "bool BoardSdFilesystem::exists", cached_free_start)
+        cached_free = filesystem_adapter[cached_free_start:cached_free_end]
+        for marker in ("f_opendir", "f_getfree", "f_stat"):
+            if marker in cached_free:
+                errors.append(
+                    "cached SD free-space evidence performs physical I/O: "
+                    f"{marker}"
+                )
         for pattern in (
             r"\bSD\s*\.\s*writeRAW",
             r"\bformat\s*\(",

@@ -4346,11 +4346,14 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
         return report;
     }
     publishProductSurveyPreparationStage("filesystem_metadata");
+    publishProductSurveyPreparationStage("filesystem_capacity");
     report.cardCapacityBytes = productSurveyFilesystem.cardCapacityBytes();
+    publishProductSurveyPreparationStage("filesystem_free_cache");
     report.cachedFreeBytes = productSurveyFilesystem.cachedFreeBytes();
     const bool capacityMatched =
         report.cardCapacityBytes != 0 &&
         report.cardCapacityBytes == identity.identity.capacityBytes;
+    publishProductSurveyPreparationStage("filesystem_root");
     const bool rootExists = productSurveyFilesystem.exists(
         leshy1::storage::kProductSessionStoreRoot);
 

@@ -81,6 +81,18 @@ class TemporaryDeviceLockHil:
         try:
             if self.fixture_started and not self.cleanup_proven:
                 self.cleanup_report = fixture_command(self.device, "cleanup")
+                # A firmware reset invalidates the RAM-only authenticated HIL
+                # session before the runner can prove fixture restoration.
+                # Reacquire a session only for cleanup; boot has already
+                # restored the product namespace and the idempotent cleanup
+                # command proves the isolated namespace is empty.
+                if self.cleanup_report.get("status") == "hil_session_required":
+                    self.sessions.append(
+                        begin_hil(self.device, self.run_id, self.app_identity))
+                    self.hil_started = True
+                    self.hil_ended = False
+                    self.cleanup_report = fixture_command(
+                        self.device, "cleanup")
                 failures.extend(fixture_failures(
                     self.cleanup_report, "fixture_cleanup", status="cleaned",
                     operation="cleanup", active=False, selected=False,
