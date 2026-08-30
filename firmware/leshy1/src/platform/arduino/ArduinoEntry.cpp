@@ -499,6 +499,7 @@ constexpr const char* kLegacyStatusLedBrightnessKey = "led_br";
 HardwareInventory inventory;
 AppCatalog appCatalog;
 leshy1::platform::arduino::MbedTlsDeviceLockCrypto deviceLockCrypto;
+leshy1::platform::arduino::MbedTlsProtectedDataCipher protectedDataCipher;
 leshy1::platform::arduino::NvsDeviceLockStore deviceLockStore;
 leshy1::services::security::DeviceLock deviceLock(deviceLockStore,
                                                    deviceLockCrypto);
@@ -928,7 +929,8 @@ leshy1::storage::SessionStoreIoRouter surveyStoreRouter(ramSessionStore);
 // Every physical-store path owns Storage+RadioSpi exclusively and closes its
 // adapter before releasing that lease. Product and diagnostic paths therefore
 // share one 4.4 KiB I/O workspace safely.
-ArduinoFsSessionStoreIo productSurveyStore(sdSessionStoreIoWorkspace);
+ArduinoFsSessionStoreIo productSurveyStore(
+    sdSessionStoreIoWorkspace, nullptr, &protectedDataCipher, &deviceLock);
 BoardSdFilesystem productSurveyFilesystem;
 SurveyWorkflow surveyWorkflow(surveyController, surveyStoreRouter,
                               sessionStoreWorkspace(), librarySession,
@@ -7034,7 +7036,8 @@ void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
 
     if (permit.allowed()) {
         ArduinoFsSessionStoreIo io(filesystem.driveNumber(),
-                                   sdSessionStoreIoWorkspace);
+                                   sdSessionStoreIoWorkspace, nullptr,
+                                   &protectedDataCipher, &deviceLock);
         productBootRecovery.opened = io.openExistingReadOnly(permit);
         if (productBootRecovery.opened) {
             productBootRecovery.catalog = sessionCatalog.recoverLatest(
@@ -8033,7 +8036,8 @@ bool loadTargetsProduct(const AppMenuItem& item) {
             leshy1::storage::productStoreAccessStatusName(permit.status);
     } else {
         ArduinoFsSessionStoreIo io(filesystem.driveNumber(),
-                                   sdSessionStoreIoWorkspace);
+                                   sdSessionStoreIoWorkspace, nullptr,
+                                   &protectedDataCipher, &deviceLock);
         if (!io.openExistingReadOnly(permit)) {
             targetsProductStatus = "open_failed";
         } else {
@@ -8060,9 +8064,9 @@ bool loadTargetsProduct(const AppMenuItem& item) {
             }
             const bool sessionReady = pairRecovered || latestRecovered;
             const bool targetStatePresent = filesystem.exists(
-                    "/leshy/sessions/v1/target-state-head-a.bin") ||
+                    "/leshy/sessions/v1/enc-target-state-head-a.bin") ||
                 filesystem.exists(
-                    "/leshy/sessions/v1/target-state-head-b.bin");
+                    "/leshy/sessions/v1/enc-target-state-head-b.bin");
             if (sessionReady && targetStatePresent) {
                 targetStateWorkspace = acquireTargetsStoreCodecWorkspace();
                 if (targetStateWorkspace == nullptr) {
@@ -8689,7 +8693,7 @@ void runTargetsMutationWorker(void*) {
         }
         io = new (std::nothrow) ArduinoFsSessionStoreIo(
             filesystem.driveNumber(), sdSessionStoreIoWorkspace,
-            supervisedCheckpoint);
+            supervisedCheckpoint, &protectedDataCipher, &deviceLock);
         if (io == nullptr) {
             event.status = "io_workspace_unavailable";
             break;
@@ -29743,7 +29747,8 @@ void emitProductStoreBootstrap(Stream& reply,
         leshy1::storage::authorizeProductStore(media, request);
 
     ArduinoFsSessionStoreIo io(filesystem.driveNumber(),
-                               sdSessionStoreIoWorkspace);
+                               sdSessionStoreIoWorkspace, nullptr,
+                               &protectedDataCipher, &deviceLock);
     const bool opened = permit.allowed() &&
         (rootExisted ? io.openExistingWritable(permit) : io.prepare(permit));
     const bool rootCreated = !rootExisted && opened && filesystem.exists(
@@ -29782,6 +29787,8 @@ void emitProductStoreBootstrap(Stream& reply,
 
     leshy1::storage::SessionStoreCommitResult commit;
     leshy1::apps::library::SessionCatalogResult cataloged;
+    leshy1::platform::arduino::ProtectedFileInspection protectedInspection;
+    bool protectedFileInspected = false;
     if (stopped && scannerCleanup && queueDropped == 0) {
         commit = leshy1::storage::commitNextSession(
             io, sessionStoreWorkspace(), surveySession);
@@ -29789,6 +29796,15 @@ void emitProductStoreBootstrap(Stream& reply,
             cataloged = sessionCatalog.recoverLatest(
                 io, sessionStoreWorkspace(), librarySession, libraryController,
                 true, false);
+            char segmentPath[leshy1::storage::kSessionStorePathMax] = {};
+            protectedFileInspected =
+                leshy1::storage::formatSessionStorePath(
+                    leshy1::storage::StoreFileKind::Segment,
+                    commit.generation, segmentPath, sizeof(segmentPath)) &&
+                io.inspectProtectedFile(
+                    segmentPath, sessionStoreWorkspace().segment.data(),
+                    sessionStoreWorkspace().segmentSize,
+                    &protectedInspection);
         }
     }
     const std::uint64_t bytesWritten = io.bytesWritten();
@@ -29810,6 +29826,7 @@ void emitProductStoreBootstrap(Stream& reply,
         permit.allowed() && opened && (rootExisted || rootCreated) &&
         scannerBegun && stopped && scannerCleanup && queueDropped == 0 &&
         appendDropped == 0 && commit.complete() && cataloged.admitted() &&
+        protectedFileInspected &&
         bytesWritten != 0 && fileSyncs != 0 && directorySyncs != 0 &&
         filesystemCleanup && ownedAfter == 0 && enrollmentSaved;
 
@@ -29830,7 +29847,7 @@ void emitProductStoreBootstrap(Stream& reply,
 
     std::snprintf(
         line, sizeof(sdPhysicalEvidence.line),
-        "{\"schema\":\"leshy.storage.product_bootstrap.v1\","
+        "{\"schema\":\"leshy.storage.product_bootstrap.v2\","
         "\"kind\":\"result\",\"status\":\"%s\","
         "\"expected_fingerprint\":\"%s\",\"cid_hex\":\"%s\","
         "\"fingerprint_matched\":%s,\"mounted_writable\":%s,"
@@ -29843,6 +29860,10 @@ void emitProductStoreBootstrap(Stream& reply,
         "\"queue_drops\":%lu,\"append_drops\":%lu,"
         "\"commit_status\":\"%s\",\"generation\":%lu,"
         "\"catalog_status\":\"%s\",\"catalog_admitted\":%s,"
+        "\"encrypted_namespace\":%s,\"envelope_header_valid\":%s,"
+        "\"physical_size_exact\":%s,\"ciphertext_differs\":%s,"
+        "\"protected_plaintext_bytes\":%lu,"
+        "\"protected_physical_bytes\":%llu,"
         "\"bytes_written\":%llu,\"file_syncs\":%lu,"
         "\"directory_syncs\":%lu,\"io_failure\":\"%s\","
         "\"io_result\":\"%s\",\"enrollment_saved\":%s,"
@@ -29867,6 +29888,12 @@ void emitProductStoreBootstrap(Stream& reply,
         static_cast<unsigned long>(commit.generation),
         leshy1::apps::library::sessionCatalogStatusName(cataloged.status),
         cataloged.admitted() ? "true" : "false",
+        protectedInspection.encryptedNamespace ? "true" : "false",
+        protectedInspection.headerValid ? "true" : "false",
+        protectedInspection.physicalSizeExact ? "true" : "false",
+        protectedInspection.ciphertextDiffers ? "true" : "false",
+        static_cast<unsigned long>(protectedInspection.plaintextSize),
+        static_cast<unsigned long long>(protectedInspection.physicalSize),
         static_cast<unsigned long long>(bytesWritten),
         static_cast<unsigned long>(fileSyncs),
         static_cast<unsigned long>(directorySyncs), ioFailure, ioResult,

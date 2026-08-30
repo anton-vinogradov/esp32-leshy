@@ -53,6 +53,20 @@ bool ArduinoFsSessionStoreIo::progress(const char* stage) {
     return false;
 }
 
+void ArduinoFsSessionStoreIo::secureClear(std::uint8_t* bytes,
+                                          std::size_t size) {
+    volatile std::uint8_t* cursor = bytes;
+    while (size-- != 0U) *cursor++ = 0U;
+}
+
+bool ArduinoFsSessionStoreIo::protectedReady() const {
+    if (protectedCipher_ == nullptr || deviceLock_ == nullptr) return false;
+    std::array<std::uint8_t, services::security::kDeviceLockDataKeyBytes> key{};
+    const bool available = deviceLock_->copyDataKey(&key);
+    secureClear(key.data(), key.size());
+    return available;
+}
+
 bool ArduinoFsSessionStoreIo::safeRelativePath(const char* path) const {
     if (path == nullptr || path[0] == '\0') return false;
     for (std::size_t index = 0; index < storage::kSessionStorePathMax; ++index) {
@@ -86,9 +100,15 @@ bool ArduinoFsSessionStoreIo::formatFullPath(
         driveNumber_ >= FF_VOLUMES || driveNumber_ > 9) {
         return false;
     }
-    const int written = std::snprintf(output, capacity, "%u:%s/%s",
-                                      static_cast<unsigned>(driveNumber_),
-                                      rootPath_, path);
+    // The encrypted namespace is physically disjoint from legacy plaintext
+    // files while preserving the stable logical SessionStore names. This is a
+    // non-destructive, fail-closed schema transition: old files are never
+    // interpreted as ciphertext and cannot shadow a protected head.
+    const int written = productRoot_
+        ? std::snprintf(output, capacity, "%u:%s/enc-%s",
+                        static_cast<unsigned>(driveNumber_), rootPath_, path)
+        : std::snprintf(output, capacity, "%u:%s/%s",
+                        static_cast<unsigned>(driveNumber_), rootPath_, path);
     return written > 0 && static_cast<std::size_t>(written) < capacity;
 }
 
@@ -155,6 +175,7 @@ bool ArduinoFsSessionStoreIo::prepare(
     lastFailure_ = "none";
     lastFresult_ = FR_OK;
     if (ready_ || driveNumber_ >= FF_VOLUMES || !permit.allowed() ||
+        !protectedReady() ||
         !permit.writable || permit.byteLimit == 0 ||
         permit.operation != storage::ProductStoreOperation::InitializeStore ||
         permit.rootPath == nullptr ||
@@ -175,6 +196,7 @@ bool ArduinoFsSessionStoreIo::prepare(
     byteLimit_ = permit.byteLimit;
     ready_ = true;
     writable_ = true;
+    productRoot_ = true;
     return true;
 }
 
@@ -306,6 +328,7 @@ bool ArduinoFsSessionStoreIo::openExistingPath(
               std::strncmp(path, storage::kScratchRoot,
                            std::strlen(storage::kScratchRoot)) == 0;
     if (ready_ || driveNumber_ >= FF_VOLUMES || path == nullptr ||
+        (productRoot && !protectedReady()) ||
         !approvedRoot ||
         std::strlen(path) >= sizeof(rootPath_) || !directoryExists(path)) {
         return false;
@@ -314,6 +337,7 @@ bool ArduinoFsSessionStoreIo::openExistingPath(
     byteLimit_ = byteLimit;
     ready_ = true;
     writable_ = writable;
+    productRoot_ = productRoot;
     return true;
 }
 
@@ -325,10 +349,12 @@ void ArduinoFsSessionStoreIo::end() {
     fileBarrierComplete_ = false;
     ready_ = false;
     writable_ = false;
+    productRoot_ = false;
 }
 
 bool ArduinoFsSessionStoreIo::writeFile(
     const char* path, const std::uint8_t* data, std::size_t size) {
+    if (productRoot_) return writeProtectedFile(path, data, size);
     if (!ready_ || !writable_ || pendingOpen_ || data == nullptr || size == 0 ||
         size > UINT_MAX || bytesWritten_ > byteLimit_ ||
         size > byteLimit_ - bytesWritten_) {
@@ -378,6 +404,9 @@ bool ArduinoFsSessionStoreIo::writeFile(
 ArduinoFsSessionStoreIo::ReadStatus ArduinoFsSessionStoreIo::readFile(
     const char* path, std::uint8_t* output, std::size_t capacity,
     std::size_t* outputSize) {
+    if (productRoot_) {
+        return readProtectedFile(path, output, capacity, outputSize);
+    }
     if (!ready_ || pendingOpen_ || output == nullptr || outputSize == nullptr) {
         return ReadStatus::IoError;
     }
@@ -412,6 +441,295 @@ ArduinoFsSessionStoreIo::ReadStatus ArduinoFsSessionStoreIo::readFile(
     if (!progress("read_close_progress")) return ReadStatus::IoError;
     *outputSize = static_cast<std::size_t>(fileSize);
     return ReadStatus::Ok;
+}
+
+bool ArduinoFsSessionStoreIo::writeProtectedFile(
+    const char* path, const std::uint8_t* data, std::size_t size) {
+    if (!ready_ || !writable_ || !productRoot_ || pendingOpen_ ||
+        protectedCipher_ == nullptr || deviceLock_ == nullptr ||
+        data == nullptr || size == 0U || size > UINT32_MAX ||
+        bytesWritten_ > byteLimit_ || size > byteLimit_ - bytesWritten_) {
+        recordFailure("protected_write_precondition", FR_INVALID_PARAMETER);
+        return false;
+    }
+    char fullPath[kFullPathCapacity] = {};
+    if (!formatFullPath(path, fullPath, sizeof(fullPath))) {
+        recordFailure("protected_write_path", FR_INVALID_NAME);
+        return false;
+    }
+    std::array<std::uint8_t, services::security::kDeviceLockDataKeyBytes> key{};
+    storage::ProtectedFileDescription description{};
+    description.plaintextSize = static_cast<std::uint32_t>(size);
+    if (!deviceLock_->copyDataKey(&key) ||
+        !protectedCipher_->fillNonce(&description.nonceSeed)) {
+        secureClear(key.data(), key.size());
+        recordFailure("protected_write_key", FR_DENIED);
+        return false;
+    }
+    description.nonceSeed[8] = 0U;
+    description.nonceSeed[9] = 0U;
+    description.nonceSeed[10] = 0U;
+    description.nonceSeed[11] = 0U;
+    if (!storage::encodeProtectedFileHeader(
+            description, &workspace_.protectedHeader)) {
+        secureClear(key.data(), key.size());
+        recordFailure("protected_write_header", FR_INVALID_PARAMETER);
+        return false;
+    }
+    const std::size_t physicalSize = storage::protectedFilePhysicalSize(size);
+    if (physicalSize == 0U || physicalSize > UINT_MAX) {
+        secureClear(key.data(), key.size());
+        recordFailure("protected_write_size", FR_INVALID_PARAMETER);
+        return false;
+    }
+    if (!progress("protected_write_open_progress")) {
+        secureClear(key.data(), key.size());
+        return false;
+    }
+    workspace_.file = {};
+    FRESULT result = f_open(&workspace_.file, fullPath,
+                            FA_WRITE | FA_CREATE_ALWAYS);
+    if (result != FR_OK) {
+        secureClear(key.data(), key.size());
+        recordFailure("protected_write_open", result);
+        return false;
+    }
+    pendingOpen_ = true;
+    ++writeCalls_;
+    UINT written = 0;
+    result = f_write(&workspace_.file, workspace_.protectedHeader.data(),
+                     static_cast<UINT>(workspace_.protectedHeader.size()),
+                     &written);
+    bool complete = result == FR_OK &&
+        written == workspace_.protectedHeader.size();
+    const std::size_t chunkCount = storage::protectedFileChunkCount(size);
+    for (std::size_t chunkIndex = 0;
+         complete && chunkIndex < chunkCount; ++chunkIndex) {
+        const std::size_t chunkSize =
+            storage::protectedFileChunkSize(size, chunkIndex);
+        const std::size_t offset = chunkIndex * storage::kProtectedFileChunkBytes;
+        std::array<std::uint8_t,
+                   services::security::kDeviceLockWrapNonceBytes> nonce{};
+        std::size_t aadSize = 0;
+        complete = storage::buildProtectedFileChunkNonce(
+                description, chunkIndex, &nonce) &&
+            storage::buildProtectedFileChunkAad(
+                workspace_.protectedHeader, path, chunkIndex,
+                &workspace_.protectedAad, &aadSize) &&
+            protectedCipher_->seal(
+                key, nonce, workspace_.protectedAad.data(), aadSize,
+                data + offset, chunkSize, workspace_.protectedChunk.data(),
+                &workspace_.protectedTag);
+        if (complete) {
+            written = 0;
+            result = f_write(&workspace_.file,
+                             workspace_.protectedChunk.data(),
+                             static_cast<UINT>(chunkSize), &written);
+            complete = result == FR_OK && written == chunkSize;
+        }
+        if (complete) {
+            written = 0;
+            result = f_write(&workspace_.file, workspace_.protectedTag.data(),
+                             static_cast<UINT>(workspace_.protectedTag.size()),
+                             &written);
+            complete = result == FR_OK &&
+                written == workspace_.protectedTag.size();
+        }
+        if (complete) complete = progress("protected_write_chunk_progress");
+        secureClear(nonce.data(), nonce.size());
+        secureClear(workspace_.protectedChunk.data(),
+                    workspace_.protectedChunk.size());
+        secureClear(workspace_.protectedTag.data(),
+                    workspace_.protectedTag.size());
+    }
+    secureClear(key.data(), key.size());
+    if (!complete) {
+        const FRESULT closeResult = f_close(&workspace_.file);
+        pendingOpen_ = false;
+        recordFailure("protected_write_data",
+                      result != FR_OK ? result :
+                      (closeResult != FR_OK ? closeResult : FR_INT_ERR));
+        return false;
+    }
+    bytesWritten_ += size;
+    std::strcpy(pendingRelative_, path);
+    pendingSize_ = physicalSize;
+    fileBarrierComplete_ = false;
+    return true;
+}
+
+ArduinoFsSessionStoreIo::ReadStatus
+ArduinoFsSessionStoreIo::readProtectedFile(
+    const char* path, std::uint8_t* output, std::size_t capacity,
+    std::size_t* outputSize) {
+    if (outputSize != nullptr) *outputSize = 0U;
+    if (!ready_ || !productRoot_ || pendingOpen_ ||
+        protectedCipher_ == nullptr || deviceLock_ == nullptr ||
+        output == nullptr || outputSize == nullptr) {
+        return ReadStatus::IoError;
+    }
+    char fullPath[kFullPathCapacity] = {};
+    if (!formatFullPath(path, fullPath, sizeof(fullPath))) {
+        return ReadStatus::IoError;
+    }
+    if (!progress("protected_read_open_progress")) return ReadStatus::IoError;
+    workspace_.file = {};
+    FRESULT result = f_open(&workspace_.file, fullPath, FA_READ);
+    if (result == FR_NO_FILE || result == FR_NO_PATH) return ReadStatus::NotFound;
+    if (result != FR_OK) {
+        recordFailure("protected_read_open", result);
+        return ReadStatus::IoError;
+    }
+    const FSIZE_t fileSize = f_size(&workspace_.file);
+    UINT read = 0;
+    result = f_read(&workspace_.file, workspace_.protectedHeader.data(),
+                    static_cast<UINT>(workspace_.protectedHeader.size()),
+                    &read);
+    storage::ProtectedFileDescription description{};
+    if (result != FR_OK || read != workspace_.protectedHeader.size() ||
+        !storage::decodeProtectedFileHeader(
+            workspace_.protectedHeader, &description)) {
+        f_close(&workspace_.file);
+        recordFailure("protected_read_header",
+                      result != FR_OK ? result : FR_INVALID_OBJECT);
+        return ReadStatus::IoError;
+    }
+    const std::size_t physicalSize =
+        storage::protectedFilePhysicalSize(description.plaintextSize);
+    if (fileSize != physicalSize) {
+        f_close(&workspace_.file);
+        recordFailure("protected_read_size", FR_INVALID_OBJECT);
+        return ReadStatus::IoError;
+    }
+    if (description.plaintextSize > capacity) {
+        f_close(&workspace_.file);
+        return ReadStatus::TooLarge;
+    }
+    std::array<std::uint8_t, services::security::kDeviceLockDataKeyBytes> key{};
+    if (!deviceLock_->copyDataKey(&key)) {
+        f_close(&workspace_.file);
+        recordFailure("protected_read_key", FR_DENIED);
+        return ReadStatus::IoError;
+    }
+    bool complete = true;
+    std::size_t produced = 0U;
+    const std::size_t chunkCount =
+        storage::protectedFileChunkCount(description.plaintextSize);
+    for (std::size_t chunkIndex = 0;
+         complete && chunkIndex < chunkCount; ++chunkIndex) {
+        const std::size_t chunkSize = storage::protectedFileChunkSize(
+            description.plaintextSize, chunkIndex);
+        read = 0;
+        result = f_read(&workspace_.file, workspace_.protectedChunk.data(),
+                        static_cast<UINT>(chunkSize), &read);
+        complete = result == FR_OK && read == chunkSize;
+        if (complete) {
+            read = 0;
+            result = f_read(&workspace_.file, workspace_.protectedTag.data(),
+                            static_cast<UINT>(workspace_.protectedTag.size()),
+                            &read);
+            complete = result == FR_OK &&
+                read == workspace_.protectedTag.size();
+        }
+        std::array<std::uint8_t,
+                   services::security::kDeviceLockWrapNonceBytes> nonce{};
+        std::size_t aadSize = 0U;
+        if (complete) {
+            complete = storage::buildProtectedFileChunkNonce(
+                    description, chunkIndex, &nonce) &&
+                storage::buildProtectedFileChunkAad(
+                    workspace_.protectedHeader, path, chunkIndex,
+                    &workspace_.protectedAad, &aadSize) &&
+                protectedCipher_->open(
+                    key, nonce, workspace_.protectedAad.data(), aadSize,
+                    workspace_.protectedChunk.data(), chunkSize,
+                    workspace_.protectedTag, output + produced);
+        }
+        if (complete) {
+            produced += chunkSize;
+            complete = progress("protected_read_chunk_progress");
+        }
+        secureClear(nonce.data(), nonce.size());
+        secureClear(workspace_.protectedChunk.data(),
+                    workspace_.protectedChunk.size());
+        secureClear(workspace_.protectedTag.data(),
+                    workspace_.protectedTag.size());
+    }
+    secureClear(key.data(), key.size());
+    const FRESULT closeResult = f_close(&workspace_.file);
+    complete = complete && closeResult == FR_OK &&
+        produced == description.plaintextSize;
+    if (!complete) {
+        secureClear(output, produced);
+        recordFailure("protected_read_auth",
+                      result != FR_OK ? result :
+                      (closeResult != FR_OK ? closeResult : FR_INT_ERR));
+        return ReadStatus::IoError;
+    }
+    *outputSize = produced;
+    return ReadStatus::Ok;
+}
+
+bool ArduinoFsSessionStoreIo::inspectProtectedFile(
+    const char* path, const std::uint8_t* knownPlaintext,
+    std::size_t knownSize, ProtectedFileInspection* output) {
+    if (output != nullptr) *output = {};
+    if (!ready_ || !productRoot_ || pendingOpen_ || path == nullptr ||
+        knownPlaintext == nullptr || knownSize == 0U || output == nullptr) {
+        return false;
+    }
+    char fullPath[kFullPathCapacity] = {};
+    if (!formatFullPath(path, fullPath, sizeof(fullPath))) return false;
+
+    workspace_.file = {};
+    FRESULT result = f_open(&workspace_.file, fullPath, FA_READ);
+    if (result != FR_OK) {
+        recordFailure("protected_inspect_open", result);
+        return false;
+    }
+    const FSIZE_t fileSize = f_size(&workspace_.file);
+    UINT read = 0;
+    result = f_read(&workspace_.file, workspace_.protectedHeader.data(),
+                    static_cast<UINT>(workspace_.protectedHeader.size()),
+                    &read);
+    storage::ProtectedFileDescription description{};
+    const bool headerValid = result == FR_OK &&
+        read == workspace_.protectedHeader.size() &&
+        storage::decodeProtectedFileHeader(
+            workspace_.protectedHeader, &description);
+    const std::size_t expectedPhysicalSize = headerValid
+        ? storage::protectedFilePhysicalSize(description.plaintextSize) : 0U;
+    const bool physicalSizeExact = headerValid &&
+        expectedPhysicalSize != 0U && fileSize == expectedPhysicalSize;
+    const std::size_t compareSize = headerValid &&
+        description.plaintextSize == knownSize
+        ? storage::protectedFileChunkSize(description.plaintextSize, 0U) : 0U;
+    bool ciphertextDiffers = false;
+    if (physicalSizeExact && compareSize != 0U) {
+        read = 0;
+        result = f_read(&workspace_.file, workspace_.protectedChunk.data(),
+                        static_cast<UINT>(compareSize), &read);
+        ciphertextDiffers = result == FR_OK && read == compareSize &&
+            !std::equal(workspace_.protectedChunk.begin(),
+                        workspace_.protectedChunk.begin() + compareSize,
+                        knownPlaintext);
+    }
+    const FRESULT closeResult = f_close(&workspace_.file);
+    output->encryptedNamespace = std::strstr(fullPath, "/enc-") != nullptr;
+    output->headerValid = headerValid;
+    output->physicalSizeExact = physicalSizeExact;
+    output->ciphertextDiffers = ciphertextDiffers;
+    output->plaintextSize = description.plaintextSize;
+    output->physicalSize = static_cast<std::size_t>(fileSize);
+    secureClear(workspace_.protectedChunk.data(),
+                workspace_.protectedChunk.size());
+    if (closeResult != FR_OK) {
+        recordFailure("protected_inspect_close", closeResult);
+        return false;
+    }
+    return output->encryptedNamespace && output->headerValid &&
+        output->physicalSizeExact && output->ciphertextDiffers &&
+        output->plaintextSize == knownSize;
 }
 
 bool ArduinoFsSessionStoreIo::syncFile(const char* path) {

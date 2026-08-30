@@ -51,6 +51,62 @@ public:
         return true;
     }
 
+    bool deriveCredentialKeys(
+        const char* pin, std::size_t pinLength,
+        const std::array<std::uint8_t, kDeviceLockSaltBytes>& salt,
+        std::uint32_t iterations,
+        std::array<std::uint8_t, kDeviceLockVerifierBytes>* verifier,
+        std::array<std::uint8_t, kDeviceLockWrappingKeyBytes>* wrappingKey)
+        override {
+        if (!deriveVerifier(pin, pinLength, salt, iterations, verifier) ||
+            wrappingKey == nullptr) {
+            return false;
+        }
+        for (std::size_t index = 0; index < wrappingKey->size(); ++index) {
+            (*wrappingKey)[index] = static_cast<std::uint8_t>(
+                (*verifier)[index] ^ 0x5aU);
+        }
+        return true;
+    }
+
+    bool wrapDataKey(
+        const std::array<std::uint8_t, kDeviceLockWrappingKeyBytes>& wrappingKey,
+        const std::array<std::uint8_t, kDeviceLockWrapNonceBytes>& nonce,
+        const std::array<std::uint8_t, kDeviceLockDataKeyBytes>& dataKey,
+        std::array<std::uint8_t, kDeviceLockDataKeyBytes>* wrappedDataKey,
+        std::array<std::uint8_t, kDeviceLockAuthTagBytes>* tag) override {
+        if (fail || wrappedDataKey == nullptr || tag == nullptr) return false;
+        for (std::size_t index = 0; index < wrappedDataKey->size(); ++index) {
+            (*wrappedDataKey)[index] = static_cast<std::uint8_t>(
+                dataKey[index] ^ wrappingKey[index]);
+        }
+        for (std::size_t index = 0; index < tag->size(); ++index) {
+            (*tag)[index] = static_cast<std::uint8_t>(
+                nonce[index % nonce.size()] ^ wrappingKey[index]);
+        }
+        return true;
+    }
+
+    bool unwrapDataKey(
+        const std::array<std::uint8_t, kDeviceLockWrappingKeyBytes>& wrappingKey,
+        const std::array<std::uint8_t, kDeviceLockWrapNonceBytes>& nonce,
+        const std::array<std::uint8_t, kDeviceLockDataKeyBytes>& wrappedDataKey,
+        const std::array<std::uint8_t, kDeviceLockAuthTagBytes>& tag,
+        std::array<std::uint8_t, kDeviceLockDataKeyBytes>* dataKey) override {
+        if (fail || dataKey == nullptr) return false;
+        for (std::size_t index = 0; index < tag.size(); ++index) {
+            if (tag[index] != static_cast<std::uint8_t>(
+                    nonce[index % nonce.size()] ^ wrappingKey[index])) {
+                return false;
+            }
+        }
+        for (std::size_t index = 0; index < dataKey->size(); ++index) {
+            (*dataKey)[index] = static_cast<std::uint8_t>(
+                wrappedDataKey[index] ^ wrappingKey[index]);
+        }
+        return true;
+    }
+
     bool fail = false;
     unsigned randomCalls = 0;
     unsigned deriveCalls = 0;
@@ -74,21 +130,56 @@ public:
         return true;
     }
 
+    DeviceLockBootstrapStatus loadBootstrapDataKey(
+        std::array<std::uint8_t, kDeviceLockDataKeyBytes>* output) override {
+        ++bootstrapLoads;
+        if (bootstrapStatus == DeviceLockBootstrapStatus::Loaded &&
+            output != nullptr) {
+            *output = bootstrapKey;
+        }
+        return bootstrapStatus;
+    }
+
+    bool saveBootstrapDataKey(
+        const std::array<std::uint8_t, kDeviceLockDataKeyBytes>& key) override {
+        ++bootstrapSaves;
+        if (failSave) return false;
+        bootstrapKey = key;
+        bootstrapStatus = DeviceLockBootstrapStatus::Loaded;
+        return true;
+    }
+
+    bool clearBootstrapDataKey() override {
+        ++bootstrapClears;
+        if (failClear) return false;
+        bootstrapKey.fill(0);
+        bootstrapStatus = DeviceLockBootstrapStatus::Missing;
+        return true;
+    }
+
     bool clearCredentialAndLatch() override {
         ++clears;
         if (failClear) return false;
         credential.clear();
         loadStatus = DeviceLockLoadStatus::MissingVirgin;
+        bootstrapKey.fill(0);
+        bootstrapStatus = DeviceLockBootstrapStatus::Missing;
         return true;
     }
 
     DeviceLockLoadStatus loadStatus = DeviceLockLoadStatus::MissingVirgin;
     DeviceLockCredential credential{};
+    DeviceLockBootstrapStatus bootstrapStatus =
+        DeviceLockBootstrapStatus::Missing;
+    std::array<std::uint8_t, kDeviceLockDataKeyBytes> bootstrapKey{};
     bool failSave = false;
     bool failClear = false;
     unsigned loads = 0;
     unsigned saves = 0;
     unsigned clears = 0;
+    unsigned bootstrapLoads = 0;
+    unsigned bootstrapSaves = 0;
+    unsigned bootstrapClears = 0;
 };
 
 class FakeEraser final : public DeviceLockProtectedDataEraser {
@@ -113,6 +204,9 @@ void testPinPolicyAndSetupRequiredDefault() {
     DeviceLock lock(store, crypto);
     CHECK(lock.restore(10));
     CHECK(lock.state() == DeviceLockState::Unconfigured);
+    CHECK(lock.audit(10).dataKeyAvailable);
+    std::array<std::uint8_t, kDeviceLockDataKeyBytes> bootstrapKey{};
+    CHECK(lock.copyDataKey(&bootstrapKey));
     CHECK(lock.access(DeviceLockOperation::ProtectedEvidence, 10) ==
           DeviceLockAccess::SetupRequired);
     CHECK(lock.access(DeviceLockOperation::Companion, 10) ==
@@ -142,8 +236,9 @@ void testPinPolicyAndSetupRequiredDefault() {
 
     CHECK(lock.configure("704281", 6, 20));
     CHECK(store.saves == 1);
-    CHECK(crypto.randomCalls == 1);
+    CHECK(crypto.randomCalls == 3);
     CHECK(crypto.deriveCalls == 1);
+    CHECK(store.bootstrapStatus == DeviceLockBootstrapStatus::Missing);
     CHECK(store.credential.valid());
     CHECK(lock.access(DeviceLockOperation::ProtectedEvidence, 20) ==
           DeviceLockAccess::Allowed);
@@ -188,6 +283,8 @@ void testLockRestoreAndCorrectUnlock() {
     configure(first);
     first.prepareSystemBoundary();
     CHECK(first.state() == DeviceLockState::Locked);
+    std::array<std::uint8_t, kDeviceLockDataKeyBytes> unavailable{};
+    CHECK(!first.copyDataKey(&unavailable));
     CHECK(first.access(DeviceLockOperation::Export, 101) ==
           DeviceLockAccess::Locked);
     CHECK(first.access(DeviceLockOperation::Cleanup, 101) ==
@@ -198,6 +295,7 @@ void testLockRestoreAndCorrectUnlock() {
     CHECK(rebooted.state() == DeviceLockState::Locked);
     CHECK(rebooted.unlock("704281", 6, 1));
     CHECK(rebooted.state() == DeviceLockState::Unlocked);
+    CHECK(rebooted.audit(1).dataKeyAvailable);
     CHECK(rebooted.access(DeviceLockOperation::Backup, 2) ==
           DeviceLockAccess::Allowed);
     CHECK(store.credential.failedAttempts == 0);
@@ -422,7 +520,11 @@ void testCredentialRecordIsVersionedExactAndCorruptionDetecting() {
     CHECK(decoded.generation == 1);
     CHECK(decoded.salt == store.credential.salt);
     CHECK(decoded.verifier == store.credential.verifier);
-    for (std::size_t index : {0U, 4U, 8U, 16U, 32U, 64U}) {
+    CHECK(decoded.wrapNonce == store.credential.wrapNonce);
+    CHECK(decoded.wrappedDataKey == store.credential.wrappedDataKey);
+    CHECK(decoded.wrapTag == store.credential.wrapTag);
+    for (std::size_t index : {
+             0U, 4U, 8U, 16U, 32U, 64U, 76U, 108U, 124U}) {
         DeviceLockRecord corrupt = record;
         corrupt[index] ^= 0x01U;
         DeviceLockCredential rejected{};

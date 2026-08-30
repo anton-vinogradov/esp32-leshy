@@ -10,6 +10,10 @@ constexpr std::size_t kDeviceLockMinimumPinDigits = 6;
 constexpr std::size_t kDeviceLockMaximumPinDigits = 12;
 constexpr std::size_t kDeviceLockSaltBytes = 16;
 constexpr std::size_t kDeviceLockVerifierBytes = 32;
+constexpr std::size_t kDeviceLockDataKeyBytes = 32;
+constexpr std::size_t kDeviceLockWrappingKeyBytes = 32;
+constexpr std::size_t kDeviceLockWrapNonceBytes = 12;
+constexpr std::size_t kDeviceLockAuthTagBytes = 16;
 constexpr std::uint32_t kDeviceLockPbkdf2Iterations = 120000;
 constexpr std::uint8_t kDeviceLockMaximumFailures = 5;
 constexpr std::uint64_t kDeviceLockIdleTimeoutUs =
@@ -47,7 +51,7 @@ const char* deviceLockStateName(DeviceLockState state);
 const char* deviceLockFailureName(DeviceLockFailure failure);
 
 struct DeviceLockCredential final {
-    static constexpr std::uint8_t kSchemaVersion = 1;
+    static constexpr std::uint8_t kSchemaVersion = 2;
 
     std::uint8_t schemaVersion = kSchemaVersion;
     std::uint8_t failedAttempts = 0;
@@ -55,6 +59,9 @@ struct DeviceLockCredential final {
     std::uint32_t generation = 0;
     std::array<std::uint8_t, kDeviceLockSaltBytes> salt{};
     std::array<std::uint8_t, kDeviceLockVerifierBytes> verifier{};
+    std::array<std::uint8_t, kDeviceLockWrapNonceBytes> wrapNonce{};
+    std::array<std::uint8_t, kDeviceLockDataKeyBytes> wrappedDataKey{};
+    std::array<std::uint8_t, kDeviceLockAuthTagBytes> wrapTag{};
 
     bool valid() const;
     void clear();
@@ -68,11 +75,23 @@ enum class DeviceLockLoadStatus : std::uint8_t {
     Error,
 };
 
+enum class DeviceLockBootstrapStatus : std::uint8_t {
+    Missing,
+    Loaded,
+    Corrupt,
+    Error,
+};
+
 class DeviceLockStore {
 public:
     virtual ~DeviceLockStore() = default;
     virtual DeviceLockLoadStatus load(DeviceLockCredential* output) = 0;
     virtual bool save(const DeviceLockCredential& credential) = 0;
+    virtual DeviceLockBootstrapStatus loadBootstrapDataKey(
+        std::array<std::uint8_t, kDeviceLockDataKeyBytes>* output) = 0;
+    virtual bool saveBootstrapDataKey(
+        const std::array<std::uint8_t, kDeviceLockDataKeyBytes>& key) = 0;
+    virtual bool clearBootstrapDataKey() = 0;
     // Factory reset must remove the credential first and its provisioned latch
     // last. A power loss between those steps therefore restores fail closed as
     // MissingExpected rather than silently returning to a virgin device.
@@ -88,6 +107,24 @@ public:
         const std::array<std::uint8_t, kDeviceLockSaltBytes>& salt,
         std::uint32_t iterations,
         std::array<std::uint8_t, kDeviceLockVerifierBytes>* output) = 0;
+    virtual bool deriveCredentialKeys(
+        const char* pin, std::size_t pinLength,
+        const std::array<std::uint8_t, kDeviceLockSaltBytes>& salt,
+        std::uint32_t iterations,
+        std::array<std::uint8_t, kDeviceLockVerifierBytes>* verifier,
+        std::array<std::uint8_t, kDeviceLockWrappingKeyBytes>* wrappingKey) = 0;
+    virtual bool wrapDataKey(
+        const std::array<std::uint8_t, kDeviceLockWrappingKeyBytes>& wrappingKey,
+        const std::array<std::uint8_t, kDeviceLockWrapNonceBytes>& nonce,
+        const std::array<std::uint8_t, kDeviceLockDataKeyBytes>& dataKey,
+        std::array<std::uint8_t, kDeviceLockDataKeyBytes>* wrappedDataKey,
+        std::array<std::uint8_t, kDeviceLockAuthTagBytes>* tag) = 0;
+    virtual bool unwrapDataKey(
+        const std::array<std::uint8_t, kDeviceLockWrappingKeyBytes>& wrappingKey,
+        const std::array<std::uint8_t, kDeviceLockWrapNonceBytes>& nonce,
+        const std::array<std::uint8_t, kDeviceLockDataKeyBytes>& wrappedDataKey,
+        const std::array<std::uint8_t, kDeviceLockAuthTagBytes>& tag,
+        std::array<std::uint8_t, kDeviceLockDataKeyBytes>* dataKey) = 0;
 };
 
 class DeviceLockProtectedDataEraser {
@@ -134,6 +171,7 @@ struct DeviceLockAudit final {
     std::uint32_t credentialGeneration = 0;
     std::uint64_t retryRemainingUs = 0;
     bool protectedAccessAllowed = false;
+    bool dataKeyAvailable = false;
 };
 
 class DeviceLock final {
@@ -172,6 +210,8 @@ public:
     DeviceLockState state() const { return state_; }
     DeviceLockFailure lastFailure() const { return lastFailure_; }
     DeviceLockAudit audit(std::uint64_t nowUs) const;
+    bool copyDataKey(
+        std::array<std::uint8_t, kDeviceLockDataKeyBytes>* output) const;
 
     static bool pinValid(const char* pin, std::size_t pinLength);
     static bool pinWeak(const char* pin, std::size_t pinLength);
@@ -180,8 +220,11 @@ public:
 
 private:
     bool persistFailure(std::uint64_t nowUs);
-    bool derive(const char* pin, std::size_t pinLength,
-                std::array<std::uint8_t, kDeviceLockVerifierBytes>* output);
+    bool deriveCredentialKeys(
+        const char* pin, std::size_t pinLength,
+        std::array<std::uint8_t, kDeviceLockVerifierBytes>* verifier,
+        std::array<std::uint8_t, kDeviceLockWrappingKeyBytes>* wrappingKey);
+    bool provisionBootstrapDataKey();
     void enterLockedForCredential(std::uint64_t nowUs);
     void clearUnlockSession();
     static bool constantTimeEqual(
@@ -197,6 +240,8 @@ private:
     std::uint64_t retryUntilUs_ = 0;
     std::uint64_t unlockedAtUs_ = 0;
     std::uint64_t lastActivityUs_ = 0;
+    std::array<std::uint8_t, kDeviceLockDataKeyBytes> dataKey_{};
+    bool dataKeyAvailable_ = false;
 };
 
 }  // namespace leshy1::services::security

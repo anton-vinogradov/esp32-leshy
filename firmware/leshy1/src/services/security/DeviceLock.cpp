@@ -97,7 +97,10 @@ bool DeviceLockCredential::valid() const {
         failedAttempts <= kDeviceLockMaximumFailures &&
         iterations == kDeviceLockPbkdf2Iterations && generation != 0 &&
         anyNonzero(salt.data(), salt.size()) &&
-        anyNonzero(verifier.data(), verifier.size());
+        anyNonzero(verifier.data(), verifier.size()) &&
+        anyNonzero(wrapNonce.data(), wrapNonce.size()) &&
+        anyNonzero(wrappedDataKey.data(), wrappedDataKey.size()) &&
+        anyNonzero(wrapTag.data(), wrapTag.size());
 }
 
 void DeviceLockCredential::clear() {
@@ -108,6 +111,18 @@ void DeviceLockCredential::clear() {
     volatile std::uint8_t* verifierCursor = verifier.data();
     for (std::size_t index = 0; index < verifier.size(); ++index) {
         verifierCursor[index] = 0;
+    }
+    volatile std::uint8_t* nonceCursor = wrapNonce.data();
+    for (std::size_t index = 0; index < wrapNonce.size(); ++index) {
+        nonceCursor[index] = 0;
+    }
+    volatile std::uint8_t* wrappedCursor = wrappedDataKey.data();
+    for (std::size_t index = 0; index < wrappedDataKey.size(); ++index) {
+        wrappedCursor[index] = 0;
+    }
+    volatile std::uint8_t* tagCursor = wrapTag.data();
+    for (std::size_t index = 0; index < wrapTag.size(); ++index) {
+        tagCursor[index] = 0;
     }
     schemaVersion = kSchemaVersion;
     failedAttempts = 0;
@@ -188,6 +203,8 @@ bool DeviceLock::constantTimeEqual(
 void DeviceLock::clearUnlockSession() {
     unlockedAtUs_ = 0;
     lastActivityUs_ = 0;
+    secureClear(dataKey_.data(), dataKey_.size());
+    dataKeyAvailable_ = false;
 }
 
 void DeviceLock::enterLockedForCredential(std::uint64_t nowUs) {
@@ -216,6 +233,11 @@ bool DeviceLock::restore(std::uint64_t nowUs) {
     DeviceLockCredential loaded{};
     const DeviceLockLoadStatus status = store_.load(&loaded);
     if (status == DeviceLockLoadStatus::MissingVirgin) {
+        if (!provisionBootstrapDataKey()) {
+            state_ = DeviceLockState::Fault;
+            lastFailure_ = DeviceLockFailure::StoreFailure;
+            return false;
+        }
         state_ = DeviceLockState::Unconfigured;
         lastFailure_ = DeviceLockFailure::None;
         return true;
@@ -230,18 +252,63 @@ bool DeviceLock::restore(std::uint64_t nowUs) {
     }
     credential_ = loaded;
     loaded.clear();
+    std::array<std::uint8_t, kDeviceLockDataKeyBytes> staleBootstrap{};
+    const DeviceLockBootstrapStatus bootstrapStatus =
+        store_.loadBootstrapDataKey(&staleBootstrap);
+    secureClear(staleBootstrap.data(), staleBootstrap.size());
+    if (bootstrapStatus == DeviceLockBootstrapStatus::Loaded &&
+        !store_.clearBootstrapDataKey()) {
+        state_ = DeviceLockState::Fault;
+        lastFailure_ = DeviceLockFailure::StoreFailure;
+        return false;
+    }
+    if (bootstrapStatus == DeviceLockBootstrapStatus::Corrupt ||
+        bootstrapStatus == DeviceLockBootstrapStatus::Error) {
+        state_ = DeviceLockState::Fault;
+        lastFailure_ = DeviceLockFailure::StoreFailure;
+        return false;
+    }
     lastFailure_ = DeviceLockFailure::None;
     enterLockedForCredential(nowUs);
     return true;
 }
 
-bool DeviceLock::derive(
+bool DeviceLock::provisionBootstrapDataKey() {
+    std::array<std::uint8_t, kDeviceLockDataKeyBytes> candidate{};
+    const DeviceLockBootstrapStatus status =
+        store_.loadBootstrapDataKey(&candidate);
+    if (status == DeviceLockBootstrapStatus::Loaded) {
+        if (!anyNonzero(candidate.data(), candidate.size())) {
+            secureClear(candidate.data(), candidate.size());
+            return false;
+        }
+    } else if (status == DeviceLockBootstrapStatus::Missing) {
+        if (!crypto_.fillRandom(candidate.data(), candidate.size()) ||
+            !anyNonzero(candidate.data(), candidate.size()) ||
+            !store_.saveBootstrapDataKey(candidate)) {
+            secureClear(candidate.data(), candidate.size());
+            return false;
+        }
+    } else {
+        secureClear(candidate.data(), candidate.size());
+        return false;
+    }
+    dataKey_ = candidate;
+    dataKeyAvailable_ = true;
+    secureClear(candidate.data(), candidate.size());
+    return true;
+}
+
+bool DeviceLock::deriveCredentialKeys(
     const char* pin, std::size_t pinLength,
-    std::array<std::uint8_t, kDeviceLockVerifierBytes>* output) {
-    if (output == nullptr) return false;
-    output->fill(0);
-    return crypto_.deriveVerifier(pin, pinLength, credential_.salt,
-                                  credential_.iterations, output);
+    std::array<std::uint8_t, kDeviceLockVerifierBytes>* verifier,
+    std::array<std::uint8_t, kDeviceLockWrappingKeyBytes>* wrappingKey) {
+    if (verifier == nullptr || wrappingKey == nullptr) return false;
+    verifier->fill(0);
+    wrappingKey->fill(0);
+    return crypto_.deriveCredentialKeys(
+        pin, pinLength, credential_.salt, credential_.iterations,
+        verifier, wrappingKey);
 }
 
 bool DeviceLock::configure(const char* pin, std::size_t pinLength,
@@ -261,17 +328,34 @@ bool DeviceLock::configure(const char* pin, std::size_t pinLength,
 
     DeviceLockCredential candidate{};
     candidate.generation = 1;
+    std::array<std::uint8_t, kDeviceLockWrappingKeyBytes> wrappingKey{};
     if (!crypto_.fillRandom(candidate.salt.data(), candidate.salt.size()) ||
         !anyNonzero(candidate.salt.data(), candidate.salt.size()) ||
-        !crypto_.deriveVerifier(pin, pinLength, candidate.salt,
-                                candidate.iterations, &candidate.verifier) ||
+        !dataKeyAvailable_ ||
+        !crypto_.deriveCredentialKeys(
+            pin, pinLength, candidate.salt, candidate.iterations,
+            &candidate.verifier, &wrappingKey) ||
+        !crypto_.fillRandom(candidate.wrapNonce.data(),
+                            candidate.wrapNonce.size()) ||
+        !crypto_.wrapDataKey(wrappingKey, candidate.wrapNonce, dataKey_,
+                             &candidate.wrappedDataKey,
+                             &candidate.wrapTag) ||
         !candidate.valid()) {
+        secureClear(wrappingKey.data(), wrappingKey.size());
         candidate.clear();
         lastFailure_ = DeviceLockFailure::CryptoFailure;
         return false;
     }
+    secureClear(wrappingKey.data(), wrappingKey.size());
     if (!store_.save(candidate)) {
         candidate.clear();
+        state_ = DeviceLockState::Fault;
+        lastFailure_ = DeviceLockFailure::StoreFailure;
+        return false;
+    }
+    if (!store_.clearBootstrapDataKey()) {
+        candidate.clear();
+        clearUnlockSession();
         state_ = DeviceLockState::Fault;
         lastFailure_ = DeviceLockFailure::StoreFailure;
         return false;
@@ -332,15 +416,33 @@ bool DeviceLock::unlock(const char* pin, std::size_t pinLength,
     }
 
     std::array<std::uint8_t, kDeviceLockVerifierBytes> derived{};
-    if (!derive(pin, pinLength, &derived)) {
+    std::array<std::uint8_t, kDeviceLockWrappingKeyBytes> wrappingKey{};
+    if (!deriveCredentialKeys(pin, pinLength, &derived, &wrappingKey)) {
         secureClear(derived.data(), derived.size());
+        secureClear(wrappingKey.data(), wrappingKey.size());
         state_ = DeviceLockState::Fault;
         lastFailure_ = DeviceLockFailure::CryptoFailure;
         return false;
     }
     const bool match = constantTimeEqual(derived, credential_.verifier);
     secureClear(derived.data(), derived.size());
-    if (!match) return persistFailure(nowUs);
+    if (!match) {
+        secureClear(wrappingKey.data(), wrappingKey.size());
+        return persistFailure(nowUs);
+    }
+
+    std::array<std::uint8_t, kDeviceLockDataKeyBytes> unwrapped{};
+    if (!crypto_.unwrapDataKey(
+            wrappingKey, credential_.wrapNonce, credential_.wrappedDataKey,
+            credential_.wrapTag, &unwrapped) ||
+        !anyNonzero(unwrapped.data(), unwrapped.size())) {
+        secureClear(wrappingKey.data(), wrappingKey.size());
+        secureClear(unwrapped.data(), unwrapped.size());
+        state_ = DeviceLockState::Fault;
+        lastFailure_ = DeviceLockFailure::CredentialCorrupt;
+        return false;
+    }
+    secureClear(wrappingKey.data(), wrappingKey.size());
 
     if (credential_.failedAttempts != 0) {
         credential_.failedAttempts = 0;
@@ -351,11 +453,15 @@ bool DeviceLock::unlock(const char* pin, std::size_t pinLength,
         }
         ++credential_.generation;
         if (!store_.save(credential_)) {
+            secureClear(unwrapped.data(), unwrapped.size());
             state_ = DeviceLockState::Fault;
             lastFailure_ = DeviceLockFailure::StoreFailure;
             return false;
         }
     }
+    dataKey_ = unwrapped;
+    dataKeyAvailable_ = true;
+    secureClear(unwrapped.data(), unwrapped.size());
     state_ = DeviceLockState::Unlocked;
     retryUntilUs_ = 0;
     unlockedAtUs_ = nowUs;
@@ -490,6 +596,11 @@ bool DeviceLock::factoryReset(bool confirmed,
         return false;
     }
     credential_.clear();
+    if (!provisionBootstrapDataKey()) {
+        state_ = DeviceLockState::Fault;
+        lastFailure_ = DeviceLockFailure::StoreFailure;
+        return false;
+    }
     state_ = DeviceLockState::Unconfigured;
     retryUntilUs_ = 0;
     lastFailure_ = DeviceLockFailure::None;
@@ -507,10 +618,23 @@ DeviceLockAudit DeviceLock::audit(std::uint64_t nowUs) const {
     result.failedAttempts = credential_.failedAttempts;
     result.credentialGeneration = credential_.generation;
     result.protectedAccessAllowed = state_ == DeviceLockState::Unlocked;
+    result.dataKeyAvailable = dataKeyAvailable_;
     if (state_ == DeviceLockState::RetryDelay && nowUs < retryUntilUs_) {
         result.retryRemainingUs = retryUntilUs_ - nowUs;
     }
     return result;
+}
+
+bool DeviceLock::copyDataKey(
+    std::array<std::uint8_t, kDeviceLockDataKeyBytes>* output) const {
+    if (output == nullptr || !dataKeyAvailable_ ||
+        (state_ != DeviceLockState::Unconfigured &&
+         state_ != DeviceLockState::Unlocked)) {
+        if (output != nullptr) output->fill(0);
+        return false;
+    }
+    *output = dataKey_;
+    return true;
 }
 
 }  // namespace leshy1::services::security

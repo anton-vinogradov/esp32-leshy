@@ -2,18 +2,36 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <array>
 
 #include <ff.h>
 
 #include "storage/ProductStorePolicy.h"
 #include "storage/SessionStore.h"
 #include "storage/StorageGuard.h"
+#include "storage/ProtectedFileEnvelope.h"
+#include "services/security/ProtectedDataCipher.h"
 
 namespace leshy1::platform::arduino {
 
 struct ArduinoFsSessionStoreWorkspace final {
     FIL file{};
     FILINFO information{};
+    storage::ProtectedFileHeader protectedHeader{};
+    storage::ProtectedFileAad protectedAad{};
+    std::array<std::uint8_t, storage::kProtectedFileChunkBytes>
+        protectedChunk{};
+    std::array<std::uint8_t, services::security::kDeviceLockAuthTagBytes>
+        protectedTag{};
+};
+
+struct ProtectedFileInspection final {
+    bool encryptedNamespace = false;
+    bool headerValid = false;
+    bool physicalSizeExact = false;
+    bool ciphertextDiffers = false;
+    std::uint32_t plaintextSize = 0;
+    std::size_t physicalSize = 0;
 };
 
 // Confines SessionStore paths to one newly authorized /leshy-hil/<run-id>
@@ -25,13 +43,20 @@ public:
 
     explicit ArduinoFsSessionStoreIo(
         ArduinoFsSessionStoreWorkspace& workspace,
-        ProgressCallback progressCallback = nullptr)
-        : workspace_(workspace), progressCallback_(progressCallback) {}
+        ProgressCallback progressCallback = nullptr,
+        services::security::ProtectedDataCipher* protectedCipher = nullptr,
+        services::security::DeviceLock* deviceLock = nullptr)
+        : workspace_(workspace), progressCallback_(progressCallback),
+          protectedCipher_(protectedCipher), deviceLock_(deviceLock) {}
     ArduinoFsSessionStoreIo(std::uint8_t driveNumber,
                             ArduinoFsSessionStoreWorkspace& workspace,
-                            ProgressCallback progressCallback = nullptr)
+                            ProgressCallback progressCallback = nullptr,
+                            services::security::ProtectedDataCipher*
+                                protectedCipher = nullptr,
+                            services::security::DeviceLock* deviceLock = nullptr)
         : workspace_(workspace), driveNumber_(driveNumber),
-          progressCallback_(progressCallback) {}
+          progressCallback_(progressCallback),
+          protectedCipher_(protectedCipher), deviceLock_(deviceLock) {}
     ~ArduinoFsSessionStoreIo() override { end(); }
 
     bool prepare(const storage::WritePermit& permit);
@@ -51,6 +76,15 @@ public:
                         std::size_t* outputSize) override;
     bool syncFile(const char* path) override;
     bool syncDirectory() override;
+
+    // Read-only physical evidence for self-diagnostics and release HIL. It
+    // intentionally inspects the stored envelope without using the data key;
+    // normal consumers must continue through readFile(), which authenticates
+    // and decrypts every chunk.
+    bool inspectProtectedFile(const char* path,
+                              const std::uint8_t* knownPlaintext,
+                              std::size_t knownSize,
+                              ProtectedFileInspection* output);
 
     bool ready() const { return ready_; }
     bool writable() const { return writable_; }
@@ -84,9 +118,18 @@ private:
                           bool writable, bool productRoot);
     void recordFailure(const char* stage, FRESULT result);
     bool progress(const char* stage);
+    bool protectedReady() const;
+    bool writeProtectedFile(const char* path, const std::uint8_t* data,
+                            std::size_t size);
+    ReadStatus readProtectedFile(const char* path, std::uint8_t* output,
+                                 std::size_t capacity,
+                                 std::size_t* outputSize);
+    static void secureClear(std::uint8_t* bytes, std::size_t size);
 
     ArduinoFsSessionStoreWorkspace& workspace_;
     ProgressCallback progressCallback_ = nullptr;
+    services::security::ProtectedDataCipher* protectedCipher_ = nullptr;
+    services::security::DeviceLock* deviceLock_ = nullptr;
     std::uint8_t driveNumber_ = 0xFF;
     char rootPath_[storage::kScratchPathMax] = {};
     char pendingRelative_[storage::kSessionStorePathMax] = {};
@@ -103,6 +146,7 @@ private:
     bool pendingOpen_ = false;
     bool fileBarrierComplete_ = false;
     bool fatFileSyncCoversDirectory_ = true;
+    bool productRoot_ = false;
     const char* lastFailure_ = "none";
     FRESULT lastFresult_ = FR_OK;
 };

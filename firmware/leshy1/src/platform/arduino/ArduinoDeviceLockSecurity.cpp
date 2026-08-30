@@ -8,6 +8,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <mbedtls/md.h>
+#include <mbedtls/gcm.h>
 #include <nvs.h>
 
 #include "services/security/DeviceLockRecord.h"
@@ -20,10 +21,43 @@ using services::security::DeviceLockLoadStatus;
 
 constexpr const char* kProductNamespace = "leshy1-lock";
 constexpr const char* kHilFixtureNamespace = "leshy1-lock-hil";
-constexpr const char* kCredentialKey = "credential.v1";
+constexpr const char* kCredentialKey = "credential.v2";
 constexpr const char* kProvisionedLatchKey = "enrolled.v1";
+constexpr const char* kBootstrapDataKey = "data-key.v1";
 constexpr std::uint32_t kProvisionedLatch = 0x4c4f434bU;
 constexpr std::uint32_t kDeviceLockKdfYieldInterval = 256U;
+constexpr char kVerifierDomain[] = "leshy1/device-lock/verifier/v2";
+constexpr char kWrappingDomain[] = "leshy1/device-lock/wrapping-key/v2";
+constexpr char kWrapAad[] = "leshy1/device-lock/data-key/v2";
+
+void secureClear(std::uint8_t* bytes, std::size_t size) {
+    volatile std::uint8_t* cursor = bytes;
+    while (size-- != 0U) *cursor++ = 0U;
+}
+
+bool anyNonzero(const std::uint8_t* bytes, std::size_t size) {
+    std::uint8_t combined = 0;
+    for (std::size_t index = 0; index < size; ++index) {
+        combined = static_cast<std::uint8_t>(combined | bytes[index]);
+    }
+    return combined != 0U;
+}
+
+template <std::size_t Size>
+bool deriveDomain(const std::array<std::uint8_t, 32>& master,
+                  const char* domain,
+                  std::array<std::uint8_t, Size>* output) {
+    static_assert(Size == 32U);
+    if (domain == nullptr || output == nullptr) return false;
+    const mbedtls_md_info_t* info =
+        mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+    output->fill(0);
+    return info != nullptr &&
+        mbedtls_md_hmac(
+            info, master.data(), master.size(),
+            reinterpret_cast<const unsigned char*>(domain),
+            std::strlen(domain), output->data()) == 0;
+}
 
 class ScopedNvsHandle final {
 public:
@@ -68,12 +102,19 @@ bool NvsDeviceLockStore::hilFixtureStatePresent() const {
     std::size_t stored = 0;
     const esp_err_t recordStatus =
         nvs_get_blob(storage.get(), kCredentialKey, nullptr, &stored);
+    std::size_t bootstrapStored = 0;
+    const esp_err_t bootstrapStatus =
+        nvs_get_blob(storage.get(), kBootstrapDataKey, nullptr,
+                     &bootstrapStored);
     const bool latchKnown = latchStatus == ESP_OK ||
         latchStatus == ESP_ERR_NVS_NOT_FOUND;
     const bool recordKnown = recordStatus == ESP_OK ||
         recordStatus == ESP_ERR_NVS_NOT_FOUND;
-    if (!latchKnown || !recordKnown) return true;
-    return latchStatus == ESP_OK || recordStatus == ESP_OK;
+    const bool bootstrapKnown = bootstrapStatus == ESP_OK ||
+        bootstrapStatus == ESP_ERR_NVS_NOT_FOUND;
+    if (!latchKnown || !recordKnown || !bootstrapKnown) return true;
+    return latchStatus == ESP_OK || recordStatus == ESP_OK ||
+        bootstrapStatus == ESP_OK;
 }
 
 bool MbedTlsDeviceLockCrypto::fillRandom(std::uint8_t* output,
@@ -162,6 +203,160 @@ bool MbedTlsDeviceLockCrypto::deriveVerifier(
     return status == 0;
 }
 
+bool MbedTlsDeviceLockCrypto::deriveCredentialKeys(
+    const char* pin, std::size_t pinLength,
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockSaltBytes>& salt,
+    std::uint32_t iterations,
+    std::array<std::uint8_t,
+               services::security::kDeviceLockVerifierBytes>* verifier,
+    std::array<std::uint8_t,
+               services::security::kDeviceLockWrappingKeyBytes>* wrappingKey) {
+    if (verifier == nullptr || wrappingKey == nullptr) return false;
+    std::array<std::uint8_t, 32> master{};
+    const bool derived = deriveVerifier(pin, pinLength, salt, iterations,
+                                        &master);
+    const bool separated = derived &&
+        deriveDomain(master, kVerifierDomain, verifier) &&
+        deriveDomain(master, kWrappingDomain, wrappingKey);
+    secureClear(master.data(), master.size());
+    if (!separated) {
+        verifier->fill(0);
+        wrappingKey->fill(0);
+    }
+    return separated;
+}
+
+bool MbedTlsDeviceLockCrypto::wrapDataKey(
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockWrappingKeyBytes>&
+        wrappingKey,
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockWrapNonceBytes>& nonce,
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockDataKeyBytes>& dataKey,
+    std::array<std::uint8_t,
+               services::security::kDeviceLockDataKeyBytes>* wrappedDataKey,
+    std::array<std::uint8_t,
+               services::security::kDeviceLockAuthTagBytes>* tag) {
+    if (wrappedDataKey == nullptr || tag == nullptr) return false;
+    wrappedDataKey->fill(0);
+    tag->fill(0);
+    mbedtls_gcm_context context;
+    mbedtls_gcm_init(&context);
+    int status = mbedtls_gcm_setkey(
+        &context, MBEDTLS_CIPHER_ID_AES, wrappingKey.data(), 256U);
+    if (status == 0) {
+        status = mbedtls_gcm_crypt_and_tag(
+            &context, MBEDTLS_GCM_ENCRYPT, dataKey.size(), nonce.data(),
+            nonce.size(), reinterpret_cast<const unsigned char*>(kWrapAad),
+            sizeof(kWrapAad) - 1U, dataKey.data(), wrappedDataKey->data(),
+            tag->size(), tag->data());
+    }
+    mbedtls_gcm_free(&context);
+    if (status != 0) {
+        wrappedDataKey->fill(0);
+        tag->fill(0);
+    }
+    return status == 0;
+}
+
+bool MbedTlsDeviceLockCrypto::unwrapDataKey(
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockWrappingKeyBytes>&
+        wrappingKey,
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockWrapNonceBytes>& nonce,
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockDataKeyBytes>&
+        wrappedDataKey,
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockAuthTagBytes>& tag,
+    std::array<std::uint8_t,
+               services::security::kDeviceLockDataKeyBytes>* dataKey) {
+    if (dataKey == nullptr) return false;
+    dataKey->fill(0);
+    mbedtls_gcm_context context;
+    mbedtls_gcm_init(&context);
+    int status = mbedtls_gcm_setkey(
+        &context, MBEDTLS_CIPHER_ID_AES, wrappingKey.data(), 256U);
+    if (status == 0) {
+        status = mbedtls_gcm_auth_decrypt(
+            &context, wrappedDataKey.size(), nonce.data(), nonce.size(),
+            reinterpret_cast<const unsigned char*>(kWrapAad),
+            sizeof(kWrapAad) - 1U, tag.data(), tag.size(),
+            wrappedDataKey.data(), dataKey->data());
+    }
+    mbedtls_gcm_free(&context);
+    if (status != 0) dataKey->fill(0);
+    return status == 0;
+}
+
+bool MbedTlsProtectedDataCipher::fillNonce(
+    std::array<std::uint8_t,
+               services::security::kDeviceLockWrapNonceBytes>* nonce) {
+    if (nonce == nullptr) return false;
+    esp_fill_random(nonce->data(), nonce->size());
+    return anyNonzero(nonce->data(), nonce->size());
+}
+
+bool MbedTlsProtectedDataCipher::seal(
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockDataKeyBytes>& key,
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockWrapNonceBytes>& nonce,
+    const std::uint8_t* aad, std::size_t aadSize,
+    const std::uint8_t* plaintext, std::size_t size,
+    std::uint8_t* ciphertext,
+    std::array<std::uint8_t,
+               services::security::kDeviceLockAuthTagBytes>* tag) {
+    if (aad == nullptr || aadSize == 0U || plaintext == nullptr || size == 0U ||
+        ciphertext == nullptr || tag == nullptr) {
+        return false;
+    }
+    tag->fill(0);
+    mbedtls_gcm_context context;
+    mbedtls_gcm_init(&context);
+    int status = mbedtls_gcm_setkey(
+        &context, MBEDTLS_CIPHER_ID_AES, key.data(), 256U);
+    if (status == 0) {
+        status = mbedtls_gcm_crypt_and_tag(
+            &context, MBEDTLS_GCM_ENCRYPT, size, nonce.data(), nonce.size(),
+            aad, aadSize, plaintext, ciphertext, tag->size(), tag->data());
+    }
+    mbedtls_gcm_free(&context);
+    if (status != 0) tag->fill(0);
+    return status == 0;
+}
+
+bool MbedTlsProtectedDataCipher::open(
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockDataKeyBytes>& key,
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockWrapNonceBytes>& nonce,
+    const std::uint8_t* aad, std::size_t aadSize,
+    const std::uint8_t* ciphertext, std::size_t size,
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockAuthTagBytes>& tag,
+    std::uint8_t* plaintext) {
+    if (aad == nullptr || aadSize == 0U || ciphertext == nullptr || size == 0U ||
+        plaintext == nullptr) {
+        return false;
+    }
+    mbedtls_gcm_context context;
+    mbedtls_gcm_init(&context);
+    int status = mbedtls_gcm_setkey(
+        &context, MBEDTLS_CIPHER_ID_AES, key.data(), 256U);
+    if (status == 0) {
+        status = mbedtls_gcm_auth_decrypt(
+            &context, size, nonce.data(), nonce.size(), aad, aadSize,
+            tag.data(), tag.size(), ciphertext, plaintext);
+    }
+    mbedtls_gcm_free(&context);
+    if (status != 0) secureClear(plaintext, size);
+    return status == 0;
+}
+
 DeviceLockLoadStatus NvsDeviceLockStore::load(
     DeviceLockCredential* output) {
     if (output == nullptr) return DeviceLockLoadStatus::Error;
@@ -244,9 +439,87 @@ bool NvsDeviceLockStore::save(
         verified.iterations == credential.iterations &&
         verified.generation == credential.generation &&
         verified.salt == credential.salt &&
-        verified.verifier == credential.verifier;
+        verified.verifier == credential.verifier &&
+        verified.wrapNonce == credential.wrapNonce &&
+        verified.wrappedDataKey == credential.wrappedDataKey &&
+        verified.wrapTag == credential.wrapTag;
     verified.clear();
     return exact;
+}
+
+services::security::DeviceLockBootstrapStatus
+NvsDeviceLockStore::loadBootstrapDataKey(
+    std::array<std::uint8_t,
+               services::security::kDeviceLockDataKeyBytes>* output) {
+    using services::security::DeviceLockBootstrapStatus;
+    if (output == nullptr) return DeviceLockBootstrapStatus::Error;
+    output->fill(0);
+    ScopedNvsHandle storage;
+    esp_err_t openStatus = ESP_FAIL;
+    const char* name = hilFixtureNamespaceActive_
+        ? kHilFixtureNamespace : kProductNamespace;
+    if (!storage.open(name, NVS_READONLY, &openStatus)) {
+        return openStatus == ESP_ERR_NVS_NOT_FOUND
+            ? DeviceLockBootstrapStatus::Missing
+            : DeviceLockBootstrapStatus::Error;
+    }
+    std::size_t stored = 0;
+    const esp_err_t lengthStatus =
+        nvs_get_blob(storage.get(), kBootstrapDataKey, nullptr, &stored);
+    if (lengthStatus == ESP_ERR_NVS_NOT_FOUND) {
+        return DeviceLockBootstrapStatus::Missing;
+    }
+    if (lengthStatus != ESP_OK) return DeviceLockBootstrapStatus::Error;
+    if (stored != output->size() ||
+        nvs_get_blob(storage.get(), kBootstrapDataKey, output->data(),
+                     &stored) != ESP_OK ||
+        stored != output->size() ||
+        !anyNonzero(output->data(), output->size())) {
+        output->fill(0);
+        return DeviceLockBootstrapStatus::Corrupt;
+    }
+    return DeviceLockBootstrapStatus::Loaded;
+}
+
+bool NvsDeviceLockStore::saveBootstrapDataKey(
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockDataKeyBytes>& key) {
+    if (!anyNonzero(key.data(), key.size())) return false;
+    ScopedNvsHandle storage;
+    esp_err_t openStatus = ESP_FAIL;
+    const char* name = hilFixtureNamespaceActive_
+        ? kHilFixtureNamespace : kProductNamespace;
+    if (!storage.open(name, NVS_READWRITE, &openStatus) ||
+        nvs_set_blob(storage.get(), kBootstrapDataKey, key.data(),
+                     key.size()) != ESP_OK ||
+        nvs_commit(storage.get()) != ESP_OK) {
+        return false;
+    }
+    std::array<std::uint8_t, services::security::kDeviceLockDataKeyBytes>
+        verified{};
+    const bool exact = loadBootstrapDataKey(&verified) ==
+            services::security::DeviceLockBootstrapStatus::Loaded &&
+        verified == key;
+    secureClear(verified.data(), verified.size());
+    return exact;
+}
+
+bool NvsDeviceLockStore::clearBootstrapDataKey() {
+    ScopedNvsHandle storage;
+    esp_err_t openStatus = ESP_FAIL;
+    const char* name = hilFixtureNamespaceActive_
+        ? kHilFixtureNamespace : kProductNamespace;
+    if (!storage.open(name, NVS_READWRITE, &openStatus)) {
+        return openStatus == ESP_ERR_NVS_NOT_FOUND;
+    }
+    if (!eraseKeyIfPresent(storage.get(), kBootstrapDataKey) ||
+        nvs_commit(storage.get()) != ESP_OK) {
+        return false;
+    }
+    std::array<std::uint8_t, services::security::kDeviceLockDataKeyBytes>
+        discarded{};
+    return loadBootstrapDataKey(&discarded) ==
+        services::security::DeviceLockBootstrapStatus::Missing;
 }
 
 bool NvsDeviceLockStore::clearCredentialAndLatch() {
@@ -258,6 +531,8 @@ bool NvsDeviceLockStore::clearCredentialAndLatch() {
     // Keep the latch until protected state and the verifier are durably gone.
     // A reset between these commits is MissingExpected and remains locked.
     if (!eraseKeyIfPresent(storage.get(), kCredentialKey) ||
+        nvs_commit(storage.get()) != ESP_OK ||
+        !eraseKeyIfPresent(storage.get(), kBootstrapDataKey) ||
         nvs_commit(storage.get()) != ESP_OK ||
         !eraseKeyIfPresent(storage.get(), kProvisionedLatchKey) ||
         nvs_commit(storage.get()) != ESP_OK) {

@@ -17,6 +17,17 @@ trap 'rm -rf "$test_tmp"' EXIT
     -o "$test_tmp/device_lock_tests"
 
 "$test_tmp/device_lock_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -Wconversion -Wsign-conversion -Wshadow \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/protected_file_envelope_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/ProtectedFileEnvelope.cpp" \
+    -o "$test_tmp/protected_file_envelope_tests"
+
+"$test_tmp/protected_file_envelope_tests"
 python3 "$repo_dir/tools/check_device_lock_contract.py"
 
 "${CXX:-c++}" \

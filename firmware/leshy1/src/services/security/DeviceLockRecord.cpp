@@ -48,7 +48,13 @@ bool encodeDeviceLockRecord(const DeviceLockCredential& credential,
               output->begin() + 16U);
     std::copy(credential.verifier.begin(), credential.verifier.end(),
               output->begin() + 32U);
-    putU32(output->data() + 64U, crc32(output->data(), 64U));
+    std::copy(credential.wrapNonce.begin(), credential.wrapNonce.end(),
+              output->begin() + 64U);
+    std::copy(credential.wrappedDataKey.begin(),
+              credential.wrappedDataKey.end(), output->begin() + 76U);
+    std::copy(credential.wrapTag.begin(), credential.wrapTag.end(),
+              output->begin() + 108U);
+    putU32(output->data() + 124U, crc32(output->data(), 124U));
     return true;
 }
 
@@ -56,7 +62,7 @@ bool decodeDeviceLockRecord(const DeviceLockRecord& input,
                             DeviceLockCredential* output) {
     if (output == nullptr ||
         !std::equal(kMagic.begin(), kMagic.end(), input.begin()) ||
-        getU32(input.data() + 64U) != crc32(input.data(), 64U) ||
+        getU32(input.data() + 124U) != crc32(input.data(), 124U) ||
         input[6] != 0 || input[7] != 0) {
         return false;
     }
@@ -69,6 +75,12 @@ bool decodeDeviceLockRecord(const DeviceLockRecord& input,
                 candidate.salt.begin());
     std::copy_n(input.begin() + 32U, candidate.verifier.size(),
                 candidate.verifier.begin());
+    std::copy_n(input.begin() + 64U, candidate.wrapNonce.size(),
+                candidate.wrapNonce.begin());
+    std::copy_n(input.begin() + 76U, candidate.wrappedDataKey.size(),
+                candidate.wrappedDataKey.begin());
+    std::copy_n(input.begin() + 108U, candidate.wrapTag.size(),
+                candidate.wrapTag.begin());
     if (!candidate.valid()) {
         candidate.clear();
         return false;

@@ -8,7 +8,7 @@
 
 namespace leshy1::services::security {
 
-constexpr std::size_t kDeviceLockRecordBytes = 68;
+constexpr std::size_t kDeviceLockRecordBytes = 128;
 using DeviceLockRecord = std::array<std::uint8_t, kDeviceLockRecordBytes>;
 
 // Stable little-endian NVS blob. CRC detects torn/corrupt records; PIN

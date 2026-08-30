@@ -13,6 +13,10 @@ CORE_CPP = ROOT / "firmware/leshy1/src/services/security/DeviceLock.cpp"
 RECORD_H = ROOT / "firmware/leshy1/src/services/security/DeviceLockRecord.h"
 RECORD_CPP = ROOT / "firmware/leshy1/src/services/security/DeviceLockRecord.cpp"
 PLATFORM = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoDeviceLockSecurity.cpp"
+PROTECTED_ENVELOPE = ROOT / (
+    "firmware/leshy1/src/storage/ProtectedFileEnvelope.cpp")
+PRODUCT_IO = ROOT / (
+    "firmware/leshy1/src/platform/arduino/ArduinoFsSessionStoreIo.cpp")
 TESTS = ROOT / "tests/native/device_lock_tests.cpp"
 CONTROLLER_H = ROOT / "firmware/leshy1/src/apps/device/DeviceLockController.h"
 CONTROLLER_CPP = ROOT / "firmware/leshy1/src/apps/device/DeviceLockController.cpp"
@@ -38,6 +42,8 @@ def main() -> int:
     record_h = RECORD_H.read_text(encoding="utf-8")
     record = RECORD_CPP.read_text(encoding="utf-8")
     platform = PLATFORM.read_text(encoding="utf-8")
+    protected_envelope = PROTECTED_ENVELOPE.read_text(encoding="utf-8")
+    product_io = PRODUCT_IO.read_text(encoding="utf-8")
     tests = TESTS.read_text(encoding="utf-8")
     controller_h = CONTROLLER_H.read_text(encoding="utf-8")
     controller = CONTROLLER_CPP.read_text(encoding="utf-8")
@@ -99,10 +105,10 @@ def main() -> int:
             failures.append(f"Device Lock core may retain/log PIN material: {forbidden}")
 
     for marker, label in (
-        ("kDeviceLockRecordBytes = 68", "fixed record size"),
+        ("kDeviceLockRecordBytes = 128", "fixed record size"),
         ("encodeDeviceLockRecord", "versioned record encoder"),
         ("decodeDeviceLockRecord", "versioned record decoder"),
-        ("crc32(output->data(), 64U)", "record CRC"),
+        ("crc32(output->data(), 124U)", "record CRC"),
         ("input[6] != 0 || input[7] != 0", "reserved-byte rejection"),
     ):
         require(record_h + record, marker, label, failures)
@@ -110,17 +116,24 @@ def main() -> int:
     for marker, label in (
         ("esp_fill_random(output, size)", "hardware RNG salt"),
         ("mbedtls_md_hmac_reset", "cooperative PBKDF2 implementation"),
+        ("kVerifierDomain", "domain-separated verifier"),
+        ("kWrappingDomain", "domain-separated wrapping key"),
+        ("mbedtls_gcm_crypt_and_tag", "authenticated data-key wrap"),
+        ("mbedtls_gcm_auth_decrypt", "authenticated data-key unwrap"),
         ("MBEDTLS_MD_SHA256", "SHA-256 KDF"),
         ("kDeviceLockKdfYieldInterval = 256", "KDF watchdog yield bound"),
         ("vTaskDelay(1)", "KDF idle-task scheduling point"),
-        ("credential.v1", "versioned NVS credential"),
+        ("credential.v2", "versioned NVS credential"),
         ("enrolled.v1", "separate provisioned latch"),
+        ("data-key.v1", "bootstrap data key"),
         ("nvs_set_blob(storage.get(), kCredentialKey", "credential write"),
         ("nvs_set_u32(storage.get(), kProvisionedLatchKey", "latch write"),
         ("eraseKeyIfPresent(storage.get(), kCredentialKey)",
          "credential erase"),
         ("eraseKeyIfPresent(storage.get(), kProvisionedLatchKey)",
          "latch erase"),
+        ("eraseKeyIfPresent(storage.get(), kBootstrapDataKey)",
+         "bootstrap key erase"),
         ("nvs_commit(storage.get())", "durable NVS boundaries"),
         ("DeviceLockLoadStatus::MissingExpected", "missing record fail closed"),
         ("kProductNamespace = \"leshy1-lock\"",
@@ -133,6 +146,38 @@ def main() -> int:
          "stale fixture detection after reboot"),
     ):
         require(platform, marker, label, failures)
+
+    for marker, label in (
+        ("kProtectedFileChunkBytes", "bounded encrypted chunks"),
+        ("protectedFilePhysicalSize", "exact encrypted size"),
+        ("buildProtectedFileChunkNonce", "unique per-chunk nonce"),
+        ("buildProtectedFileChunkAad", "path and chunk binding"),
+        ("crc32(output->data(), 28U)", "envelope header corruption check"),
+        ("protectedCipher_->seal", "product file encryption"),
+        ("protectedCipher_->open", "product file authentication"),
+        ("deviceLock_->copyDataKey", "volatile key gate"),
+        ("secureClear(output, produced)", "auth failure plaintext wipe"),
+        ("if (productRoot_) return writeProtectedFile", "all product writes"),
+        ("return readProtectedFile(path", "all product reads"),
+        ("inspectProtectedFile", "physical encrypted-file inspection"),
+        ("/enc-", "physically disjoint encrypted namespace"),
+    ):
+        require(protected_envelope + product_io, marker, label, failures)
+
+    if entry.count("&protectedDataCipher, &deviceLock") != 5:
+        failures.append(
+            "every product SD adapter must share the protected cipher/key gate")
+
+    for marker, label in (
+        ("leshy.storage.product_bootstrap.v2",
+         "physical encrypted bootstrap evidence"),
+        ("encrypted_namespace\\\":%s", "encrypted namespace report"),
+        ("envelope_header_valid\\\":%s", "envelope header report"),
+        ("physical_size_exact\\\":%s", "physical size report"),
+        ("ciphertext_differs\\\":%s", "ciphertext/plaintext separation"),
+        ("protectedFileInspected", "physical inspection acceptance gate"),
+    ):
+        require(entry, marker, label, failures)
 
     save_record = platform.find("nvs_set_blob(storage.get(), kCredentialKey")
     save_latch = platform.find("nvs_set_u32(storage.get(), kProvisionedLatchKey")
