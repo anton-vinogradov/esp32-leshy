@@ -1527,6 +1527,21 @@ Typed dispatcher, strict CLI и два ownership bits добавляют 144 B a
 static RAM к dev.283. UART buffer и product screen ещё не финансируются; этот
 bound не заявляет physical serial, radio, device или host-network acceptance.
 
+Bound bounded product path CAP-053 `RB-M211`: exact physical `1.0.0-dev.285` на
+source `8a5799aca03f96ae518ae0c7c7391b43828d6f4f` использует 232 072 B static RAM и
+app image 3 523 472 B, оставляя 670 832 B в OTA slot 4 MiB. SHA-256
+app/factory/ELF/map —
+`9119f8c86e2ca9822fc18b754e58d25536e4ff1f11d15b412e01be3b5e02d993`/
+`5ea9f9e43733a538718650b05f3ec9f5a6add31e5b2f839a12bdbb3aad94e63d`/
+`f662101891a7857435e576374ff2a250558b0487ee4c306829499473dfe93348`/
+`37d38edcafce37bcf2423b6fcacc4a76f475fb7162687c9006ef49114ea30428`.
+Delta 584 B static и 11 008 B padded app поверх dev.284 финансирует fixed volatile
+ring 256 bytes, endpoint `Serial1`, bounded service path 64 bytes, product UI и CLI
+integration. Stock-profile HIL сохраняет free heap byte-invariant 72 576 B, потому
+что admission останавливается до UART configuration. Этот budget не заявляет
+positive serial traffic, второй transcript buffer или encrypted storage transcript;
+они остаются gated reviewed no-RF fixture и отдельной action Save.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

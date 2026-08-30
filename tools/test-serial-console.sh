@@ -21,3 +21,4 @@ trap 'rm -rf "$test_tmp"' EXIT
 
 "$test_tmp/serial_console_action_tests"
 python3 "$repo_dir/tools/check_serial_console_product_acceptance.py"
+python3 "$repo_dir/tools/check_serial_console_hil_acceptance.py"

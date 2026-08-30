@@ -1541,6 +1541,21 @@ The typed dispatcher, strict CLI and two ownership bits add 144 B app and zero
 static RAM beyond dev.283. No UART buffer or product screen is funded yet, and no
 physical serial, radio, device or host-network claim is made by this bound.
 
+CAP-053 bounded product-path bound `RB-M211`: exact physical `1.0.0-dev.285` at
+source `8a5799aca03f96ae518ae0c7c7391b43828d6f4f` uses 232,072 B static RAM and a
+3,523,472 B app image, leaving 670,832 B in the 4 MiB OTA slot. App/factory/ELF/map
+SHA-256 values are
+`9119f8c86e2ca9822fc18b754e58d25536e4ff1f11d15b412e01be3b5e02d993`/
+`5ea9f9e43733a538718650b05f3ec9f5a6add31e5b2f839a12bdbb3aad94e63d`/
+`f662101891a7857435e576374ff2a250558b0487ee4c306829499473dfe93348`/
+`37d38edcafce37bcf2423b6fcacc4a76f475fb7162687c9006ef49114ea30428`.
+The 584 B static and 11,008 B padded-app delta beyond dev.284 funds the fixed
+256-byte volatile ring, `Serial1` endpoint, bounded 64-byte service path, product UI
+and CLI integration. The stock-profile HIL leaves free heap byte-invariant at
+72,576 B because admission stops before UART configuration. This budget does not
+claim positive serial traffic, a second transcript buffer or encrypted transcript
+storage; those remain gated by the reviewed no-RF fixture and a separate Save action.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

@@ -7,8 +7,8 @@
 - **Workflow:** WF-07, especially WF-07-A3/A4
 - **Architecture:** [ADR-002](adr/ADR-002-resource-policy.md),
   [ADR-004](adr/ADR-004-action-boundary.md)
-- **State:** host/build foundation at `1.0.0-dev.284`; product UI, hardware adapter
-  and physical HIL remain open
+- **State:** platform/product path and stock-profile physical negative accepted in
+  exact `1.0.0-dev.285`; positive UART traffic requires a reviewed no-RF fixture
 
 ## User outcome
 
@@ -90,12 +90,19 @@ whitespace, oversized lines and `run` without `confirm=yes` fail closed.
 1. `done` — typed dispatcher, strict CLI parser, named profile preflight, separate
    monitor/write permissions, atomic leases, timeout/cancel/error cleanup, native
    contract tests and production build (`dev.284`).
-2. `next` — bounded Arduino UART adapter and volatile ring, Device → Serial Console
-   preview/running/result screens, Device Lock admission and shared CLI execution.
-3. `planned` — physical receive-only loop fixture, then explicitly permissioned
-   bridge fixture; Back/error/timeout/watchdog HIL, zero leaked leases and no saved
-   transcript.
+2. `done` — allocation-free `Serial1` adapter, 256-byte volatile ring, 64-byte
+   per-service bound, Device → Serial Console setup/confirm/running/result screens,
+   Device Lock admission and shared CLI execution (`dev.285`).
+3. `partial` — exact original-board stock profile physically displays the conflict;
+   preview and confirmed run return `mux_conflict` before configure/start with zero
+   `Console|Mux56` lease, zero pin touch, invariant heap/safe outputs and final
+   Home/zero lease. Positive receive-only, timeout/fault/panic and Bridge still need
+   a separately declared and reviewed no-RF fixture.
 4. `planned` — explicit encrypted Save, cold reopen/export and release HIL matrix.
 
-`dev.284` is not a physical UART claim: it deliberately performs no pin change,
-device flash, serial bridge, storage write, radio operation or network operation.
+`dev.285` accepts the product path and physical *negative* only; it is not a positive
+UART-traffic claim. The focused HIL used one fresh application flash on original
+board-01 and exact reuse after correcting an oracle that confused `UiForeground`
+with `Console|Mux56`. It performed no UART configure/start, storage write, radio or
+host-network operation and did not touch the clone or Cardputer. Machine-checked
+evidence: [`E-HIL-211`](../../tests/hil/evidence/board-01-serial-console-stock-conflict-1.0.0-dev.285.json).
