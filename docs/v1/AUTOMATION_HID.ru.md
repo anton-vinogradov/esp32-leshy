@@ -7,9 +7,12 @@
 - **Workflow:** WF-08-A1/A2/A4
 - **Архитектура:** [ADR-002](adr/ADR-002-resource-policy.ru.md),
   [ADR-004](adr/ADR-004-action-boundary.ru.md)
-- **Состояние:** slice 1 принят в exact host/build `1.0.0-dev.286`: пассивный
-  allocation-free inspector package и boundary допуска execution; product route
-  и active execution не подключены
+- **Состояние:** slice 1 принят; slice 2 реализован в exact host/build
+  `1.0.0-dev.289` и физически подключён в exact `1.0.0-dev.288`: passive
+  allocation-free inspector package и boundary допуска
+  execution подключены к read-only product route Лаборатории; top-level route Lab
+  физически принят, а nested TFT evidence package, real trust и active execution
+  ещё не приняты
 
 ## Результат для пользователя
 
@@ -99,8 +102,11 @@ inspection.
 
 1. `done` — canonical parser, passive summary, interface verifier, strict ordering
    policy/admission и mutation/ceiling/permission/target negative host tests.
-2. `next` — выбор package из Library и compact EN/RU UI Inspector; malformed и
-   unsigned packages можно посмотреть, но нельзя запустить.
+2. `implemented / physical nested gate next` — bounded discovery package на SD и
+   compact EN/RU UI Лаборатория → Automation Inspector; malformed и unsigned packages
+   можно посмотреть, но нельзя запустить. Exact dev.289 host/build удерживает каждую
+   EN/RU label в измеренном pixel budget; exact dev.288 физически принимает top-level
+   route Lab и zero-output boundary, но ещё не nested `.lhau` summary frames.
 3. `planned` — real P-256 trust adapter и owner-visible enrollment/revocation keys;
    cold restore и interaction Device Lock.
 4. `planned` — execution named Action-only package через shared dispatcher, audit и

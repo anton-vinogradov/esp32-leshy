@@ -1572,6 +1572,39 @@ with at most 32 steps, 128 active events, 1,024 output bytes and 300 seconds; ca
 storage for the package and trust adapter remains unfunded. No resident package,
 signature, HID report, target or script buffer and no execution resource is claimed.
 
+CAP-054 passive product-route and no-PSRAM BLE-startup bound `RB-M213`: exact physical
+`1.0.0-dev.288` at source `3d232d2e5aff8e914ccb7e7414194c1ce7e89bbf`
+uses 232,440 B static RAM, 3,531,976 B linked flash and a 3,532,144 B app image,
+leaving 662,160 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`8cab98cb4a141ee771311c8ad2a848e3f33a2cf831f786c878d6b877f276bb83`/
+`2f87d13a04891709d6999a53c0d2d90be6c870569581c87d1c7be270dee890e4`/
+`106f09dc2c97ced6ef0d005ecfb6f5f68f8377d4925e23a638266116295896d2`/
+`cfd7d9de39f50f7e88800b3c16529ae61ef70b1d0e1732ab90e394bc3c36d217`.
+The +368 B static/+8,640 B padded-app delta over dev.286 funds the linked Inspector,
+one on-demand 4,096-byte package buffer, read-only FAT package reader, Lab route and
+telemetry. The BLE corrective itself adds zero static RAM: only the BLE-only idle
+observation queue is resized from 64 to 32 records before first NimBLE initialization
+and restored to 64 on exit. Physical minima are 76,768 B free/31,732 B largest before
+NimBLE and 4,992/2,932 B after; five cycles accept 122 advertisements with zero driver
+drops and queue high-water 3/32. This bound does not fund a resident package, real
+trust store, signature-verifier workspace, HID report queue, execution engine or a
+dense-environment claim above the observed load.
+
+Inspector presentation and catalog-contract bound `RB-M214`: exact host/build
+`1.0.0-dev.289` at source `94e04134a5174165824800537ff02942a7bca7ea`
+uses 232,440 B static RAM, 3,531,620 B linked flash and a 3,532,128 B app image,
+leaving 662,176 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`3668a267ea2239d96a98105a7e6055aebebf0ad4941186ab5ae4c4d0ad19bf20`/
+`bba49775efbcbbbe0211caa51642aa877582cb72c4e2278477a4ee8075f2fbf8`/
+`5f2743919b6b7792120ff2d664e27fe27f7fe68d513387bdbb02a1684be5ebd2`/
+`2db5bccf30d4750c003a80d3afd66117769250e2168b46ceba0868a1ff570094`.
+Static RAM is unchanged from dev.288; linked flash/app shrink by 356/16 B. The
+delta restores the exact lowercase package path, fits the Russian untrusted-signature
+result within 212 px and updates historical catalog assertions from eight to nine
+Home entries. Full host, documentation and production-build gates pass. No physical
+runtime, package fixture, radio, host network, clone or Cardputer claim is added;
+exact dev.288 remains the accepted physical baseline until the due full checkpoint.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

@@ -1558,6 +1558,40 @@ events, 1 024 output bytes и 300 seconds; caller storage package и trust adapt
 не финансируются. Resident buffer package/signature/HID report/target/script и
 execution resource не заявляются.
 
+Bound passive product route CAP-054 и no-PSRAM startup BLE `RB-M213`: exact physical
+`1.0.0-dev.288` на source `3d232d2e5aff8e914ccb7e7414194c1ce7e89bbf`
+использует 232 440 B static RAM, 3 531 976 B linked flash и app image 3 532 144 B,
+оставляя 662 160 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`8cab98cb4a141ee771311c8ad2a848e3f33a2cf831f786c878d6b877f276bb83`/
+`2f87d13a04891709d6999a53c0d2d90be6c870569581c87d1c7be270dee890e4`/
+`106f09dc2c97ced6ef0d005ecfb6f5f68f8377d4925e23a638266116295896d2`/
+`cfd7d9de39f50f7e88800b3c16529ae61ef70b1d0e1732ab90e394bc3c36d217`.
+Delta +368 B static/+8 640 B padded app относительно dev.286 финансирует linked
+Inspector, один on-demand buffer package 4 096 bytes, read-only reader package FAT,
+route Lab и telemetry. Сам corrective BLE добавляет zero static RAM: только BLE-only
+idle observation queue меняется от 64 к 32 records до первой initialization NimBLE и
+восстанавливается к 64 при выходе. Physical minima — 76 768 B free/31 732 B largest
+до NimBLE и 4 992/2 932 B после; пять cycles принимают 122 advertisements с zero
+driver drops и high-water queue 3/32. Этот bound не финансирует resident package,
+real trust store, workspace signature verifier, queue HID reports, execution engine
+или claim dense environment сверх наблюдаемой нагрузки.
+
+Bound presentation Inspector и contract catalog `RB-M214`: exact host/build
+`1.0.0-dev.289` на source `94e04134a5174165824800537ff02942a7bca7ea`
+использует 232 440 B static RAM, 3 531 620 B linked flash и app image 3 532 128 B,
+оставляя 662 176 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`3668a267ea2239d96a98105a7e6055aebebf0ad4941186ab5ae4c4d0ad19bf20`/
+`bba49775efbcbbbe0211caa51642aa877582cb72c4e2278477a4ee8075f2fbf8`/
+`5f2743919b6b7792120ff2d664e27fe27f7fe68d513387bdbb02a1684be5ebd2`/
+`2db5bccf30d4750c003a80d3afd66117769250e2168b46ceba0868a1ff570094`.
+Static RAM не меняется относительно dev.288; linked flash/app уменьшаются на
+356/16 B. Delta восстанавливает exact lowercase path package, укладывает русский
+result untrusted signature в 212 px и обновляет исторические assertions catalog с
+восьми до девяти entries Home. Full host, documentation и production-build gates
+проходят. Новых claims physical runtime, fixture package, radio, host network, clone
+или Cardputer нет; exact dev.288 остаётся принятым physical baseline до прохождения
+обязательного full checkpoint.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

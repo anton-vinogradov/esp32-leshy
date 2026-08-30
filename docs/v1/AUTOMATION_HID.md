@@ -7,9 +7,12 @@
 - **Workflow:** WF-08-A1/A2/A4
 - **Architecture:** [ADR-002](adr/ADR-002-resource-policy.md),
   [ADR-004](adr/ADR-004-action-boundary.md)
-- **State:** slice 1 accepted in exact host/build `1.0.0-dev.286`: passive,
-  allocation-free package inspector and execution-admission boundary; no product
-  route or active execution is connected
+- **State:** slice 1 is accepted; slice 2 is implemented in exact host/build
+  `1.0.0-dev.289` and physically routed in exact `1.0.0-dev.288`: the passive,
+  allocation-free package inspector and
+  execution-admission boundary are connected to a read-only Lab product route; the
+  top-level Lab route is physically accepted, while nested package TFT evidence,
+  real trust and active execution remain unaccepted
 
 ## User outcome
 
@@ -99,8 +102,11 @@ inspection.
 
 1. `done` — canonical parser, passive summary, verifier interface, strict
    policy/admission order, and mutation/ceiling/permission/target negative host tests.
-2. `next` — Library package selection and compact EN/RU Inspector UI; malformed and
-   unsigned packages remain viewable but not runnable.
+2. `implemented / physical nested gate next` — bounded SD package discovery and a
+   compact EN/RU Lab → Automation Inspector UI; malformed and unsigned packages are
+   viewable but not runnable. Exact dev.289 host/build keeps every EN/RU label inside
+   its measured pixel budget; exact dev.288 physically accepts the Lab top-level
+   route and zero-output boundary, not yet the nested `.lhau` summary frames.
 3. `planned` — real P-256 trust adapter and owner-visible key enrollment/revocation;
    cold restore and Device Lock interaction.
 4. `planned` — named Action-only package execution through the shared dispatcher,

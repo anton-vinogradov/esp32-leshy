@@ -1,0 +1,123 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "106f09dc2c97ced6ef0d005ecfb6f5f68f8377d4925e23a638266116295896d2",
+    "elf_file_sha256": "106f09dc2c97ced6ef0d005ecfb6f5f68f8377d4925e23a638266116295896d2",
+    "factory_bytes": 3597680,
+    "factory_sha256": "2f87d13a04891709d6999a53c0d2d90be6c870569581c87d1c7be270dee890e4",
+    "firmware_bytes": 3532144,
+    "firmware_sha256": "8cab98cb4a141ee771311c8ad2a848e3f33a2cf831f786c878d6b877f276bb83",
+    "linked_flash_bytes": 3531976,
+    "map_sha256": "cfd7d9de39f50f7e88800b3c16529ae61ef70b1d0e1732ab90e394bc3c36d217",
+    "ota_free_bytes": 662160,
+    "source_commit": "3d232d2e5aff8e914ccb7e7414194c1ce7e89bbf",
+    "source_sha256": {
+      "ble_contract": "2ff46e19c750d98237598f9b0285a9ae6b2fad48e476ecdb2011aac540aa6167",
+      "firmware": "e130b3a3fa6e0ac2c1f18031040855571a12b38e6cf30e574277daff13d42299",
+      "platform": "0e17f5ca4b11c3177c883ad32f7861eed05ebed1debb1a82e2e496679ecc83f5",
+      "runner": "277dd75fd217382e2ebd065a41b62ff5b98bb6340fa2ff148fa2d349d300aa52",
+      "runner_tests": "6713dcc073f4b102ecb5b547d16628df4a10811cbcf935bd294854b4a0a3bd24"
+    },
+    "static_ram_bytes": 232440,
+    "version": "1.0.0-dev.288"
+  },
+  "cid": "FE343253440000002000000055019CB7",
+  "evidence_ids": [
+    "E-BUILD-202",
+    "E-AUTO-177",
+    "E-HIL-212",
+    "E-UX-067"
+  ],
+  "positive_run": {
+    "ble_advertisements_accepted": 122,
+    "ble_devices_observed": 27,
+    "ble_driver_drops": 0,
+    "ble_dwell_seconds": 15.0,
+    "ble_minimum_heap_free_after": 4992,
+    "ble_minimum_heap_free_before": 76768,
+    "ble_minimum_heap_largest_after": 2932,
+    "ble_minimum_heap_largest_before": 31732,
+    "ble_queue_high_water": 3,
+    "ble_ready_samples": 59,
+    "buzzer_inactive": true,
+    "catalog_order": [
+      "wifi",
+      "ble",
+      "spectrum24",
+      "subghz",
+      "capture",
+      "targets",
+      "library",
+      "lab",
+      "device"
+    ],
+    "dangerous_tx_started": false,
+    "final_hil_active": false,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "final_storage_mounted": false,
+    "fresh_flash": true,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "isolated_device_lock_cleanup": "cleaned",
+    "mac_wifi_or_ble_controlled": false,
+    "manual_button_presses": 0,
+    "menu_samples": {
+      "ble": 69,
+      "capture": 8,
+      "device": 8,
+      "lab": 8,
+      "library": 8,
+      "spectrum24": 8,
+      "subghz": 8,
+      "targets": 8,
+      "wifi": 8
+    },
+    "menus_passed": 9,
+    "nrf_ce_inactive": true,
+    "physical_product_write_calls": 0,
+    "product_lock_namespace_written_or_erased": false,
+    "recovery_generation_after": 3,
+    "recovery_generation_before": 3,
+    "recovery_observations_after": 13,
+    "recovery_observations_before": 13,
+    "run_sha256": "f57be9a1a51e71013258d0026b8d13af525c7111969ff8b7083b42fd825ed44b",
+    "runner_sha256": "277dd75fd217382e2ebd065a41b62ff5b98bb6340fa2ff148fa2d349d300aa52"
+  },
+  "rejected_predecessor": {
+    "app_elf_sha256": "558d3c1ef40bff69ef0141fba3766475b462399d84a882f7dfca4ca201e4eaad",
+    "ble_begin_stage_before_boundary": "not_attempted",
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "firmware_sha256": "24bcbcbb661f756f2276309fa93ab077e65644c01c11a10b563e20c071b04f9e",
+    "gate_eligible": false,
+    "owner_after_boundary": "none",
+    "owner_before_boundary": "ble",
+    "page_after_boundary": "home",
+    "page_before_boundary": "survey",
+    "run_sha256": "bd7e008a338e1b09beeeb34f4c57a3fb6e2384cec4ed549a0b2f555f79ea52fd",
+    "source_commit": "80bc025dd99fa98fae3b03c6523cf379a8fe0dcd",
+    "ui_revision_after_boundary": 0,
+    "ui_revision_before_boundary": 85,
+    "version": "1.0.0-dev.287"
+  },
+  "schema": "leshy.top_level_menu_smoke.acceptance.v1",
+  "scope": {
+    "accepts": [
+      "nine current top-level product routes",
+      "bounded first-process BLE initialization on no-PSRAM board-01",
+      "Device Lock fixture isolation and terminal cleanup"
+    ],
+    "does_not_accept": [
+      "nested destructive or transmit actions",
+      "Automation/HID signature trust or execution",
+      "dense BLE environments exceeding the observed queue load",
+      "release endurance or the periodic full HIL checkpoint"
+    ],
+    "focused_cadence": "15/15",
+    "periodic_full_checkpoint_due": true
+  },
+  "status": "pass_top_level_menu_and_ble_startup"
+}
