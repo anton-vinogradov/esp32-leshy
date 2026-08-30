@@ -47,6 +47,7 @@
 #include "apps/capture/SubGhzRawCapture.h"
 #include "apps/capture/SubGhzRawCsv.h"
 #include "apps/capture/WifiFrameCapture.h"
+#include "apps/device/DeviceLockController.h"
 #include "apps/self_test/SelfTestController.h"
 #include "apps/spectrum/Cc1101SignalFinder.h"
 #include "apps/spectrum/Cc1101SpectrumController.h"
@@ -198,6 +199,12 @@ using leshy1::apps::capture::SubGhzRawRssiSample;
 using leshy1::apps::capture::WifiFrameCapture;
 using leshy1::apps::capture::WifiFrameCapturePlan;
 using leshy1::apps::capture::WifiFrameCaptureState;
+using leshy1::apps::device::DeviceLockActivation;
+using leshy1::apps::device::DeviceLockController;
+using leshy1::apps::device::DeviceLockIntent;
+using leshy1::apps::device::DeviceLockSubmission;
+using leshy1::apps::device::DeviceLockUiOutcome;
+using leshy1::apps::device::DeviceLockView;
 using leshy1::apps::self_test::SelfTestController;
 using leshy1::apps::self_test::SelfTestFacts;
 using leshy1::apps::self_test::SelfTestMode;
@@ -959,8 +966,38 @@ SelfTestController selfTestController;
 constexpr std::uint8_t kDevicePage = 9;
 constexpr std::uint8_t kAboutPage = 10;
 constexpr std::uint8_t kPowerPage = 11;
-constexpr std::uint8_t kDeviceItemCount = 5;
+constexpr std::uint8_t kDeviceLockPage = 12;
+constexpr std::uint8_t kDeviceItemCount = 6;
 std::uint8_t deviceSelection = 0;
+DeviceLockController deviceLockController;
+enum class DeviceLockWorkerMode : std::uint8_t {
+    Product,
+    KdfBenchmark,
+};
+struct DeviceLockWorkerEvent final {
+    DeviceLockWorkerMode mode = DeviceLockWorkerMode::Product;
+    bool success = false;
+    std::uint64_t elapsedUs = 0;
+    std::uint32_t heapBefore = 0;
+    std::uint32_t heapAfter = 0;
+    std::uint32_t minimumHeapAfter = 0;
+    leshy1::services::security::DeviceLockAudit audit{};
+};
+struct DeviceLockKdfBenchmarkReport final {
+    bool requested = false;
+    bool complete = false;
+    bool success = false;
+    std::uint64_t elapsedUs = 0;
+    std::uint32_t heapBefore = 0;
+    std::uint32_t heapAfter = 0;
+    std::uint32_t minimumHeapAfter = 0;
+};
+QueueHandle_t deviceLockWorkerEvents = nullptr;
+TaskHandle_t deviceLockWorkerTaskHandle = nullptr;
+DeviceLockSubmission deviceLockWorkerRequest{};
+DeviceLockWorkerMode deviceLockWorkerMode = DeviceLockWorkerMode::Product;
+DeviceLockKdfBenchmarkReport deviceLockKdfBenchmark{};
+std::uint64_t deviceLockLastKdfUs = 0;
 PowerSafetyPolicy powerSafetyPolicy;
 bool powerManagerAddressAck = false;
 std::uint32_t boundedSleepCount = 0;
@@ -12049,6 +12086,36 @@ NavigationFooter navigationFooterForCurrentState() {
         return {{NavigationKey::Left, UiTextId::NavList}, {},
                 {NavigationKey::RightAndSelect, UiTextId::NavActions}};
     }
+    if (uiController.page() == kDeviceLockPage) {
+        const DeviceLockView view = deviceLockController.view();
+        if (view == DeviceLockView::Working) return {};
+        if (view == DeviceLockView::EnterPin ||
+            view == DeviceLockView::ConfirmPin) {
+            return {
+                {NavigationKey::Left, UiTextId::NavCancel},
+                {NavigationKey::UpDown, UiTextId::NavDigit},
+                {NavigationKey::RightAndSelect,
+                 deviceLockController.cursor() + 1U >=
+                         DeviceLockController::kProductPinDigits
+                     ? UiTextId::NavConfirm : UiTextId::NavNext},
+            };
+        }
+        const auto state = deviceLockController.audit().state;
+        if (state ==
+            leshy1::services::security::DeviceLockState::Unconfigured) {
+            return {back, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavSetup}};
+        }
+        if (state == leshy1::services::security::DeviceLockState::Locked) {
+            return {back, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavUnlock}};
+        }
+        if (state == leshy1::services::security::DeviceLockState::Unlocked) {
+            return {back, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavLock}};
+        }
+        return {back, {}, {}};
+    }
     if (uiController.page() == kDevicePage) return {back, choose, enter};
     return {back, {}, {}};
 }
@@ -12449,19 +12516,37 @@ UiTextId deviceLabel(std::uint8_t index) {
     switch (index) {
         case 0: return UiTextId::DevicePower;
         case 1: return UiTextId::DeviceSettings;
-        case 2: return UiTextId::AppSelfTest;
-        case 3: return UiTextId::AppDiagnostics;
-        default: return UiTextId::DeviceAbout;
+        case 2: return UiTextId::DeviceLockMenu;
+        case 3: return UiTextId::DeviceAbout;
+        case 4: return UiTextId::AppDiagnostics;
+        default: return UiTextId::AppSelfTest;
     }
+}
+
+UiTextId deviceLockMenuNote() {
+    switch (deviceLock.state()) {
+        case leshy1::services::security::DeviceLockState::Unconfigured:
+            return UiTextId::DeviceLockMenuOff;
+        case leshy1::services::security::DeviceLockState::Unlocked:
+            return UiTextId::DeviceLockMenuOpen;
+        case leshy1::services::security::DeviceLockState::Locked:
+        case leshy1::services::security::DeviceLockState::RetryDelay:
+            return UiTextId::DeviceLockMenuLocked;
+        case leshy1::services::security::DeviceLockState::RecoveryOnly:
+        case leshy1::services::security::DeviceLockState::Fault:
+            return UiTextId::DeviceLockMenuFault;
+    }
+    return UiTextId::DeviceLockMenuFault;
 }
 
 UiTextId deviceNote(std::uint8_t index) {
     switch (index) {
         case 0: return UiTextId::DevicePowerNote;
         case 1: return UiTextId::DeviceSettingsNote;
-        case 2: return UiTextId::NoteSelfTest;
-        case 3: return UiTextId::DeviceDiagnosticsNote;
-        default: return UiTextId::DeviceAboutNote;
+        case 2: return deviceLockMenuNote();
+        case 3: return UiTextId::DeviceAboutNote;
+        case 4: return UiTextId::DeviceDiagnosticsNote;
+        default: return UiTextId::NoteSelfTest;
     }
 }
 
@@ -12484,6 +12569,426 @@ void renderDevicePage(bool clearContent) {
     for (std::uint8_t index = first; index < end; ++index) {
         renderDeviceRow(index, first);
     }
+}
+
+UiTextId deviceLockStateText(
+    leshy1::services::security::DeviceLockState state) {
+    switch (state) {
+        case leshy1::services::security::DeviceLockState::Unconfigured:
+            return UiTextId::DeviceLockUnconfigured;
+        case leshy1::services::security::DeviceLockState::Locked:
+            return UiTextId::DeviceLockLocked;
+        case leshy1::services::security::DeviceLockState::RetryDelay:
+            return UiTextId::DeviceLockRetry;
+        case leshy1::services::security::DeviceLockState::RecoveryOnly:
+            return UiTextId::DeviceLockRecovery;
+        case leshy1::services::security::DeviceLockState::Unlocked:
+            return UiTextId::DeviceLockUnlocked;
+        case leshy1::services::security::DeviceLockState::Fault:
+            return UiTextId::DeviceLockFault;
+    }
+    return UiTextId::DeviceLockFault;
+}
+
+Tone deviceLockStateTone(
+    leshy1::services::security::DeviceLockState state) {
+    switch (state) {
+        case leshy1::services::security::DeviceLockState::Unconfigured:
+        case leshy1::services::security::DeviceLockState::Locked:
+            return Tone::Warning;
+        case leshy1::services::security::DeviceLockState::Unlocked:
+            return Tone::Positive;
+        case leshy1::services::security::DeviceLockState::RetryDelay:
+            return Tone::Warning;
+        case leshy1::services::security::DeviceLockState::RecoveryOnly:
+        case leshy1::services::security::DeviceLockState::Fault:
+            return Tone::Danger;
+    }
+    return Tone::Danger;
+}
+
+UiTextId deviceLockOutcomeText(DeviceLockUiOutcome outcome) {
+    switch (outcome) {
+        case DeviceLockUiOutcome::Configured:
+            return UiTextId::DeviceLockConfigured;
+        case DeviceLockUiOutcome::Unlocked:
+            return UiTextId::DeviceLockOpened;
+        case DeviceLockUiOutcome::Locked:
+            return UiTextId::DeviceLockClosed;
+        case DeviceLockUiOutcome::PinMismatch:
+            return UiTextId::DeviceLockMismatch;
+        case DeviceLockUiOutcome::WeakPin:
+            return UiTextId::DeviceLockWeak;
+        case DeviceLockUiOutcome::Failed:
+            return UiTextId::DeviceLockFailed;
+        case DeviceLockUiOutcome::None:
+            break;
+    }
+    return UiTextId::DeviceLockProtectedClosed;
+}
+
+Tone deviceLockOutcomeTone(DeviceLockUiOutcome outcome) {
+    switch (outcome) {
+        case DeviceLockUiOutcome::Configured:
+        case DeviceLockUiOutcome::Unlocked:
+        case DeviceLockUiOutcome::Locked:
+            return Tone::Positive;
+        case DeviceLockUiOutcome::PinMismatch:
+        case DeviceLockUiOutcome::WeakPin:
+            return Tone::Warning;
+        case DeviceLockUiOutcome::Failed:
+            return Tone::Danger;
+        case DeviceLockUiOutcome::None:
+            return Tone::Muted;
+    }
+    return Tone::Muted;
+}
+
+void renderDeviceLockAction(UiTextId label) {
+    const Rect bounds = Components::homeRow(3);
+    renderMenuRow(bounds, tr(label), tr(UiTextId::DeviceLockSetupNote),
+                  true, true, Tone::Positive);
+}
+
+void renderDeviceLockPinCells() {
+    constexpr std::int16_t kCellWidth = 28;
+    constexpr std::int16_t kCellGap = 7;
+    constexpr std::int16_t kCellsWidth =
+        static_cast<std::int16_t>(
+            DeviceLockController::kProductPinDigits * kCellWidth +
+            (DeviceLockController::kProductPinDigits - 1U) * kCellGap);
+    constexpr std::int16_t kCellLeft =
+        static_cast<std::int16_t>((Layout::ScreenWidth - kCellsWidth) / 2);
+    constexpr std::int16_t kCellTop = 88;
+    constexpr std::int16_t kCellHeight = 42;
+    for (std::size_t index = 0;
+         index < DeviceLockController::kProductPinDigits; ++index) {
+        const bool selected = index == deviceLockController.cursor();
+        const std::int16_t x = static_cast<std::int16_t>(
+            kCellLeft + static_cast<std::int16_t>(index) *
+                            (kCellWidth + kCellGap));
+        const std::uint16_t background =
+            selected ? Palette::SurfaceFocus : Palette::Surface;
+        display.fillRoundRect(x, kCellTop, kCellWidth, kCellHeight,
+                              Layout::Radius, background);
+        display.drawRoundRect(x, kCellTop, kCellWidth, kCellHeight,
+                              Layout::Radius,
+                              selected ? Palette::Focus : Palette::Divider);
+        char glyph[2] = {'-', '\0'};
+        if (selected) {
+            glyph[0] = static_cast<char>('0' + deviceLockController.digit());
+        } else if (index < deviceLockController.cursor()) {
+            glyph[0] = '*';
+        }
+        selectUiFont(UiTextRole::Body);
+        display.setTextColor(selected ? Palette::Focus
+                                      : Palette::TextSecondary,
+                             background);
+        const std::int16_t glyphX = static_cast<std::int16_t>(
+            x + (kCellWidth - display.textWidth(glyph)) / 2);
+        setUiCursor(UiTextRole::Body, glyphX, kCellTop + 10);
+        display.print(glyph);
+    }
+}
+
+void renderDeviceLockPinAdvanceAction() {
+    const UiTextId next = deviceLockController.cursor() + 1U >=
+                                  DeviceLockController::kProductPinDigits
+        ? UiTextId::DeviceLockConfirmAction
+        : UiTextId::DeviceLockNextAction;
+    renderMenuRow(Components::homeRow(2), tr(next),
+                  tr(UiTextId::DeviceLockTouchNote), true, true,
+                  Tone::Positive);
+}
+
+void renderDeviceLockPinEditor() {
+    const DeviceLockView view = deviceLockController.view();
+    const UiTextId headline = view == DeviceLockView::ConfirmPin
+        ? UiTextId::DeviceLockConfirmPin
+        : (deviceLockController.intent() == DeviceLockIntent::Configure
+               ? UiTextId::DeviceLockSetupPin
+               : UiTextId::DeviceLockEnterPin);
+    renderMetric(0, tr(headline), Tone::Positive);
+    renderDeviceLockPinCells();
+
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 140);
+    display.print(tr(UiTextId::DeviceLockDigitNote));
+    renderDeviceLockPinAdvanceAction();
+    renderMenuRow(Components::homeRow(3),
+                  tr(UiTextId::DeviceLockCancelAction),
+                  tr(UiTextId::DeviceLockTouchNote), false, true,
+                  Tone::Muted);
+}
+
+void renderDeviceLockPage(bool clearContent) {
+    renderHeader(tr(UiTextId::DeviceLockTitle), clearContent);
+    const DeviceLockView view = deviceLockController.view();
+    if (view == DeviceLockView::EnterPin ||
+        view == DeviceLockView::ConfirmPin) {
+        renderDeviceLockPinEditor();
+        return;
+    }
+    if (view == DeviceLockView::Working) {
+        renderMetric(
+            0,
+            tr(deviceLockController.intent() == DeviceLockIntent::Configure
+                   ? UiTextId::DeviceLockSecuring
+                   : UiTextId::DeviceLockVerifying),
+            Tone::Positive);
+        renderMetric(2, tr(UiTextId::DeviceLockResponsive), Tone::Muted);
+        return;
+    }
+
+    const auto audit = deviceLockController.audit();
+    renderMetric(0, tr(deviceLockStateText(audit.state)),
+                 deviceLockStateTone(audit.state));
+    char line[64] = {};
+    if (audit.state ==
+        leshy1::services::security::DeviceLockState::RetryDelay) {
+        const unsigned long long seconds =
+            static_cast<unsigned long long>(
+                (audit.retryRemainingUs + 999999ULL) / 1000000ULL);
+        std::snprintf(line, sizeof(line), tr(UiTextId::DeviceLockRetryFormat),
+                      seconds);
+        renderMetric(1, line, Tone::Warning);
+    } else if (audit.state ==
+               leshy1::services::security::DeviceLockState::Unlocked) {
+        renderMetric(1, tr(UiTextId::DeviceLockAutoNote), Tone::Muted);
+    } else if (audit.state ==
+                   leshy1::services::security::DeviceLockState::RecoveryOnly ||
+               audit.state ==
+                   leshy1::services::security::DeviceLockState::Fault) {
+        renderMetric(1, tr(UiTextId::DeviceLockRecoveryNote), Tone::Danger);
+    } else {
+        renderMetric(1, tr(UiTextId::DeviceLockProtectedClosed), Tone::Muted);
+    }
+    if (audit.failedAttempts != 0U) {
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::DeviceLockAttemptsFormat),
+                      static_cast<unsigned>(audit.failedAttempts));
+        renderMetric(2, line, Tone::Warning);
+    }
+    if (deviceLockController.outcome() != DeviceLockUiOutcome::None) {
+        renderMetric(3,
+                     tr(deviceLockOutcomeText(deviceLockController.outcome())),
+                     deviceLockOutcomeTone(deviceLockController.outcome()));
+    }
+
+    if (audit.state ==
+        leshy1::services::security::DeviceLockState::Unconfigured) {
+        renderDeviceLockAction(UiTextId::DeviceLockSetupAction);
+    } else if (audit.state ==
+               leshy1::services::security::DeviceLockState::Locked) {
+        renderDeviceLockAction(UiTextId::DeviceLockUnlockAction);
+    } else if (audit.state ==
+               leshy1::services::security::DeviceLockState::Unlocked) {
+        renderDeviceLockAction(UiTextId::DeviceLockLockAction);
+    }
+}
+
+void runDeviceLockWorker(void*) {
+    DeviceLockWorkerEvent event{};
+    event.mode = deviceLockWorkerMode;
+    event.heapBefore = ESP.getFreeHeap();
+    std::uint64_t startedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (startedUs == 0U) startedUs = 1U;
+    if (event.mode == DeviceLockWorkerMode::KdfBenchmark) {
+        // A fixed diagnostic vector exercises the production 120k-round KDF
+        // without reading or changing the owner's credential. Every byte is
+        // stack-local and wiped before the completion event is published.
+        std::array<char, 7> pin{{'4', '8', '2', '9', '1', '5', '\0'}};
+        std::array<std::uint8_t,
+                   leshy1::services::security::kDeviceLockSaltBytes> salt{};
+        std::array<std::uint8_t,
+                   leshy1::services::security::kDeviceLockVerifierBytes>
+            verifier{};
+        for (std::size_t index = 0; index < salt.size(); ++index) {
+            salt[index] = static_cast<std::uint8_t>(0x31U + index * 7U);
+        }
+        event.success = deviceLockCrypto.deriveVerifier(
+            pin.data(), pin.size() - 1U, salt,
+            leshy1::services::security::kDeviceLockPbkdf2Iterations,
+            &verifier);
+        volatile char* pinBytes = pin.data();
+        for (std::size_t index = 0; index < pin.size(); ++index) {
+            pinBytes[index] = '\0';
+        }
+        volatile std::uint8_t* saltBytes = salt.data();
+        for (std::size_t index = 0; index < salt.size(); ++index) {
+            saltBytes[index] = 0U;
+        }
+        volatile std::uint8_t* verifierBytes = verifier.data();
+        for (std::size_t index = 0; index < verifier.size(); ++index) {
+            verifierBytes[index] = 0U;
+        }
+    } else if (deviceLockWorkerRequest.intent ==
+               DeviceLockIntent::Configure) {
+        event.success = deviceLock.configure(
+            deviceLockWorkerRequest.pin.data(),
+            deviceLockWorkerRequest.pinLength, startedUs);
+    } else if (deviceLockWorkerRequest.intent == DeviceLockIntent::Unlock) {
+        event.success = deviceLock.unlock(
+            deviceLockWorkerRequest.pin.data(),
+            deviceLockWorkerRequest.pinLength, startedUs);
+    }
+    deviceLockWorkerRequest.clear();
+    const std::uint64_t finishedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    event.elapsedUs = finishedUs >= startedUs ? finishedUs - startedUs : 0U;
+    event.heapAfter = ESP.getFreeHeap();
+    event.minimumHeapAfter = ESP.getMinFreeHeap();
+    event.audit = deviceLock.audit(finishedUs);
+    if (deviceLockWorkerEvents != nullptr) {
+        xQueueOverwrite(deviceLockWorkerEvents, &event);
+    }
+    vTaskDelete(nullptr);
+}
+
+bool requestDeviceLockWorker() {
+    if (deviceLockWorkerTaskHandle != nullptr ||
+        !deviceLockController.takeSubmission(&deviceLockWorkerRequest)) {
+        return false;
+    }
+    if (deviceLockWorkerEvents == nullptr) {
+        deviceLockWorkerRequest.clear();
+        deviceLockController.complete(
+            deviceLock.audit(static_cast<std::uint64_t>(esp_timer_get_time())),
+            false);
+        return false;
+    }
+    deviceLockWorkerMode = DeviceLockWorkerMode::Product;
+    const bool started = xTaskCreatePinnedToCore(
+        runDeviceLockWorker, "leshy-device-lock", 6144, nullptr, 1,
+        &deviceLockWorkerTaskHandle, 0) == pdPASS;
+    if (!started) {
+        deviceLockWorkerTaskHandle = nullptr;
+        deviceLockWorkerRequest.clear();
+        deviceLockController.complete(
+            deviceLock.audit(static_cast<std::uint64_t>(esp_timer_get_time())),
+            false);
+    }
+    return started;
+}
+
+bool requestDeviceLockKdfBenchmark() {
+    if (deviceLockWorkerTaskHandle != nullptr ||
+        deviceLockWorkerEvents == nullptr) {
+        return false;
+    }
+    deviceLockKdfBenchmark = {};
+    deviceLockKdfBenchmark.requested = true;
+    deviceLockWorkerMode = DeviceLockWorkerMode::KdfBenchmark;
+    const bool started = xTaskCreatePinnedToCore(
+        runDeviceLockWorker, "leshy-lock-kdf-hil", 6144, nullptr, 1,
+        &deviceLockWorkerTaskHandle, 0) == pdPASS;
+    if (!started) {
+        deviceLockWorkerTaskHandle = nullptr;
+        deviceLockKdfBenchmark.complete = true;
+    }
+    return started;
+}
+
+void serviceDeviceLock() {
+    if (deviceLockWorkerEvents != nullptr) {
+        DeviceLockWorkerEvent event{};
+        if (xQueueReceive(deviceLockWorkerEvents, &event, 0) == pdTRUE) {
+            deviceLockWorkerTaskHandle = nullptr;
+            deviceLockLastKdfUs = event.elapsedUs;
+            if (event.mode == DeviceLockWorkerMode::KdfBenchmark) {
+                deviceLockKdfBenchmark.complete = true;
+                deviceLockKdfBenchmark.success = event.success;
+                deviceLockKdfBenchmark.elapsedUs = event.elapsedUs;
+                deviceLockKdfBenchmark.heapBefore = event.heapBefore;
+                deviceLockKdfBenchmark.heapAfter = event.heapAfter;
+                deviceLockKdfBenchmark.minimumHeapAfter =
+                    event.minimumHeapAfter;
+                lastRuntimeEvent = event.success
+                    ? "device_lock_kdf_benchmark_complete"
+                    : "device_lock_kdf_benchmark_failed";
+            } else {
+                deviceLockController.complete(event.audit, event.success);
+                lastRuntimeEvent = event.success
+                    ? "device_lock_operation_complete"
+                    : "device_lock_operation_failed";
+                if (!safetySupervisor.latched() &&
+                    uiController.page() == kDeviceLockPage) {
+                    renderInteractiveScreen(true);
+                }
+            }
+        }
+    }
+    if (deviceLockWorkerTaskHandle != nullptr) return;
+    const std::uint64_t nowUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (deviceLock.service(nowUs) &&
+        uiController.page() == kDeviceLockPage) {
+        deviceLockController.enter(deviceLock.audit(nowUs));
+        if (!safetySupervisor.latched()) renderInteractiveScreen(true);
+    }
+}
+
+void emitDeviceLockState(Stream& reply) {
+    const std::uint64_t nowUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    const auto audit = deviceLock.audit(nowUs);
+    char line[640] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.device_lock.v1\",\"kind\":\"state\","
+        "\"status\":\"%s\",\"failure\":\"%s\","
+        "\"failed_attempts\":%u,\"credential_generation\":%lu,"
+        "\"retry_remaining_ms\":%llu,\"protected_access\":%s,"
+        "\"worker_active\":%s,\"last_kdf_us\":%llu,"
+        "\"benchmark_requested\":%s,\"benchmark_complete\":%s,"
+        "\"benchmark_success\":%s,\"benchmark_elapsed_us\":%llu,"
+        "\"benchmark_heap_before\":%lu,\"benchmark_heap_after\":%lu,"
+        "\"benchmark_minimum_heap_after\":%lu,"
+        "\"persistence_touched_by_benchmark\":false,"
+        "\"radio_touched\":false}",
+        leshy1::services::security::deviceLockStateName(audit.state),
+        leshy1::services::security::deviceLockFailureName(audit.lastFailure),
+        static_cast<unsigned>(audit.failedAttempts),
+        static_cast<unsigned long>(audit.credentialGeneration),
+        static_cast<unsigned long long>(audit.retryRemainingUs / 1000ULL),
+        audit.protectedAccessAllowed ? "true" : "false",
+        deviceLockWorkerTaskHandle != nullptr ? "true" : "false",
+        static_cast<unsigned long long>(deviceLockLastKdfUs),
+        deviceLockKdfBenchmark.requested ? "true" : "false",
+        deviceLockKdfBenchmark.complete ? "true" : "false",
+        deviceLockKdfBenchmark.success ? "true" : "false",
+        static_cast<unsigned long long>(deviceLockKdfBenchmark.elapsedUs),
+        static_cast<unsigned long>(deviceLockKdfBenchmark.heapBefore),
+        static_cast<unsigned long>(deviceLockKdfBenchmark.heapAfter),
+        static_cast<unsigned long>(
+            deviceLockKdfBenchmark.minimumHeapAfter));
+    reply.println(line);
+}
+
+void triggerDeviceLockKdfBenchmark(Stream& reply) {
+    const char* status = "accepted";
+    bool accepted = false;
+    if (!hilSession.active()) {
+        status = "hil_session_required";
+    } else if (deviceLockWorkerTaskHandle != nullptr) {
+        status = "worker_busy";
+    } else if (!requestDeviceLockKdfBenchmark()) {
+        status = "worker_unavailable";
+    } else {
+        accepted = true;
+    }
+    char line[256] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.device_lock.v1\",\"kind\":\"benchmark\","
+        "\"status\":\"%s\",\"accepted\":%s,"
+        "\"iterations\":%lu,\"persistence_touched\":false,"
+        "\"radio_touched\":false}",
+        status, accepted ? "true" : "false",
+        static_cast<unsigned long>(
+            leshy1::services::security::kDeviceLockPbkdf2Iterations));
+    reply.println(line);
 }
 
 void renderAboutPage(bool clearContent) {
@@ -18188,6 +18693,9 @@ struct UiRenderSnapshot final {
     std::size_t targetsSize = 0;
     bool webCompanionOverlay = false;
     bool webCompanionAuthorized = false;
+    std::uint8_t deviceLockView = 0;
+    std::uint8_t deviceLockCursor = 0;
+    std::uint8_t deviceLockDigit = 0;
 };
 
 UiRenderSnapshot renderedUi{};
@@ -18255,6 +18763,9 @@ UiRenderSnapshot captureUiRenderSnapshot() {
             ? 0U : targetsProductRuntime->controller.navigationCount(),
         webCompanionOverlay,
         webCompanionConnectivity.authorized(),
+        static_cast<std::uint8_t>(deviceLockController.view()),
+        static_cast<std::uint8_t>(deviceLockController.cursor()),
+        deviceLockController.digit(),
     };
 }
 
@@ -18294,6 +18805,27 @@ bool renderSelectionDelta() {
         }
         renderDeviceRow(renderedUi.deviceSelection, currentFirst);
         renderDeviceRow(deviceSelection, currentFirst);
+        return true;
+    }
+
+    if (uiController.page() == kDeviceLockPage &&
+        (deviceLockController.view() == DeviceLockView::EnterPin ||
+         deviceLockController.view() == DeviceLockView::ConfirmPin) &&
+        renderedUi.deviceLockView ==
+            static_cast<std::uint8_t>(deviceLockController.view())) {
+        const bool cursorChanged = renderedUi.deviceLockCursor !=
+            deviceLockController.cursor();
+        const bool digitChanged = renderedUi.deviceLockDigit !=
+            deviceLockController.digit();
+        if (!cursorChanged && !digitChanged) return true;
+        // PIN navigation is a strictly local repaint. Keeping the header,
+        // headline and canvas intact prevents the bright flash that a
+        // full-screen clear would create while keys repeat.
+        renderDeviceLockPinCells();
+        if (cursorChanged) {
+            renderDeviceLockPinAdvanceAction();
+            renderNavigationFooter();
+        }
         return true;
     }
 
@@ -18887,6 +19419,8 @@ void renderInteractiveScreen(bool clearContent) {
             renderDevicePage(clearContent);
         } else if (uiController.page() == kPowerPage) {
             renderPowerPage(clearContent);
+        } else if (uiController.page() == kDeviceLockPage) {
+            renderDeviceLockPage(clearContent);
         } else {
             renderAboutPage(clearContent);
         }
@@ -24255,6 +24789,13 @@ bool selectionCanRepaintInPlace(UiAction action) {
     if (uiController.page() == 4) {
         return captureView == CaptureView::SourceMenu;
     }
+    if (uiController.page() == kDeviceLockPage) {
+        const DeviceLockView view = deviceLockController.view();
+        return (view == DeviceLockView::EnterPin ||
+                view == DeviceLockView::ConfirmPin) &&
+            (action == UiAction::Up || action == UiAction::Down ||
+             action == UiAction::Select || action == UiAction::Right);
+    }
     if (uiController.page() == kDevicePage) return true;
     return uiController.page() == 6 &&
            selfTestController.view() == SelfTestView::ModeMenu;
@@ -24311,6 +24852,17 @@ bool applyUiAction(UiAction action, bool render = true) {
             uiController.recordHandledAction(action);
         }
         return finish(changed);
+    }
+    if (deviceLockWorkerTaskHandle == nullptr &&
+        deviceLock.state() ==
+            leshy1::services::security::DeviceLockState::Unlocked &&
+        action != UiAction::Unknown) {
+        const std::uint64_t nowUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (!deviceLock.recordActivity(nowUs) &&
+            uiController.page() == kDeviceLockPage) {
+            deviceLockController.enter(deviceLock.audit(nowUs));
+        }
     }
     const AppMenuItem* selected = appCatalog.get(uiController.selection());
     const bool wasRoot = uiController.isRoot();
@@ -25633,6 +26185,70 @@ bool applyUiAction(UiAction action, bool render = true) {
         }
         }
     }
+    if (!wasRoot && uiController.page() == kDeviceLockPage) {
+        bool handled = true;
+        bool changed = false;
+        bool controllerRecorded = true;
+        const DeviceLockView view = deviceLockController.view();
+        if (action == UiAction::Back || action == UiAction::Left) {
+            if (view == DeviceLockView::Working) {
+                lastRuntimeEvent = "device_lock_operation_pending";
+            } else if (deviceLockController.cancel()) {
+                changed = true;
+                lastRuntimeEvent = "device_lock_editor_cancelled";
+            } else {
+                changed = uiController.apply(
+                    action, static_cast<std::uint8_t>(appCatalog.size()),
+                    true, kDeviceLockPage);
+                controllerRecorded = false;
+                lastRuntimeEvent = changed ? "device_lock_device_menu"
+                                           : "device_lock_back_rejected";
+            }
+        } else if (view == DeviceLockView::EnterPin ||
+                   view == DeviceLockView::ConfirmPin) {
+            if (action == UiAction::Up) {
+                changed = deviceLockController.previousDigit();
+            } else if (action == UiAction::Down) {
+                changed = deviceLockController.nextDigit();
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                changed = deviceLockController.advance();
+                if (deviceLockController.submissionReady()) {
+                    const bool started = requestDeviceLockWorker();
+                    lastRuntimeEvent = started
+                        ? "device_lock_operation_started"
+                        : "device_lock_worker_unavailable";
+                }
+            } else {
+                handled = false;
+            }
+        } else if (view == DeviceLockView::Status &&
+                   (action == UiAction::Select ||
+                    action == UiAction::Right)) {
+            const DeviceLockActivation activation =
+                deviceLockController.activate();
+            if (activation == DeviceLockActivation::EditorOpened) {
+                changed = true;
+                lastRuntimeEvent = "device_lock_editor_opened";
+            } else if (activation ==
+                       DeviceLockActivation::LockRequested) {
+                deviceLock.lock();
+                const std::uint64_t nowUs =
+                    static_cast<std::uint64_t>(esp_timer_get_time());
+                deviceLockController.noteLocked(deviceLock.audit(nowUs));
+                changed = true;
+                lastRuntimeEvent = "device_lock_locked";
+            } else {
+                lastRuntimeEvent = "device_lock_action_unavailable";
+            }
+        } else {
+            handled = view == DeviceLockView::Working;
+        }
+        if (handled) {
+            if (controllerRecorded) uiController.recordHandledAction(action);
+            return finish(changed);
+        }
+    }
     if (!wasRoot && uiController.page() == kDevicePage) {
         bool handled = false;
         bool changed = false;
@@ -25648,11 +26264,16 @@ bool applyUiAction(UiAction action, bool render = true) {
         } else if (action == UiAction::Select || action == UiAction::Right) {
             handled = true;
             constexpr std::uint8_t pages[kDeviceItemCount] = {
-                kPowerPage, 5, 6, 1, kAboutPage,
+                kPowerPage, 5, kDeviceLockPage, kAboutPage, 1, 6,
             };
             changed = uiController.openChild(pages[deviceSelection]);
             if (changed && deviceSelection == 1) {
                 interfaceSettingsController.enter();
+            }
+            if (changed && deviceSelection == 2) {
+                const std::uint64_t nowUs =
+                    static_cast<std::uint64_t>(esp_timer_get_time());
+                deviceLockController.enter(deviceLock.audit(nowUs));
             }
             lastRuntimeEvent = changed ? "device_item_opened"
                                        : "device_item_rejected";
@@ -26289,6 +26910,44 @@ bool dispatchTouchPoint(TouchPoint point, bool synthetic = false) {
     lastTouchPoint = point;
     lastTouchChanged = false;
     if (synthetic) ++syntheticTouchPresses;
+    if (uiController.page() == kDeviceLockPage) {
+        UiAction action = UiAction::Unknown;
+        const DeviceLockView view = deviceLockController.view();
+        if (view == DeviceLockView::Status &&
+            leshy1::ui::visual::containsPoint(
+                Components::homeRow(3), point.x, point.y)) {
+            action = UiAction::Select;
+        } else if ((view == DeviceLockView::EnterPin ||
+                    view == DeviceLockView::ConfirmPin) &&
+                   point.x >= 15U && point.x < 225U &&
+                   point.y >= 84U && point.y < 134U) {
+            // The complete six-cell strip is one generous touch target: each
+            // tap increments the active digit while keys retain both
+            // directions. This avoids six tiny, error-prone targets.
+            action = UiAction::Down;
+        } else if ((view == DeviceLockView::EnterPin ||
+                    view == DeviceLockView::ConfirmPin) &&
+                   leshy1::ui::visual::containsPoint(
+                       Components::homeRow(2), point.x, point.y)) {
+            action = UiAction::Select;
+        } else if ((view == DeviceLockView::EnterPin ||
+                    view == DeviceLockView::ConfirmPin) &&
+                   leshy1::ui::visual::containsPoint(
+                       Components::homeRow(3), point.x, point.y)) {
+            action = UiAction::Back;
+        }
+        if (action == UiAction::Unknown) {
+            ++touchMissedPresses;
+            return false;
+        }
+        ++touchHandledPresses;
+        const bool changed = applyUiAction(action, false);
+        lastTouchChanged = changed;
+        if (changed) {
+            renderInteractiveScreen(!lastUiActionUsedIncrementalRender);
+        }
+        return changed;
+    }
     const TouchDispatchTarget dispatch = touchDispatchTarget(point);
     if (!dispatch.target.hit) {
         ++touchMissedPresses;
@@ -32715,6 +33374,7 @@ bool commandAllowedDuringSafetyStop(const char* command) {
            std::strcmp(command, "ping") == 0 ||
            std::strcmp(command, "hardware.safe-outputs") == 0 ||
            std::strcmp(command, "safety.state") == 0 ||
+           std::strcmp(command, "device-lock.state") == 0 ||
            std::strcmp(command, "safety.restart-test confirm") == 0 ||
            std::strcmp(command, "safety.clear confirm") == 0 ||
            std::strcmp(command, "ui.state") == 0 ||
@@ -32753,6 +33413,7 @@ bool commandAllowedWhileSessionWorkspaceBorrowed(const char* command) {
            std::strcmp(command, "hardware.cc1101.spectrum") == 0 ||
            std::strcmp(command, "hardware.cc1101.finder") == 0 ||
            std::strcmp(command, "safety.state") == 0 ||
+           std::strcmp(command, "device-lock.state") == 0 ||
            std::strcmp(command, "ping") == 0 ||
            std::strcmp(command, "ui.state") == 0 ||
            std::strcmp(command, "survey.field-visit") == 0 ||
@@ -33243,6 +33904,12 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitPowerSleepTestReport(reply);
     } else if (std::strcmp(command, "safety.state") == 0) {
         emitSafetyState(reply);
+    } else if (std::strcmp(command, "device-lock.state") == 0) {
+        emitDeviceLockState(reply);
+    } else if (std::strcmp(
+                   command,
+                   "device-lock.kdf-benchmark confirm-no-persist") == 0) {
+        triggerDeviceLockKdfBenchmark(reply);
     } else if (std::strcmp(command,
                            "safety.watchdog-test confirm") == 0) {
         triggerRuntimeSafetyWatchdogTest(reply);
@@ -33940,6 +34607,8 @@ void setup() {
         subGhzCaptureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
         infraredCaptureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
         targetsMutationEvents = xQueueCreate(1, sizeof(TargetsMutationEvent));
+        deviceLockWorkerEvents = xQueueCreate(
+            1, sizeof(DeviceLockWorkerEvent));
     } else {
         productBootRecovery.status = "safety_latched";
         productBootRecovery.cleanupComplete = true;
@@ -34121,6 +34790,8 @@ void setup() {
               "\"power.state\",\"power.low-voltage-test confirm\","
               "\"power.sleep-test confirm\",\"power.sleep-test state\","
               "\"safety.state\",\"safety.watchdog-test confirm\","
+              "\"device-lock.state\","
+              "\"device-lock.kdf-benchmark confirm-no-persist\","
               "\"safety.worker-deadline-test confirm\","
               "\"safety.worker-preparation-deadline-test confirm\","
               "\"safety.capture-store-deadline-test confirm\","
@@ -34210,6 +34881,7 @@ void loop() {
         ++spectrumLoopCount;
     }
     serviceWorkerDeadlineSupervisor();
+    serviceDeviceLock();
     serviceWifiAuthenticationSyntheticHilExpiry();
     if (safetySupervisor.latched()) {
         quiesceSpectrumOnSafetyStop();

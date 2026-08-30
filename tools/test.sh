@@ -2,6 +2,19 @@
 # Fast host-side tests for the hardware-independent firmware core.
 set -euo pipefail
 
+# Expensive retained-evidence validation is intentional for the complete
+# suite. Product slices use an explicit focused entry point so a delta never
+# silently expands into the several-minute full gate.
+if [[ $# -gt 0 ]]; then
+    if [[ $# -eq 2 && "$1" == "--only" &&
+          ("$2" == "device-lock" ||
+           "$2" == "device_lock_controller_tests") ]]; then
+        exec "$(cd "$(dirname "$0")" && pwd)/test-device-lock.sh"
+    fi
+    echo "usage: $0 [--only device-lock]" >&2
+    exit 2
+fi
+
 # HIL runner unit tests import pyserial even though they never open a device.
 # Prefer the already provisioned PlatformIO environment so this one-command
 # host suite behaves the same from an interactive shell and from automation.
@@ -139,18 +152,7 @@ python3 "$repo_dir/tools/check_ble_gatt_acceptance.py"
 python3 "$repo_dir/tools/check_ble_gatt_negative_acceptance.py"
 python3 "$repo_dir/tools/check_product_survey_terminal_acceptance.py"
 
-"${CXX:-c++}" \
-    -std=c++17 \
-    -Wall -Wextra -Werror -pedantic \
-    -Wconversion -Wsign-conversion -Wshadow \
-    -I"$repo_dir/firmware/leshy1/src" \
-    "$repo_dir/tests/native/device_lock_tests.cpp" \
-    "$repo_dir/firmware/leshy1/src/services/security/DeviceLock.cpp" \
-    "$repo_dir/firmware/leshy1/src/services/security/DeviceLockRecord.cpp" \
-    -o "$test_tmp/device_lock_tests"
-
-"$test_tmp/device_lock_tests"
-python3 "$repo_dir/tools/check_device_lock_contract.py"
+"$repo_dir/tools/test-device-lock.sh"
 
 "${CXX:-c++}" \
     -std=c++17 \

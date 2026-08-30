@@ -14,6 +14,10 @@ RECORD_H = ROOT / "firmware/leshy1/src/services/security/DeviceLockRecord.h"
 RECORD_CPP = ROOT / "firmware/leshy1/src/services/security/DeviceLockRecord.cpp"
 PLATFORM = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoDeviceLockSecurity.cpp"
 TESTS = ROOT / "tests/native/device_lock_tests.cpp"
+CONTROLLER_H = ROOT / "firmware/leshy1/src/apps/device/DeviceLockController.h"
+CONTROLLER_CPP = ROOT / "firmware/leshy1/src/apps/device/DeviceLockController.cpp"
+CONTROLLER_TESTS = ROOT / "tests/native/device_lock_controller_tests.cpp"
+ENTRY = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 
 
 def require(text: str, marker: str, label: str, failures: list[str]) -> None:
@@ -28,6 +32,10 @@ def main() -> int:
     record = RECORD_CPP.read_text(encoding="utf-8")
     platform = PLATFORM.read_text(encoding="utf-8")
     tests = TESTS.read_text(encoding="utf-8")
+    controller_h = CONTROLLER_H.read_text(encoding="utf-8")
+    controller = CONTROLLER_CPP.read_text(encoding="utf-8")
+    controller_tests = CONTROLLER_TESTS.read_text(encoding="utf-8")
+    entry = ENTRY.read_text(encoding="utf-8")
     failures: list[str] = []
 
     for marker, label in (
@@ -135,6 +143,50 @@ def main() -> int:
     ):
         require(tests, marker, label, failures)
 
+    for marker, label in (
+        ("kProductPinDigits =", "fixed legible product PIN shape"),
+        ("void DeviceLockSubmission::clear()", "worker submission wipe"),
+        ("secureClear(pin_.data(), pin_.size())", "editor PIN wipe"),
+        ("secureClear(firstPin_.data(), firstPin_.size())",
+         "confirmation PIN wipe"),
+        ("DeviceLock::pinWeak", "weak product PIN rejection"),
+        ("std::memcmp(firstPin_.data(), pin_.data()",
+         "setup confirmation"),
+        ("submission_.clear();", "single-use product submission"),
+    ):
+        require(controller_h + controller, marker, label, failures)
+
+    for marker, label in (
+        ("DeviceLockTitle", "Device Lock product page"),
+        ("DeviceLockController deviceLockController", "product controller"),
+        ("xQueueCreate(", "bounded KDF completion queue"),
+        ("xTaskCreatePinnedToCore(", "background KDF task"),
+        ("deviceLockWorkerRequest.clear()", "worker PIN wipe"),
+        ("renderDeviceLockPinCells();", "local PIN cell repaint"),
+        ("renderInteractiveScreen(!lastUiActionUsedIncrementalRender)",
+         "touch incremental repaint"),
+        ("deviceLock.recordActivity(nowUs)", "unlock activity timeout"),
+        ("DeviceLockWorkerMode::KdfBenchmark", "non-persistent KDF HIL"),
+        ("device-lock.kdf-benchmark confirm-no-persist",
+         "explicit KDF HIL command"),
+        ("persistence_touched_by_benchmark\\\":false",
+         "KDF HIL non-persistence report"),
+        ("volatile char* pinBytes", "KDF vector PIN wipe"),
+        ("volatile std::uint8_t* verifierBytes",
+         "KDF vector verifier wipe"),
+    ):
+        require(entry, marker, label, failures)
+
+    for marker, label in (
+        ("testConfigureRequiresStrongMatchingConfirmationAndClearsSubmission",
+         "setup/confirmation UI test"),
+        ("testWeakAndMismatchedPinNeverProduceSubmission",
+         "weak/mismatch UI negative test"),
+        ("testUnlockCancelRetryAndImmediateLockIntent",
+         "unlock/cancel/retry/lock UI test"),
+    ):
+        require(controller_tests, marker, label, failures)
+
     if failures:
         print("Device Lock contract failed:", file=sys.stderr)
         for failure in failures:
@@ -142,7 +194,8 @@ def main() -> int:
         return 1
     print(
         "Device Lock contract passed: PBKDF2 verifier, persistent bounded retry, "
-        "locked access matrix, non-bypassable safe operations and destructive-only recovery"
+        "locked access matrix, non-bypassable safe operations, destructive-only recovery, "
+        "background product UI and local repaint"
     )
     return 0
 
