@@ -144,6 +144,19 @@ python3 "$repo_dir/tools/check_product_survey_terminal_acceptance.py"
     -Wall -Wextra -Werror -pedantic \
     -Wconversion -Wsign-conversion -Wshadow \
     -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/device_lock_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/security/DeviceLock.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/security/DeviceLockRecord.cpp" \
+    -o "$test_tmp/device_lock_tests"
+
+"$test_tmp/device_lock_tests"
+python3 "$repo_dir/tools/check_device_lock_contract.py"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -Wconversion -Wsign-conversion -Wshadow \
+    -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/field_survey_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/FieldSurveyCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/FieldSurveyNativeCsv.cpp" \

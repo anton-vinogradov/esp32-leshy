@@ -93,6 +93,7 @@
 #include "platform/arduino/BoardShieldReceiverProbe.h"
 #include "platform/arduino/ArduinoFsSessionStoreIo.h"
 #include "platform/arduino/ArduinoCompanionWebService.h"
+#include "platform/arduino/ArduinoDeviceLockSecurity.h"
 #include "platform/arduino/ArduinoLittleFsSessionStoreIo.h"
 #include "platform/arduino/BoardSdFilesystem.h"
 #include "platform/arduino/BoardStorageAdapter.h"
@@ -114,6 +115,7 @@
 #include "services/ble/BleInspector.h"
 #include "services/ble/BleInspectorExport.h"
 #include "services/power/PowerSafetyPolicy.h"
+#include "services/security/DeviceLock.h"
 #include "services/targets/CorrelationService.h"
 #include "services/targets/SessionTargetAdmission.h"
 #include "services/targets/SurveySessionTargetEvidenceLookup.h"
@@ -489,6 +491,11 @@ constexpr const char* kLegacyUiPreferencesNamespace = "leshy";
 constexpr const char* kLegacyStatusLedBrightnessKey = "led_br";
 HardwareInventory inventory;
 AppCatalog appCatalog;
+leshy1::platform::arduino::MbedTlsDeviceLockCrypto deviceLockCrypto;
+leshy1::platform::arduino::NvsDeviceLockStore deviceLockStore;
+leshy1::services::security::DeviceLock deviceLock(deviceLockStore,
+                                                   deviceLockCrypto);
+bool deviceLockRestoreSucceeded = false;
 ResourceBroker resourceBroker;
 AppRuntime appRuntime(resourceBroker);
 SurveySession surveySession;
@@ -33873,6 +33880,12 @@ void setup() {
         disarmEarlyBootGuard();
     }
 
+    // Restore only: dev.277 links and exercises the production crypto/store
+    // boundary without silently enrolling or weakening an existing device.
+    // UI setup and protected-operation admission are the next CAP-052 slice.
+    deviceLockRestoreSucceeded = deviceLock.restore(
+        static_cast<std::uint64_t>(esp_timer_get_time()));
+
     interfaceSettingsController.restore(loadUiBrightnessIndex(), loadUiTheme());
     antennaStatusController.restoreBrightness(
         loadStatusLedBrightnessIndex());
@@ -33957,6 +33970,12 @@ void setup() {
         "panic_task_wdt_plus_rtc_latch",
         safetySupervisor.latched() ? "latched_safe_mode"
                                    : "runtime_watchdog_armed"});
+    inventory.add({
+        "security.device_lock",
+        deviceLockRestoreSucceeded ? CapabilityState::Declared
+                                   : CapabilityState::Fault,
+        "pbkdf2_sha256_nvs_record_v1",
+        leshy1::services::security::deviceLockStateName(deviceLock.state())});
     inventory.add({"input.pcf8574",
                    bootMetrics.inputDetected ? CapabilityState::Detected
                                              : CapabilityState::Unknown,
