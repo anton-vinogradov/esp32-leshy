@@ -19699,6 +19699,8 @@ void renderTargetsPage(bool clearContent) {
         return;
     }
     if (targetsProductRuntime == nullptr) {
+        const bool noSessions =
+            std::strcmp(targetsProductStatus, "session_unavailable") == 0;
         renderHeader(targetsMutationState == TargetsMutationState::Saving
                          ? tr(UiTextId::TargetsActions)
                          : tr(UiTextId::AppTargets),
@@ -19706,9 +19708,17 @@ void renderTargetsPage(bool clearContent) {
         renderMetric(0,
                      targetsMutationState == TargetsMutationState::Saving
                          ? tr(UiTextId::TargetsSaving)
-                         : tr(UiTextId::TargetsLoadFailed),
+                         : tr(noSessions ? UiTextId::TargetsNoSessions
+                                         : UiTextId::TargetsLoadFailed),
                      targetsMutationState == TargetsMutationState::Saving
-                         ? Tone::Positive : Tone::Danger);
+                         ? Tone::Positive
+                         : noSessions ? Tone::Muted : Tone::Danger);
+        if (targetsMutationState != TargetsMutationState::Saving) {
+            renderMetric(2,
+                         tr(noSessions ? UiTextId::TargetsNoSessionsHint
+                                       : UiTextId::TargetsLoadFailedHint),
+                         noSessions ? Tone::Positive : Tone::Warning);
+        }
         return;
     }
     TargetsController& controller = targetsProductRuntime->controller;

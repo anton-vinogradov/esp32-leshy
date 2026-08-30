@@ -148,7 +148,10 @@ def main() -> int:
         )
 
     targets_empty_state = re.search(
-        r"controller\.status\(\) == TargetsLoadStatus::SessionUnavailable"
+        r"targetsProductRuntime == nullptr.*?"
+        r"targetsProductStatus, \"session_unavailable\".*?"
+        r"UiTextId::TargetsNoSessions.*?UiTextId::TargetsNoSessionsHint"
+        r".*?controller\.status\(\) == TargetsLoadStatus::SessionUnavailable"
         r".*?UiTextId::TargetsNoSessions.*?UiTextId::TargetsNoSessionsHint"
         r".*?controller\.status\(\) != TargetsLoadStatus::Ready"
         r".*?UiTextId::TargetsLoadFailed.*?UiTextId::TargetsLoadFailedHint",
