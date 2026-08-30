@@ -1,0 +1,140 @@
+{
+  "board": "board-01",
+  "boot_captures": [
+    "automation-trust-cold-restore.ndjson",
+    "automation-trust-final-clean.ndjson"
+  ],
+  "bundle": "tests/hil/evidence/board-01-automation-trust-positive-1.0.0-dev.308",
+  "candidate": {
+    "app_elf_sha256": "66e29c6337fddf89a3fe554def643c3cc167843c5a88125f765c952951e9c4c0",
+    "elf_sha256": "66e29c6337fddf89a3fe554def643c3cc167843c5a88125f765c952951e9c4c0",
+    "firmware_bytes": 3563504,
+    "firmware_sha256": "d68155a47d47181547843d1ab2f89056fd98a5ce5863a05846604fae2637e866",
+    "map_sha256": "96f803134e9dc83f849cdc6856a252be1035cb329c36dc3f873859b7d87e0128",
+    "version": "1.0.0-dev.308"
+  },
+  "cleanup": {
+    "attempted": true,
+    "complete": true,
+    "device_lock_fixture_removed": true,
+    "errors": [],
+    "final_cold_boot_clean": true,
+    "hil_ended": true,
+    "product_lock_restored": true,
+    "product_trust_restored": true,
+    "scratch_removed": true,
+    "trust_fixture_removed": true
+  },
+  "evidence_ids": [
+    "E-BUILD-210",
+    "E-AUTO-185",
+    "E-HIL-218",
+    "E-SEC-085",
+    "E-STORAGE-068",
+    "RB-M221"
+  ],
+  "factory_sha256": "658eb147d214ac8f0fdd0b8bfe40d9a15b6928167974b69efae0cb28e590522f",
+  "firmware_source_commit": "c70ab42739faab639b65c2fb77905718921fa676",
+  "lineage": {
+    "accepted_run_flashes": 0,
+    "accepted_run_hardware_resets": 2,
+    "accepted_run_reused_installed_candidate": true,
+    "candidate_flashes": 1,
+    "reset_capture_attempts": 2,
+    "reset_capture_transient_retries": 0
+  },
+  "manifest_sha256": "033fee8288b6811f974ea315f9559bb7d918f002167636679b425153bcbdf290",
+  "predecessor_failure": {
+    "failure_class": "cold_restore_bundle_match_telemetry_false_negative",
+    "path": "tests/hil/evidence/board-01-automation-trust-positive-1.0.0-dev.307-failed.json",
+    "sha256": "6b9c6a55bff3a1e3bb8992946b2e45100bbe3ce8b59e2ce5921a656190246ece"
+  },
+  "public_bundle": {
+    "algorithm": "ecdsa_p256_sha256",
+    "bundle_bytes": 128,
+    "bundle_sha256": "426eb188dd0ba3f4386435c8bb59f7f250d87e8fb8a1402e3f250fbbe5986408",
+    "contains_private_key": false,
+    "key_id": "72b53a9dcfb4d96b",
+    "label": "GitHub owner key",
+    "public_key_sha256": "72b53a9dcfb4d96b9fabc1d0b80abc950be7649678d7c7d88f50bb0793d48407",
+    "retained_bundle_sha256": "426eb188dd0ba3f4386435c8bb59f7f250d87e8fb8a1402e3f250fbbe5986408",
+    "retained_metadata_sha256": "713cf315d8741dac99305aba7b4d856feabb6962a7bcbb8ee0a88b661342879d",
+    "schema": "leshy.automation.trust_bundle.v1"
+  },
+  "raw_run_sha256": "11f7ee94a12c14723fbe30f1575877b947b6ae9c9ecdabaff7543c3444585a09",
+  "result_frames": {
+    "enrolled": "frames/automation-trust-enrolled.png",
+    "revoked": "frames/automation-trust-revoked.png"
+  },
+  "runner_commit": "ae2ecbf88cfb3d10fb03739fb8591a844dc1d134",
+  "safe": {
+    "action_invocations": 0,
+    "device_lock_product_restored": true,
+    "forbidden_ports_touched": [],
+    "hid_reports": 0,
+    "private_key_used_or_stored": false,
+    "product_trust_namespace_written_or_erased": false,
+    "radio_tx_commands": 0,
+    "rf_transmit_attempts": 0,
+    "wifi_host_touched": false
+  },
+  "schema": "leshy.automation_trust_positive_hil.summary.v1",
+  "stable_frames": {
+    "import_review": {
+      "pair": [
+        "frames/automation-trust-import-review-a.png",
+        "frames/automation-trust-import-review-b.png"
+      ],
+      "png_sha256": "c9f3844f4484723b8780c13f8cd9db0e0b76ce49b913fb2891ebddf6df21ee59"
+    },
+    "revoke_review": {
+      "pair": [
+        "frames/automation-trust-revoke-review-a.png",
+        "frames/automation-trust-revoke-review-b.png"
+      ],
+      "png_sha256": "ac354200c16a515e40263137dc4513f1c10b4b34e6d6c0b22e3fc26538167c84"
+    }
+  },
+  "status": "pass_with_retained_negative_predecessor",
+  "storage": {
+    "bytes_written": 128,
+    "cid": "FE343253440000002000000055019CB7",
+    "directory_syncs": 1,
+    "exact_entries": true,
+    "file_syncs": 1,
+    "files_removed": 1,
+    "namespace_cleared": true,
+    "scratch_path": "/leshy-hil/ab2391f332fe01aa33f09c0a8029bd99",
+    "write_calls": 1
+  },
+  "trust_transition": {
+    "cold_restored": {
+      "count": 1,
+      "generation": 1
+    },
+    "enrolled": {
+      "count": 1,
+      "generation": 1
+    },
+    "final_cold_boot": {
+      "count": 0,
+      "generation": 0
+    },
+    "isolated_before": {
+      "count": 0,
+      "generation": 0
+    },
+    "product_after": {
+      "count": 0,
+      "generation": 0
+    },
+    "product_before": {
+      "count": 0,
+      "generation": 0
+    },
+    "revoked": {
+      "count": 0,
+      "generation": 2
+    }
+  }
+}

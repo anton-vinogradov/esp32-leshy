@@ -1,0 +1,21 @@
+{
+  "candidate": {
+    "app_elf_sha256": "e265946bab957cb1f48f38a46f8ebb0be291f901c3d8be374f9189f003086d94",
+    "elf_sha256": "e265946bab957cb1f48f38a46f8ebb0be291f901c3d8be374f9189f003086d94",
+    "firmware_bytes": 3563472,
+    "firmware_sha256": "e5cb197d3e9f70691afdf7b1a4f7405cab6ad6292b954033e8af029d906cd448",
+    "map_sha256": "7a5e136e9c92e8f556e939e673d5f46dad6fa70d240248307e8c7f5c677951a2",
+    "version": "1.0.0-dev.307"
+  },
+  "cleanup_complete": true,
+  "failure": "workflow: RuntimeError: trust fixture resume: expected={'status': 'complete', 'complete': True, 'expected_fingerprint': 'FE343253440000002000000055019CB7', 'cid_hex': 'FE343253440000002000000055019CB7', 'fingerprint_matched': True, 'run_id': '721e3fc0f63774037388bad96d79ec3f', 'expected_sha256': '426eb188dd0ba3f4386435c8bb59f7f250d87e8fb8a1402e3f250fbbe5986408', 'observed_sha256': '426eb188dd0ba3f4386435c8bb59f7f250d87e8fb8a1402e3f250fbbe5986408', 'bundle_valid': True, 'key_id': '72b53a9dcfb4d96b', 'fixture_active': True, 'cleanup_required': True, 'fixture_namespace_selected': True, 'namespace_cleared': False, 'product_restored': False, 'exact_entries': True, 'bundle_read': True, 'bundle_matched': True, 'cleanup_complete': False, 'identity_cleanup': True, 'filesystem_cleanup': True, 'gpio21_stable_high': True, 'owned_after': 0, 'private_key_received': False, 'product_namespace_written_or_erased': False, 'whole_nvs_read_or_copied': False, 'format_allowed': False, 'rf_transmit_attempts': 0, 'action_invocations': 0, 'hid_reports': 0}, actual={'status': 'complete', 'complete': True, 'expected_fingerprint': 'FE343253440000002000000055019CB7', 'cid_hex': 'FE343253440000002000000055019CB7', 'fingerprint_matched': True, 'run_id': '721e3fc0f63774037388bad96d79ec3f', 'expected_sha256': '426eb188dd0ba3f4386435c8bb59f7f250d87e8fb8a1402e3f250fbbe5986408', 'observed_sha256': '426eb188dd0ba3f4386435c8bb59f7f250d87e8fb8a1402e3f250fbbe5986408', 'bundle_valid': True, 'key_id': '72b53a9dcfb4d96b', 'fixture_active': True, 'cleanup_required': True, 'fixture_namespace_selected': True, 'namespace_cleared': False, 'product_restored': False, 'exact_entries': True, 'bundle_read': True, 'bundle_matched': False, 'cleanup_complete': False, 'identity_cleanup': True, 'filesystem_cleanup': True, 'gpio21_stable_high': True, 'owned_after': 0, 'private_key_received': False, 'product_namespace_written_or_erased': False, 'whole_nvs_read_or_copied': False, 'format_allowed': False, 'rf_transmit_attempts': 0, 'action_invocations': 0, 'hid_reports': 0}",
+  "failure_class": "cold_restore_bundle_match_telemetry_false_negative",
+  "firmware_source_commit": "d08815a5e927c6f1098c8103c631dd279063de13",
+  "hil_ended": true,
+  "radio_tx_commands": 0,
+  "raw_run_sha256": "bec5a9d849926425d049f0dbfda902d8e374d493d61166ac77519f65f28091aa",
+  "schema": "leshy.automation_trust_positive_hil.failure.v1",
+  "status": "failed_as_expected_and_preserved",
+  "successor_firmware_source_commit": "c70ab42739faab639b65c2fb77905718921fa676",
+  "wifi_host_touched": false
+}

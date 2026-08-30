@@ -1,0 +1,31 @@
+{
+  "accepted_raw_run_sha256": "11f7ee94a12c14723fbe30f1575877b947b6ae9c9ecdabaff7543c3444585a09",
+  "candidate": {
+    "app_elf_sha256": "66e29c6337fddf89a3fe554def643c3cc167843c5a88125f765c952951e9c4c0",
+    "elf_sha256": "66e29c6337fddf89a3fe554def643c3cc167843c5a88125f765c952951e9c4c0",
+    "firmware_bytes": 3563504,
+    "firmware_sha256": "d68155a47d47181547843d1ab2f89056fd98a5ce5863a05846604fae2637e866",
+    "map_sha256": "96f803134e9dc83f849cdc6856a252be1035cb329c36dc3f873859b7d87e0128",
+    "version": "1.0.0-dev.308"
+  },
+  "factory_sha256": "658eb147d214ac8f0fdd0b8bfe40d9a15b6928167974b69efae0cb28e590522f",
+  "firmware_source_commit": "c70ab42739faab639b65c2fb77905718921fa676",
+  "predecessor_failure_summary_sha256": "6b9c6a55bff3a1e3bb8992946b2e45100bbe3ce8b59e2ce5921a656190246ece",
+  "runner_commit": "ae2ecbf88cfb3d10fb03739fb8591a844dc1d134",
+  "runner_sha256": "d5384fb30e80f6f38baec4ede93b61a034c63f86864274ae172ad8cef0d356c7",
+  "schema": "leshy.automation_trust_positive_hil.provenance.v1",
+  "source_sha256": {
+    "firmware/leshy1/platformio.ini": "d1095edaa5780afa9ed42c3d7b3b63501499951bc85be574b37ac2e1663c78c0",
+    "firmware/leshy1/src/apps/automation/AutomationTrustBundle.cpp": "ab9a78ab456303ba643d426306862c3f9b899198195e0065ae26bf91d5f50806",
+    "firmware/leshy1/src/apps/automation/AutomationTrustBundle.h": "56ae7fe7c159aa1e4661435956aa37192ab69942ba40f8a67d242ad2e647e42f",
+    "firmware/leshy1/src/apps/automation/AutomationTrustStore.cpp": "61631b82a09f6cbf034c71f9bb879e396d0f59ac5082a6f88b517a5fbaeedc30",
+    "firmware/leshy1/src/apps/automation/AutomationTrustStore.h": "91cf60ec019738e7dc23c40496ff3de65db82e07844c5cfe9b3218fa48ae77f4",
+    "firmware/leshy1/src/platform/arduino/ArduinoAutomationTrust.cpp": "c21d92dbe8b94c248821964c3e6115c12b379b960928a32ab8e9f9d6115dd42c",
+    "firmware/leshy1/src/platform/arduino/ArduinoAutomationTrust.h": "c7b725495dd8981ae7b80ffd102c63837cb334f5236fa16fd2f264d92430f2bc",
+    "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp": "c8115e67049eb9864b0dc4542173d29870e085f1febc95d250362e0b647d8123",
+    "firmware/leshy1/src/platform/arduino/BoardAutomationTrustBundleReader.cpp": "9f1c350a3b61db82f14d6059a1c24a88cd326b56d843fba5407a9f45f9d55c4b",
+    "firmware/leshy1/src/platform/arduino/BoardAutomationTrustBundleReader.h": "d31bd6a61492612c595cd74f578ff8cf4bce5d10e6aee063a6f87e75e82c7bb3",
+    "firmware/leshy1/src/platform/arduino/BoardAutomationTrustHilFixture.cpp": "0fe9b8613d35fc537936e29ca1dc53bd4f0ba93e034efb6f4b4b5297834d450f",
+    "firmware/leshy1/src/platform/arduino/BoardAutomationTrustHilFixture.h": "942f027e45b71566ae7535d3faf51c373f06741c75c277d2b53602e629fe779d"
+  }
+}

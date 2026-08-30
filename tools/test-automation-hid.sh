@@ -25,3 +25,6 @@ PYTHONPATH="$repo_dir/tools" python3 "$repo_dir/tools/test_automation_trust_posi
 python3 "$repo_dir/tools/check_automation_hid_foundation.py"
 python3 "$repo_dir/tools/check_automation_inspector_hil_acceptance.py"
 python3 "$repo_dir/tools/check_automation_trust_ui_hil_acceptance.py"
+if [[ -f "$repo_dir/tests/hil/evidence/board-01-automation-trust-positive-1.0.0-dev.308.json" ]]; then
+    python3 "$repo_dir/tools/check_automation_trust_positive_hil_acceptance.py"
+fi

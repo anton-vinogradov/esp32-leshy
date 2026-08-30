@@ -1691,6 +1691,23 @@ engine. Physical boot reports 145,500 B total heap, 71,196 B free and 71,004 B m
 The accepted read-only import keeps trust count/generation unchanged and ends with
 zero output and lease; cadence advances to 2/15.
 
+Authenticated public-only trust lifecycle bound `RB-M221`: exact physical
+`1.0.0-dev.308` at firmware source
+`c70ab42739faab639b65c2fb77905718921fa676` uses 233,632 B static RAM,
+3,563,004 B linked flash and 3,563,504/3,629,040 B app/factory images, leaving
+630,800 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`d68155a47d47181547843d1ab2f89056fd98a5ce5863a05846604fae2637e866`/
+`658eb147d214ac8f0fdd0b8bfe40d9a15b6928167974b69efae0cb28e590522f`/
+`66e29c6337fddf89a3fe554def643c3cc167843c5a88125f765c952951e9c4c0`/
+`96f803134e9dc83f849cdc6856a252be1035cb329c36dc3f873859b7d87e0128`.
+Against dev.306 this is +328 B static RAM, +10,520 B linked flash and +10,512 B
+app/factory, with 10,512 B less OTA headroom. The delta funds the isolated HIL trust
+namespace/cleanup marker and exact 128-byte SD fixture; it adds no resident private
+key, HID queue or execution engine. The accepted run reuses the installed candidate,
+performs exactly two one-attempt cold resets, writes one 128-byte public file with
+one file and one directory sync, and restores product trust/Device Lock with zero
+Action/HID/RF output. Cadence advances to 3/15.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

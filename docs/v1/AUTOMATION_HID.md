@@ -7,11 +7,11 @@
 - **Workflow:** WF-08-A1/A2/A4
 - **Architecture:** [ADR-002](adr/ADR-002-resource-policy.md),
   [ADR-004](adr/ADR-004-action-boundary.md)
-- **State:** slices 1 and 2 are accepted. Slice 3 has a physical owner-UI checkpoint
-  in `1.0.0-dev.306`: the product restores a bounded canonical P-256 public-key trust
-  store from NVS, uses a real mbedTLS verifier for passive inspection and exposes the
-  protected list/import/revoke route as the last Device item. Positive enrollment,
-  cold restore/revocation and all active execution remain unaccepted
+- **State:** slices 1–3 are accepted. Exact physical `1.0.0-dev.308` restores a
+  bounded canonical P-256 public-key trust store from NVS, uses the real mbedTLS
+  verifier, exposes protected list/import/revoke and accepts the GitHub public-only
+  owner bundle through enrollment, cold restore and revocation. Real signed-package
+  trusted/unknown/invalid classification and all active execution remain unaccepted
 
 ## User outcome
 
@@ -94,10 +94,13 @@ confirmation. The owner-visible Device route lists at most four public keys and 
 exactly `/leshy/automation/v1/automation-owner.lhak` from SD. Import validates the
 public point and derived key ID before a separate review; mutation still requires a
 fresh 30-second confirmation. Exact physical dev.306 accepts the EN/RU list, button
-and touch import paths and missing-bundle result without confirming mutation: trust
-count/generation remain unchanged, SD is read-only, private-key/Action/HID/RF output
-stays zero and execution remains disabled. Positive enrollment and cold restore are a
-separate gate. No test double or locally invented checksum may promote a package.
+and touch import paths and missing-bundle result without confirming mutation. Exact
+physical dev.308 then consumes the real GitHub public-only artifact through a fully
+isolated positive lifecycle: durable exact-CID SD staging, reviewed enrollment
+`0/0→1/1`, cold restore `1/1`, reviewed revoke `0/2`, scratch removal and product
+trust restoration `0/0`. Two stable review pairs and two single-attempt cold boots
+are retained; private-key/Action/HID/RF output stays zero and execution remains
+disabled. No test double or locally invented checksum may promote a package.
 
 An enrollment artifact is a fixed 128-byte public-only `LHAK` v1 bundle. The protected
 GitHub `automation-signing` environment keeps
@@ -130,14 +133,17 @@ inspection.
    fixture before HIL ends. The [machine-checked evidence](../../tests/hil/evidence/board-01-automation-inspector-1.0.0-dev.303.json)
    binds the single-flash lineage, candidate hashes, exact CID and final
    Home/none/lease 0. The product `/leshy/automation/v1` namespace is never written.
-3. `in progress` — exact host/build dev.304 connects the real P-256 verifier,
+3. `done` — exact host/build dev.304 connects the real P-256 verifier,
    canonical four-key NVS store, atomic authenticated mutation contract and
    GitHub-built public-only enrollment bundle. Exact physical dev.306 adds the final
    Device item for list/import/revoke, validates only the fixed public bundle path and
    accepts stable EN/RU button/touch missing-bundle behavior with unchanged trust and
    zero output in [machine-checked evidence](../../tests/hil/evidence/board-01-automation-trust-ui-1.0.0-dev.306.json).
-   Authenticated positive enrollment, cold restore, trusted/unknown/invalid inspection
-   and revocation remain open; execution is still disconnected.
+   Exact physical dev.308 accepts the real public artifact through enrollment, cold
+   restore and revocation with isolated NVS/SD cleanup and retained dev.307 negative
+   evidence in [machine-checked evidence](../../tests/hil/evidence/board-01-automation-trust-positive-1.0.0-dev.308.json).
+   Trusted/unknown/invalid signed-package inspection remains the next passive gate;
+   execution is still disconnected.
 4. `planned` — named Action-only package execution through the shared dispatcher,
    audit and timeout/cancel/panic cleanup.
 5. `planned` — USB HID on an exact owned fixture, then separately BLE HID; each gets a

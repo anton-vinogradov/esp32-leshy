@@ -7,11 +7,11 @@
 - **Workflow:** WF-08-A1/A2/A4
 - **Архитектура:** [ADR-002](adr/ADR-002-resource-policy.ru.md),
   [ADR-004](adr/ADR-004-action-boundary.ru.md)
-- **Состояние:** slices 1 и 2 приняты. Slice 3 имеет physical owner-UI checkpoint
-  `1.0.0-dev.306`: product восстанавливает bounded canonical trust store публичных
-  ключей P-256 из NVS, использует real verifier mbedTLS для passive inspection и
-  показывает защищённый list/import/revoke последним пунктом «Устройство». Positive
-  enrollment, cold restore/revocation и всё active execution ещё не приняты
+- **Состояние:** slices 1–3 приняты. Exact physical `1.0.0-dev.308` восстанавливает
+  bounded canonical trust store публичных ключей P-256 из NVS, использует real
+  verifier mbedTLS, показывает protected list/import/revoke и принимает public-only
+  owner bundle GitHub через enrollment, cold restore и revocation. Классификация real
+  signed package trusted/unknown/invalid и всё active execution ещё не приняты
 
 ## Результат для пользователя
 
@@ -94,10 +94,13 @@ store, malformed record fail closed. Enrollment/revocation atomic, считае�
 `/leshy/automation/v1/automation-owner.lhak` с SD. Import проверяет public point и
 derived key ID до отдельного review; mutation требует fresh confirmation на 30 seconds.
 Exact physical dev.306 принимает список EN/RU, button/touch import и результат
-отсутствующего bundle без подтверждения mutation: count/generation trust не меняются,
-SD read-only, private-key/Action/HID/RF output остаётся zero, execution disabled.
-Positive enrollment и cold restore являются отдельным gate. Ни test double, ни
-локально придуманный checksum не может разрешить product package.
+отсутствующего bundle без подтверждения mutation. Exact physical dev.308 затем
+использует real public-only artifact GitHub в полностью isolated positive lifecycle:
+durable exact-CID staging на SD, reviewed enrollment `0/0→1/1`, cold restore `1/1`,
+reviewed revoke `0/2`, удаление scratch и восстановление product trust `0/0`.
+Сохранены две stable пары review и две cold boot с одной попыткой;
+private-key/Action/HID/RF output остаётся zero, execution disabled. Ни test double,
+ни локально придуманный checksum не может разрешить product package.
 
 Enrollment artifact — fixed public-only bundle `LHAK` v1 размером 128 bytes.
 Защищённый GitHub environment `automation-signing` хранит
@@ -130,14 +133,17 @@ inspection.
    `hil.end`. [Machine-checked evidence](../../tests/hil/evidence/board-01-automation-inspector-1.0.0-dev.303.json)
    связывает single-flash lineage, hashes candidate, exact CID и final
    Home/none/lease 0. Product namespace `/leshy/automation/v1` не изменяется.
-3. `in progress` — exact host/build dev.304 подключает real verifier P-256,
+3. `done` — exact host/build dev.304 подключает real verifier P-256,
    canonical NVS store на четыре ключа, atomic authenticated mutation contract и
    public-only enrollment bundle из GitHub. Exact physical dev.306 добавляет последний
    пункт «Устройство» для list/import/revoke, проверяет только fixed path public bundle
    и принимает stable EN/RU missing-bundle path для buttons/touch с неизменным trust и
    zero output в [machine-checked evidence](../../tests/hil/evidence/board-01-automation-trust-ui-1.0.0-dev.306.json).
-   Authenticated positive enrollment, cold restore, inspection trusted/unknown/invalid
-   и revocation остаются открыты; execution всё ещё disconnected.
+   Exact physical dev.308 принимает real public artifact через enrollment, cold
+   restore и revocation с cleanup isolated NVS/SD и сохранённым negative evidence
+   dev.307 в [machine-checked evidence](../../tests/hil/evidence/board-01-automation-trust-positive-1.0.0-dev.308.json).
+   Inspection signed package trusted/unknown/invalid остаётся следующим passive gate;
+   execution всё ещё disconnected.
 4. `planned` — execution named Action-only package через shared dispatcher, audit и
    cleanup timeout/cancel/panic.
 5. `planned` — USB HID на exact owned fixture, затем отдельно BLE HID; каждый получает

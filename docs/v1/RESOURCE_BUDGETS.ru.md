@@ -1679,6 +1679,23 @@ engine не добавлены. Physical boot сообщает heap total/free/m
 145 500/71 196/71 004 B. Accepted read-only import сохраняет count/generation trust,
 заканчивается с zero output/lease и двигает cadence до 2/15.
 
+Bound authenticated public-only trust lifecycle `RB-M221`: exact physical
+`1.0.0-dev.308` на firmware source
+`c70ab42739faab639b65c2fb77905718921fa676` использует 233 632 B static RAM,
+3 563 004 B linked flash и app/factory images 3 563 504/3 629 040 B, оставляя
+630 800 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`d68155a47d47181547843d1ab2f89056fd98a5ce5863a05846604fae2637e866`/
+`658eb147d214ac8f0fdd0b8bfe40d9a15b6928167974b69efae0cb28e590522f`/
+`66e29c6337fddf89a3fe554def643c3cc167843c5a88125f765c952951e9c4c0`/
+`96f803134e9dc83f849cdc6856a252be1035cb329c36dc3f873859b7d87e0128`.
+Относительно dev.306 это +328 B static RAM, +10 520 B linked flash и +10 512 B
+app/factory с уменьшением OTA headroom на 10 512 B. Delta финансирует isolated
+namespace trust HIL/cleanup marker и exact fixture SD 128 bytes; resident private
+key, queue HID и execution engine не добавлены. Accepted run переиспользует
+установленный candidate, выполняет ровно две cold reset с одной попыткой, пишет один
+public file 128 bytes с одним file и одним directory sync и восстанавливает product
+trust/Device Lock при zero Action/HID/RF output. Cadence двигается до 3/15.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

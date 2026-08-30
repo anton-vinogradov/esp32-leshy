@@ -1,0 +1,14 @@
+{
+  "automation-owner.json": "713cf315d8741dac99305aba7b4d856feabb6962a7bcbb8ee0a88b661342879d",
+  "automation-owner.lhak": "426eb188dd0ba3f4386435c8bb59f7f250d87e8fb8a1402e3f250fbbe5986408",
+  "automation-trust-cold-restore.ndjson": "19c5c0345c722b1f2af36ccaa1442abb69dc0a6bf5a57d96e2be620785918aa2",
+  "automation-trust-final-clean.ndjson": "1b7409d79fd7844fd4a0ee75a1ee71e9ad7fafb18535a592a947f2434d1b9801",
+  "frames/automation-trust-enrolled.png": "55c4e5c26a858539c4655e8e8bb2254f22717248c9c547ad9c56ed87e52bbce5",
+  "frames/automation-trust-import-review-a.png": "c9f3844f4484723b8780c13f8cd9db0e0b76ce49b913fb2891ebddf6df21ee59",
+  "frames/automation-trust-import-review-b.png": "c9f3844f4484723b8780c13f8cd9db0e0b76ce49b913fb2891ebddf6df21ee59",
+  "frames/automation-trust-revoke-review-a.png": "ac354200c16a515e40263137dc4513f1c10b4b34e6d6c0b22e3fc26538167c84",
+  "frames/automation-trust-revoke-review-b.png": "ac354200c16a515e40263137dc4513f1c10b4b34e6d6c0b22e3fc26538167c84",
+  "frames/automation-trust-revoked.png": "7c1e7bf9a08a3995d8cc9c525cb4c603d1c4a2625f3a12c18ec005c01b13e63d",
+  "provenance.json": "2d8564170fce76e7fbd1c22b1ba7a8a7d50c3e123705094488e048dc70f90183",
+  "run.json": "11f7ee94a12c14723fbe30f1575877b947b6ae9c9ecdabaff7543c3444585a09"
+}

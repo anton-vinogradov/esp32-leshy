@@ -1,0 +1,10 @@
+{
+  "algorithm": "ecdsa_p256_sha256",
+  "bundle_bytes": 128,
+  "bundle_sha256": "426eb188dd0ba3f4386435c8bb59f7f250d87e8fb8a1402e3f250fbbe5986408",
+  "contains_private_key": false,
+  "key_id": "72b53a9dcfb4d96b",
+  "label": "GitHub owner key",
+  "public_key_sha256": "72b53a9dcfb4d96b9fabc1d0b80abc950be7649678d7c7d88f50bb0793d48407",
+  "schema": "leshy.automation.trust_bundle.v1"
+}
