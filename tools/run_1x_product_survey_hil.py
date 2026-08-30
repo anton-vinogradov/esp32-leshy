@@ -422,6 +422,52 @@ def paused_cycle_failures(state: dict[str, Any], expected_cid: str,
     return failures
 
 
+def paused_browser_failures(state: dict[str, Any],
+                            observations: int) -> list[str]:
+    """Validate either coherent list focus produced at the auto-pause edge."""
+    failures = expect(state, {
+        "view": "list",
+        "filter": "all",
+        "draft_filter": "all",
+        "total": observations,
+        "visible": observations,
+        "radio_touched": False,
+        "storage_touched": False,
+        "read_only_query": True,
+    }, "paused_browser")
+    filter_focused = state.get("filter_focused")
+    selected = state.get("selected")
+    if filter_focused is True:
+        failures.extend(expect(state, {
+            "selected": False,
+            "selected_radio": "none",
+            "history_valid": False,
+            "history_samples": 0,
+            "history_retained": 0,
+        }, "paused_browser.filter_focus"))
+    elif filter_focused is False and selected is True:
+        selection = state.get("selection")
+        samples = state.get("history_samples")
+        retained = state.get("history_retained")
+        latest = state.get("history_latest_rssi_dbm")
+        minimum = state.get("history_min_rssi_dbm")
+        maximum = state.get("history_max_rssi_dbm")
+        if (state.get("selected_radio") not in ("wifi", "ble") or
+                state.get("history_valid") is not True or
+                not isinstance(selection, int) or isinstance(selection, bool) or
+                selection < 0 or selection >= observations or
+                not isinstance(samples, int) or isinstance(samples, bool) or
+                not isinstance(retained, int) or isinstance(retained, bool) or
+                samples < 1 or retained < 1 or retained > samples or
+                not all(isinstance(value, int) and not isinstance(value, bool)
+                        for value in (latest, minimum, maximum)) or
+                not minimum <= latest <= maximum):
+            failures.append("paused_browser.row_focus: incoherent selection/history")
+    else:
+        failures.append("paused_browser.focus: neither filter nor row is focused")
+    return failures
+
+
 def paused_detail_failures(state: dict[str, Any], observations: int,
                            scan_cycles: int,
                            expected_owner: str = "survey") -> list[str]:
@@ -1049,14 +1095,9 @@ def main() -> int:
                         device, b"survey.browser",
                         "leshy.survey.browser.v1", "state"
                     )
-                    failures.extend(expect(paused_browser, {
-                        "view": "list",
-                        "filter_focused": True,
-                        "total": observations,
-                        "selected": False,
-                        "radio_touched": False,
-                        "storage_touched": False,
-                    }, "paused_browser"))
+                    failures.extend(paused_browser_failures(
+                        paused_browser, observations
+                    ))
                     captures["paused"] = capture(device, frames, "paused")
                 if not failures and args.release_cycle:
                     list_ack = action(device, "down")
@@ -1089,7 +1130,10 @@ def main() -> int:
                         )
                         trace.append(committed)
                     failures.extend(committed_failures(
-                        committed, before_generation, "wifi"
+                        committed, before_generation, "wifi",
+                        automatic_pause=(
+                            running.get("survey_product_status") == "paused"
+                        ),
                     ))
                     captures["committed"] = capture(
                         device, frames, "committed"

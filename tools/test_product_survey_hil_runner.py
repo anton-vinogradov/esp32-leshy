@@ -204,6 +204,31 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
         paused["survey_forwarded"] = 53
         self.assertTrue(RUNNER.paused_cycle_failures(paused, CID, "wifi"))
 
+    def test_paused_browser_accepts_filter_or_coherent_row_focus(self) -> None:
+        browser = {
+            "view": "list", "filter": "all", "draft_filter": "all",
+            "filter_focused": True, "total": 51, "visible": 51,
+            "selected": False, "selected_radio": "none", "selection": 0,
+            "history_valid": False, "history_samples": 0,
+            "history_retained": 0, "history_latest_rssi_dbm": 0,
+            "history_min_rssi_dbm": 0, "history_max_rssi_dbm": 0,
+            "radio_touched": False, "storage_touched": False,
+            "read_only_query": True,
+        }
+        self.assertEqual([], RUNNER.paused_browser_failures(browser, 51))
+
+        browser.update({
+            "filter_focused": False, "selected": True,
+            "selected_radio": "wifi", "history_valid": True,
+            "history_samples": 2, "history_retained": 2,
+            "history_latest_rssi_dbm": -72,
+            "history_min_rssi_dbm": -80,
+            "history_max_rssi_dbm": -65,
+        })
+        self.assertEqual([], RUNNER.paused_browser_failures(browser, 51))
+        browser["selection"] = 51
+        self.assertTrue(RUNNER.paused_browser_failures(browser, 51))
+
     def test_boot_parser_ignores_noise_and_keeps_product_record(self) -> None:
         raw = (
             b"noise\n"
