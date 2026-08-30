@@ -1,0 +1,140 @@
+{
+  "accepted_corrections": {
+    "automation": {
+      "frame": "frames/automation-empty.png",
+      "outcome": "actionable missing-SD state; internal path removed; execution off",
+      "png_sha256": "cbd15c75515607dff82499ef3d648e93550a971f53ea4461dea8a7b168260b32",
+      "run_sha256": "3c6841281a705e11fb7631a4d1d52e991327a98aa613a58a81370b9926a32dc5",
+      "version": "1.0.0-dev.309"
+    },
+    "targets": {
+      "blocked_write_attempts": 0,
+      "feature_status": "session_unavailable",
+      "frame": "frames/targets-empty.png",
+      "outcome": "truthful empty state and one-line next action",
+      "png_sha256": "36712b81fecad7edb446ba2152022ed70bde4659fbbeaa3ed683b27c6f9c88e6",
+      "run_sha256": "99a0d948edfad4ca42917065291f7f0cc5e8c62a677a3761ec38892cc93a0102",
+      "sd_identity_attempts": 1,
+      "sd_mount_attempts": 1,
+      "sd_mount_error": 0,
+      "version": "1.0.0-dev.311"
+    }
+  },
+  "board": "board-01",
+  "candidate": {
+    "elf_sha256": "ccdaec43a12863259194f49c42624963c3e7145ad6208b555bd152ef8b1699f7",
+    "factory_bytes": 3629216,
+    "factory_sha256": "dce42aa071d4937cf8009ab8b32d28d3c5d007d03cbef2e927e7fe5e8ebaef34",
+    "firmware_bytes": 3563680,
+    "firmware_sha256": "0b749437c42b192bb3148f0cb3f248c676ac7b49c6735e58e0645ae94c8e964b",
+    "linked_flash_bytes": 3563180,
+    "map_sha256": "6d2551841095e2af5ec624bfc10250bcb7e2f6d6903696eca0962eb05c8bee6c",
+    "ota_free_bytes": 630624,
+    "source_commit": "65402c4f2de77a8568e07e0e14ea9382d6123589",
+    "static_ram_bytes": 233632,
+    "version": "1.0.0-dev.311"
+  },
+  "cid": "FE343253440000002000000055019CB7",
+  "evidence_ids": [
+    "E-BUILD-211",
+    "E-AUTO-186",
+    "E-HIL-219",
+    "E-UX-070",
+    "RB-M222"
+  ],
+  "rejected_visual_predecessor": {
+    "accepted": false,
+    "hil_contract_passed": true,
+    "png_sha256": "351d9d0ab4db204ecb38e6edad4b3623733bf6ff835691ee8ab4b35a451ae224",
+    "reason": "Russian Bluetooth hint wrapped its final two letters",
+    "run_sha256": "ae597e1949c15b1aa7e57d79d02de6f576a61e918e3259e8f20aa41b1c0a656b",
+    "version": "1.0.0-dev.310"
+  },
+  "review": {
+    "ambient_frame_digests": {
+      "ble": {
+        "png_sha256": "9c2fa51bee4684124289a854054a783e3f39618a16212ed43edab3cdf7363740",
+        "rgb565_sha256": "fd586b580ba092ba5141eb2c75a92746ebea84274da800ffd3b95f077da3f4c5"
+      },
+      "capture": {
+        "png_sha256": "f542dd3917643eaee28361b8b43733a5ad0a14ed690c13ca9c5192e53cb809ff",
+        "rgb565_sha256": "432e056b6feaecc7984408875f00b861bfe97870c0bc9c9f027083def043e30d"
+      },
+      "device": {
+        "png_sha256": "564beff6234e12574a0cc5e6b3a5c79d27b88e76f5d706bdc3117f06f29e4872",
+        "rgb565_sha256": "9de13eb5b2c4828a284bcaef76b08339ba11b6fb79c45bfe201a74815dfc897e"
+      },
+      "lab": {
+        "png_sha256": "622aa27d44bac8a46c1a1ee8a71e2901369bc2f46c8edc9fb19e0b7c002bf795",
+        "rgb565_sha256": "af1838668ceeb51727bdc599db1b5f32d6ff30048b823e8531847dfc41ae70a9"
+      },
+      "library": {
+        "png_sha256": "e87740598d12556ecf1bfe452722c46ff6c45fe1fde94d51f774cb5c1fb154d4",
+        "rgb565_sha256": "22389768601de91b8fc0149a31b8367252d527aecc2d3d21b73e2ba39216bc9a"
+      },
+      "spectrum24": {
+        "png_sha256": "9d87081203117a6600459c8c0bd5ef7a64128b2e78001fc86887471aeba4a614",
+        "rgb565_sha256": "eaa51f1daaf0df7de5fa0716698b0fda1d82dbb5a47d74bc713a86060da255b4"
+      },
+      "subghz": {
+        "png_sha256": "b39f820803a8efcfe9325868d532299819a3cf04ed2dcf4bb4c5caf5cce86ca1",
+        "rgb565_sha256": "008e2cf4e1f92ed13d6d4cf1bf7b2e31c936f0edab47f0f7af25daeba8d1ffcc"
+      },
+      "targets": {
+        "png_sha256": "ff113d598079aa414a09b9b4444e2c7bad09782b8dfeda8e0d4a158f57e2d086",
+        "rgb565_sha256": "460997311c7ac296e23cc3a5c8390b89b9f7f586fceb9fb80c8d518ceb0de89b"
+      },
+      "wifi": {
+        "png_sha256": "3e7ceeb2e084f16916755403b36612bd3e88a1cfe50fb59e62de178a4587d093",
+        "rgb565_sha256": "ca7c3d9a415e78f1243c2757da793c573eaa243015ac4493ca46a286873fdaff"
+      }
+    },
+    "ambient_frames_retained": false,
+    "automatic_screens_captured": 9,
+    "baseline_run_sha256": "bf68b4929fc67519ce7e1958f8f9d39feb411de780125ce65ba948509d15fcc2",
+    "baseline_version": "1.0.0-dev.308",
+    "catalog_order": [
+      "wifi",
+      "ble",
+      "spectrum24",
+      "subghz",
+      "capture",
+      "targets",
+      "library",
+      "lab",
+      "device"
+    ],
+    "privacy_note": "Ambient Wi-Fi/BLE frame bytes are intentionally not retained; only their machine-checked digests and lifecycle evidence remain.",
+    "top_level_routes_reviewed": 9
+  },
+  "schema": "leshy.functional_review.acceptance.v1",
+  "scope": {
+    "accepts": [
+      "FF-0 physical top-level product review on all nine routes",
+      "automatic screenshots and lifecycle cleanup",
+      "actionable Automation and truthful empty Targets states"
+    ],
+    "does_not_accept": [
+      "nested feature completeness or calibrated RF accuracy",
+      "flicker under every live-update workload",
+      "release endurance or periodic full HIL"
+    ],
+    "focused_cadence": "5/15",
+    "next": "FF-1 FUNC-17 Radar/localize vertical slice"
+  },
+  "status": "pass",
+  "terminal": {
+    "buzzer_inactive": true,
+    "clone_or_cardputer_touched": false,
+    "dangerous_tx_started": false,
+    "hil_active": false,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "lease_mask": 0,
+    "mac_wifi_or_ble_controlled": false,
+    "manual_button_presses": 0,
+    "nrf_ce_inactive": true,
+    "page": "home",
+    "runtime_owner": "none"
+  }
+}

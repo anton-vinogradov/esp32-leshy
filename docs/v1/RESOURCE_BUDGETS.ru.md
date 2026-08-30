@@ -1696,6 +1696,24 @@ key, queue HID и execution engine не добавлены. Accepted run пер�
 public file 128 bytes с одним file и одним directory sync и восстанавливает product
 trust/Device Lock при zero Action/HID/RF output. Cadence двигается до 3/15.
 
+Bound correction functional review `RB-M222`: exact physical
+`1.0.0-dev.311` на firmware source
+`65402c4f2de77a8568e07e0e14ea9382d6123589` использует 233 632 B static RAM,
+3 563 180 B linked flash и app/factory images 3 563 680/3 629 216 B, оставляя
+630 624 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`0b749437c42b192bb3148f0cb3f248c676ac7b49c6735e58e0645ae94c8e964b`/
+`dce42aa071d4937cf8009ab8b32d28d3c5d007d03cbef2e927e7fe5e8ebaef34`/
+`ccdaec43a12863259194f49c42624963c3e7145ad6208b555bd152ef8b1699f7`/
+`6d2551841095e2af5ec624bfc10250bcb7e2f6d6903696eca0962eb05c8bee6c`.
+Относительно dev.308 это zero growth static RAM, +176 B linked/app/factory и
+176 B меньше OTA headroom. Delta оплачивает только честное представление
+null-runtime и retained HIL oracle состояния функции. Одна exact-CID
+identity/mount попытка успешна, read-only пустое состояние Targets выполняет zero
+blocked writes, cleanup завершён, final owner/lease — none/0. Вместе с correction
+Automation dev.309 это завершает review FF-0 и двигает focused cadence до 5/15;
+не заменяет periodic full checkpoint dev.302 и не заявляет acceptance nested
+features, полного устранения flicker, calibrated RF или release endurance.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

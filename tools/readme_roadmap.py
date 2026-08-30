@@ -78,7 +78,7 @@ CONFIGS = (
         queue_heading="Functional-first delivery queue",
         queue_columns=("Priority", "User-visible slice", "State"),
         queue_status_labels={
-            "active": "active", "next": "next", "queued": "queued",
+            "done": "complete", "active": "active", "next": "next", "queued": "queued",
             "parked": "safely parked",
         },
         functions_heading="Complete user functionality catalog",
@@ -116,7 +116,7 @@ CONFIGS = (
         queue_heading="Functional-first очередь поставки",
         queue_columns=("Приоритет", "Пользовательский срез", "Состояние"),
         queue_status_labels={
-            "active": "в работе", "next": "следующий", "queued": "в очереди",
+            "done": "готово", "active": "в работе", "next": "следующий", "queued": "в очереди",
             "parked": "безопасно заморожен",
         },
         functions_heading="Полный каталог пользовательских возможностей",
@@ -246,9 +246,16 @@ def parse_delivery_queue(config: LanguageConfig) -> list[tuple[str, str, str]]:
         raise ValueError(
             f"{config.status}: unsupported delivery-queue states {unknown}")
     active = [row[0] for row in rows if row[2] == "active"]
-    if active != ["FF-0"]:
+    if len(active) != 1:
         raise ValueError(
-            f"{config.status}: expected only FF-0 active, got {active}")
+            f"{config.status}: expected one active delivery row, got {active}")
+    active_index = actual_ids.index(active[0])
+    if any(row[2] != "done" for row in rows[:active_index]):
+        raise ValueError(
+            f"{config.status}: every delivery row before {active[0]} must be done")
+    if any(row[2] == "done" for row in rows[active_index + 1:]):
+        raise ValueError(
+            f"{config.status}: delivery rows after {active[0]} cannot be done")
     return rows
 
 
@@ -325,7 +332,8 @@ def render(config: LanguageConfig) -> str:
         "|---|---|---|",
     ))
     queue_icon = {
-        "active": "🟡", "next": "➡️", "queued": "⬜", "parked": "⏸️",
+        "done": "✅", "active": "🟡", "next": "➡️", "queued": "⬜",
+        "parked": "⏸️",
     }
     for queue_id, queue_slice, state in queue:
         lines.append(

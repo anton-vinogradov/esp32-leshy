@@ -1708,6 +1708,24 @@ performs exactly two one-attempt cold resets, writes one 128-byte public file wi
 one file and one directory sync, and restores product trust/Device Lock with zero
 Action/HID/RF output. Cadence advances to 3/15.
 
+Functional-review correction bound `RB-M222`: exact physical
+`1.0.0-dev.311` at firmware source
+`65402c4f2de77a8568e07e0e14ea9382d6123589` uses 233,632 B static RAM,
+3,563,180 B linked flash and 3,563,680/3,629,216 B app/factory images, leaving
+630,624 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`0b749437c42b192bb3148f0cb3f248c676ac7b49c6735e58e0645ae94c8e964b`/
+`dce42aa071d4937cf8009ab8b32d28d3c5d007d03cbef2e927e7fe5e8ebaef34`/
+`ccdaec43a12863259194f49c42624963c3e7145ad6208b555bd152ef8b1699f7`/
+`6d2551841095e2af5ec624bfc10250bcb7e2f6d6903696eca0962eb05c8bee6c`.
+Against dev.308 this is zero static-RAM growth, +176 B linked/app/factory and
+176 B less OTA headroom. The delta funds only truthful null-runtime presentation
+and the retained feature-state HIL oracle. One exact-CID identity/mount succeeds,
+the read-only empty Targets state performs zero blocked writes, cleanup completes,
+and final owner/lease is none/0. Combined with the dev.309 Automation correction,
+this completes the FF-0 review and advances focused cadence to 5/15; it does not
+replace the dev.302 periodic full checkpoint or claim nested-feature, flicker,
+calibrated-RF or release-endurance acceptance.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

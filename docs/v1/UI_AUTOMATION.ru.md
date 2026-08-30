@@ -264,3 +264,14 @@ row, без raw-input chrome и с компактным честным header. �
 запускает, ставит на паузу, возобновляет и останавливает оба nRF24 receiver; exact
 framebuffer crops различают idle `RF --` и running `RF RX`, generation/heap остаются
 неизменными, final lease равен нулю (`E-AUTO-056`/`E-HIL-116`/`E-UX-015`).
+
+Exact `1.0.0-dev.311` завершает functional-first review lane FF-0. Runner умеет
+выбирать strict subset top-level routes и сохраняет feature state открытой страницы
+там, где route его предоставляет. Baseline dev.308 проходит все девять passive
+routes; dev.309 и dev.311 повторяют только corrections Automation и Targets.
+Retained artifact хранит хэши ambient Wi-Fi/BLE frames вместо их байтов, оставляет
+только два безопасных PNG пустых состояний и независимо проверяет exact lineage
+candidate/runner, exact-CID mount/cleanup Targets, zero drops input и final
+Home/none/lease 0 (`E-AUTO-186`/`E-HIL-219`/`E-UX-070`). Structural-pass frame
+dev.310 сохранён как визуально отклонённый: HIL acceptance включает человеческую
+читаемость layout, а не только успех протокола.

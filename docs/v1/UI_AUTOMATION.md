@@ -269,3 +269,14 @@ no raw-input chrome and a compact truthful header. A second physical lane starts
 pauses, resumes and stops both nRF24 receivers; exact framebuffer crops distinguish
 idle `RF --` from running `RF RX`, while generation/heap remain invariant and the
 final lease is zero (`E-AUTO-056`/`E-HIL-116`/`E-UX-015`).
+
+Exact `1.0.0-dev.311` completes the functional-first FF-0 review lane. The runner
+can select a strict subset of top-level routes and records the open-page feature
+state where a route exposes one. A dev.308 baseline traverses all nine passive routes;
+dev.309 and dev.311 rerun only Automation and Targets corrections. The retained
+artifact stores hashes for ambient Wi-Fi/BLE frames rather than their bytes, keeps
+only two safe empty-state PNGs, and independently checks exact candidate/runner
+lineage, Targets exact-CID mount/cleanup, zero input drops and final Home/none/lease
+0 (`E-AUTO-186`/`E-HIL-219`/`E-UX-070`). The structurally passing dev.310 frame is
+retained as visually rejected, demonstrating that HIL acceptance includes
+human-readable layout, not only protocol success.
