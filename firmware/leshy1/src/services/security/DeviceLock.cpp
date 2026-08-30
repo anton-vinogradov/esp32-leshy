@@ -56,6 +56,30 @@ const char* deviceLockFailureName(DeviceLockFailure failure) {
     return "credential_corrupt";
 }
 
+const char* deviceLockOperationName(DeviceLockOperation operation) {
+    switch (operation) {
+        case DeviceLockOperation::Status: return "status";
+        case DeviceLockOperation::Configure: return "configure";
+        case DeviceLockOperation::Unlock: return "unlock";
+        case DeviceLockOperation::Lock: return "lock";
+        case DeviceLockOperation::ProtectedUi: return "protected_ui";
+        case DeviceLockOperation::ProtectedEvidence:
+            return "protected_evidence";
+        case DeviceLockOperation::SecretRead: return "secret_read";
+        case DeviceLockOperation::Export: return "export";
+        case DeviceLockOperation::Backup: return "backup";
+        case DeviceLockOperation::Companion: return "companion";
+        case DeviceLockOperation::SensitiveSettings:
+            return "sensitive_settings";
+        case DeviceLockOperation::SafeStop: return "safe_stop";
+        case DeviceLockOperation::Panic: return "panic";
+        case DeviceLockOperation::Cleanup: return "cleanup";
+        case DeviceLockOperation::UpdateRecovery: return "update_recovery";
+        case DeviceLockOperation::FactoryReset: return "factory_reset";
+    }
+    return "unknown";
+}
+
 const char* deviceLockAccessName(DeviceLockAccess access) {
     switch (access) {
         case DeviceLockAccess::Allowed: return "allowed";

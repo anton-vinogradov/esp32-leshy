@@ -34,5 +34,7 @@ PYTHONPATH="$repo_dir/tools" python3 \
     "$repo_dir/tools/test_device_lock_hil_runner.py"
 PYTHONPATH="$repo_dir/tools" python3 \
     "$repo_dir/tools/test_device_lock_persistence_hil_runner.py"
+PYTHONPATH="$repo_dir/tools" python3 \
+    "$repo_dir/tools/test_device_lock_recovery_admission_hil_runner.py"
 python3 "$repo_dir/tools/check_device_lock_hil_acceptance.py"
 python3 "$repo_dir/tools/check_device_lock_persistence_hil_acceptance.py"

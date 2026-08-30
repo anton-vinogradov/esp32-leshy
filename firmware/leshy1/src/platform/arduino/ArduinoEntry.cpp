@@ -1000,6 +1000,72 @@ DeviceLockKdfBenchmarkReport deviceLockKdfBenchmark{};
 std::uint64_t deviceLockLastKdfUs = 0;
 bool deviceLockPersistenceHilActive = false;
 bool deviceLockPersistenceHilCleanupRequired = false;
+leshy1::services::security::DeviceLockOperation deviceLockLastAdmissionOperation =
+    leshy1::services::security::DeviceLockOperation::Status;
+leshy1::services::security::DeviceLockAccess deviceLockLastAdmissionAccess =
+    leshy1::services::security::DeviceLockAccess::SetupRequired;
+std::uint32_t deviceLockAdmissionChecks = 0;
+std::uint32_t deviceLockAdmissionBlocks = 0;
+
+class DeviceLockFixtureProtectedDataEraser final
+    : public leshy1::services::security::DeviceLockProtectedDataEraser {
+public:
+    bool eraseProtectedData() override {
+        ++calls;
+        leshy1::services::security::DeviceLockCredential current{};
+        credentialPresentDuringErase =
+            deviceLockPersistenceHilActive &&
+            deviceLockStore.hilFixtureNamespaceActive() &&
+            deviceLockStore.load(&current) ==
+                leshy1::services::security::DeviceLockLoadStatus::Loaded;
+        current.clear();
+        fixtureProtectedDataErased = credentialPresentDuringErase;
+        return fixtureProtectedDataErased;
+    }
+
+    void reset() {
+        calls = 0;
+        credentialPresentDuringErase = false;
+        fixtureProtectedDataErased = false;
+    }
+
+    std::uint32_t calls = 0;
+    bool credentialPresentDuringErase = false;
+    bool fixtureProtectedDataErased = false;
+};
+
+DeviceLockFixtureProtectedDataEraser deviceLockFixtureEraser;
+
+leshy1::services::security::DeviceLockAccess checkDeviceLockAdmission(
+    leshy1::services::security::DeviceLockOperation operation) {
+    std::uint64_t nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0U) nowUs = 1U;
+    deviceLockLastAdmissionOperation = operation;
+    deviceLockLastAdmissionAccess = deviceLock.access(operation, nowUs);
+    ++deviceLockAdmissionChecks;
+    if (deviceLockLastAdmissionAccess !=
+        leshy1::services::security::DeviceLockAccess::Allowed) {
+        ++deviceLockAdmissionBlocks;
+    }
+    return deviceLockLastAdmissionAccess;
+}
+
+bool deviceLockOperationAllowed(
+    leshy1::services::security::DeviceLockOperation operation) {
+    return checkDeviceLockAdmission(operation) ==
+        leshy1::services::security::DeviceLockAccess::Allowed;
+}
+
+bool deviceLockProtectedPage(std::uint8_t page) {
+    return page == 2U || page == 3U || page == 4U || page == 5U ||
+        page == 7U || page == 8U;
+}
+
+void noteDeviceLockAdmissionBlocked() {
+    lastRuntimeEvent =
+        leshy1::services::security::deviceLockAccessName(
+            deviceLockLastAdmissionAccess);
+}
 PowerSafetyPolicy powerSafetyPolicy;
 bool powerManagerAddressAck = false;
 std::uint32_t boundedSleepCount = 0;
@@ -5856,6 +5922,14 @@ void runCaptureStoreWorker(void*) {
 }
 
 bool requestWifiFrameCapturePersist() {
+    if (!deviceLockOperationAllowed(
+            leshy1::services::security::
+                DeviceLockOperation::ProtectedEvidence)) {
+        capturePersistState = CapturePersistState::Failed;
+        capturePersistStatus = "device_locked";
+        noteDeviceLockAdmissionBlocked();
+        return true;
+    }
     if (capturePersistState != CapturePersistState::Confirm ||
         wifiFrameCapture.stats().state != WifiFrameCaptureState::Complete ||
         wifiFrameCapture.capture().size() == 0) {
@@ -5903,6 +5977,14 @@ bool requestWifiFrameCapturePersist() {
 }
 
 bool requestWifiAuthenticationCapturePersist() {
+    if (!deviceLockOperationAllowed(
+            leshy1::services::security::
+                DeviceLockOperation::ProtectedEvidence)) {
+        wifiAuthenticationPersistState = CapturePersistState::Failed;
+        wifiAuthenticationPersistStatus = "device_locked";
+        noteDeviceLockAdmissionBlocked();
+        return true;
+    }
     if (wifiAuthenticationPersistState != CapturePersistState::Confirm ||
         (wifiAuthenticationSynthetic && !wifiAuthenticationPersistenceHil) ||
         wifiAuthenticationProductState !=
@@ -6285,6 +6367,14 @@ void runInfraredCaptureStoreWorker(void*) {
 }
 
 bool requestSubGhzRawCapturePersist() {
+    if (!deviceLockOperationAllowed(
+            leshy1::services::security::
+                DeviceLockOperation::ProtectedEvidence)) {
+        subGhzCapturePersistState = CapturePersistState::Failed;
+        subGhzCapturePersistStatus = "device_locked";
+        noteDeviceLockAdmissionBlocked();
+        return true;
+    }
     if (subGhzCapturePersistState != CapturePersistState::Result ||
         subGhzRawCapture.stats().state !=
             SubGhzRawCaptureState::Complete ||
@@ -6359,6 +6449,14 @@ void serviceSubGhzRawCapturePersist() {
 }
 
 bool requestInfraredRawCapturePersist() {
+    if (!deviceLockOperationAllowed(
+            leshy1::services::security::
+                DeviceLockOperation::ProtectedEvidence)) {
+        infraredCapturePersistState = CapturePersistState::Failed;
+        infraredCapturePersistStatus = "device_locked";
+        noteDeviceLockAdmissionBlocked();
+        return true;
+    }
     if (infraredCapturePersistState != CapturePersistState::Result ||
         infraredCapture.stats().state != InfraredCaptureState::Complete ||
         infraredCapture.pulseCount() == 0) {
@@ -8843,6 +8941,16 @@ void runTargetsMutationWorker(void*) {
 bool requestTargetsMutationExact(const TargetAction& action,
                                  bool companionRequest,
                                  bool companionWebRequest = false) {
+    if (!deviceLockOperationAllowed(
+            companionRequest
+                ? leshy1::services::security::DeviceLockOperation::Companion
+                : leshy1::services::security::
+                      DeviceLockOperation::ProtectedEvidence)) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "device_locked";
+        noteDeviceLockAdmissionBlocked();
+        return true;
+    }
     const std::uint64_t actionStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     TargetCatalog* activeCatalog = targetsProductRuntime == nullptr
@@ -9020,6 +9128,14 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
 }
 
 bool requestTargetsCorrelationMutation(CorrelationActionKind kind) {
+    if (!deviceLockOperationAllowed(
+            leshy1::services::security::
+                DeviceLockOperation::ProtectedEvidence)) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "device_locked";
+        noteDeviceLockAdmissionBlocked();
+        return true;
+    }
     const std::uint64_t actionStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     if (targetsProductRuntime == nullptr ||
@@ -9105,6 +9221,14 @@ bool requestTargetsCorrelationMutation(CorrelationActionKind kind) {
 }
 
 bool requestTargetsMergeMutation() {
+    if (!deviceLockOperationAllowed(
+            leshy1::services::security::
+                DeviceLockOperation::ProtectedEvidence)) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "device_locked";
+        noteDeviceLockAdmissionBlocked();
+        return true;
+    }
     const std::uint64_t actionStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     if (targetsProductRuntime == nullptr ||
@@ -12789,6 +12913,21 @@ void renderDeviceLockPage(bool clearContent) {
     }
 }
 
+void renderDeviceLockBlockedPage(bool clearContent) {
+    renderHeader(tr(UiTextId::DeviceLockTitle), clearContent);
+    const auto audit = deviceLock.audit(
+        static_cast<std::uint64_t>(esp_timer_get_time()));
+    renderMetric(0, tr(deviceLockStateText(audit.state)),
+                 deviceLockStateTone(audit.state));
+    renderMetric(1, tr(UiTextId::DeviceLockProtectedClosed), Tone::Danger);
+    renderMetric(2, tr(audit.state ==
+                               leshy1::services::security::
+                                   DeviceLockState::Unconfigured
+                           ? UiTextId::DeviceLockSetupNote
+                           : UiTextId::DeviceLockRecoveryNote),
+                 Tone::Muted);
+}
+
 void runDeviceLockWorker(void*) {
     DeviceLockWorkerEvent event{};
     event.mode = deviceLockWorkerMode;
@@ -12944,10 +13083,15 @@ void serviceDeviceLock() {
     if (deviceLockWorkerTaskHandle != nullptr) return;
     const std::uint64_t nowUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
-    if (deviceLock.service(nowUs) &&
-        uiController.page() == kDeviceLockPage) {
-        deviceLockController.enter(deviceLock.audit(nowUs));
-        if (!safetySupervisor.latched()) renderInteractiveScreen(true);
+    if (deviceLock.service(nowUs)) {
+        if (uiController.page() == kDeviceLockPage) {
+            deviceLockController.enter(deviceLock.audit(nowUs));
+        }
+        if (!safetySupervisor.latched() &&
+            (uiController.page() == kDeviceLockPage ||
+             deviceLockProtectedPage(uiController.page()))) {
+            renderInteractiveScreen(true);
+        }
     }
 }
 
@@ -12994,6 +13138,96 @@ void emitDeviceLockState(Stream& reply) {
     reply.println(line);
 }
 
+void emitDeviceLockAdmissionMatrix(Stream& reply) {
+    using leshy1::services::security::DeviceLockAccess;
+    using leshy1::services::security::DeviceLockOperation;
+    constexpr std::array<DeviceLockOperation, 16> operations{{
+        DeviceLockOperation::Status,
+        DeviceLockOperation::Configure,
+        DeviceLockOperation::Unlock,
+        DeviceLockOperation::Lock,
+        DeviceLockOperation::ProtectedUi,
+        DeviceLockOperation::ProtectedEvidence,
+        DeviceLockOperation::SecretRead,
+        DeviceLockOperation::Export,
+        DeviceLockOperation::Backup,
+        DeviceLockOperation::Companion,
+        DeviceLockOperation::SensitiveSettings,
+        DeviceLockOperation::SafeStop,
+        DeviceLockOperation::Panic,
+        DeviceLockOperation::Cleanup,
+        DeviceLockOperation::UpdateRecovery,
+        DeviceLockOperation::FactoryReset,
+    }};
+    std::array<DeviceLockAccess, operations.size()> access{};
+    for (std::size_t index = 0; index < operations.size(); ++index) {
+        access[index] = checkDeviceLockAdmission(operations[index]);
+    }
+    const bool protectedAllowed =
+        access[4] == DeviceLockAccess::Allowed &&
+        access[5] == DeviceLockAccess::Allowed &&
+        access[6] == DeviceLockAccess::Allowed &&
+        access[7] == DeviceLockAccess::Allowed &&
+        access[8] == DeviceLockAccess::Allowed &&
+        access[9] == DeviceLockAccess::Allowed &&
+        access[10] == DeviceLockAccess::Allowed;
+    const bool safeAllowed =
+        access[0] == DeviceLockAccess::Allowed &&
+        access[3] == DeviceLockAccess::Allowed &&
+        access[11] == DeviceLockAccess::Allowed &&
+        access[12] == DeviceLockAccess::Allowed &&
+        access[13] == DeviceLockAccess::Allowed &&
+        access[14] == DeviceLockAccess::Allowed &&
+        access[15] == DeviceLockAccess::Allowed;
+    const auto audit = deviceLock.audit(
+        static_cast<std::uint64_t>(esp_timer_get_time()));
+    char line[2048] = {};
+    int written = std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.device_lock.admission.v1\","
+        "\"kind\":\"matrix\",\"state\":\"%s\",\"access\":{",
+        leshy1::services::security::deviceLockStateName(audit.state));
+    for (std::size_t index = 0;
+         written > 0 && static_cast<std::size_t>(written) < sizeof(line) &&
+         index < operations.size(); ++index) {
+        const int appended = std::snprintf(
+            line + written, sizeof(line) - static_cast<std::size_t>(written),
+            "%s\"%s\":\"%s\"", index == 0 ? "" : ",",
+            leshy1::services::security::deviceLockOperationName(
+                operations[index]),
+            leshy1::services::security::deviceLockAccessName(access[index]));
+        if (appended <= 0) {
+            written = -1;
+        } else {
+            written += appended;
+        }
+    }
+    if (written <= 0 || static_cast<std::size_t>(written) >= sizeof(line)) {
+        reply.println(
+            "{\"schema\":\"leshy.device_lock.admission.v1\","
+            "\"kind\":\"error\",\"status\":\"encoding_failed\"}");
+        return;
+    }
+    const int appended = std::snprintf(
+        line + written, sizeof(line) - static_cast<std::size_t>(written),
+        "},\"protected_all_allowed\":%s,\"safe_all_allowed\":%s,"
+        "\"protected_content_returned\":false,"
+        "\"admission_checks\":%lu,\"admission_blocks\":%lu,"
+        "\"radio_touched\":false}",
+        protectedAllowed ? "true" : "false",
+        safeAllowed ? "true" : "false",
+        static_cast<unsigned long>(deviceLockAdmissionChecks),
+        static_cast<unsigned long>(deviceLockAdmissionBlocks));
+    if (appended <= 0 ||
+        static_cast<std::size_t>(written + appended) >= sizeof(line)) {
+        reply.println(
+            "{\"schema\":\"leshy.device_lock.admission.v1\","
+            "\"kind\":\"error\",\"status\":\"encoding_failed\"}");
+        return;
+    }
+    reply.println(line);
+}
+
 void runDeviceLockPersistenceFixture(Stream& reply, const char* command) {
     constexpr const char* beginCommand =
         "device-lock.persistence-fixture begin";
@@ -13001,13 +13235,30 @@ void runDeviceLockPersistenceFixture(Stream& reply, const char* command) {
         "device-lock.persistence-fixture resume";
     constexpr const char* cleanupCommand =
         "device-lock.persistence-fixture cleanup";
+    constexpr const char* factoryResetPreviewCommand =
+        "device-lock.persistence-fixture factory-reset-preview";
+    constexpr const char* factoryResetConfirmCommand =
+        "device-lock.persistence-fixture factory-reset-confirm";
     const bool begin = std::strcmp(command, beginCommand) == 0;
     const bool resume = std::strcmp(command, resumeCommand) == 0;
     const bool cleanup = std::strcmp(command, cleanupCommand) == 0;
-    const char* operation = begin ? "begin" : (resume ? "resume" : "cleanup");
+    const bool factoryResetPreview =
+        std::strcmp(command, factoryResetPreviewCommand) == 0;
+    const bool factoryResetConfirm =
+        std::strcmp(command, factoryResetConfirmCommand) == 0;
+    const bool factoryReset = factoryResetPreview || factoryResetConfirm;
+    const char* operation = begin
+        ? "begin"
+        : resume
+              ? "resume"
+              : cleanup
+                    ? "cleanup"
+                    : factoryResetPreview ? "factory_reset_preview"
+                                          : "factory_reset_confirm";
     const char* status = "invalid_operation";
     bool fixtureCleanupComplete = false;
     bool productRestored = false;
+    bool resetResult = false;
     const std::uint64_t nowUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
 
@@ -13015,10 +13266,29 @@ void runDeviceLockPersistenceFixture(Stream& reply, const char* command) {
         status = "hil_session_required";
     } else if (deviceLockWorkerTaskHandle != nullptr) {
         status = "worker_busy";
-    } else if (!begin && !resume && !cleanup) {
+    } else if (!begin && !resume && !cleanup && !factoryReset) {
         status = "invalid_operation";
     } else if ((begin || resume) && deviceLockPersistenceHilActive) {
         status = "already_active";
+    } else if (factoryReset && !deviceLockPersistenceHilActive) {
+        status = "fixture_required";
+    } else if (factoryResetConfirm &&
+               deviceLock.state() != leshy1::services::security::
+                                         DeviceLockState::RecoveryOnly) {
+        status = "recovery_only_required";
+    } else if (factoryReset) {
+        deviceLockFixtureEraser.reset();
+        resetResult = deviceLock.factoryReset(
+            factoryResetConfirm, deviceLockFixtureEraser);
+        if (factoryResetPreview) {
+            status = !resetResult && deviceLockFixtureEraser.calls == 0U
+                ? "confirmation_required" : "preview_failed";
+        } else {
+            status = resetResult && deviceLockFixtureEraser.calls == 1U &&
+                    deviceLockFixtureEraser.credentialPresentDuringErase &&
+                    deviceLockFixtureEraser.fixtureProtectedDataErased
+                ? "recovered" : "recovery_failed";
+        }
     } else if (cleanup) {
         deviceLock.prepareSystemBoundary();
         deviceLockStore.useHilFixtureNamespace(true);
@@ -13049,7 +13319,7 @@ void runDeviceLockPersistenceFixture(Stream& reply, const char* command) {
         renderInteractiveScreen(true);
     }
     const auto audit = deviceLock.audit(nowUs);
-    char line[512] = {};
+    char line[1024] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.device_lock.fixture.v1\","
@@ -13060,6 +13330,10 @@ void runDeviceLockPersistenceFixture(Stream& reply, const char* command) {
         "\"fixture_cleanup_complete\":%s,\"product_restored\":%s,"
         "\"lock_status\":\"%s\",\"failure\":\"%s\","
         "\"failed_attempts\":%u,\"credential_generation\":%lu,"
+        "\"factory_reset_result\":%s,\"protected_erase_calls\":%lu,"
+        "\"credential_present_during_erase\":%s,"
+        "\"fixture_protected_data_erased\":%s,"
+        "\"destructive_order_proven\":%s,"
         "\"product_namespace_written_or_erased\":false,"
         "\"whole_nvs_read_or_copied\":false,\"radio_touched\":false}",
         operation, status,
@@ -13071,7 +13345,17 @@ void runDeviceLockPersistenceFixture(Stream& reply, const char* command) {
         leshy1::services::security::deviceLockStateName(audit.state),
         leshy1::services::security::deviceLockFailureName(audit.lastFailure),
         static_cast<unsigned>(audit.failedAttempts),
-        static_cast<unsigned long>(audit.credentialGeneration));
+        static_cast<unsigned long>(audit.credentialGeneration),
+        resetResult ? "true" : "false",
+        static_cast<unsigned long>(deviceLockFixtureEraser.calls),
+        deviceLockFixtureEraser.credentialPresentDuringErase
+            ? "true" : "false",
+        deviceLockFixtureEraser.fixtureProtectedDataErased
+            ? "true" : "false",
+        resetResult && deviceLockFixtureEraser.calls == 1U &&
+                deviceLockFixtureEraser.credentialPresentDuringErase &&
+                deviceLockFixtureEraser.fixtureProtectedDataErased
+            ? "true" : "false");
     reply.println(line);
 }
 
@@ -19502,12 +19786,18 @@ void renderInteractiveScreen(bool clearContent) {
     std::uint64_t startedUs = static_cast<std::uint64_t>(esp_timer_get_time());
     if (startedUs == 0) startedUs = 1;
     display.startWrite();
-    const bool incremental = !safetySupervisor.latched() && !clearContent &&
-                             renderSelectionDelta();
+    const bool protectedUiBlocked =
+        deviceLockProtectedPage(uiController.page()) &&
+        !deviceLockOperationAllowed(
+            leshy1::services::security::DeviceLockOperation::ProtectedUi);
+    const bool incremental = !safetySupervisor.latched() &&
+        !protectedUiBlocked && !clearContent && renderSelectionDelta();
     if (!incremental) {
         clearContent = true;
         if (safetySupervisor.latched()) {
             renderSafetyStop(clearContent);
+        } else if (protectedUiBlocked) {
+            renderDeviceLockBlockedPage(clearContent);
         } else if (uiController.isRoot()) {
             renderHome(clearContent);
         } else if (uiController.page() == 1) {
@@ -24911,6 +25201,11 @@ bool selectionCanRepaintInPlace(UiAction action) {
 }
 
 bool openCurrentFieldSurveyExport() {
+    if (!deviceLockOperationAllowed(
+            leshy1::services::security::DeviceLockOperation::Export)) {
+        noteDeviceLockAdmissionBlocked();
+        return false;
+    }
     const LibraryEntry* entry = libraryController.selected();
     if (entry == nullptr || entry->session == nullptr ||
         std::strcmp(entry->session->id(), FieldSurveyTracker::kSessionId) != 0 ||
@@ -24976,6 +25271,14 @@ bool applyUiAction(UiAction action, bool render = true) {
     const AppMenuItem* selected = appCatalog.get(uiController.selection());
     const bool wasRoot = uiController.isRoot();
     const std::uint8_t pageBefore = uiController.page();
+    if (!wasRoot && deviceLockProtectedPage(pageBefore) &&
+        !deviceLockOperationAllowed(
+            leshy1::services::security::DeviceLockOperation::ProtectedUi) &&
+        action != UiAction::Back && action != UiAction::Left) {
+        noteDeviceLockAdmissionBlocked();
+        uiController.recordHandledAction(action);
+        return finish(false);
+    }
     if (!wasRoot && uiController.page() == 2) {
         bool handled = false;
         bool changed = false;
@@ -25926,7 +26229,14 @@ bool applyUiAction(UiAction action, bool render = true) {
                    (action == UiAction::Select ||
                     action == UiAction::Right)) {
             handled = true;
-            changed = libraryController.requestExport();
+            changed = deviceLockOperationAllowed(
+                          leshy1::services::security::
+                              DeviceLockOperation::Export) &&
+                libraryController.requestExport();
+            if (!changed && deviceLockLastAdmissionAccess !=
+                    leshy1::services::security::DeviceLockAccess::Allowed) {
+                noteDeviceLockAdmissionBlocked();
+            }
         } else if (libraryController.view() == LibraryView::SessionList) {
             if (action == UiAction::Up) {
                 handled = true;
@@ -26375,7 +26685,13 @@ bool applyUiAction(UiAction action, bool render = true) {
             constexpr std::uint8_t pages[kDeviceItemCount] = {
                 kPowerPage, 5, kDeviceLockPage, kAboutPage, 1, 6,
             };
-            changed = uiController.openChild(pages[deviceSelection]);
+            const bool settingsAllowed = deviceSelection != 1U ||
+                deviceLockOperationAllowed(
+                    leshy1::services::security::
+                        DeviceLockOperation::SensitiveSettings);
+            changed = settingsAllowed &&
+                uiController.openChild(pages[deviceSelection]);
+            if (!settingsAllowed) noteDeviceLockAdmissionBlocked();
             if (changed && deviceSelection == 1) {
                 interfaceSettingsController.enter();
             }
@@ -26384,8 +26700,10 @@ bool applyUiAction(UiAction action, bool render = true) {
                     static_cast<std::uint64_t>(esp_timer_get_time());
                 deviceLockController.enter(deviceLock.audit(nowUs));
             }
-            lastRuntimeEvent = changed ? "device_item_opened"
-                                       : "device_item_rejected";
+            if (settingsAllowed) {
+                lastRuntimeEvent = changed ? "device_item_opened"
+                                           : "device_item_rejected";
+            }
         }
         if (handled) {
             if (action == UiAction::Up || action == UiAction::Down) {
@@ -26557,10 +26875,23 @@ bool applyUiAction(UiAction action, bool render = true) {
     bool openable = selected != nullptr && selected->enabled;
     LaunchStatus launchStatus = LaunchStatus::InvalidDescriptor;
     if (wantsLaunch) {
+        const bool protectedLaunch = selected != nullptr &&
+            std::strcmp(selected->id, "device") != 0;
+        const bool admissionAllowed = !protectedLaunch ||
+            deviceLockOperationAllowed(
+                leshy1::services::security::
+                    DeviceLockOperation::ProtectedUi);
         launchStatus = selected == nullptr
                            ? LaunchStatus::InvalidDescriptor
-                           : appRuntime.launch(selected->id, selected->enabled, selected->resources);
-        lastRuntimeEvent = leshy1::kernel::runtime::launchStatusName(launchStatus);
+                           : admissionAllowed
+                                 ? appRuntime.launch(
+                                       selected->id, selected->enabled,
+                                       selected->resources)
+                                 : LaunchStatus::InvalidDescriptor;
+        lastRuntimeEvent = admissionAllowed
+            ? leshy1::kernel::runtime::launchStatusName(launchStatus)
+            : leshy1::services::security::deviceLockAccessName(
+                  deviceLockLastAdmissionAccess);
         openable = launchStatus == LaunchStatus::Started;
         if (openable && selected != nullptr &&
             std::strcmp(selected->id, "language") == 0) {
@@ -33899,6 +34230,26 @@ void handleCompanionFrame(
         return;
     }
 
+    if (!deviceLockOperationAllowed(
+            leshy1::services::security::DeviceLockOperation::Companion)) {
+        char blocked[256] = {};
+        const int length = std::snprintf(
+            blocked, sizeof(blocked),
+            "{\"schema\":\"leshy.device_lock.admission.v1\","
+            "\"kind\":\"blocked\",\"operation\":\"companion\","
+            "\"access\":\"%s\",\"protected_content_returned\":false}",
+            leshy1::services::security::deviceLockAccessName(
+                deviceLockLastAdmissionAccess));
+        if (length > 0 && static_cast<std::size_t>(length) <
+                              sizeof(blocked)) {
+            writeCompanionFrame(
+                reply, blocked, static_cast<std::size_t>(length));
+        } else {
+            emitCompanionEncodingError(reply);
+        }
+        return;
+    }
+
     companion::CompanionMutationRequest mutationRequest{};
     const companion::CompanionMutationParseStatus mutationStatus =
         companion::parseCompanionMutationRequest(
@@ -33975,6 +34326,42 @@ bool handleWebCompanionRequest(
     return true;
 }
 
+bool commandRequiresDeviceLockExport(const char* command) {
+    if (command == nullptr) return false;
+    constexpr std::array<const char*, 10> commands{{
+        "ble.inspector.export.raw",
+        "capture.export.pcap",
+        "library.field-survey.export.native",
+        "library.field-survey.export.wigle",
+        "capture.subghz.export.csv",
+        "capture.ir.export.csv",
+        "library.export",
+        "library.export.csv",
+        "library.export.pcap",
+        "library.export.hc22000",
+    }};
+    for (const char* candidate : commands) {
+        if (std::strcmp(command, candidate) == 0) return true;
+    }
+    return false;
+}
+
+void emitDeviceLockBlocked(Stream& reply,
+                           leshy1::services::security::DeviceLockOperation
+                               operation,
+                           leshy1::services::security::DeviceLockAccess
+                               access) {
+    char line[256] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.device_lock.admission.v1\","
+        "\"kind\":\"blocked\",\"operation\":\"%s\","
+        "\"access\":\"%s\",\"protected_content_returned\":false}",
+        leshy1::services::security::deviceLockOperationName(operation),
+        leshy1::services::security::deviceLockAccessName(access));
+    reply.println(line);
+}
+
 void handleCommand(Stream& reply, char* command, std::size_t capacity,
                    bool companionAllowed) {
     if (safetySupervisor.latched() &&
@@ -33995,6 +34382,18 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
             targetsStoreCodecWorkspaceOwnerName());
         reply.println(line);
         return;
+    }
+    if (commandRequiresDeviceLockExport(command)) {
+        const auto access = checkDeviceLockAdmission(
+            leshy1::services::security::DeviceLockOperation::Export);
+        if (access !=
+            leshy1::services::security::DeviceLockAccess::Allowed) {
+            emitDeviceLockBlocked(
+                reply,
+                leshy1::services::security::DeviceLockOperation::Export,
+                access);
+            return;
+        }
     }
     if (companionAllowed && command[0] == '{') {
         handleUsbCompanionFrame(reply, command, capacity);
@@ -34025,6 +34424,8 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitSafetyState(reply);
     } else if (std::strcmp(command, "device-lock.state") == 0) {
         emitDeviceLockState(reply);
+    } else if (std::strcmp(command, "device-lock.admission") == 0) {
+        emitDeviceLockAdmissionMatrix(reply);
     } else if (std::strncmp(
                    command, "device-lock.persistence-fixture ", 32) == 0) {
         runDeviceLockPersistenceFixture(reply, command);

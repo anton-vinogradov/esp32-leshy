@@ -124,6 +124,7 @@ enum class DeviceLockAccess : std::uint8_t {
     Faulted,
 };
 
+const char* deviceLockOperationName(DeviceLockOperation operation);
 const char* deviceLockAccessName(DeviceLockAccess access);
 
 struct DeviceLockAudit final {

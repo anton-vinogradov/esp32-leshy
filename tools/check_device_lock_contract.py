@@ -19,6 +19,8 @@ CONTROLLER_CPP = ROOT / "firmware/leshy1/src/apps/device/DeviceLockController.cp
 CONTROLLER_TESTS = ROOT / "tests/native/device_lock_controller_tests.cpp"
 ENTRY = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 PERSISTENCE_RUNNER = ROOT / "tools/run_1x_device_lock_persistence_hil.py"
+RECOVERY_RUNNER = ROOT / (
+    "tools/run_1x_device_lock_recovery_admission_hil.py")
 
 
 def require(text: str, marker: str, label: str, failures: list[str]) -> None:
@@ -38,6 +40,7 @@ def main() -> int:
     controller_tests = CONTROLLER_TESTS.read_text(encoding="utf-8")
     entry = ENTRY.read_text(encoding="utf-8")
     persistence_runner = PERSISTENCE_RUNNER.read_text(encoding="utf-8")
+    recovery_runner = RECOVERY_RUNNER.read_text(encoding="utf-8")
     failures: list[str] = []
 
     for marker, label in (
@@ -199,6 +202,17 @@ def main() -> int:
          "product namespace mutation exclusion"),
         ("whole_nvs_read_or_copied\\\":false",
          "whole-NVS copy exclusion"),
+        ("device-lock.admission", "physical admission matrix command"),
+        ("renderDeviceLockBlockedPage", "opaque protected UI replacement"),
+        ("DeviceLockOperation::ProtectedUi", "root and page UI gate"),
+        ("DeviceLockOperation::ProtectedEvidence", "capture persistence gate"),
+        ("DeviceLockOperation::Companion", "companion data gate"),
+        ("DeviceLockOperation::SensitiveSettings", "settings gate"),
+        ("commandRequiresDeviceLockExport", "console export gate"),
+        ("protected_content_returned\\\":false", "no-content denial report"),
+        ("factory-reset-preview", "non-destructive reset preview"),
+        ("factory-reset-confirm", "confirmed destructive reset"),
+        ("credential_present_during_erase", "destructive reset ordering proof"),
     ):
         require(entry, marker, label, failures)
 
@@ -220,6 +234,26 @@ def main() -> int:
         ("cardputer\": False", "Cardputer exclusion"),
     ):
         require(persistence_runner, marker, label, failures)
+
+    for marker, label in (
+        ("RUN_SCHEMA = \"leshy.device_lock_recovery_admission_hil.run.v1\"",
+         "recovery/admission HIL schema"),
+        ("PROTECTED_OPERATIONS", "complete protected operation set"),
+        ("SAFE_OPERATIONS", "complete always-available operation set"),
+        ("device-lock.admission", "physical admission query"),
+        ("factory-reset-preview", "physical reset preview"),
+        ("factory-reset-confirm", "physical reset confirmation"),
+        ("for attempt in range(1, 6)", "all five physical PIN failures"),
+        ("300000", "real five-minute retry bound"),
+        ("destructive_order_proven", "machine-checked erase ordering"),
+        ("wipe_pin(correct_pin)", "ephemeral correct PIN wipe"),
+        ("wipe_pin(wrong_pin)", "ephemeral wrong PIN wipe"),
+        ("pin_or_digest_retained\": False", "PIN evidence exclusion"),
+        ("mac_wifi\": False", "Mac Wi-Fi exclusion"),
+        ("clone\": False", "clone exclusion"),
+        ("cardputer\": False", "Cardputer exclusion"),
+    ):
+        require(recovery_runner, marker, label, failures)
 
     for marker, label in (
         ("testConfigureRequiresStrongMatchingConfirmationAndClearsSubmission",

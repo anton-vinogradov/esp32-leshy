@@ -149,6 +149,38 @@ void testPinPolicyAndSetupRequiredDefault() {
           DeviceLockAccess::Allowed);
 }
 
+void testOperationNamesAreStableAndComplete() {
+    constexpr std::array<DeviceLockOperation, 16> operations{{
+        DeviceLockOperation::Status,
+        DeviceLockOperation::Configure,
+        DeviceLockOperation::Unlock,
+        DeviceLockOperation::Lock,
+        DeviceLockOperation::ProtectedUi,
+        DeviceLockOperation::ProtectedEvidence,
+        DeviceLockOperation::SecretRead,
+        DeviceLockOperation::Export,
+        DeviceLockOperation::Backup,
+        DeviceLockOperation::Companion,
+        DeviceLockOperation::SensitiveSettings,
+        DeviceLockOperation::SafeStop,
+        DeviceLockOperation::Panic,
+        DeviceLockOperation::Cleanup,
+        DeviceLockOperation::UpdateRecovery,
+        DeviceLockOperation::FactoryReset,
+    }};
+    for (const DeviceLockOperation operation : operations) {
+        const char* name = deviceLockOperationName(operation);
+        CHECK(name != nullptr);
+        CHECK(std::strcmp(name, "unknown") != 0);
+    }
+    CHECK(std::strcmp(
+              deviceLockOperationName(DeviceLockOperation::ProtectedEvidence),
+              "protected_evidence") == 0);
+    CHECK(std::strcmp(
+              deviceLockOperationName(DeviceLockOperation::UpdateRecovery),
+              "update_recovery") == 0);
+}
+
 void testLockRestoreAndCorrectUnlock() {
     MemoryStore store;
     FakeCrypto crypto;
@@ -403,6 +435,7 @@ void testCredentialRecordIsVersionedExactAndCorruptionDetecting() {
 
 int main() {
     testPinPolicyAndSetupRequiredDefault();
+    testOperationNamesAreStableAndComplete();
     testLockRestoreAndCorrectUnlock();
     testWrongPinPersistsBackoffAcrossResetAndEndsRecoveryOnly();
     testSuccessfulUnlockClearsPersistentFailuresOnlyAfterSave();
