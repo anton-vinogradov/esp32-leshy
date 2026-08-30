@@ -29,6 +29,7 @@ from run_1x_product_survey_hil import (
     query,
 )
 from run_1x_ui_typography_hil import normalize_home
+from temporary_device_lock_hil import TemporaryDeviceLockHil
 
 
 SCHEMA = "leshy.companion_usb_delta_hil.run.v1"
@@ -318,6 +319,7 @@ def main() -> int:
     }
     write_json(args.output / "run.json", record)
     cleanup: dict[str, Any] = {"attempted": False}
+    protected_ui: TemporaryDeviceLockHil | None = None
 
     try:
         if not args.reuse_exact_flash:
@@ -347,6 +349,8 @@ def main() -> int:
                     recovery.get("physical_write_calls") == 0 and
                     recovery.get("cleanup_complete") is True,
                     f"exact product media unavailable: {recovery}")
+            protected_ui = TemporaryDeviceLockHil(device, app_identity)
+            protected_ui.start()
 
             checkpoint(args.output, record, "home_denials")
             before_connect = companion_request(device, request(
@@ -639,6 +643,7 @@ def main() -> int:
                         post_web_final.get("lease_mask") == 0,
                         "post-Web Targets teardown did not restore worker: "
                         f"{post_web_final}")
+            protected_ui.close()
             checkpoint(args.output, record, "final_invariants")
             safe = query(device, b"hardware.safe-outputs",
                          "leshy.hardware.safe-outputs.v1", "state")
@@ -703,6 +708,7 @@ def main() -> int:
             "raw_radio_tx_commands": 0,
             "wifi_softap_started": args.exercise_device_web_lifecycle,
             "storage_write_commands": 0,
+            "device_lock_fixture": protected_ui.evidence(),
         })
         write_json(args.output / "run.json", record)
         artifact_manifest(args.output)
@@ -722,6 +728,9 @@ def main() -> int:
             try:
                 with PassiveSerial(args.port, 115200, timeout=0.25) as device:
                     synchronize_console(device, 10.0)
+                    if protected_ui is not None:
+                        protected_ui.rebind(device)
+                        protected_ui.close()
                     cleanup = best_effort_cleanup(device)
             except Exception as cleanup_error:
                 cleanup = {
@@ -735,6 +744,8 @@ def main() -> int:
             "status": "failed",
             "error": f"{type(error).__name__}: {error}",
             "cleanup": cleanup,
+            "device_lock_fixture": None if protected_ui is None
+            else protected_ui.evidence(),
         })
         write_json(args.output / "run.json", record)
         artifact_manifest(args.output)

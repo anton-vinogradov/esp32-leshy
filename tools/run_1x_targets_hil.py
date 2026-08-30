@@ -30,6 +30,7 @@ from run_1x_product_survey_hil import (
     wait_ui_state,
 )
 from run_1x_ui_typography_hil import normalize_home
+from temporary_device_lock_hil import TemporaryDeviceLockHil
 
 
 SCHEMA = "leshy.targets_product_hil.run.v1"
@@ -211,6 +212,7 @@ def main() -> int:
     write_json(args.output / "run.json", record)
 
     cleanup: dict[str, Any] = {"attempted": False}
+    protected_ui: TemporaryDeviceLockHil | None = None
     try:
         if not args.reuse_exact_flash:
             flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
@@ -230,6 +232,8 @@ def main() -> int:
                     read_only_guaranteed=True, blocked_write_attempts=0,
                     cleanup_complete=True, physical_write_calls=0)
             generation_before = int(recovery["generation"])
+            protected_ui = TemporaryDeviceLockHil(device, app_identity)
+            protected_ui.start()
             first: dict[str, Any] | None = None
             second: dict[str, Any] | None = None
             first_generation = 0
@@ -326,6 +330,7 @@ def main() -> int:
             heap_after = int(released["heap_free_after_release"])
             if heap_before <= 0 or heap_after + 512 < heap_before:
                 raise RuntimeError(f"Targets heap was not released: {released}")
+            protected_ui.close()
             safe = query(device, b"hardware.safe-outputs",
                          "leshy.hardware.safe-outputs.v1", "state")
             require(safe, "safe outputs", buzzer_inactive=True,
@@ -356,6 +361,7 @@ def main() -> int:
             "cleanup": cleanup,
             "flash_count": 0 if args.reuse_exact_flash else 1,
             "radio_tx_commands": 0,
+            "device_lock_fixture": protected_ui.evidence(),
         })
         write_json(args.output / "run.json", record)
         artifact_manifest(args.output)
@@ -369,6 +375,9 @@ def main() -> int:
             try:
                 with PassiveSerial(args.port, 115200, timeout=0.25) as device:
                     synchronize_console(device, 10.0)
+                    if protected_ui is not None:
+                        protected_ui.rebind(device)
+                        protected_ui.close()
                     cleanup = best_effort_cleanup(device)
             except Exception as cleanup_error:
                 cleanup = {
@@ -381,6 +390,8 @@ def main() -> int:
         record.update({"status": "failed", "error": str(error),
                        "trace": trace, "screens": screens,
                        "cleanup": cleanup,
+                       "device_lock_fixture": None if protected_ui is None
+                       else protected_ui.evidence(),
                        "flash_count": 0 if args.reuse_exact_flash else 1})
         write_json(args.output / "run.json", record)
         artifact_manifest(args.output)
