@@ -5326,6 +5326,19 @@ bool startProductSurvey() {
     return true;
 }
 
+void serviceProductSurveyCommitBoundary() {
+    // Terminal commit is intentionally synchronous so the Survey session and
+    // its codec remain single-owner.  SD identification, FAT mount, atomic
+    // write and unmount are nevertheless separate bounded operations.  Feed
+    // only after one operation has returned, then yield to the idle tasks,
+    // preserving the Task-WDT as protection against a call that actually
+    // hangs while avoiding a false reset when several healthy stages together
+    // take longer than the watchdog interval.
+    feedRuntimeSafetyWatchdog();
+    vTaskDelay(1);
+    feedRuntimeSafetyWatchdog();
+}
+
 bool reopenProductSurveyBackendForCommit() {
     const auto required =
         leshy1::kernel::runtime::resourceMask(Resource::UiForeground) |
@@ -5342,6 +5355,7 @@ bool reopenProductSurveyBackendForCommit() {
                     productSurveyRuntime.expectedFingerprint) != 0) {
         return false;
     }
+    serviceProductSurveyCommitBoundary();
 
     leshy1::storage::SdTransportRunResult identity;
     for (std::uint8_t attempt = 1;
@@ -5361,6 +5375,7 @@ bool reopenProductSurveyBackendForCommit() {
                 identityTransport, policy);
             identityTransport.end();
         }
+        serviceProductSurveyCommitBoundary();
         productSurveyRuntime.identityAttempts = attempt;
         productSurveyRuntime.identityTransientRetries =
             static_cast<std::uint8_t>(attempt - 1U);
@@ -5393,6 +5408,7 @@ bool reopenProductSurveyBackendForCommit() {
         }
         vTaskDelay(pdMS_TO_TICKS(
             leshy1::storage::productStartIdentityRetryDelayMs(attempt)));
+        serviceProductSurveyCommitBoundary();
     }
     if (!productSurveyRuntime.identityCleanupComplete ||
         identity.status != leshy1::storage::SdTransportRunStatus::Valid ||
@@ -5419,7 +5435,9 @@ bool reopenProductSurveyBackendForCommit() {
              leshy1::storage::kProductStartMaximumFilesystemAttempts;
          ++attempt) {
         productSurveyRuntime.filesystemMountAttempts = attempt;
+        serviceProductSurveyCommitBoundary();
         filesystemMounted = productSurveyFilesystem.begin();
+        serviceProductSurveyCommitBoundary();
         recordProductSurveyMountOutcome(filesystemMounted);
         productSurveyRuntime.filesystemMountError =
             productSurveyFilesystem.mountError();
@@ -5480,8 +5498,10 @@ bool reopenProductSurveyBackendForCommit() {
         productSurveyRuntime.filesystemMountTransientRetries = attempt;
         vTaskDelay(pdMS_TO_TICKS(
             leshy1::storage::productStartFilesystemRetryDelayMs(attempt)));
+        serviceProductSurveyCommitBoundary();
     }
     if (!filesystemMounted) return false;
+    serviceProductSurveyCommitBoundary();
     productSurveyRuntime.cardCapacityBytes =
         productSurveyFilesystem.cardCapacityBytes();
     productSurveyRuntime.cachedFreeBytes =
@@ -5515,11 +5535,13 @@ bool reopenProductSurveyBackendForCommit() {
         leshy1::storage::authorizeProductStore(media, storeRequest);
     productSurveyRuntime.storeStatus = storePermit.status;
     productSurveyRuntime.storeOpenAttempted = true;
+    serviceProductSurveyCommitBoundary();
     if (!storePermit.allowed() ||
         !productSurveyStore.selectDrive(productSurveyFilesystem.driveNumber()) ||
         !productSurveyStore.openExistingWritable(storePermit)) {
         return false;
     }
+    serviceProductSurveyCommitBoundary();
     surveyStoreRouter.bind(productSurveyStore);
     productSurveyRuntime.backendOpen = true;
     productSurveyRuntime.cleanupComplete = false;
@@ -5528,14 +5550,18 @@ bool reopenProductSurveyBackendForCommit() {
 
 SurveyPipelineStatus stopProductSurvey() {
     if (!reopenProductSurveyBackendForCommit()) {
+        serviceProductSurveyCommitBoundary();
         const bool cleanup = closeProductSurveyBackend();
+        serviceProductSurveyCommitBoundary();
         productSurveyRuntime.status = cleanup
             ? "commit_backend_failed" : "cleanup_failed";
         lastRuntimeEvent = productSurveyRuntime.status;
         return SurveyPipelineStatus::WorkflowRejected;
     }
+    serviceProductSurveyCommitBoundary();
     const SurveyPipelineStatus status = surveyPipeline.stopAndCommit(
         static_cast<std::uint64_t>(esp_timer_get_time()));
+    serviceProductSurveyCommitBoundary();
     // Retain the exact terminal boundary before release/reset returns the UI
     // to Setup. HIL can therefore distinguish codec, recovery, backend and
     // workspace-lifetime failures instead of seeing only `commit_failed`.
@@ -5549,6 +5575,7 @@ SurveyPipelineStatus stopProductSurvey() {
     productSurveyRuntime.commitSessionSize = static_cast<std::uint16_t>(
         surveySession.size());
     const bool cleanup = closeProductSurveyBackend();
+    serviceProductSurveyCommitBoundary();
     productSurveyRuntime.status =
         status == SurveyPipelineStatus::Committed
             ? (cleanup ? "committed" : "cleanup_failed")

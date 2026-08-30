@@ -984,6 +984,32 @@ def main() -> int:
             errors.append(
                 "product Survey must re-identify/reopen exact media before commit"
             )
+        commit_boundary = entry.find(
+            "void serviceProductSurveyCommitBoundary()", product_start
+        )
+        commit_boundary_body = entry[
+            commit_boundary:entry.find(
+                "bool reopenProductSurveyBackendForCommit()", commit_boundary
+            )
+        ] if commit_boundary >= 0 else ""
+        if (
+            "feedRuntimeSafetyWatchdog();" not in commit_boundary_body
+            or "vTaskDelay(1);" not in commit_boundary_body
+        ):
+            errors.append(
+                "product Survey terminal commit is missing cooperative "
+                "Task-WDT stage boundaries"
+            )
+        if product_stop_action.count(
+                "serviceProductSurveyCommitBoundary();") < 4:
+            errors.append(
+                "product Survey commit must yield between backend, codec and "
+                "cleanup stages"
+            )
+        if "esp_task_wdt_delete" in logical_commit_body:
+            errors.append(
+                "product Survey commit must not disable Task-WDT supervision"
+            )
 
     for marker in (
         "setProductSurveyScanActive(true);",
