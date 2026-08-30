@@ -86,11 +86,18 @@ def main() -> int:
             "protected_ui.close()" in evidence_runner and
             '"device_lock_fixture": protected_ui.evidence()' in
                 evidence_runner and
+            'baseline_generation = int(listed["baseline_generation"])' in
+                evidence_runner and
+            'current_generation = int(listed["current_generation"])' in
+                evidence_runner and
+            "current_generation != baseline_generation + 1" in
+                evidence_runner and
             "merge-base" in evidence_runner and
             "descended from firmware source" in evidence_runner,
             "Targets evidence HIL must use disposable RAM-only Device Lock "
-            "admission, prove cleanup and bind a clean descendant harness to "
-            "the exact firmware source")
+            "admission, prove cleanup, use the actually loaded adjacent "
+            "Session pair and bind a clean descendant harness to the exact "
+            "firmware source")
     require(failures,
             "TargetsProductRuntime* targetsProductRuntime = nullptr" in entry and
             "new (std::nothrow) TargetsProductRuntime" in entry and

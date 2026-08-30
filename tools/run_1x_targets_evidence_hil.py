@@ -165,11 +165,6 @@ def main() -> int:
                     fingerprint_matched=True, mounted_read_only=True,
                     read_only_guaranteed=True, blocked_write_attempts=0,
                     cleanup_complete=True, physical_write_calls=0)
-            current_generation = int(recovery["generation"])
-            if current_generation < 2:
-                raise RuntimeError("Targets evidence delta needs a Session pair")
-            baseline_generation = current_generation - 1
-
             # Targets is protected by Device Lock.  Full-regression HIL must
             # not silently depend on a user's product credential, nor write a
             # disposable credential/data key into the product namespace.  Use
@@ -193,8 +188,6 @@ def main() -> int:
             require(listed, "Targets list", status="ready",
                     workspace_allocated=True, page_open=True, view="list",
                     compare_available=True,
-                    baseline_generation=baseline_generation,
-                    current_generation=current_generation,
                     # Targets is a mutation-capable product (favorite/name/
                     # tags/notes/correlation/merge).  The list view has no
                     # write in flight, but it must not claim that the whole
@@ -202,6 +195,19 @@ def main() -> int:
                     read_only=False, write_enabled=False,
                     blocked_write_attempts=0, filesystem_mount_error=0,
                     cleanup_complete=True, lease_mask=13)
+            # Boot recovery is deliberately a snapshot of the last boot.  A
+            # preceding no-reboot Survey commit may advance the atomic media
+            # head after that snapshot.  Bind this read-only gate to the pair
+            # actually decoded by Targets, and require strict adjacency.
+            baseline_generation = int(listed["baseline_generation"])
+            current_generation = int(listed["current_generation"])
+            if (baseline_generation < 1 or
+                    current_generation != baseline_generation + 1):
+                raise RuntimeError(
+                    f"Targets evidence needs an adjacent Session pair: {listed}")
+            if int(recovery["generation"]) > current_generation:
+                raise RuntimeError(
+                    "boot-recovery generation is newer than loaded Targets head")
             target_count = int(listed["target_count"])
             comparison_count = int(listed["comparison_count"])
             if not 1 <= target_count <= 16 or comparison_count != target_count:
