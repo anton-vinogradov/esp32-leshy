@@ -91,7 +91,7 @@ LESHY_UI_TEXT(AutomationTrustFull, Body, 212, "TRUST STORE FULL", u8"НЕТ МЕ
 LESHY_UI_TEXT(AutomationTrustNotFound, Body, 212, "KEY NOT FOUND", u8"КЛЮЧ НЕ НАЙДЕН")
 LESHY_UI_TEXT(AutomationTrustSaveFailed, Body, 212, "KEY SAVE FAILED", u8"КЛЮЧ НЕ СОХРАНЕН")
 LESHY_UI_TEXT(AutomationTrustStoreUnavailable, Body, 212, "TRUST STORE UNAVAILABLE", u8"КЛЮЧИ НЕДОСТУПНЫ")
-LESHY_UI_TEXT(AutomationTrustNoExecution, Meta, 212, "TRUST ONLY · EXECUTION DISCONNECTED", u8"ТОЛЬКО ДОВЕРИЕ · БЕЗ ЗАПУСКА")
+LESHY_UI_TEXT(AutomationTrustNoExecution, Meta, 212, "TRUST ONLY · NO EXECUTION", u8"ДОВЕРИЕ · БЕЗ ЗАПУСКА")
 
 LESHY_UI_TEXT(AirspaceGuardTitle, Body, 206, "AIRSPACE GUARD", u8"ЗАЩИТА ЭФИРА")
 LESHY_UI_TEXT(AirspaceGuardClear, Body, 212, "NO SUSPICIOUS ACTIVITY", u8"ПОДОЗРИТЕЛЬНОГО НЕТ")
