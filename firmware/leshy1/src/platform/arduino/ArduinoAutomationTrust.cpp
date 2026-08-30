@@ -17,8 +17,11 @@ using apps::automation::AutomationTrustRecord;
 using apps::automation::AutomationTrustSnapshot;
 using apps::automation::AutomationTrustStatus;
 
-constexpr const char* kNamespace = "leshy1-auto";
+constexpr const char* kProductNamespace = "leshy1-auto";
+constexpr const char* kHilFixtureNamespace = "leshy1-auto-hil";
 constexpr const char* kTrustRecordKey = "trust.v1";
+constexpr const char* kHilFixtureMarkerKey = "fixture.v1";
+constexpr std::uint32_t kHilFixtureMarker = 0x4c484154U;
 
 class ScopedNvsHandle final {
 public:
@@ -26,9 +29,9 @@ public:
         if (open_) nvs_close(handle_);
     }
 
-    bool open(nvs_open_mode_t mode, esp_err_t* status) {
-        if (status == nullptr || open_) return false;
-        *status = nvs_open(kNamespace, mode, &handle_);
+    bool open(const char* name, nvs_open_mode_t mode, esp_err_t* status) {
+        if (name == nullptr || status == nullptr || open_) return false;
+        *status = nvs_open(name, mode, &handle_);
         open_ = *status == ESP_OK;
         return open_;
     }
@@ -77,13 +80,70 @@ bool sha256(const std::uint8_t* bytes, std::size_t size,
 
 }  // namespace
 
+void NvsAutomationTrustStore::useHilFixtureNamespace(bool enabled) {
+    hilFixtureNamespaceActive_ = enabled;
+}
+
+bool NvsAutomationTrustStore::beginHilFixture() {
+    ScopedNvsHandle storage;
+    esp_err_t openStatus = ESP_FAIL;
+    if (!storage.open(kHilFixtureNamespace, NVS_READWRITE, &openStatus) ||
+        nvs_erase_all(storage.get()) != ESP_OK ||
+        nvs_commit(storage.get()) != ESP_OK ||
+        nvs_set_u32(storage.get(), kHilFixtureMarkerKey,
+                    kHilFixtureMarker) != ESP_OK ||
+        nvs_commit(storage.get()) != ESP_OK) {
+        return false;
+    }
+    hilFixtureNamespaceActive_ = true;
+    return true;
+}
+
+bool NvsAutomationTrustStore::clearHilFixture() {
+    ScopedNvsHandle storage;
+    esp_err_t openStatus = ESP_FAIL;
+    if (!storage.open(kHilFixtureNamespace, NVS_READWRITE, &openStatus)) {
+        hilFixtureNamespaceActive_ = false;
+        return openStatus == ESP_ERR_NVS_NOT_FOUND;
+    }
+    const bool cleared = nvs_erase_all(storage.get()) == ESP_OK &&
+        nvs_commit(storage.get()) == ESP_OK;
+    hilFixtureNamespaceActive_ = false;
+    return cleared && !hilFixtureStatePresent();
+}
+
+bool NvsAutomationTrustStore::hilFixtureStatePresent() const {
+    ScopedNvsHandle storage;
+    esp_err_t openStatus = ESP_FAIL;
+    if (!storage.open(kHilFixtureNamespace, NVS_READONLY, &openStatus)) {
+        return openStatus != ESP_ERR_NVS_NOT_FOUND;
+    }
+    std::uint32_t marker = 0U;
+    const esp_err_t markerStatus =
+        nvs_get_u32(storage.get(), kHilFixtureMarkerKey, &marker);
+    std::size_t trustBytes = 0U;
+    const esp_err_t trustStatus =
+        nvs_get_blob(storage.get(), kTrustRecordKey, nullptr, &trustBytes);
+    const bool markerKnown = markerStatus == ESP_OK ||
+        markerStatus == ESP_ERR_NVS_NOT_FOUND;
+    const bool trustKnown = trustStatus == ESP_OK ||
+        trustStatus == ESP_ERR_NVS_NOT_FOUND;
+    if (!markerKnown || !trustKnown) return true;
+    // Any data in the isolated namespace is cleanup-required, including an
+    // unknown marker value. Never erase unexpected state by treating it as a
+    // fresh fixture.
+    return markerStatus == ESP_OK || trustStatus == ESP_OK;
+}
+
 AutomationTrustLoadStatus NvsAutomationTrustStore::load(
     AutomationTrustSnapshot* output) {
     if (output == nullptr) return AutomationTrustLoadStatus::Error;
     *output = {};
     ScopedNvsHandle storage;
     esp_err_t openStatus = ESP_FAIL;
-    if (!storage.open(NVS_READONLY, &openStatus)) {
+    const char* name = hilFixtureNamespaceActive_
+        ? kHilFixtureNamespace : kProductNamespace;
+    if (!storage.open(name, NVS_READONLY, &openStatus)) {
         return openStatus == ESP_ERR_NVS_NOT_FOUND
             ? AutomationTrustLoadStatus::Missing
             : AutomationTrustLoadStatus::Error;
@@ -125,7 +185,9 @@ bool NvsAutomationTrustStore::save(const AutomationTrustSnapshot& snapshot) {
     }
     ScopedNvsHandle storage;
     esp_err_t openStatus = ESP_FAIL;
-    if (!storage.open(NVS_READWRITE, &openStatus) ||
+    const char* name = hilFixtureNamespaceActive_
+        ? kHilFixtureNamespace : kProductNamespace;
+    if (!storage.open(name, NVS_READWRITE, &openStatus) ||
         nvs_set_blob(storage.get(), kTrustRecordKey, record.data(),
                      record.size()) != ESP_OK ||
         nvs_commit(storage.get()) != ESP_OK) {

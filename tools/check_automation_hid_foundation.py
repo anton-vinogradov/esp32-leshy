@@ -55,10 +55,19 @@ TRUST_BOARD_READER_HEADER = (
 TRUST_BOARD_READER_SOURCE = (
     ROOT / "firmware/leshy1/src/platform/arduino/BoardAutomationTrustBundleReader.cpp"
 )
+TRUST_HIL_FIXTURE_HEADER = (
+    ROOT / "firmware/leshy1/src/platform/arduino/BoardAutomationTrustHilFixture.h"
+)
+TRUST_HIL_FIXTURE_SOURCE = (
+    ROOT / "firmware/leshy1/src/platform/arduino/BoardAutomationTrustHilFixture.cpp"
+)
 TRUST_BUILDER = ROOT / "tools/build_automation_trust_bundle.py"
 TRUST_WORKFLOW = ROOT / ".github/workflows/automation-trust-bundle.yml"
 PHYSICAL_HIL_RUNNER = ROOT / "tools/run_1x_automation_inspector_hil.py"
 TRUST_UI_HIL_RUNNER = ROOT / "tools/run_1x_automation_trust_ui_hil.py"
+TRUST_POSITIVE_HIL_RUNNER = (
+    ROOT / "tools/run_1x_automation_trust_positive_hil.py"
+)
 TEST = ROOT / "tests/native/automation_package_tests.cpp"
 DOC = ROOT / "docs/v1/AUTOMATION_HID.md"
 DOC_RU = ROOT / "docs/v1/AUTOMATION_HID.ru.md"
@@ -85,10 +94,16 @@ def main() -> int:
         encoding="utf-8")
     trust_board_reader_source = TRUST_BOARD_READER_SOURCE.read_text(
         encoding="utf-8")
+    trust_hil_fixture_header = TRUST_HIL_FIXTURE_HEADER.read_text(
+        encoding="utf-8")
+    trust_hil_fixture_source = TRUST_HIL_FIXTURE_SOURCE.read_text(
+        encoding="utf-8")
     trust_builder = TRUST_BUILDER.read_text(encoding="utf-8")
     trust_workflow = TRUST_WORKFLOW.read_text(encoding="utf-8")
     physical_hil_runner = PHYSICAL_HIL_RUNNER.read_text(encoding="utf-8")
     trust_ui_hil_runner = TRUST_UI_HIL_RUNNER.read_text(encoding="utf-8")
+    trust_positive_hil_runner = TRUST_POSITIVE_HIL_RUNNER.read_text(
+        encoding="utf-8")
     test = TEST.read_text(encoding="utf-8")
     docs = DOC.read_text(encoding="utf-8")
     docs_ru = DOC_RU.read_text(encoding="utf-8")
@@ -146,7 +161,7 @@ def main() -> int:
         "decodeAutomationTrustRecord",
         'std::memcmp(bytes, "LHAK", 4U)',
         "kAutomationTrustBundleBytes = 128U",
-        'kNamespace = "leshy1-auto"',
+        'kProductNamespace = "leshy1-auto"',
         'kTrustRecordKey = "trust.v1"',
         "mbedtls_ecp_check_pubkey",
         "mbedtls_ecdsa_verify",
@@ -265,6 +280,35 @@ def main() -> int:
         if token in fixture_contract:
             failures.append(f"HIL fixture contains forbidden path: {token}")
 
+    trust_fixture_contract = "\n".join(
+        (trust_hil_fixture_header, trust_hil_fixture_source,
+         arduino_trust_header, arduino_trust_source))
+    for token in (
+        'kHilFixtureNamespace = "leshy1-auto-hil"',
+        'kHilFixtureMarkerKey = "fixture.v1"',
+        "beginHilFixture()",
+        "clearHilFixture()",
+        "const storage::WritePermit& permit",
+        "const storage::ScratchCleanupPermit& permit",
+        "io.syncFile(kAutomationTrustBundleName)",
+        "io.syncDirectory()",
+        'failure = "scan_unknown_entry"',
+        "observed != expected",
+        "f_unlink(child)",
+        "f_unlink(root)",
+    ):
+        if token not in trust_fixture_contract:
+            failures.append(f"missing bounded trust HIL fixture token: {token}")
+    if 'kAutomationTrustBundleName = "automation-owner.lhak"' not in \
+            trust_board_reader_header:
+        failures.append("missing exact public trust bundle name")
+    for token in (
+        "/leshy/automation/v1", "f_mkfs(", "format(", "WiFi.",
+        "NimBLE", "USBHID", "ActionDispatcher", "Keyboard.", "Mouse.",
+    ):
+        if token in trust_fixture_contract:
+            failures.append(f"trust HIL fixture contains forbidden path: {token}")
+
     required_physical = (
         '\\"leshy.automation.inspector.state.v1\\"',
         '\\"leshy.automation.inspector.fixture.v1\\"',
@@ -330,6 +374,31 @@ def main() -> int:
     for token in required_trust_ui_runner:
         if token not in trust_ui_hil_runner:
             failures.append(f"missing physical trust UI runner guard: {token}")
+
+    required_trust_positive_runner = (
+        'BOARD_PORT = "/dev/cu.usbmodem2101"',
+        'FORBIDDEN_PORTS = {"/dev/cu.usbmodem1101"}',
+        '"trust_namespace": "leshy1-auto-hil"',
+        '"product_trust_namespace_written_or_erased": False',
+        '"private_key_used_or_stored": False',
+        '"radio_tx_commands": 0',
+        '"wifi_host_touched": False',
+        '"full_hil": False',
+        '"delta_only": True',
+        '"--skip-flash"',
+        'stage_public_bundle(device, bundle)',
+        'trust_fixture_command(',
+        'device_lock_fixture_command(device, "cleanup")',
+        'wipe_pin(lock_pin)',
+        'reset_capture(',
+        'product_state_matches(product_trust_before, final_trust)',
+        'private_key_received=False',
+        'product_namespace_written_or_erased=False',
+        'rf_transmit_attempts=0, action_invocations=0, hid_reports=0',
+    )
+    for token in required_trust_positive_runner:
+        if token not in trust_positive_hil_runner:
+            failures.append(f"missing positive trust HIL guard: {token}")
 
     required_tests = (
         "testTrustedActionPackageIsInspectedWithoutExecution",

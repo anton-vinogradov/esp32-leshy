@@ -103,6 +103,7 @@
 #include "platform/arduino/BoardAutomationPackageReader.h"
 #include "platform/arduino/BoardAutomationPackageHilFixture.h"
 #include "platform/arduino/BoardAutomationTrustBundleReader.h"
+#include "platform/arduino/BoardAutomationTrustHilFixture.h"
 #include "platform/arduino/BoardStorageAdapter.h"
 #include "platform/arduino/BoardTouchInput.h"
 #include "platform/arduino/BoardBlePassiveScanner.h"
@@ -398,6 +399,8 @@ using leshy1::platform::arduino::BoardAutomationPackageReader;
 using leshy1::platform::arduino::BoardAutomationPackageStatus;
 using leshy1::platform::arduino::BoardAutomationPackageHilFixture;
 using leshy1::platform::arduino::BoardAutomationPackageHilFixtureReport;
+using leshy1::platform::arduino::BoardAutomationTrustHilFixture;
+using leshy1::platform::arduino::BoardAutomationTrustHilFixtureReport;
 using leshy1::platform::arduino::kAutomationPackageLibraryRoot;
 using leshy1::platform::arduino::BoardStorageAdapter;
 using leshy1::platform::arduino::BoardTouchInput;
@@ -510,6 +513,14 @@ constexpr const char* kAutomationInspectorFixtureBeginPrefix =
     "automation.inspector-fixture begin disposable-write ";
 constexpr const char* kAutomationInspectorFixtureCleanupPrefix =
     "automation.inspector-fixture cleanup disposable-write ";
+constexpr const char* kAutomationTrustFixtureStagePrefix =
+    "automation.trust-fixture stage ";
+constexpr const char* kAutomationTrustFixtureBeginPrefix =
+    "automation.trust-fixture begin disposable-write ";
+constexpr const char* kAutomationTrustFixtureResumePrefix =
+    "automation.trust-fixture resume disposable-write ";
+constexpr const char* kAutomationTrustFixtureCleanupPrefix =
+    "automation.trust-fixture cleanup disposable-write ";
 constexpr const char* kLittleFsParityPrefix =
     "storage.littlefs.parity disposable-ota1 ";
 constexpr const char* kLittleFsResetPrefix =
@@ -579,6 +590,15 @@ char automationInspectorPackageRoot[leshy1::storage::kScratchPathMax] =
     "/leshy/automation/v1";
 char automationInspectorFixtureFingerprint[33] = {};
 char automationInspectorFixtureRunId[33] = {};
+bool automationTrustHilFixtureActive = false;
+bool automationTrustHilFixtureCleanupRequired = false;
+char automationTrustBundleRoot[leshy1::storage::kScratchPathMax] =
+    "/leshy/automation/v1";
+char automationTrustFixtureFingerprint[33] = {};
+char automationTrustFixtureRunId[33] = {};
+char automationTrustFixtureSha256[65] = {};
+AutomationTrustBundle automationTrustFixtureStaging{};
+std::uint8_t automationTrustFixtureStageMask = 0U;
 SessionCatalog sessionCatalog;
 struct TargetsProductRuntime final {
     TargetCatalog* catalogStorage = nullptr;
@@ -2232,9 +2252,10 @@ constexpr std::size_t kUsbRxBufferCapacity = 576;
 static_assert(kUsbRxBufferCapacity >= kUsbCommandCapacity + 1U,
               "USB RX queue must hold a maximum frame and CRLF");
 constexpr char kLongestConsoleCommand[] =
-    "storage.littlefs.reset recover read-only "
-    "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff "
-    "s3-littlefs-reset-20260818-b6 6";
+    "automation.trust-fixture cleanup disposable-write "
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF "
+    "0123456789abcdef0123456789abcdef "
+    "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 static_assert(sizeof(kLongestConsoleCommand) <= kConsoleCommandCapacity,
               "console command buffer cannot hold the longest command");
 char usbCommand[kUsbCommandCapacity] = {};
@@ -3054,7 +3075,8 @@ void readAutomationTrustBundleForReview() {
     if (filesystem.beginReadOnly() && filesystem.readOnlyGuaranteed()) {
         BoardAutomationTrustBundleReader reader(sdSessionStoreIoWorkspace);
         automationTrustBundleReadStatus = reader.read(
-            filesystem.driveNumber(), &automationTrustBundleScratch);
+            filesystem.driveNumber(), automationTrustBundleRoot,
+            &automationTrustBundleScratch);
     } else {
         automationTrustUiResult =
             AutomationTrustUiResult::StorageUnavailable;
@@ -30867,6 +30889,8 @@ void emitAutomationTrustState(Stream& reply) {
         "\"confirmation_fresh\":%s,\"device_unlocked\":%s,"
         "\"bundle_read_status\":\"%s\",\"bundle_parse_status\":\"%s\","
         "\"bundle_root\":\"%s\",\"bundle_name\":\"%s\","
+        "\"fixture_active\":%s,\"fixture_cleanup_required\":%s,"
+        "\"fixture_namespace_selected\":%s,"
         "\"public_keys_only\":true,\"private_key_stored\":false,"
         "\"execution_connected\":false,\"action_invocations\":0,"
         "\"hid_reports\":0,\"rf_transmit_attempts\":0,"
@@ -30892,10 +30916,517 @@ void emitAutomationTrustState(Stream& reply) {
             automationTrustBundleReadStatus),
         leshy1::apps::automation::automationTrustBundleStatusName(
             automationTrustBundleParseStatus),
-        leshy1::platform::arduino::kAutomationTrustBundleRoot,
+        automationTrustBundleRoot,
         leshy1::platform::arduino::kAutomationTrustBundleName,
+        automationTrustHilFixtureActive ? "true" : "false",
+        automationTrustHilFixtureCleanupRequired ? "true" : "false",
+        automationTrustBackend.hilFixtureNamespaceActive() ? "true" : "false",
         appRuntime.activeApp(),
         static_cast<unsigned long>(appRuntime.activeResources()));
+    reply.println(line);
+}
+
+void clearAutomationTrustFixtureStaging() {
+    volatile std::uint8_t* cursor = automationTrustFixtureStaging.data();
+    for (std::size_t index = 0U;
+         index < automationTrustFixtureStaging.size(); ++index) {
+        cursor[index] = 0U;
+    }
+    automationTrustFixtureStageMask = 0U;
+}
+
+void resetAutomationTrustFixtureRuntime() {
+    automationTrustBackend.useHilFixtureNamespace(false);
+    automationTrustHilFixtureActive = false;
+    automationTrustHilFixtureCleanupRequired = false;
+    automationTrustFixtureFingerprint[0] = '\0';
+    automationTrustFixtureRunId[0] = '\0';
+    automationTrustFixtureSha256[0] = '\0';
+    std::snprintf(automationTrustBundleRoot, sizeof(automationTrustBundleRoot),
+                  "%s",
+                  leshy1::platform::arduino::kAutomationTrustBundleRoot);
+    clearAutomationTrustFixtureStaging();
+}
+
+int automationTrustHexNibble(char value) {
+    if (value >= '0' && value <= '9') return value - '0';
+    if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+    return -1;
+}
+
+bool automationTrustSha256Hex(const std::uint8_t* bytes, std::size_t size,
+                              char* output, std::size_t capacity) {
+    if (bytes == nullptr || size == 0U || output == nullptr || capacity < 65U) {
+        return false;
+    }
+    std::array<std::uint8_t, 32U> digest{};
+    mbedtls_sha256_context context;
+    mbedtls_sha256_init(&context);
+    const bool valid = mbedtls_sha256_starts(&context, 0) == 0 &&
+        mbedtls_sha256_update(&context, bytes, size) == 0 &&
+        mbedtls_sha256_finish(&context, digest.data()) == 0;
+    mbedtls_sha256_free(&context);
+    constexpr char hex[] = "0123456789abcdef";
+    if (valid) {
+        for (std::size_t index = 0U; index < digest.size(); ++index) {
+            output[index * 2U] = hex[digest[index] >> 4U];
+            output[index * 2U + 1U] = hex[digest[index] & 0x0fU];
+        }
+        output[64U] = '\0';
+    } else {
+        output[0] = '\0';
+    }
+    volatile std::uint8_t* cursor = digest.data();
+    for (std::size_t index = 0U; index < digest.size(); ++index) {
+        cursor[index] = 0U;
+    }
+    return valid;
+}
+
+bool validAutomationTrustFixtureBundle(
+    const AutomationTrustBundle& bundle, const char* expectedSha256,
+    AutomationTrustedKey* parsed, char* observedSha256,
+    std::size_t observedCapacity) {
+    if (expectedSha256 == nullptr || std::strlen(expectedSha256) != 64U ||
+        parsed == nullptr || observedSha256 == nullptr) {
+        return false;
+    }
+    *parsed = {};
+    if (!automationTrustSha256Hex(bundle.data(), bundle.size(),
+                                  observedSha256, observedCapacity) ||
+        std::strcmp(observedSha256, expectedSha256) != 0 ||
+        leshy1::apps::automation::parseAutomationTrustBundle(
+            bundle.data(), bundle.size(), parsed) !=
+            AutomationTrustBundleStatus::Parsed ||
+        !leshy1::platform::arduino::validateAutomationP256PublicKey(
+            parsed->publicKey)) {
+        *parsed = {};
+        return false;
+    }
+    std::array<std::uint8_t,
+               leshy1::apps::automation::kAutomationKeyIdBytes> derived{};
+    const bool bound =
+        leshy1::platform::arduino::deriveAutomationP256KeyId(
+            parsed->publicKey, &derived) &&
+        std::equal(derived.begin(), derived.end(), parsed->keyId.begin());
+    if (!bound) *parsed = {};
+    return bound;
+}
+
+bool parseAutomationTrustFixtureScope(
+    const char* command, const char* prefix, char* fingerprint,
+    std::size_t fingerprintCapacity, char* runId, std::size_t runIdCapacity,
+    char* sha256, std::size_t shaCapacity) {
+    if (command == nullptr || prefix == nullptr || fingerprint == nullptr ||
+        runId == nullptr || sha256 == nullptr || fingerprintCapacity < 33U ||
+        runIdCapacity < 33U || shaCapacity < 65U ||
+        std::strncmp(command, prefix, std::strlen(prefix)) != 0) {
+        return false;
+    }
+    char extra = '\0';
+    const int parsed = std::sscanf(
+        command + std::strlen(prefix),
+        "%32[0-9A-F] %32[A-Za-z0-9_-] %64[0-9a-f] %c",
+        fingerprint, runId, sha256, &extra);
+    return parsed == 3 && std::strlen(fingerprint) == 32U &&
+        std::strlen(runId) == 32U && std::strlen(sha256) == 64U;
+}
+
+void emitAutomationTrustFixtureStage(Stream& reply, const char* command) {
+    unsigned chunk = 0U;
+    char encoded[65] = {};
+    char extra = '\0';
+    const bool parsed = std::sscanf(
+        command + std::strlen(kAutomationTrustFixtureStagePrefix),
+        "%u %64[0-9a-f] %c", &chunk, encoded, &extra) == 2 &&
+        chunk < 4U && std::strlen(encoded) == 64U;
+    const std::uint8_t expectedMask = static_cast<std::uint8_t>(
+        chunk == 0U ? 0U : (1U << chunk) - 1U);
+    const bool admissible = hilSession.active() && uiController.isRoot() &&
+        !appRuntime.running() && !automationTrustHilFixtureActive &&
+        !automationTrustHilFixtureCleanupRequired && parsed &&
+        automationTrustFixtureStageMask == expectedMask;
+    bool decoded = admissible;
+    if (decoded) {
+        for (std::size_t index = 0U; index < 32U; ++index) {
+            const int high = automationTrustHexNibble(encoded[index * 2U]);
+            const int low = automationTrustHexNibble(encoded[index * 2U + 1U]);
+            if (high < 0 || low < 0) {
+                decoded = false;
+                break;
+            }
+            automationTrustFixtureStaging[
+                static_cast<std::size_t>(chunk) * 32U + index] =
+                static_cast<std::uint8_t>((high << 4) | low);
+        }
+    }
+    if (decoded) {
+        automationTrustFixtureStageMask = static_cast<std::uint8_t>(
+            automationTrustFixtureStageMask | (1U << chunk));
+    } else if (admissible) {
+        clearAutomationTrustFixtureStaging();
+    }
+    const char* status = !hilSession.active()
+        ? "hil_session_required"
+        : !uiController.isRoot() || appRuntime.running()
+              ? "ui_not_idle"
+              : automationTrustHilFixtureActive ||
+                    automationTrustHilFixtureCleanupRequired
+                    ? "fixture_state_mismatch"
+                    : !parsed
+                          ? "invalid_chunk"
+                          : automationTrustFixtureStageMask !=
+                                static_cast<std::uint8_t>(expectedMask |
+                                                          (1U << chunk))
+                                ? "chunk_order_mismatch"
+                                : "staged";
+    char line[512] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.automation.trust.fixture.v1\","
+        "\"kind\":\"stage\",\"status\":\"%s\",\"chunk\":%u,"
+        "\"stage_mask\":%u,\"staging_complete\":%s,"
+        "\"private_key_received\":false,\"storage_written\":false,"
+        "\"product_namespace_written_or_erased\":false,"
+        "\"rf_transmit_attempts\":0}",
+        status, chunk, static_cast<unsigned>(automationTrustFixtureStageMask),
+        automationTrustFixtureStageMask == 0x0fU ? "true" : "false");
+    reply.println(line);
+}
+
+void emitAutomationTrustFixture(Stream& reply, const char* command,
+                                const char* operation) {
+    const bool begin = std::strcmp(operation, "begin") == 0;
+    const bool resume = std::strcmp(operation, "resume") == 0;
+    const bool cleanup = std::strcmp(operation, "cleanup") == 0;
+    const char* prefix = begin
+        ? kAutomationTrustFixtureBeginPrefix
+        : resume ? kAutomationTrustFixtureResumePrefix
+                 : kAutomationTrustFixtureCleanupPrefix;
+    char expectedFingerprint[33] = {};
+    char runId[33] = {};
+    char expectedSha256[65] = {};
+    if (!parseAutomationTrustFixtureScope(
+            command, prefix, expectedFingerprint,
+            sizeof(expectedFingerprint), runId, sizeof(runId),
+            expectedSha256, sizeof(expectedSha256))) {
+        reply.println(
+            "{\"schema\":\"leshy.automation.trust.fixture.v1\","
+            "\"kind\":\"error\",\"status\":\"invalid_explicit_scope\","
+            "\"active\":false,\"private_key_received\":false,"
+            "\"product_namespace_written_or_erased\":false,"
+            "\"rf_transmit_attempts\":0}");
+        return;
+    }
+
+    auto& cidHex = sdPhysicalEvidence.cidHex;
+    cidHex[0] = '\0';
+    const bool sessionActive = hilSession.active();
+    const bool idleUi = uiController.isRoot() && !appRuntime.running();
+    const bool scopeMatchesRuntime =
+        automationTrustFixtureFingerprint[0] == '\0' ||
+        (std::strcmp(expectedFingerprint,
+                     automationTrustFixtureFingerprint) == 0 &&
+         std::strcmp(runId, automationTrustFixtureRunId) == 0 &&
+         std::strcmp(expectedSha256, automationTrustFixtureSha256) == 0);
+    const bool fixtureStateAdmissible = begin
+        ? !automationTrustHilFixtureActive &&
+              !automationTrustHilFixtureCleanupRequired &&
+              automationTrustFixtureStageMask == 0x0fU &&
+              !automationTrustBackend.hilFixtureStatePresent()
+        : resume
+              ? !automationTrustHilFixtureActive &&
+                    automationTrustBackend.hilFixtureStatePresent() &&
+                    scopeMatchesRuntime
+              : automationTrustHilFixtureCleanupRequired &&
+                    scopeMatchesRuntime;
+    const bool resourcesAcquired = sessionActive && idleUi &&
+        fixtureStateAdmissible && resourceBroker.acquire(
+            kSdIdentificationOwner,
+            leshy1::storage::kSdIdentificationResources);
+    const std::uint32_t ownedDuring =
+        resourceBroker.ownedBy(kSdIdentificationOwner);
+
+    BoardSdSpiTransport identityTransport;
+    const bool identityAdapterBegun =
+        resourcesAcquired && identityTransport.begin();
+    leshy1::storage::SdTransportRunResult identity;
+    if (identityAdapterBegun) {
+        leshy1::storage::SdTransportRunPolicy policy;
+        policy.allowPhysical = true;
+        policy.explicitlySelected = true;
+        policy.identificationOnly = true;
+        policy.ownedResources = ownedDuring;
+        identity = leshy1::storage::runSdIdentificationStateMachine(
+            leshy1::storage::defaultSdIdentificationPlan(),
+            identityTransport, policy);
+        identityTransport.end();
+    }
+    const bool identityCleanup = identityTransport.cleanupComplete();
+    formatCidFingerprint(identity.identity, cidHex,
+                         sizeof(sdPhysicalEvidence.cidHex));
+    const bool fingerprintMatched =
+        identity.status == leshy1::storage::SdTransportRunStatus::Valid &&
+        std::strcmp(cidHex, expectedFingerprint) == 0;
+
+    char scratchPath[leshy1::storage::kScratchPathMax] = {};
+    std::snprintf(scratchPath, sizeof(scratchPath), "%s%s",
+                  leshy1::storage::kScratchRoot, runId);
+    BoardSdFilesystem filesystem;
+    const bool mounted = fingerprintMatched && filesystem.begin();
+    const std::uint64_t cardCapacity =
+        mounted ? filesystem.cardCapacityBytes() : 0U;
+    const std::uint64_t filesystemCapacity =
+        mounted ? filesystem.filesystemCapacityBytes() : 0U;
+    const std::uint64_t freeBytes = mounted ? filesystem.freeBytes() : 0U;
+    const bool capacityMatched = mounted &&
+        cardCapacity == identity.identity.capacityBytes &&
+        filesystemCapacity != 0U && filesystemCapacity <= cardCapacity;
+    const bool scratchExists = mounted && filesystem.exists(scratchPath);
+
+    leshy1::storage::MediaIdentity media;
+    media.present = capacityMatched;
+    media.kind = leshy1::storage::MediaKind::Sd;
+    media.fingerprint = cidHex;
+    media.capacityBytes = cardCapacity;
+    media.freeBytes = freeBytes;
+    leshy1::storage::WritePermit writePermit;
+    leshy1::storage::ScratchCleanupPermit cleanupPermit;
+    if (begin) {
+        leshy1::storage::WriteRequest request;
+        request.explicitlyDisposable = true;
+        request.expectedFingerprint = expectedFingerprint;
+        request.runId = runId;
+        request.scratchExists = scratchExists;
+        request.requiredBytes = leshy1::platform::arduino::
+            kAutomationTrustHilFixtureRequiredBytes;
+        request.reserveBytes = 1024U * 1024U;
+        writePermit = leshy1::storage::authorizeScratchWrite(media, request);
+    } else {
+        leshy1::storage::ScratchCleanupRequest request;
+        request.explicitlyDisposable = true;
+        request.expectedFingerprint = expectedFingerprint;
+        request.runId = runId;
+        request.scratchExists = scratchExists;
+        cleanupPermit =
+            leshy1::storage::authorizeScratchCleanup(media, request);
+    }
+
+    BoardAutomationTrustHilFixtureReport fixtureReport;
+    AutomationTrustBundle observed{};
+    AutomationTrustedKey parsedKey{};
+    char observedSha256[65] = {};
+    bool bundleValid = false;
+    bool fixtureOperationComplete = false;
+    bool namespacePrepared = false;
+    bool fixtureStoreRestored = false;
+    bool namespaceCleared = false;
+    bool productRestored = false;
+    if (mounted && capacityMatched) {
+        BoardAutomationTrustHilFixture fixture(
+            filesystem.driveNumber(), sdSessionStoreIoWorkspace);
+        if (begin && writePermit.allowed()) {
+            bundleValid = validAutomationTrustFixtureBundle(
+                automationTrustFixtureStaging, expectedSha256, &parsedKey,
+                observedSha256, sizeof(observedSha256));
+            fixtureOperationComplete = bundleValid && fixture.create(
+                writePermit, automationTrustFixtureStaging, &fixtureReport);
+            namespacePrepared = fixtureOperationComplete &&
+                automationTrustBackend.beginHilFixture();
+            fixtureStoreRestored = namespacePrepared &&
+                automationTrustStore.restore() &&
+                automationTrustStore.loadStatus() ==
+                    leshy1::apps::automation::AutomationTrustLoadStatus::Missing &&
+                automationTrustStore.snapshot().count == 0U &&
+                automationTrustStore.snapshot().generation == 0U;
+        } else if (!begin && cleanupPermit.allowed()) {
+            fixtureOperationComplete = fixture.inspect(
+                cleanupPermit.scratchPath, &observed, &fixtureReport);
+            bundleValid = fixtureOperationComplete &&
+                validAutomationTrustFixtureBundle(
+                    observed, expectedSha256, &parsedKey, observedSha256,
+                    sizeof(observedSha256));
+            if (resume && bundleValid) {
+                automationTrustBackend.useHilFixtureNamespace(true);
+                fixtureStoreRestored = automationTrustStore.restore();
+                fixtureOperationComplete = fixtureStoreRestored;
+            } else if (cleanup && bundleValid) {
+                bool isolatedEmpty = false;
+                if (automationTrustHilFixtureActive) {
+                    isolatedEmpty =
+                        automationTrustStore.snapshot().count == 0U;
+                } else if (automationTrustBackend.hilFixtureStatePresent()) {
+                    automationTrustBackend.useHilFixtureNamespace(true);
+                    fixtureStoreRestored = automationTrustStore.restore();
+                    isolatedEmpty = fixtureStoreRestored &&
+                        automationTrustStore.snapshot().count == 0U;
+                } else {
+                    // A failed begin may have committed the public SD fixture
+                    // before the isolated marker existed. There is no HIL NVS
+                    // state to preserve in that case.
+                    isolatedEmpty = true;
+                }
+                namespaceCleared = isolatedEmpty &&
+                    (!automationTrustBackend.hilFixtureStatePresent() ||
+                     automationTrustBackend.clearHilFixture());
+                automationTrustBackend.useHilFixtureNamespace(false);
+                productRestored = namespaceCleared &&
+                    automationTrustStore.restore();
+                BoardAutomationTrustHilFixtureReport removalReport;
+                const bool removed = productRestored && fixture.remove(
+                    cleanupPermit, observed, &removalReport);
+                if (removed || !fixtureOperationComplete) {
+                    fixtureReport = removalReport;
+                } else {
+                    fixtureReport.cleanupComplete =
+                        removalReport.cleanupComplete;
+                    fixtureReport.filesRemoved = removalReport.filesRemoved;
+                    fixtureReport.lastFailure = removalReport.lastFailure;
+                    fixtureReport.lastFresult = removalReport.lastFresult;
+                }
+                fixtureOperationComplete = removed;
+            }
+        }
+    }
+
+    if ((begin && fixtureStoreRestored) || (resume && fixtureStoreRestored)) {
+        std::snprintf(automationTrustFixtureFingerprint,
+                      sizeof(automationTrustFixtureFingerprint), "%s",
+                      expectedFingerprint);
+        std::snprintf(automationTrustFixtureRunId,
+                      sizeof(automationTrustFixtureRunId), "%s", runId);
+        std::snprintf(automationTrustFixtureSha256,
+                      sizeof(automationTrustFixtureSha256), "%s",
+                      expectedSha256);
+        std::snprintf(automationTrustBundleRoot,
+                      sizeof(automationTrustBundleRoot), "%s", scratchPath);
+        automationTrustHilFixtureActive = true;
+        automationTrustHilFixtureCleanupRequired = true;
+        resetAutomationTrustUi();
+    } else if (cleanup && fixtureOperationComplete && namespaceCleared &&
+               productRestored) {
+        resetAutomationTrustFixtureRuntime();
+        resetAutomationTrustUi();
+    } else if (begin && mounted && scratchExists == false &&
+               filesystem.exists(scratchPath)) {
+        automationTrustHilFixtureCleanupRequired = true;
+    }
+    clearAutomationTrustFixtureStaging();
+    observed.fill(0U);
+
+    filesystem.end();
+    const bool filesystemCleanup = filesystem.cleanupComplete();
+    resourceBroker.releaseAll(kSdIdentificationOwner);
+    const std::uint32_t ownedAfter =
+        resourceBroker.ownedBy(kSdIdentificationOwner);
+    const bool complete = sessionActive && idleUi && fixtureStateAdmissible &&
+        resourcesAcquired && identityAdapterBegun && identityCleanup &&
+        fingerprintMatched && mounted && capacityMatched && bundleValid &&
+        fixtureOperationComplete && filesystemCleanup && ownedAfter == 0U &&
+        (begin || resume ? fixtureStoreRestored
+                         : namespaceCleared && productRestored);
+    const char* status = !sessionActive
+        ? "hil_session_required"
+        : !idleUi
+              ? "ui_not_idle"
+              : !fixtureStateAdmissible
+                    ? "fixture_state_mismatch"
+                    : !resourcesAcquired
+                          ? "resources_unavailable"
+                          : !identityAdapterBegun
+                                ? "identity_adapter_begin_failed"
+                                : identity.status != leshy1::storage::
+                                      SdTransportRunStatus::Valid
+                                      ? "identity_failed"
+                                      : !fingerprintMatched
+                                            ? "fingerprint_mismatch"
+                                            : !mounted
+                                                  ? "mount_failed"
+                                                  : !capacityMatched
+                                                        ? "capacity_mismatch"
+                                                        : begin &&
+                                                              !writePermit.allowed()
+                                                              ? "write_permit_rejected"
+                                                              : !begin &&
+                                                                    !cleanupPermit.allowed()
+                                                                    ? "cleanup_permit_rejected"
+                                                                    : !bundleValid
+                                                                          ? "bundle_invalid"
+                                                                          : !fixtureOperationComplete
+                                                                                ? "fixture_operation_failed"
+                                                                                : !filesystemCleanup
+                                                                                      ? "filesystem_cleanup_failed"
+                                                                                      : ownedAfter != 0U
+                                                                                            ? "lease_cleanup_failed"
+                                                                                            : !complete
+                                                                                                  ? "namespace_operation_failed"
+                                                                                                  : "complete";
+    char keyId[17] = {};
+    for (std::size_t index = 0U; index < parsedKey.keyId.size(); ++index) {
+        std::snprintf(keyId + index * 2U, sizeof(keyId) - index * 2U,
+                      "%02x", parsedKey.keyId[index]);
+    }
+    diagnosticJson[0] = '\0';
+    auto& line = diagnosticJson;
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.automation.trust.fixture.v1\","
+        "\"kind\":\"%s\",\"status\":\"%s\",\"complete\":%s,"
+        "\"expected_fingerprint\":\"%s\",\"cid_hex\":\"%s\","
+        "\"fingerprint_matched\":%s,\"run_id\":\"%s\","
+        "\"scratch_path\":\"%s\",\"scratch_preexisting\":%s,"
+        "\"expected_sha256\":\"%s\",\"observed_sha256\":\"%s\","
+        "\"bundle_valid\":%s,\"key_id\":\"%s\","
+        "\"fixture_active\":%s,\"cleanup_required\":%s,"
+        "\"fixture_namespace_selected\":%s,"
+        "\"fixture_store_restored\":%s,\"namespace_prepared\":%s,"
+        "\"namespace_cleared\":%s,\"product_restored\":%s,"
+        "\"prepared\":%s,\"bundle_written\":%s,"
+        "\"file_barrier_complete\":%s,"
+        "\"directory_barrier_complete\":%s,\"exact_entries\":%s,"
+        "\"bundle_read\":%s,\"bundle_matched\":%s,"
+        "\"cleanup_complete\":%s,\"files_removed\":%u,"
+        "\"bytes_written\":%llu,\"write_calls\":%lu,"
+        "\"file_syncs\":%lu,\"directory_syncs\":%lu,"
+        "\"last_failure\":\"%s\",\"last_fresult\":%u,"
+        "\"identity_cleanup\":%s,\"filesystem_cleanup\":%s,"
+        "\"gpio21_stable_high\":%s,\"owned_during\":%lu,"
+        "\"owned_after\":%lu,\"private_key_received\":false,"
+        "\"product_namespace_written_or_erased\":false,"
+        "\"whole_nvs_read_or_copied\":false,\"format_allowed\":false,"
+        "\"rf_transmit_attempts\":0,\"action_invocations\":0,"
+        "\"hid_reports\":0}",
+        operation, status, complete ? "true" : "false",
+        expectedFingerprint, cidHex,
+        fingerprintMatched ? "true" : "false", runId, scratchPath,
+        scratchExists ? "true" : "false", expectedSha256, observedSha256,
+        bundleValid ? "true" : "false", keyId,
+        automationTrustHilFixtureActive ? "true" : "false",
+        automationTrustHilFixtureCleanupRequired ? "true" : "false",
+        automationTrustBackend.hilFixtureNamespaceActive() ? "true" : "false",
+        fixtureStoreRestored ? "true" : "false",
+        namespacePrepared ? "true" : "false",
+        namespaceCleared ? "true" : "false",
+        productRestored ? "true" : "false",
+        fixtureReport.prepared ? "true" : "false",
+        fixtureReport.bundleWritten ? "true" : "false",
+        fixtureReport.fileBarrierComplete ? "true" : "false",
+        fixtureReport.directoryBarrierComplete ? "true" : "false",
+        fixtureReport.exactEntries ? "true" : "false",
+        fixtureReport.bundleRead ? "true" : "false",
+        fixtureReport.bundleMatched ? "true" : "false",
+        fixtureReport.cleanupComplete ? "true" : "false",
+        static_cast<unsigned>(fixtureReport.filesRemoved),
+        static_cast<unsigned long long>(fixtureReport.bytesWritten),
+        static_cast<unsigned long>(fixtureReport.writeCalls),
+        static_cast<unsigned long>(fixtureReport.fileSyncs),
+        static_cast<unsigned long>(fixtureReport.directorySyncs),
+        fixtureReport.lastFailure, fixtureReport.lastFresult,
+        identityCleanup ? "true" : "false",
+        filesystemCleanup ? "true" : "false",
+        filesystem.gpio21StableHigh() ? "true" : "false",
+        static_cast<unsigned long>(ownedDuring),
+        static_cast<unsigned long>(ownedAfter));
     reply.println(line);
 }
 
@@ -33777,6 +34308,17 @@ void emitHilSessionBegin(Stream& reply, const char* command) {
         deviceLockProtectedReadHilActive = false;
         deviceLockPersistenceHilCleanupRequired =
             deviceLockStore.hilFixtureStatePresent();
+        automationTrustBackend.useHilFixtureNamespace(false);
+        automationTrustHilFixtureActive = false;
+        automationTrustHilFixtureCleanupRequired =
+            automationTrustBackend.hilFixtureStatePresent();
+        automationTrustFixtureFingerprint[0] = '\0';
+        automationTrustFixtureRunId[0] = '\0';
+        automationTrustFixtureSha256[0] = '\0';
+        std::snprintf(
+            automationTrustBundleRoot, sizeof(automationTrustBundleRoot),
+            "%s", leshy1::platform::arduino::kAutomationTrustBundleRoot);
+        clearAutomationTrustFixtureStaging();
         bleGattTransport.clearHilFault();
         resourceBroker.releaseAll(kBleGattHilConflictOwner);
         wifiAuthenticationSyntheticHilFixture.resetForSession();
@@ -33825,7 +34367,9 @@ void emitHilSessionEnd(Stream& reply, const char* command) {
         deviceLockProtectedReadHilActive ||
         deviceLockPersistenceHilCleanupRequired ||
         automationInspectorHilFixtureActive ||
-        automationInspectorHilFixtureCleanupRequired) {
+        automationInspectorHilFixtureCleanupRequired ||
+        automationTrustHilFixtureActive ||
+        automationTrustHilFixtureCleanupRequired) {
         reply.println(
             "{\"schema\":\"leshy.hil.session.v1\",\"kind\":\"error\","
             "\"operation\":\"end\","
@@ -36860,6 +37404,22 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
     } else if (std::strcmp(command, "automation.trust.state") == 0) {
         emitAutomationTrustState(reply);
     } else if (std::strncmp(
+                   command, kAutomationTrustFixtureStagePrefix,
+                   std::strlen(kAutomationTrustFixtureStagePrefix)) == 0) {
+        emitAutomationTrustFixtureStage(reply, command);
+    } else if (std::strncmp(
+                   command, kAutomationTrustFixtureBeginPrefix,
+                   std::strlen(kAutomationTrustFixtureBeginPrefix)) == 0) {
+        emitAutomationTrustFixture(reply, command, "begin");
+    } else if (std::strncmp(
+                   command, kAutomationTrustFixtureResumePrefix,
+                   std::strlen(kAutomationTrustFixtureResumePrefix)) == 0) {
+        emitAutomationTrustFixture(reply, command, "resume");
+    } else if (std::strncmp(
+                   command, kAutomationTrustFixtureCleanupPrefix,
+                   std::strlen(kAutomationTrustFixtureCleanupPrefix)) == 0) {
+        emitAutomationTrustFixture(reply, command, "cleanup");
+    } else if (std::strncmp(
                    command, kAutomationInspectorFixtureBeginPrefix,
                    std::strlen(kAutomationInspectorFixtureBeginPrefix)) == 0) {
         emitAutomationInspectorFixture(reply, command, true);
@@ -37745,6 +38305,10 @@ void setup() {
               "\"capture.subghz.test-fixture fixed-rx-only\","
               "\"ui.state\",\"ui.key <action>\","
               "\"automation.inspector.state\",\"automation.trust.state\","
+              "\"automation.trust-fixture stage <chunk-0..3> <64-lower-hex>\","
+              "\"automation.trust-fixture begin disposable-write <CID32> <run-id32> <bundle-sha256>\","
+              "\"automation.trust-fixture resume disposable-write <CID32> <run-id32> <bundle-sha256>\","
+              "\"automation.trust-fixture cleanup disposable-write <CID32> <run-id32> <bundle-sha256>\","
               "\"automation.inspector-fixture begin disposable-write <CID32> <run-id>\","
               "\"automation.inspector-fixture cleanup disposable-write <CID32> <run-id>\","
               "\"survey.browser\","

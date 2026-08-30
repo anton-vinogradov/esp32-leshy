@@ -20,16 +20,17 @@ const char* boardAutomationTrustBundleStatusName(
 }
 
 BoardAutomationTrustBundleStatus BoardAutomationTrustBundleReader::read(
-    std::uint8_t driveNumber,
+    std::uint8_t driveNumber, const char* root,
     apps::automation::AutomationTrustBundle* output) {
-    if (output == nullptr || driveNumber >= FF_VOLUMES || driveNumber > 9U) {
+    if (root == nullptr || root[0] != '/' || output == nullptr ||
+        driveNumber >= FF_VOLUMES || driveNumber > 9U) {
         return BoardAutomationTrustBundleStatus::InvalidArgument;
     }
     output->fill(0U);
     char path[96] = {};
     const int written = std::snprintf(
         path, sizeof(path), "%u:%s/%s",
-        static_cast<unsigned>(driveNumber), kAutomationTrustBundleRoot,
+        static_cast<unsigned>(driveNumber), root,
         kAutomationTrustBundleName);
     if (written <= 0 || static_cast<std::size_t>(written) >= sizeof(path)) {
         return BoardAutomationTrustBundleStatus::InvalidArgument;

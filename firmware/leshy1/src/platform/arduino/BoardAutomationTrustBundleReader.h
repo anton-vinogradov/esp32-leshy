@@ -31,7 +31,7 @@ public:
         : workspace_(workspace) {}
 
     BoardAutomationTrustBundleStatus read(
-        std::uint8_t driveNumber,
+        std::uint8_t driveNumber, const char* root,
         apps::automation::AutomationTrustBundle* output);
 
 private:

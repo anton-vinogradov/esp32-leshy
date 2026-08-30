@@ -21,6 +21,7 @@ trap 'rm -rf "$test_tmp"' EXIT
 
 "$test_tmp/automation_package_tests"
 PYTHONPATH="$repo_dir/tools" python3 "$repo_dir/tools/test_automation_trust_bundle.py"
+PYTHONPATH="$repo_dir/tools" python3 "$repo_dir/tools/test_automation_trust_positive_hil_runner.py"
 python3 "$repo_dir/tools/check_automation_hid_foundation.py"
 python3 "$repo_dir/tools/check_automation_inspector_hil_acceptance.py"
 python3 "$repo_dir/tools/check_automation_trust_ui_hil_acceptance.py"
