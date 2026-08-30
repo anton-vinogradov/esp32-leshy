@@ -19,6 +19,41 @@ class TemporaryDeviceLockHilTests(unittest.TestCase):
     @patch.object(fixture, "home_device")
     @patch.object(fixture, "end_hil")
     @patch.object(fixture, "begin_hil")
+    @patch.object(fixture, "protected_read_fixture_command")
+    def test_read_admission_is_ram_only_and_mutation_denied(
+            self, command, begin, end, home) -> None:
+        begun = {
+            "operation": "begin", "status": "begun", "active": True,
+            "ram_only_admission": True, "protected_ui_allowed": True,
+            "companion_read_only": True, "mutation_scope_allowed": False,
+            "credential_written": False, "data_key_replaced": False,
+            "product_namespace_written_or_erased": False,
+            "whole_nvs_read_or_copied": False, "radio_touched": False,
+        }
+        command.side_effect = [
+            begun,
+            {**begun, "operation": "cleanup", "status": "cleaned",
+             "active": False},
+        ]
+        begin.return_value = {"kind": "begun", "active": True}
+        end.return_value = {"kind": "ended", "active": False}
+        home.return_value = {"page": "home"}
+        session = fixture.TemporaryProtectedReadAdmissionHil(
+            object(), "a" * 64)
+
+        self.assertEqual({"page": "home"}, session.start())
+        session.close()
+
+        evidence = session.evidence()
+        self.assertTrue(evidence["cleanup_proven"])
+        self.assertTrue(evidence["companion_read_only"])
+        self.assertFalse(evidence["mutation_scope_allowed"])
+        self.assertFalse(evidence["credential_written"])
+        self.assertFalse(evidence["data_key_replaced"])
+
+    @patch.object(fixture, "home_device")
+    @patch.object(fixture, "end_hil")
+    @patch.object(fixture, "begin_hil")
     @patch.object(fixture, "protected_ui_fixture_command")
     def test_ram_only_admission_preserves_product_key(
             self, command, begin, end, home) -> None:

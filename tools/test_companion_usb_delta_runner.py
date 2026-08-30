@@ -105,6 +105,7 @@ class CompanionUsbDeltaRunnerTests(unittest.TestCase):
         self.assertNotIn("en0", source)
         self.assertIn('"active_mac_wifi_touched": False', source)
         self.assertIn('"host_network_tools_invoked": False', source)
+        self.assertIn("TemporaryProtectedReadAdmissionHil", source)
         self.assertIn('"associated_stations": 0', source)
         self.assertIn('"--exercise-device-web-lifecycle"', source)
         self.assertIn("exercise_device_web_lifecycle(device)", source)

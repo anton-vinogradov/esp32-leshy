@@ -101,6 +101,16 @@ def main() -> int:
     ):
         require(failures, marker in header, f"missing header contract: {marker}")
 
+    for marker in (
+        "deviceLockProtectedReadHilActive && hilSession.active()",
+        "policy.deviceSessionScopes = companion::kCompanionS65ReadScopes",
+        "if (!hilReadOnly)",
+        "device-lock.protected-read-fixture ",
+        "mutation_scope_allowed\\\":false",
+    ):
+        require(failures, marker in arduino,
+                f"missing read-only physical HIL boundary: {marker}")
+
     for scope in (
         "session.read",
         "target.read",
