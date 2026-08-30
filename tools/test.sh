@@ -6,12 +6,16 @@ set -euo pipefail
 # suite. Product slices use an explicit focused entry point so a delta never
 # silently expands into the several-minute full gate.
 if [[ $# -gt 0 ]]; then
-    if [[ $# -eq 2 && "$1" == "--only" &&
-          ("$2" == "device-lock" ||
-           "$2" == "device_lock_controller_tests") ]]; then
-        exec "$(cd "$(dirname "$0")" && pwd)/test-device-lock.sh"
+    if [[ $# -eq 2 && "$1" == "--only" ]]; then
+        if [[ "$2" == "device-lock" ||
+              "$2" == "device_lock_controller_tests" ]]; then
+            exec "$(cd "$(dirname "$0")" && pwd)/test-device-lock.sh"
+        fi
+        if [[ "$2" == "serial-console" ]]; then
+            exec "$(cd "$(dirname "$0")" && pwd)/test-serial-console.sh"
+        fi
     fi
-    echo "usage: $0 [--only device-lock]" >&2
+    echo "usage: $0 [--only device-lock|serial-console]" >&2
     exit 2
 fi
 
@@ -153,6 +157,7 @@ python3 "$repo_dir/tools/check_ble_gatt_negative_acceptance.py"
 python3 "$repo_dir/tools/check_product_survey_terminal_acceptance.py"
 
 "$repo_dir/tools/test-device-lock.sh"
+"$repo_dir/tools/test-serial-console.sh"
 
 "${CXX:-c++}" \
     -std=c++17 \

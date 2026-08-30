@@ -12,6 +12,8 @@ enum class Resource : ResourceMask {
     Storage = 1U << 2U,
     RadioSpi = 1U << 3U,
     DisplaySpi = 1U << 4U,
+    Console = 1U << 5U,
+    Mux56 = 1U << 6U,
 };
 
 constexpr ResourceMask resourceMask(Resource resource) {
@@ -25,6 +27,7 @@ constexpr ResourceMask operator|(Resource left, Resource right) {
 constexpr ResourceMask kKnownResources =
     resourceMask(Resource::UiForeground) | resourceMask(Resource::EspRf) |
     resourceMask(Resource::Storage) | resourceMask(Resource::RadioSpi) |
-    resourceMask(Resource::DisplaySpi);
+    resourceMask(Resource::DisplaySpi) | resourceMask(Resource::Console) |
+    resourceMask(Resource::Mux56);
 
 }  // namespace leshy1::kernel::runtime

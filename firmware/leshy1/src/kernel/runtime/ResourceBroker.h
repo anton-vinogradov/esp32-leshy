@@ -13,7 +13,7 @@ constexpr ResourceOwner kNoOwner = 0;
 
 class ResourceBroker final {
 public:
-    static constexpr std::size_t kResourceBits = 5;
+    static constexpr std::size_t kResourceBits = 7;
 
     bool acquire(ResourceOwner owner, ResourceMask resources);
     void release(ResourceOwner owner, ResourceMask resources);
