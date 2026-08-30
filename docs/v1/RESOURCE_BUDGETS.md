@@ -1641,6 +1641,24 @@ heap after one retained 260 B cold lazy initialization and returns exactly to th
 warm baseline after Home/RF, Targets and companion matrices. This is a regression
 budget, not release endurance, physical LED-color or instrumented RF evidence.
 
+Physical nested Automation Inspector bound `RB-M217`: exact physical
+`1.0.0-dev.303` at firmware source
+`ca5bf300289b310dd39845a530aa3fe7a2acd9c2` uses 232,624 B static RAM,
+3,541,796 B linked flash and 3,541,952/3,607,488 B app/factory images, leaving
+652,352 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`0976943e76b5d03feefb9acda58d07301597175bc41e62183a1cbcff884e95a2`/
+`8fc16699e4383b6e31050671ac04e2774ac58dcc368065ef1e9f4727b3e2b9ce`/
+`28a67093c3bedf01cae20289fa7bc162f973f614dff43b549eacc82be6216125`/
+`f81d234557e19250b9fe99c7118942f2640108e6e66e1d0788d9e5a03b74979d`.
+Against dev.302 this is +128 B static RAM, +7,816 B linked flash and +7,472 B
+app/factory, with 7,472 B less OTA headroom. The delta funds the exact-CID bounded
+scratch fixture, public HIL commands and fail-closed cleanup telemetry; it does not
+add a resident package, trust store, signature workspace, HID queue or execution
+engine. Accepted boot heap is 146,180 B total/71,660 B free/55,160 B minimum while
+the isolated Device Lock KDF and nested inspection run. The final lease is zero and
+all scratch data is removed. This focused delta advances cadence to 1/15; it does not
+replace the dev.302 full checkpoint or claim real trust/execution.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

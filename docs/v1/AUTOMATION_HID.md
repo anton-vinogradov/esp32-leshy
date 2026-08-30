@@ -7,12 +7,10 @@
 - **Workflow:** WF-08-A1/A2/A4
 - **Architecture:** [ADR-002](adr/ADR-002-resource-policy.md),
   [ADR-004](adr/ADR-004-action-boundary.md)
-- **State:** slice 1 is accepted; slice 2 is implemented in exact host/build
-  `1.0.0-dev.289` and physically routed in exact `1.0.0-dev.288`: the passive,
-  allocation-free package inspector and
-  execution-admission boundary are connected to a read-only Lab product route; the
-  top-level Lab route is physically accepted, while nested package TFT evidence,
-  real trust and active execution remain unaccepted
+- **State:** slices 1 and 2 are accepted. Exact physical `1.0.0-dev.303` proves the
+  passive nested package route on real exact-CID SD with stable EN/RU TFT evidence,
+  zero Action/HID/resource/RF output and complete scratch/Device Lock cleanup. Real
+  P-256 trust and active execution remain unaccepted
 
 ## User outcome
 
@@ -102,16 +100,18 @@ inspection.
 
 1. `done` — canonical parser, passive summary, verifier interface, strict
    policy/admission order, and mutation/ceiling/permission/target negative host tests.
-2. `implemented / physical nested delta prepared` — bounded SD package discovery and
+2. `done` — bounded SD package discovery and
    a compact EN/RU Lab → Automation Inspector UI; malformed and unsigned packages are
    viewable but not runnable. Exact dev.289 host/build keeps every EN/RU label inside
    its measured pixel budget; exact dev.288 physically accepts the Lab top-level
-   route and zero-output boundary. The dev.303 delta creates only fixed
+   route and zero-output boundary. Exact physical dev.303 creates only fixed
    `malformed.lhau` and `unsigned.lhau` files below one exact-CID
    `/leshy-hil/<run-id>` StorageGuard directory, drives the public nested UI in EN/RU,
-   requires two byte-stable frames per result and zero Action/HID/resource output,
-   then removes the exact fixture before HIL may end. It never writes the product
-   `/leshy/automation/v1` namespace and does not exercise execution or RF transmit.
+   retains two byte-identical frames per result and proves zero
+   Action/HID/resource/RF output, then removes both files and the isolated Device Lock
+   fixture before HIL ends. The [machine-checked evidence](../../tests/hil/evidence/board-01-automation-inspector-1.0.0-dev.303.json)
+   binds the single-flash lineage, candidate hashes, exact CID and final
+   Home/none/lease 0. The product `/leshy/automation/v1` namespace is never written.
 3. `planned` — real P-256 trust adapter and owner-visible key enrollment/revocation;
    cold restore and Device Lock interaction.
 4. `planned` — named Action-only package execution through the shared dispatcher,

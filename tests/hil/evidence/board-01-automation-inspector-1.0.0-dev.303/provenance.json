@@ -1,0 +1,52 @@
+{
+  "accepted_raw_run_sha256": "bb3b9b012826323757f2bbd132b568da637b42664c95fb7945e7b79c4ed4893a",
+  "candidate": {
+    "app_elf_sha256": "28a67093c3bedf01cae20289fa7bc162f973f614dff43b549eacc82be6216125",
+    "elf_sha256": "28a67093c3bedf01cae20289fa7bc162f973f614dff43b549eacc82be6216125",
+    "firmware_bytes": 3541952,
+    "firmware_sha256": "0976943e76b5d03feefb9acda58d07301597175bc41e62183a1cbcff884e95a2",
+    "map_sha256": "f81d234557e19250b9fe99c7118942f2640108e6e66e1d0788d9e5a03b74979d",
+    "source_commit": "ca5bf300289b310dd39845a530aa3fe7a2acd9c2",
+    "version": "1.0.0-dev.303"
+  },
+  "factory_sha256": "8fc16699e4383b6e31050671ac04e2774ac58dcc368065ef1e9f4727b3e2b9ce",
+  "firmware_source_commit": "ca5bf300289b310dd39845a530aa3fe7a2acd9c2",
+  "harness_commits": [
+    "603e230170da545b0ef011ed512f8d34416dac3d",
+    "b7b2e04849b2fd76a7992b5fc2ecf42bf18b73be",
+    "36cd4bc57ab06e78efefe5cf82a5fe7f4734936e"
+  ],
+  "precursor_lineage": [
+    {
+      "cleanup_complete": false,
+      "failure": "workflow: SerialException: Port is already open.",
+      "flash_count": 1,
+      "run_json_sha256": "ed1aa364d08718636722f2756fd9d46bfaffecd1f4c95fcdb2e468c5c9a4d57c"
+    },
+    {
+      "cleanup_complete": true,
+      "failure": "workflow: RuntimeError: device rejected command: {'schema': 'leshy.hil.session.v1', 'kind': 'error', 'operation': 'begin', 'status': 'invalid_session_id', 'active': False}",
+      "flash_count": 0,
+      "run_json_sha256": "1eb5419a97b35383bae79756f1143a19ea34ee647c083dc935c14ed2562f165e"
+    },
+    {
+      "cleanup_complete": true,
+      "failure": "workflow: RuntimeError: open Lab: expected={'page': 'lab', 'runtime_owner': 'lab', 'lease_mask': 1}, actual={'page': 'home', 'runtime_owner': 'none', 'lease_mask': 0}",
+      "flash_count": 0,
+      "run_json_sha256": "5ddb1497c5750aefe06ef4485fc3ee493736548a3415c8e68791dfb1ae33c1a0"
+    }
+  ],
+  "runner_source_sha256": "68dd61776b4aac29234fca74a174171d1ec5d1aa4422f74aed6a048b53610ed8",
+  "schema": "leshy.automation_inspector_hil.provenance.v1",
+  "source_sha256": {
+    "firmware/leshy1/platformio.ini": "af5924fd4049d14ec0860e2bd1300b017262bd7c4b2091f477d615ab7dd1f4d3",
+    "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp": "6102258df44bd1e09483d66660416905de7f0598a8fcad8479ad14e299291697",
+    "firmware/leshy1/src/platform/arduino/BoardAutomationPackageHilFixture.cpp": "ed26baba7117e56210f02345803e720db1a1e1cc011d238245b20f62f9c11126",
+    "firmware/leshy1/src/platform/arduino/BoardAutomationPackageHilFixture.h": "ab0e41872c66ea8526e35f2b049d0a9d6706d015c22ec5672accbbd614353eb7",
+    "firmware/leshy1/src/platform/arduino/BoardAutomationPackageReader.cpp": "9249cdbb795d3c41242072fe37d75c8cc2b8952be53d562497c8617291ebe217",
+    "firmware/leshy1/src/platform/arduino/BoardAutomationPackageReader.h": "4afe49b7244c865745d608d25fa199911907c8961372d83808670e52b4ce5928",
+    "tests/hil/delta-scopes/automation-inspector-1.0.0-dev.303.json": "73cc1f6088693c1c3aed932f72d5d17043e2bc03f620131391208aeaa8b58d64",
+    "tools/check_automation_hid_foundation.py": "380e453daf3891812e2f03568a5dcf32f36d7eb4c80596749d7cd5426f6e7516",
+    "tools/run_1x_automation_inspector_hil.py": "68dd61776b4aac29234fca74a174171d1ec5d1aa4422f74aed6a048b53610ed8"
+  }
+}

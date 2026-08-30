@@ -7,12 +7,10 @@
 - **Workflow:** WF-08-A1/A2/A4
 - **Архитектура:** [ADR-002](adr/ADR-002-resource-policy.ru.md),
   [ADR-004](adr/ADR-004-action-boundary.ru.md)
-- **Состояние:** slice 1 принят; slice 2 реализован в exact host/build
-  `1.0.0-dev.289` и физически подключён в exact `1.0.0-dev.288`: passive
-  allocation-free inspector package и boundary допуска
-  execution подключены к read-only product route Лаборатории; top-level route Lab
-  физически принят, а nested TFT evidence package, real trust и active execution
-  ещё не приняты
+- **Состояние:** slices 1 и 2 приняты. Exact physical `1.0.0-dev.303` доказывает
+  passive nested route package на real exact-CID SD со stable EN/RU TFT evidence,
+  zero output Action/HID/resource/RF и complete cleanup scratch/Device Lock. Real
+  trust P-256 и active execution ещё не приняты
 
 ## Результат для пользователя
 
@@ -102,16 +100,18 @@ inspection.
 
 1. `done` — canonical parser, passive summary, interface verifier, strict ordering
    policy/admission и mutation/ceiling/permission/target negative host tests.
-2. `implemented / physical nested delta prepared` — bounded discovery package на SD
+2. `done` — bounded discovery package на SD
    и compact EN/RU UI Лаборатория → Automation Inspector; malformed и unsigned
    packages можно посмотреть, но нельзя запустить. Exact dev.289 host/build удерживает
    каждую EN/RU label в измеренном pixel budget; exact dev.288 физически принимает
-   top-level route Lab и zero-output boundary. Delta dev.303 создаёт только fixed
+   top-level route Lab и zero-output boundary. Exact physical dev.303 создаёт только fixed
    `malformed.lhau` и `unsigned.lhau` внутри одного exact-CID каталога StorageGuard
-   `/leshy-hil/<run-id>`, проходит public nested UI на EN/RU, требует две byte-stable
-   frames для каждого результата и zero output Action/HID/resource, а затем удаляет
-   exact fixture до разрешения `hil.end`. Product namespace `/leshy/automation/v1`
-   не изменяется; execution и RF transmit не запускаются.
+   `/leshy-hil/<run-id>`, проходит public nested UI на EN/RU, сохраняет две
+   byte-identical frames каждого результата и доказывает zero output
+   Action/HID/resource/RF, затем удаляет оба файла и isolated fixture Device Lock до
+   `hil.end`. [Machine-checked evidence](../../tests/hil/evidence/board-01-automation-inspector-1.0.0-dev.303.json)
+   связывает single-flash lineage, hashes candidate, exact CID и final
+   Home/none/lease 0. Product namespace `/leshy/automation/v1` не изменяется.
 3. `planned` — real P-256 trust adapter и owner-visible enrollment/revocation keys;
    cold restore и interaction Device Lock.
 4. `planned` — execution named Action-only package через shared dispatcher, audit и

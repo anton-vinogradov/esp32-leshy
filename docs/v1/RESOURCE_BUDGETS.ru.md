@@ -1629,6 +1629,24 @@ file или companion buffer. Full checkpoint стабилизируется н�
 Это regression budget, а не evidence release endurance, physical LED color или
 instrumented RF.
 
+Bound physical nested Automation Inspector `RB-M217`: exact physical
+`1.0.0-dev.303` на firmware source
+`ca5bf300289b310dd39845a530aa3fe7a2acd9c2` использует 232 624 B static RAM,
+3 541 796 B linked flash и app/factory images 3 541 952/3 607 488 B, оставляя
+652 352 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`0976943e76b5d03feefb9acda58d07301597175bc41e62183a1cbcff884e95a2`/
+`8fc16699e4383b6e31050671ac04e2774ac58dcc368065ef1e9f4727b3e2b9ce`/
+`28a67093c3bedf01cae20289fa7bc162f973f614dff43b549eacc82be6216125`/
+`f81d234557e19250b9fe99c7118942f2640108e6e66e1d0788d9e5a03b74979d`.
+Относительно dev.302 это +128 B static RAM, +7 816 B linked flash и +7 472 B
+app/factory с уменьшением OTA headroom на 7 472 B. Delta финансирует bounded
+exact-CID fixture scratch, public HIL commands и fail-closed telemetry cleanup; он
+не добавляет resident package, trust store, workspace signature, queue HID или
+execution engine. Accepted boot heap — 146 180 B total/71 660 B free/55 160 B
+minimum во время isolated KDF Device Lock и nested inspection. Final lease равен
+zero, все scratch data удалены. Focused delta двигает cadence до 1/15; он не заменяет
+full checkpoint dev.302 и не заявляет real trust/execution.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

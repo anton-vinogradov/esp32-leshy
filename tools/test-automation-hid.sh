@@ -19,3 +19,4 @@ trap 'rm -rf "$test_tmp"' EXIT
 
 "$test_tmp/automation_package_tests"
 python3 "$repo_dir/tools/check_automation_hid_foundation.py"
+python3 "$repo_dir/tools/check_automation_inspector_hil_acceptance.py"

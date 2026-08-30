@@ -1,0 +1,12 @@
+{
+  "frames/malformed-en-a.png": "b442ec43f5c79f6689b30e2f963aef0d22b43dc4a179d77629007eeff713091b",
+  "frames/malformed-en-b.png": "b442ec43f5c79f6689b30e2f963aef0d22b43dc4a179d77629007eeff713091b",
+  "frames/malformed-ru-a.png": "564bbdfbfabada42c0d42761f0595ebfa0f400a4c7f618d8cc47355c2968ec00",
+  "frames/malformed-ru-b.png": "564bbdfbfabada42c0d42761f0595ebfa0f400a4c7f618d8cc47355c2968ec00",
+  "frames/unsigned-en-a.png": "f55cd50700fa762a1cb62db2bd1b57787f9550974a33043bbd915ddd0691b07f",
+  "frames/unsigned-en-b.png": "f55cd50700fa762a1cb62db2bd1b57787f9550974a33043bbd915ddd0691b07f",
+  "frames/unsigned-ru-a.png": "df9ba766a04a4cd4514f12c4d91611b97e0504f870d1bcb63b813afd38e9f60c",
+  "frames/unsigned-ru-b.png": "df9ba766a04a4cd4514f12c4d91611b97e0504f870d1bcb63b813afd38e9f60c",
+  "provenance.json": "af9249f82a0b2de3fdd64185978df5d12533108ee9758155bb5585cf24dc7b09",
+  "run.json": "bb3b9b012826323757f2bbd132b568da637b42664c95fb7945e7b79c4ed4893a"
+}

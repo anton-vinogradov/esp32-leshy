@@ -1,0 +1,159 @@
+{
+  "board": "board-01",
+  "bundle": "tests/hil/evidence/board-01-automation-inspector-1.0.0-dev.303",
+  "candidate": {
+    "app_elf_sha256": "28a67093c3bedf01cae20289fa7bc162f973f614dff43b549eacc82be6216125",
+    "elf_sha256": "28a67093c3bedf01cae20289fa7bc162f973f614dff43b549eacc82be6216125",
+    "firmware_bytes": 3541952,
+    "firmware_sha256": "0976943e76b5d03feefb9acda58d07301597175bc41e62183a1cbcff884e95a2",
+    "map_sha256": "f81d234557e19250b9fe99c7118942f2640108e6e66e1d0788d9e5a03b74979d",
+    "source_commit": "ca5bf300289b310dd39845a530aa3fe7a2acd9c2",
+    "version": "1.0.0-dev.303"
+  },
+  "cleanup": {
+    "device_lock_product_restored": true,
+    "language_restored": true,
+    "lease_mask": 0,
+    "page": "home",
+    "runtime_owner": "none",
+    "scratch_files_removed": 2
+  },
+  "evidence_ids": [
+    "E-BUILD-206",
+    "E-AUTO-181",
+    "E-HIL-215",
+    "E-UX-068",
+    "E-STORAGE-039",
+    "RB-M217"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "factory_sha256": "8fc16699e4383b6e31050671ac04e2774ac58dcc368065ef1e9f4727b3e2b9ce",
+  "firmware_source_commit": "ca5bf300289b310dd39845a530aa3fe7a2acd9c2",
+  "fixture": {
+    "bytes_written": 159,
+    "directory_syncs": 1,
+    "exact_entries": true,
+    "file_syncs": 2,
+    "fingerprint_matched": true,
+    "scratch_path": "/leshy-hil/23af57d41ad8058f2d287fe5428672c6",
+    "write_calls": 2
+  },
+  "inspection": {
+    "malformed_en": {
+      "execution_eligible": false,
+      "language": "en",
+      "observed_steps": 0,
+      "parse_status": "too_small",
+      "source_name": "malformed.lhau",
+      "source_size": 12,
+      "trust_status": "verifier_unavailable",
+      "zero_action_hid_resource_output": true
+    },
+    "malformed_ru": {
+      "execution_eligible": false,
+      "language": "ru",
+      "observed_steps": 0,
+      "parse_status": "too_small",
+      "source_name": "malformed.lhau",
+      "source_size": 12,
+      "trust_status": "verifier_unavailable",
+      "zero_action_hid_resource_output": true
+    },
+    "unsigned_en": {
+      "execution_eligible": false,
+      "language": "en",
+      "observed_steps": 1,
+      "parse_status": "parsed",
+      "source_name": "unsigned.lhau",
+      "source_size": 147,
+      "trust_status": "missing_signature",
+      "zero_action_hid_resource_output": true
+    },
+    "unsigned_ru": {
+      "execution_eligible": false,
+      "language": "ru",
+      "observed_steps": 1,
+      "parse_status": "parsed",
+      "source_name": "unsigned.lhau",
+      "source_size": 147,
+      "trust_status": "missing_signature",
+      "zero_action_hid_resource_output": true
+    }
+  },
+  "lineage": {
+    "accepted_run_flashes": 0,
+    "accepted_run_reused_installed_candidate": true,
+    "candidate_flashes": 1,
+    "precursors": [
+      {
+        "cleanup_complete": false,
+        "failure": "workflow: SerialException: Port is already open.",
+        "flash_count": 1,
+        "run_json_sha256": "ed1aa364d08718636722f2756fd9d46bfaffecd1f4c95fcdb2e468c5c9a4d57c"
+      },
+      {
+        "cleanup_complete": true,
+        "failure": "workflow: RuntimeError: device rejected command: {'schema': 'leshy.hil.session.v1', 'kind': 'error', 'operation': 'begin', 'status': 'invalid_session_id', 'active': False}",
+        "flash_count": 0,
+        "run_json_sha256": "1eb5419a97b35383bae79756f1143a19ea34ee647c083dc935c14ed2562f165e"
+      },
+      {
+        "cleanup_complete": true,
+        "failure": "workflow: RuntimeError: open Lab: expected={'page': 'lab', 'runtime_owner': 'lab', 'lease_mask': 1}, actual={'page': 'home', 'runtime_owner': 'none', 'lease_mask': 0}",
+        "flash_count": 0,
+        "run_json_sha256": "5ddb1497c5750aefe06ef4485fc3ee493736548a3415c8e68791dfb1ae33c1a0"
+      }
+    ]
+  },
+  "manifest_sha256": "7d8cacee73ed62ee2c9608214233f191b0388cccf0078e5786648e87e523b460",
+  "raw_run_sha256": "bb3b9b012826323757f2bbd132b568da637b42664c95fb7945e7b79c4ed4893a",
+  "safe": {
+    "action_invocations": 0,
+    "hid_reports": 0,
+    "pin_or_digest_retained": false,
+    "product_namespace_written": false,
+    "resources_acquired": 0,
+    "rf_transmit_attempts": 0,
+    "wifi_host_touched": false
+  },
+  "schema": "leshy.automation_inspector_hil.summary.v1",
+  "stable_screens": {
+    "malformed_en": {
+      "pair": [
+        "frames/malformed-en-a.png",
+        "frames/malformed-en-b.png"
+      ],
+      "png_sha256": "b442ec43f5c79f6689b30e2f963aef0d22b43dc4a179d77629007eeff713091b",
+      "revision": 84,
+      "rgb565_sha256": "136614af3a01d696ff1bf19726408c15a34a6fe191d9555fe76ea646c488b544"
+    },
+    "malformed_ru": {
+      "pair": [
+        "frames/malformed-ru-a.png",
+        "frames/malformed-ru-b.png"
+      ],
+      "png_sha256": "564bbdfbfabada42c0d42761f0595ebfa0f400a4c7f618d8cc47355c2968ec00",
+      "revision": 92,
+      "rgb565_sha256": "c5c35d411f7dd75b739d5eb86f0a64b6a34288aba964e9545d317bb29c0d9a0f"
+    },
+    "unsigned_en": {
+      "pair": [
+        "frames/unsigned-en-a.png",
+        "frames/unsigned-en-b.png"
+      ],
+      "png_sha256": "f55cd50700fa762a1cb62db2bd1b57787f9550974a33043bbd915ddd0691b07f",
+      "revision": 88,
+      "rgb565_sha256": "9b6bba387e574d90ef0f14ea6c41ad62b21d537e6fdbbaf42f04e208f2d8eee4"
+    },
+    "unsigned_ru": {
+      "pair": [
+        "frames/unsigned-ru-a.png",
+        "frames/unsigned-ru-b.png"
+      ],
+      "png_sha256": "df9ba766a04a4cd4514f12c4d91611b97e0504f870d1bcb63b813afd38e9f60c",
+      "revision": 88,
+      "rgb565_sha256": "226866ffe36f6bb44c61282619632b1e035686a2037fcaf833a183026c50c8a5"
+    }
+  },
+  "status": "pass"
+}

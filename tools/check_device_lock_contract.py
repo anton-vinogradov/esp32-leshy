@@ -258,7 +258,7 @@ def main() -> int:
          "read fixture reports denied mutation scope"),
         ("deviceLockProtectedReadHilActive && hilSession.active()",
          "read fixture is physically session-bound"),
-        ("device_lock_fixture_active",
+        ("fixture_cleanup_required",
          "HIL end blocked before fixture cleanup"),
         ("persistence_fixture_cleanup_required",
          "fixture cleanup continuity in state evidence"),
