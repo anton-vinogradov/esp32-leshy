@@ -998,6 +998,8 @@ DeviceLockSubmission deviceLockWorkerRequest{};
 DeviceLockWorkerMode deviceLockWorkerMode = DeviceLockWorkerMode::Product;
 DeviceLockKdfBenchmarkReport deviceLockKdfBenchmark{};
 std::uint64_t deviceLockLastKdfUs = 0;
+bool deviceLockPersistenceHilActive = false;
+bool deviceLockPersistenceHilCleanupRequired = false;
 PowerSafetyPolicy powerSafetyPolicy;
 bool powerManagerAddressAck = false;
 std::uint32_t boundedSleepCount = 0;
@@ -12953,7 +12955,7 @@ void emitDeviceLockState(Stream& reply) {
     const std::uint64_t nowUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     const auto audit = deviceLock.audit(nowUs);
-    char line[640] = {};
+    char line[768] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.device_lock.v1\",\"kind\":\"state\","
@@ -12967,6 +12969,8 @@ void emitDeviceLockState(Stream& reply) {
         "\"benchmark_heap_before\":%lu,\"benchmark_heap_after\":%lu,"
         "\"benchmark_minimum_heap_after\":%lu,"
         "\"persistence_touched_by_benchmark\":false,"
+        "\"persistence_fixture_active\":%s,"
+        "\"persistence_fixture_cleanup_required\":%s,"
         "\"radio_touched\":false}",
         leshy1::services::security::deviceLockStateName(audit.state),
         leshy1::services::security::deviceLockFailureName(audit.lastFailure),
@@ -12984,7 +12988,90 @@ void emitDeviceLockState(Stream& reply) {
         static_cast<unsigned long>(deviceLockKdfBenchmark.heapBefore),
         static_cast<unsigned long>(deviceLockKdfBenchmark.heapAfter),
         static_cast<unsigned long>(
-            deviceLockKdfBenchmark.minimumHeapAfter));
+            deviceLockKdfBenchmark.minimumHeapAfter),
+        deviceLockPersistenceHilActive ? "true" : "false",
+        deviceLockPersistenceHilCleanupRequired ? "true" : "false");
+    reply.println(line);
+}
+
+void runDeviceLockPersistenceFixture(Stream& reply, const char* command) {
+    constexpr const char* beginCommand =
+        "device-lock.persistence-fixture begin";
+    constexpr const char* resumeCommand =
+        "device-lock.persistence-fixture resume";
+    constexpr const char* cleanupCommand =
+        "device-lock.persistence-fixture cleanup";
+    const bool begin = std::strcmp(command, beginCommand) == 0;
+    const bool resume = std::strcmp(command, resumeCommand) == 0;
+    const bool cleanup = std::strcmp(command, cleanupCommand) == 0;
+    const char* operation = begin ? "begin" : (resume ? "resume" : "cleanup");
+    const char* status = "invalid_operation";
+    bool fixtureCleanupComplete = false;
+    bool productRestored = false;
+    const std::uint64_t nowUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+
+    if (!hilSession.active()) {
+        status = "hil_session_required";
+    } else if (deviceLockWorkerTaskHandle != nullptr) {
+        status = "worker_busy";
+    } else if (!begin && !resume && !cleanup) {
+        status = "invalid_operation";
+    } else if ((begin || resume) && deviceLockPersistenceHilActive) {
+        status = "already_active";
+    } else if (cleanup) {
+        deviceLock.prepareSystemBoundary();
+        deviceLockStore.useHilFixtureNamespace(true);
+        fixtureCleanupComplete = deviceLockStore.clearCredentialAndLatch();
+        deviceLockStore.useHilFixtureNamespace(false);
+        productRestored = deviceLock.restore(nowUs);
+        deviceLockPersistenceHilActive = false;
+        deviceLockPersistenceHilCleanupRequired =
+            !fixtureCleanupComplete;
+        status = fixtureCleanupComplete && productRestored
+            ? "cleaned" : "cleanup_failed";
+    } else {
+        deviceLock.prepareSystemBoundary();
+        deviceLockStore.useHilFixtureNamespace(true);
+        fixtureCleanupComplete = begin
+            ? deviceLockStore.clearCredentialAndLatch() : true;
+        const bool fixtureRestored =
+            fixtureCleanupComplete && deviceLock.restore(nowUs);
+        deviceLockPersistenceHilActive = true;
+        deviceLockPersistenceHilCleanupRequired = true;
+        status = fixtureRestored
+            ? (begin ? "begun" : "resumed") : "fixture_restore_failed";
+    }
+
+    deviceLockController.enter(deviceLock.audit(nowUs));
+    if (!safetySupervisor.latched() &&
+        uiController.page() == kDeviceLockPage) {
+        renderInteractiveScreen(true);
+    }
+    const auto audit = deviceLock.audit(nowUs);
+    char line[512] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.device_lock.fixture.v1\","
+        "\"kind\":\"persistence_fixture\",\"operation\":\"%s\","
+        "\"status\":\"%s\",\"active\":%s,"
+        "\"cleanup_required\":%s,"
+        "\"fixture_namespace_selected\":%s,"
+        "\"fixture_cleanup_complete\":%s,\"product_restored\":%s,"
+        "\"lock_status\":\"%s\",\"failure\":\"%s\","
+        "\"failed_attempts\":%u,\"credential_generation\":%lu,"
+        "\"product_namespace_written_or_erased\":false,"
+        "\"whole_nvs_read_or_copied\":false,\"radio_touched\":false}",
+        operation, status,
+        deviceLockPersistenceHilActive ? "true" : "false",
+        deviceLockPersistenceHilCleanupRequired ? "true" : "false",
+        deviceLockStore.hilFixtureNamespaceActive() ? "true" : "false",
+        fixtureCleanupComplete ? "true" : "false",
+        productRestored ? "true" : "false",
+        leshy1::services::security::deviceLockStateName(audit.state),
+        leshy1::services::security::deviceLockFailureName(audit.lastFailure),
+        static_cast<unsigned>(audit.failedAttempts),
+        static_cast<unsigned long>(audit.credentialGeneration));
     reply.println(line);
 }
 
@@ -31218,6 +31305,8 @@ void emitHilSessionBegin(Stream& reply, const char* command) {
     }
     char line[384] = {};
     if (status == HilSessionStatus::Begun) {
+        deviceLockPersistenceHilCleanupRequired =
+            deviceLockStore.hilFixtureStatePresent();
         bleGattTransport.clearHilFault();
         resourceBroker.releaseAll(kBleGattHilConflictOwner);
         wifiAuthenticationSyntheticHilFixture.resetForSession();
@@ -31261,6 +31350,14 @@ void emitHilSessionState(Stream& reply) {
 void emitHilSessionEnd(Stream& reply, const char* command) {
     constexpr const char* prefix = "hil.end ";
     const char* sessionId = command + std::strlen(prefix);
+    if (deviceLockPersistenceHilActive ||
+        deviceLockPersistenceHilCleanupRequired) {
+        reply.println(
+            "{\"schema\":\"leshy.hil.session.v1\",\"kind\":\"error\","
+            "\"operation\":\"end\","
+            "\"status\":\"device_lock_fixture_active\",\"active\":true}");
+        return;
+    }
     if (wifiAuthenticationPersistenceHil &&
         captureStoreTaskHandle != nullptr) {
         reply.println(
@@ -33928,6 +34025,9 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitSafetyState(reply);
     } else if (std::strcmp(command, "device-lock.state") == 0) {
         emitDeviceLockState(reply);
+    } else if (std::strncmp(
+                   command, "device-lock.persistence-fixture ", 32) == 0) {
+        runDeviceLockPersistenceFixture(reply, command);
     } else if (std::strcmp(
                    command,
                    "device-lock.kdf-benchmark confirm-no-persist") == 0) {

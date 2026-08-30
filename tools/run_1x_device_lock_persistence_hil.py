@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise Device Lock persistence with an ephemeral PIN and restore NVS."""
+"""Exercise Device Lock persistence in an isolated disposable NVS namespace."""
 
 from __future__ import annotations
 
@@ -20,10 +20,10 @@ from run_1x_device_lock_hil import (
     home_device,
     read_only_query,
 )
-from run_1x_littlefs_parity_hil import read_flash_with_retry, restore_flash
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_survey_hil import (
     action,
+    artifact_manifest,
     best_effort_cleanup,
     boot_failures,
     capture,
@@ -34,9 +34,8 @@ from run_1x_product_survey_hil import (
 )
 
 
-RUN_SCHEMA = "leshy.device_lock_persistence_hil.run.v1"
-NVS_OFFSET = 0x9000
-NVS_SIZE = 0x5000
+RUN_SCHEMA = "leshy.device_lock_persistence_hil.run.v2"
+FIXTURE_SCHEMA = "leshy.device_lock.fixture.v1"
 
 
 def pin_weak(pin: bytearray) -> bool:
@@ -68,7 +67,8 @@ def wipe_pin(pin: bytearray) -> None:
 
 def state_failures(record: dict[str, Any], label: str, *, status: str,
                    failure: str, failed_attempts: int, generation: int,
-                   protected: bool) -> list[str]:
+                   protected: bool, fixture_active: bool,
+                   ) -> list[str]:
     failures = expect(record, {
         "status": status,
         "failure": failure,
@@ -76,6 +76,8 @@ def state_failures(record: dict[str, Any], label: str, *, status: str,
         "credential_generation": generation,
         "protected_access": protected,
         "worker_active": False,
+        "persistence_fixture_active": fixture_active,
+        "persistence_fixture_cleanup_required": fixture_active,
         "radio_touched": False,
     }, label)
     if status == "retry_delay":
@@ -99,6 +101,24 @@ def full_retry_failures(record: dict[str, Any], label: str,
     return []
 
 
+def fixture_failures(record: dict[str, Any], label: str, *, status: str,
+                     operation: str, active: bool, selected: bool,
+                     cleaned: bool, product_restored: bool,
+                     ) -> list[str]:
+    return expect(record, {
+        "operation": operation,
+        "status": status,
+        "active": active,
+        "cleanup_required": active,
+        "fixture_namespace_selected": selected,
+        "fixture_cleanup_complete": cleaned,
+        "product_restored": product_restored,
+        "product_namespace_written_or_erased": False,
+        "whole_nvs_read_or_copied": False,
+        "radio_touched": False,
+    }, label)
+
+
 def wait_lock_state(device: PassiveSerial,
                     predicate: Callable[[dict[str, Any]], bool],
                     description: str, timeout: float = 25.0,
@@ -115,7 +135,7 @@ def wait_lock_state(device: PassiveSerial,
 
 
 def enter_pin(device: PassiveSerial, pin: bytearray) -> None:
-    """Enter one six-digit editor pass without retaining PIN-shaped replies."""
+    """Enter one editor pass without retaining any PIN-shaped UI replies."""
     if len(pin) != 6 or any(digit > 9 for digit in pin):
         raise ValueError("PIN must contain exactly six decimal digits")
     for digit in pin:
@@ -139,15 +159,20 @@ def end_hil(device: PassiveSerial, run_id: str) -> dict[str, Any]:
         "leshy.hil.session.v1", "ended")
 
 
-def public_artifact_manifest(output: Path) -> None:
-    lines: list[str] = []
-    for path in sorted(output.rglob("*")):
-        if (not path.is_file() or path.name == "artifacts.sha256" or
-                "private" in path.parts):
-            continue
-        lines.append(f"{sha256_file(path)}  {path.relative_to(output)}")
-    (output / "artifacts.sha256").write_text(
-        "\n".join(lines) + "\n", encoding="utf-8")
+def fixture_command(device: PassiveSerial, operation: str) -> dict[str, Any]:
+    if operation not in {"begin", "resume", "cleanup"}:
+        raise ValueError("invalid fixture operation")
+    return query(
+        device,
+        f"device-lock.persistence-fixture {operation}".encode("ascii"),
+        FIXTURE_SCHEMA, "persistence_fixture")
+
+
+def reopen_after_reset(port: str, run_id: str,
+                       app_identity: str) -> tuple[PassiveSerial, dict[str, Any]]:
+    device = PassiveSerial(port, 115200, timeout=0.25)
+    synchronize_console(device, 20.0)
+    return device, begin_hil(device, run_id, app_identity)
 
 
 def main() -> int:
@@ -172,11 +197,6 @@ def main() -> int:
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
     frames.mkdir()
-    private = args.output / "private"
-    private.mkdir()
-    backup = private / "nvs-before.bin"
-    backup_second = private / "nvs-before-second.bin"
-    restore_readback = private / "nvs-restore-readback.bin"
     candidate = args.output / "firmware.bin"
     shutil.copyfile(args.firmware, candidate)
     app_identity = app_elf_sha256(candidate)
@@ -189,30 +209,18 @@ def main() -> int:
     sessions: list[dict[str, Any]] = []
     cleanup: dict[str, Any] = {"attempted": False}
     device: PassiveSerial | None = None
-    backup_ready = False
-    backup_sha = ""
-    backup_attempts = 0
-    backup_second_attempts = 0
-    restore_attempted = False
-    restore_attempts = 0
-    restore_sha = ""
-    restore_verified = False
-    private_backup_deleted = False
+    candidate_flashed = False
+    fixture_started = False
+    fixture_ever_started = False
+    fixture_cleanup: dict[str, Any] = {}
+    fixture_cleanup_proven = False
     final_boot: dict[str, Any] = {}
     final_recovery: dict[str, Any] = {}
     final_reset: dict[str, Any] = {}
 
     try:
-        backup_sha, backup_attempts = read_flash_with_retry(
-            args.port, args.flash_baud, NVS_OFFSET, NVS_SIZE, backup)
-        backup_second_sha, backup_second_attempts = read_flash_with_retry(
-            args.port, args.flash_baud, NVS_OFFSET, NVS_SIZE, backup_second)
-        backup_ready = backup_sha == backup_second_sha
-        if not backup_ready:
-            raise RuntimeError("two independent NVS backup reads differ")
-        backup_second.unlink(missing_ok=True)
-
         flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+        candidate_flashed = True
         time.sleep(0.6)
         device = PassiveSerial(args.port, 115200, timeout=0.25)
         synchronize_console(device, 30.0)
@@ -236,12 +244,28 @@ def main() -> int:
 
         baseline = read_only_query(
             device, b"device-lock.state", LOCK_SCHEMA, "state")
-        reports["baseline"] = baseline
+        reports["product_baseline"] = baseline
         failures.extend(state_failures(
-            baseline, "baseline", status="unconfigured", failure="none",
-            failed_attempts=0, generation=0, protected=False))
+            baseline, "product_baseline", status="unconfigured",
+            failure="none", failed_attempts=0, generation=0,
+            protected=False, fixture_active=False))
         if failures:
-            raise RuntimeError("Device Lock baseline is not virgin")
+            raise RuntimeError("product Device Lock baseline is not virgin")
+
+        fixture_begin = fixture_command(device, "begin")
+        fixture_started = True
+        fixture_ever_started = True
+        reports["fixture_begin"] = fixture_begin
+        failures.extend(fixture_failures(
+            fixture_begin, "fixture_begin", status="begun",
+            operation="begin", active=True, selected=True,
+            cleaned=True, product_restored=False))
+        fixture_baseline = read_only_query(
+            device, b"device-lock.state", LOCK_SCHEMA, "state")
+        failures.extend(state_failures(
+            fixture_baseline, "fixture_baseline", status="unconfigured",
+            failure="none", failed_attempts=0, generation=0,
+            protected=False, fixture_active=True))
         home_device(device)
         device_lock_page(device)
         screens["unconfigured"] = capture(
@@ -260,7 +284,8 @@ def main() -> int:
         reports["configured"] = configured
         failures.extend(state_failures(
             configured, "configured", status="unlocked", failure="none",
-            failed_attempts=0, generation=1, protected=True))
+            failed_attempts=0, generation=1, protected=True,
+            fixture_active=True))
         screens["configured"] = capture(
             device, frames, "device-lock-configured")
 
@@ -270,8 +295,8 @@ def main() -> int:
         reports["locked_before_reset"] = locked
         failures.extend(state_failures(
             locked, "locked_before_reset", status="locked", failure="none",
-            failed_attempts=0, generation=1, protected=False))
-        sessions.append(end_hil(device, run_id))
+            failed_attempts=0, generation=1, protected=False,
+            fixture_active=True))
         device.close()
         device = None
 
@@ -283,16 +308,28 @@ def main() -> int:
         failures.extend(boot_failures(
             boot_locked, recovery_locked, args.expected_version,
             app_identity, args.expected_cid))
-        device = PassiveSerial(args.port, 115200, timeout=0.25)
-        synchronize_console(device, 20.0)
-        sessions.append(begin_hil(device, run_id, app_identity))
+        device, session = reopen_after_reset(
+            args.port, run_id, app_identity)
+        sessions.append(session)
+        product_after_reset = read_only_query(
+            device, b"device-lock.state", LOCK_SCHEMA, "state")
+        failures.extend(state_failures(
+            product_after_reset, "product_after_reset", status="unconfigured",
+            failure="none", failed_attempts=0, generation=0,
+            protected=False, fixture_active=False))
+        fixture_resume = fixture_command(device, "resume")
+        reports["fixture_resume_locked"] = fixture_resume
+        failures.extend(fixture_failures(
+            fixture_resume, "fixture_resume_locked", status="resumed",
+            operation="resume", active=True, selected=True,
+            cleaned=True, product_restored=False))
         restored_locked = read_only_query(
             device, b"device-lock.state", LOCK_SCHEMA, "state")
         reports["restored_locked"] = restored_locked
         failures.extend(state_failures(
             restored_locked, "restored_locked", status="locked",
             failure="none", failed_attempts=0, generation=1,
-            protected=False))
+            protected=False, fixture_active=True))
         home_device(device)
         device_lock_page(device)
 
@@ -305,7 +342,7 @@ def main() -> int:
         failures.extend(state_failures(
             retry_one, "retry_one", status="retry_delay",
             failure="wrong_pin", failed_attempts=1, generation=2,
-            protected=False))
+            protected=False, fixture_active=True))
         failures.extend(full_retry_failures(retry_one, "retry_one", 5000))
         wait_lock_state(
             device, lambda state: state.get("status") == "locked",
@@ -320,7 +357,7 @@ def main() -> int:
         failures.extend(state_failures(
             retry_two, "retry_two", status="retry_delay",
             failure="wrong_pin", failed_attempts=2, generation=3,
-            protected=False))
+            protected=False, fixture_active=True))
         failures.extend(full_retry_failures(retry_two, "retry_two", 15000))
         screens["retry"] = capture(device, frames, "device-lock-retry")
         device.close()
@@ -334,16 +371,22 @@ def main() -> int:
         failures.extend(boot_failures(
             boot_retry, recovery_retry, args.expected_version,
             app_identity, args.expected_cid))
-        device = PassiveSerial(args.port, 115200, timeout=0.25)
-        synchronize_console(device, 20.0)
-        sessions.append(begin_hil(device, run_id, app_identity))
+        device, session = reopen_after_reset(
+            args.port, run_id, app_identity)
+        sessions.append(session)
+        fixture_resume_retry = fixture_command(device, "resume")
+        reports["fixture_resume_retry"] = fixture_resume_retry
+        failures.extend(fixture_failures(
+            fixture_resume_retry, "fixture_resume_retry", status="resumed",
+            operation="resume", active=True, selected=True,
+            cleaned=True, product_restored=False))
         restored_retry = read_only_query(
             device, b"device-lock.state", LOCK_SCHEMA, "state")
         reports["restored_retry"] = restored_retry
         failures.extend(state_failures(
             restored_retry, "restored_retry", status="retry_delay",
             failure="retry_delay", failed_attempts=2, generation=3,
-            protected=False))
+            protected=False, fixture_active=True))
         home_device(device)
         device_lock_page(device)
         wait_lock_state(
@@ -359,7 +402,7 @@ def main() -> int:
         failures.extend(state_failures(
             unlocked, "unlocked_after_retry", status="unlocked",
             failure="none", failed_attempts=0, generation=4,
-            protected=True))
+            protected=True, fixture_active=True))
         screens["unlocked"] = capture(
             device, frames, "device-lock-unlocked")
         action(device, "right")
@@ -369,11 +412,28 @@ def main() -> int:
         failures.extend(state_failures(
             terminal_locked, "terminal_locked", status="locked",
             failure="none", failed_attempts=0, generation=4,
-            protected=False))
+            protected=False, fixture_active=True))
+
+        fixture_cleanup = fixture_command(device, "cleanup")
+        reports["fixture_cleanup"] = fixture_cleanup
+        cleanup_failures = fixture_failures(
+            fixture_cleanup, "fixture_cleanup", status="cleaned",
+            operation="cleanup", active=False, selected=False,
+            cleaned=True, product_restored=True)
+        failures.extend(cleanup_failures)
+        fixture_cleanup_proven = not cleanup_failures
+        fixture_started = False
         sessions.append(end_hil(device, run_id))
         cleanup = best_effort_cleanup(device)
         if not cleanup.get("complete"):
             failures.append("cleanup: Home/zero lease unproven")
+        product_after_cleanup = read_only_query(
+            device, b"device-lock.state", LOCK_SCHEMA, "state")
+        reports["product_after_cleanup"] = product_after_cleanup
+        failures.extend(state_failures(
+            product_after_cleanup, "product_after_cleanup",
+            status="unconfigured", failure="none", failed_attempts=0,
+            generation=0, protected=False, fixture_active=False))
     except Exception as error:
         failures.append(f"workflow: {type(error).__name__}: {error}")
         if device is not None:
@@ -384,80 +444,83 @@ def main() -> int:
                     "cleanup: "
                     f"{type(cleanup_error).__name__}: {cleanup_error}")
     finally:
-        if device is not None:
-            device.close()
-            device = None
         wipe_pin(correct_pin)
         wipe_pin(wrong_pin)
-        if backup_ready and backup.is_file():
-            restore_attempted = True
+        if candidate_flashed and not fixture_cleanup_proven:
             try:
-                expected, observed, restore_attempts = restore_flash(
-                    args.port, args.flash_baud, NVS_OFFSET,
-                    backup, restore_readback)
-                restore_sha = observed
-                restore_verified = expected == backup_sha == observed
-            except Exception as restore_error:
-                failures.append(
-                    "NVS restore: "
-                    f"{type(restore_error).__name__}: {restore_error}")
-            if restore_verified:
-                backup.unlink(missing_ok=True)
-                restore_readback.unlink(missing_ok=True)
-                private_backup_deleted = True
-                try:
-                    final_boot, final_recovery, final_reset = reset_capture(
-                        args.port, args.output,
-                        "device-lock-restored-baseline", 25.0, 2)
-                    failures.extend(boot_failures(
-                        final_boot, final_recovery, args.expected_version,
-                        app_identity, args.expected_cid))
+                if device is None:
                     device = PassiveSerial(
                         args.port, 115200, timeout=0.25)
                     synchronize_console(device, 20.0)
-                    final_lock = read_only_query(
-                        device, b"device-lock.state", LOCK_SCHEMA, "state")
-                    reports["restored_baseline"] = final_lock
-                    baseline = reports.get("baseline", {})
-                    for field in (
-                            "status", "failure", "failed_attempts",
-                            "credential_generation", "protected_access"):
-                        if final_lock.get(field) != baseline.get(field):
-                            failures.append(
-                                f"restored_baseline.{field}: "
-                                f"{final_lock.get(field)!r} != "
-                                f"{baseline.get(field)!r}")
-                    final_input = read_only_query(
-                        device, b"input.state",
-                        "leshy.input.frontend.v1", "state")
-                    reports["final_input"] = final_input
-                    failures.extend(expect(final_input, {
-                        "status": "ready", "read_errors": 0,
-                        "queue_drops": 0,
-                    }, "final_input"))
-                    device.close()
-                    device = None
-                except Exception as final_error:
-                    failures.append(
-                        "restored baseline verification: "
-                        f"{type(final_error).__name__}: {final_error}")
-        elif not backup_ready:
-            backup.unlink(missing_ok=True)
-            backup_second.unlink(missing_ok=True)
+                hil_state = read_only_query(
+                    device, b"hil.state",
+                    "leshy.hil.session.v1", "state")
+                if hil_state.get("active") is not True:
+                    sessions.append(begin_hil(device, run_id, app_identity))
+                fixture_cleanup = fixture_command(device, "cleanup")
+                cleanup_failures = fixture_failures(
+                    fixture_cleanup, "fixture_cleanup_finally",
+                    status="cleaned", operation="cleanup", active=False,
+                    selected=False, cleaned=True, product_restored=True)
+                failures.extend(cleanup_failures)
+                fixture_cleanup_proven = not cleanup_failures
+                fixture_started = False
+                if fixture_cleanup_proven:
+                    try:
+                        sessions.append(end_hil(device, run_id))
+                    except Exception:
+                        pass
+            except Exception as fixture_error:
+                failures.append(
+                    "fixture cleanup: "
+                    f"{type(fixture_error).__name__}: {fixture_error}")
+        if device is not None:
+            device.close()
+            device = None
+
+    if candidate_flashed and fixture_cleanup_proven:
+        try:
+            final_boot, final_recovery, final_reset = reset_capture(
+                args.port, args.output,
+                "device-lock-product-after-cleanup", 25.0, 2)
+            failures.extend(boot_failures(
+                final_boot, final_recovery, args.expected_version,
+                app_identity, args.expected_cid))
+            device = PassiveSerial(args.port, 115200, timeout=0.25)
+            synchronize_console(device, 20.0)
+            final_lock = read_only_query(
+                device, b"device-lock.state", LOCK_SCHEMA, "state")
+            reports["product_after_cleanup_cold"] = final_lock
+            failures.extend(state_failures(
+                final_lock, "product_after_cleanup_cold",
+                status="unconfigured", failure="none", failed_attempts=0,
+                generation=0, protected=False, fixture_active=False))
+            final_input = read_only_query(
+                device, b"input.state",
+                "leshy.input.frontend.v1", "state")
+            reports["final_input"] = final_input
+            failures.extend(expect(final_input, {
+                "status": "ready", "read_errors": 0, "queue_drops": 0,
+            }, "final_input"))
+            device.close()
+            device = None
+        except Exception as final_error:
+            failures.append(
+                "final product verification: "
+                f"{type(final_error).__name__}: {final_error}")
 
     result = {
         "schema": RUN_SCHEMA,
         "run_id": run_id,
-        "passed": not failures and restore_verified and private_backup_deleted,
-        "gate_eligible": not failures and restore_verified and
-            private_backup_deleted,
+        "passed": not failures and fixture_cleanup_proven,
+        "gate_eligible": not failures and fixture_cleanup_proven,
         "failures": failures,
         "candidate": {
             "version": args.expected_version,
             "source_commit": args.source_commit,
             "firmware_sha256": sha256_file(candidate),
             "app_elf_sha256": app_identity,
-            "flashed": True,
+            "flashed": candidate_flashed,
             "flash_mode": "fresh",
         },
         "expected_cid": args.expected_cid,
@@ -465,19 +528,14 @@ def main() -> int:
         "screens": screens,
         "sessions": sessions,
         "cleanup": cleanup,
-        "nvs_transaction": {
-            "offset": NVS_OFFSET,
-            "size": NVS_SIZE,
-            "backup_sha256": backup_sha,
-            "backup_attempts": backup_attempts,
-            "backup_second_attempts": backup_second_attempts,
-            "two_reads_matched": backup_ready,
-            "restore_attempted": restore_attempted,
-            "restore_attempts": restore_attempts,
-            "restore_sha256": restore_sha,
-            "restore_verified": restore_verified,
-            "private_backup_deleted_after_verified_restore":
-                private_backup_deleted,
+        "fixture": {
+            "ever_started": fixture_ever_started,
+            "active_at_end": fixture_started,
+            "cleanup": fixture_cleanup,
+            "cleanup_proven": fixture_cleanup_proven,
+            "isolated_namespace": True,
+            "whole_nvs_read_or_copied": False,
+            "product_namespace_written_or_erased": False,
         },
         "final_boot": final_boot,
         "final_recovery": final_recovery,
@@ -486,7 +544,7 @@ def main() -> int:
             "ephemeral_pin_length": 6,
             "pin_or_digest_retained": False,
             "pin_editor_replies_retained": False,
-            "private_nvs_in_public_manifest": False,
+            "whole_nvs_or_product_namespace_retained": False,
         },
         "scope": {
             "credential_enrollment": True,
@@ -502,13 +560,13 @@ def main() -> int:
             Path(__file__).read_bytes()).hexdigest(),
     }
     write_json(args.output / "run.json", result)
-    public_artifact_manifest(args.output)
+    artifact_manifest(args.output)
     print(json.dumps({
         "schema": RUN_SCHEMA,
         "passed": result["passed"],
         "failures": failures,
         "output": str(args.output),
-        "nvs_restored": restore_verified,
+        "fixture_cleaned": fixture_cleanup_proven,
     }, sort_keys=True))
     return 0 if result["passed"] else 1
 

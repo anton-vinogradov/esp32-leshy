@@ -18,7 +18,8 @@ namespace {
 using services::security::DeviceLockCredential;
 using services::security::DeviceLockLoadStatus;
 
-constexpr const char* kNamespace = "leshy1-lock";
+constexpr const char* kProductNamespace = "leshy1-lock";
+constexpr const char* kHilFixtureNamespace = "leshy1-lock-hil";
 constexpr const char* kCredentialKey = "credential.v1";
 constexpr const char* kProvisionedLatchKey = "enrolled.v1";
 constexpr std::uint32_t kProvisionedLatch = 0x4c4f434bU;
@@ -30,9 +31,9 @@ public:
         if (open_) nvs_close(handle_);
     }
 
-    bool open(nvs_open_mode_t mode, esp_err_t* status) {
+    bool open(const char* name, nvs_open_mode_t mode, esp_err_t* status) {
         if (status == nullptr || open_) return false;
-        *status = nvs_open(kNamespace, mode, &handle_);
+        *status = nvs_open(name, mode, &handle_);
         open_ = *status == ESP_OK;
         return open_;
     }
@@ -50,6 +51,30 @@ bool eraseKeyIfPresent(nvs_handle_t handle, const char* key) {
 }
 
 }  // namespace
+
+void NvsDeviceLockStore::useHilFixtureNamespace(bool enabled) {
+    hilFixtureNamespaceActive_ = enabled;
+}
+
+bool NvsDeviceLockStore::hilFixtureStatePresent() const {
+    ScopedNvsHandle storage;
+    esp_err_t openStatus = ESP_FAIL;
+    if (!storage.open(kHilFixtureNamespace, NVS_READONLY, &openStatus)) {
+        return openStatus != ESP_ERR_NVS_NOT_FOUND;
+    }
+    std::uint32_t latch = 0;
+    const esp_err_t latchStatus =
+        nvs_get_u32(storage.get(), kProvisionedLatchKey, &latch);
+    std::size_t stored = 0;
+    const esp_err_t recordStatus =
+        nvs_get_blob(storage.get(), kCredentialKey, nullptr, &stored);
+    const bool latchKnown = latchStatus == ESP_OK ||
+        latchStatus == ESP_ERR_NVS_NOT_FOUND;
+    const bool recordKnown = recordStatus == ESP_OK ||
+        recordStatus == ESP_ERR_NVS_NOT_FOUND;
+    if (!latchKnown || !recordKnown) return true;
+    return latchStatus == ESP_OK || recordStatus == ESP_OK;
+}
 
 bool MbedTlsDeviceLockCrypto::fillRandom(std::uint8_t* output,
                                         std::size_t size) {
@@ -143,7 +168,9 @@ DeviceLockLoadStatus NvsDeviceLockStore::load(
     output->clear();
     ScopedNvsHandle storage;
     esp_err_t openStatus = ESP_FAIL;
-    if (!storage.open(NVS_READONLY, &openStatus)) {
+    const char* name = hilFixtureNamespaceActive_
+        ? kHilFixtureNamespace : kProductNamespace;
+    if (!storage.open(name, NVS_READONLY, &openStatus)) {
         if (openStatus == ESP_ERR_NVS_NOT_FOUND) {
             return DeviceLockLoadStatus::MissingVirgin;
         }
@@ -196,7 +223,9 @@ bool NvsDeviceLockStore::save(
     }
     ScopedNvsHandle storage;
     esp_err_t openStatus = ESP_FAIL;
-    if (!storage.open(NVS_READWRITE, &openStatus)) return false;
+    const char* name = hilFixtureNamespaceActive_
+        ? kHilFixtureNamespace : kProductNamespace;
+    if (!storage.open(name, NVS_READWRITE, &openStatus)) return false;
     // Commit the credential before the independent provisioned latch. A
     // power cut can therefore produce only virgin, corrupt or fully loaded —
     // never an apparently valid empty credential.
@@ -223,7 +252,9 @@ bool NvsDeviceLockStore::save(
 bool NvsDeviceLockStore::clearCredentialAndLatch() {
     ScopedNvsHandle storage;
     esp_err_t openStatus = ESP_FAIL;
-    if (!storage.open(NVS_READWRITE, &openStatus)) return false;
+    const char* name = hilFixtureNamespaceActive_
+        ? kHilFixtureNamespace : kProductNamespace;
+    if (!storage.open(name, NVS_READWRITE, &openStatus)) return false;
     // Keep the latch until protected state and the verifier are durably gone.
     // A reset between these commits is MissingExpected and remains locked.
     if (!eraseKeyIfPresent(storage.get(), kCredentialKey) ||

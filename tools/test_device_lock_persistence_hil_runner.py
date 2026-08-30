@@ -46,16 +46,37 @@ class DeviceLockPersistenceHilRunnerTests(unittest.TestCase):
             "credential_generation": 2,
             "protected_access": False,
             "worker_active": False,
+            "persistence_fixture_active": True,
+            "persistence_fixture_cleanup_required": True,
             "radio_touched": False,
             "retry_remaining_ms": 4990,
         }
         self.assertEqual([], RUNNER.state_failures(
             record, "retry", status="retry_delay", failure="wrong_pin",
-            failed_attempts=1, generation=2, protected=False))
+            failed_attempts=1, generation=2, protected=False,
+            fixture_active=True))
         self.assertEqual([], RUNNER.full_retry_failures(
             record, "retry", 5000))
         self.assertTrue(RUNNER.full_retry_failures(
             dict(record, retry_remaining_ms=4000), "retry", 5000))
+
+    def test_fixture_contract_excludes_product_and_whole_nvs(self) -> None:
+        record = {
+            "operation": "cleanup",
+            "status": "cleaned",
+            "active": False,
+            "cleanup_required": False,
+            "fixture_namespace_selected": False,
+            "fixture_cleanup_complete": True,
+            "product_restored": True,
+            "product_namespace_written_or_erased": False,
+            "whole_nvs_read_or_copied": False,
+            "radio_touched": False,
+        }
+        self.assertEqual([], RUNNER.fixture_failures(
+            record, "cleanup", status="cleaned", operation="cleanup",
+            active=False, selected=False, cleaned=True,
+            product_restored=True))
 
     def test_wipe_pin_overwrites_mutable_buffer(self) -> None:
         pin = bytearray([7, 0, 4, 2, 8, 1])

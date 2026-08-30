@@ -26,6 +26,18 @@ public:
     bool save(const services::security::DeviceLockCredential& credential)
         override;
     bool clearCredentialAndLatch() override;
+
+    // HIL may exercise the exact production codec and NVS transaction logic
+    // in a dedicated namespace. It never reads, copies or erases the product
+    // namespace, and every boot returns to the product namespace by default.
+    void useHilFixtureNamespace(bool enabled);
+    bool hilFixtureNamespaceActive() const {
+        return hilFixtureNamespaceActive_;
+    }
+    bool hilFixtureStatePresent() const;
+
+private:
+    bool hilFixtureNamespaceActive_ = false;
 };
 
 }  // namespace leshy1::platform::arduino
