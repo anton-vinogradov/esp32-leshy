@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <new>
+#include <type_traits>
 
 #include <esp_system.h>
 #include <esp_sleep.h>
@@ -1590,7 +1591,7 @@ struct BleInspectorCaptureSummary final {
 };
 
 portMUX_TYPE bleInspectorCaptureMux = portMUX_INITIALIZER_UNLOCKED;
-BleInspectorCapture bleInspectorCapture;
+BleInspectorCapture* bleInspectorCapture = nullptr;
 std::uint32_t bleInspectorUiRevision = 0U;
 std::uint32_t bleInspectorRenderedRevision = UINT32_MAX;
 std::uint32_t bleInspectorContentClears = 0U;
@@ -1600,14 +1601,16 @@ std::uint64_t nextBleInspectorUiRefreshUs = 0U;
 BleInspectorCaptureSummary bleInspectorCaptureSnapshot() {
     BleInspectorCaptureSummary summary{};
     portENTER_CRITICAL(&bleInspectorCaptureMux);
-    summary.state = bleInspectorCapture.state();
-    summary.counters = bleInspectorCapture.counters();
-    summary.target = bleInspectorCapture.target();
-    summary.records = bleInspectorCapture.size();
     summary.revision = bleInspectorUiRevision;
-    if (summary.records != 0U) {
+    if (bleInspectorCapture != nullptr) {
+        summary.state = bleInspectorCapture->state();
+        summary.counters = bleInspectorCapture->counters();
+        summary.target = bleInspectorCapture->target();
+        summary.records = bleInspectorCapture->size();
+    }
+    if (bleInspectorCapture != nullptr && summary.records != 0U) {
         const BleInspectorRawAdvertisement* latest =
-            bleInspectorCapture.at(summary.records - 1U);
+            bleInspectorCapture->at(summary.records - 1U);
         if (latest != nullptr) {
             summary.latest = *latest;
             summary.latestPresent = true;
@@ -1631,7 +1634,9 @@ bool beginBleInspectorCapture(const Observation& observation) {
         bleInspectorTargetFromObservation(observation);
     bool begun = false;
     portENTER_CRITICAL(&bleInspectorCaptureMux);
-    begun = bleInspectorCapture.begin(target);
+    if (bleInspectorCapture != nullptr) {
+        begun = bleInspectorCapture->begin(target);
+    }
     if (begun) ++bleInspectorUiRevision;
     portEXIT_CRITICAL(&bleInspectorCaptureMux);
     if (begun) nextBleInspectorUiRefreshUs = 0U;
@@ -1641,7 +1646,9 @@ bool beginBleInspectorCapture(const Observation& observation) {
 bool freezeBleInspectorCapture() {
     bool frozen = false;
     portENTER_CRITICAL(&bleInspectorCaptureMux);
-    frozen = bleInspectorCapture.freeze();
+    if (bleInspectorCapture != nullptr) {
+        frozen = bleInspectorCapture->freeze();
+    }
     if (frozen) ++bleInspectorUiRevision;
     portEXIT_CRITICAL(&bleInspectorCaptureMux);
     if (frozen) nextBleInspectorUiRefreshUs = 0U;
@@ -1650,7 +1657,7 @@ bool freezeBleInspectorCapture() {
 
 void resetBleInspectorCapture() {
     portENTER_CRITICAL(&bleInspectorCaptureMux);
-    bleInspectorCapture.reset();
+    if (bleInspectorCapture != nullptr) bleInspectorCapture->reset();
     ++bleInspectorUiRevision;
     portEXIT_CRITICAL(&bleInspectorCaptureMux);
     bleInspectorRenderedRevision = UINT32_MAX;
@@ -2238,10 +2245,62 @@ struct AirspaceGuardBleWorkerEvent final {
 // Queue receive storage must not live on Arduino's bounded 8-KiB loop stack.
 // AirspaceGuardReport is intentionally evidence-rich; dev.223 proved that a
 // local event plus local merge/report temporaries inflated the service frame to
-// 7,280 bytes and corrupted the following critical-section call. Only the loop
-// task reads this workspace, while the worker copies complete events through
-// the queue, so one static bounded instance preserves ownership and accounting.
-AirspaceGuardBleWorkerEvent airspaceGuardBleEventWorkspace{};
+// 7,280 bytes and corrupted the following critical-section call. BLE Inspector
+// is a different foreground application, so its exact-packet capture shares the
+// larger 4.6-KiB event storage instead of permanently removing another 1.8 KiB
+// from the internal heap NimBLE needs during initialization.
+static_assert(std::is_trivially_destructible_v<AirspaceGuardBleWorkerEvent>);
+static_assert(std::is_trivially_destructible_v<BleInspectorCapture>);
+static_assert(sizeof(BleInspectorCapture) <=
+              sizeof(AirspaceGuardBleWorkerEvent));
+union BleProductSharedWorkspace final {
+    AirspaceGuardBleWorkerEvent airspaceGuard;
+    BleInspectorCapture inspector;
+
+    BleProductSharedWorkspace() : airspaceGuard{} {}
+    ~BleProductSharedWorkspace() {}
+};
+BleProductSharedWorkspace bleProductSharedWorkspace;
+AirspaceGuardBleWorkerEvent& airspaceGuardBleEventWorkspace =
+    bleProductSharedWorkspace.airspaceGuard;
+
+bool activateBleInspectorWorkspace() {
+    portENTER_CRITICAL(&bleInspectorCaptureMux);
+    if (bleInspectorCapture == nullptr) {
+        bleProductSharedWorkspace.airspaceGuard.
+            ~AirspaceGuardBleWorkerEvent();
+        bleInspectorCapture = new (&bleProductSharedWorkspace.inspector)
+            BleInspectorCapture();
+        ++bleInspectorUiRevision;
+    }
+    portEXIT_CRITICAL(&bleInspectorCaptureMux);
+    return bleInspectorCapture != nullptr;
+}
+
+bool bleInspectorWorkspaceActive() {
+    portENTER_CRITICAL(&bleInspectorCaptureMux);
+    const bool active = bleInspectorCapture != nullptr;
+    portEXIT_CRITICAL(&bleInspectorCaptureMux);
+    return active;
+}
+
+void releaseBleInspectorWorkspace() {
+    portENTER_CRITICAL(&bleInspectorCaptureMux);
+    if (bleInspectorCapture != nullptr) {
+        bleInspectorCapture->reset();
+        bleInspectorCapture->~BleInspectorCapture();
+        bleInspectorCapture = nullptr;
+        new (&bleProductSharedWorkspace.airspaceGuard)
+            AirspaceGuardBleWorkerEvent();
+        ++bleInspectorUiRevision;
+    }
+    portEXIT_CRITICAL(&bleInspectorCaptureMux);
+    bleInspectorRenderedRevision = UINT32_MAX;
+    bleInspectorContentClears = 0U;
+    bleInspectorAtomicRowPushes = 0U;
+    nextBleInspectorUiRefreshUs = 0U;
+}
+
 void resetAirspaceGuardBleEventWorkspace() {
     // The worker and loop task exchange ownership through the completion-token
     // queue. Keep the evidence-rich payload in one static workspace so neither
@@ -2818,7 +2877,8 @@ std::uint32_t airspaceGuardBleRequestGeneration() {
 }
 
 bool requestAirspaceGuardBleWorker(std::uint32_t generation) {
-    if (generation == 0U || !productSurveyWorkerReady ||
+    if (generation == 0U || bleInspectorWorkspaceActive() ||
+        !productSurveyWorkerReady ||
         productSurveyWorkerTaskHandle == nullptr ||
         airspaceGuardBleWorkerEvents == nullptr ||
         productSurveyControl() != ProductSurveyWorkerControl::Idle) {
@@ -3481,10 +3541,12 @@ BleRecordDisposition enqueueProductSurveyWorkerBleRecord(
     const BleAdvertisementRecord& record, std::uint64_t monotonicUs, void*) {
     portENTER_CRITICAL(&bleInspectorCaptureMux);
     const BleInspectorCaptureDisposition inspectorDisposition =
-        bleInspectorCapture.ingest(record, monotonicUs);
+        bleInspectorCapture == nullptr
+            ? BleInspectorCaptureDisposition::NotRunning
+            : bleInspectorCapture->ingest(record, monotonicUs);
     if (inspectorDisposition == BleInspectorCaptureDisposition::Accepted &&
-        bleInspectorCapture.size() == BleInspectorCapture::kRecordCapacity) {
-        (void)bleInspectorCapture.freeze();
+        bleInspectorCapture->size() == BleInspectorCapture::kRecordCapacity) {
+        (void)bleInspectorCapture->freeze();
     }
     if (inspectorDisposition == BleInspectorCaptureDisposition::Accepted ||
         inspectorDisposition == BleInspectorCaptureDisposition::InvalidRecord ||
@@ -6255,7 +6317,7 @@ void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
                uiController.page() == 2) {
         if (returnFromBle) {
             bleProductView = BleProductView::None;
-            resetBleInspectorCapture();
+            releaseBleInspectorWorkspace();
         }
         uiController.apply(UiAction::Back,
                            static_cast<std::uint8_t>(appCatalog.size()), false);
@@ -22358,6 +22420,13 @@ void emitWifiFrameCaptureState(Stream& reply) {
 }
 
 void emitAirspaceGuardState(Stream& reply) {
+    if (bleInspectorWorkspaceActive()) {
+        reply.println(
+            "{\"schema\":\"leshy.airspace_guard.v1\","
+            "\"kind\":\"error\","
+            "\"reason\":\"workspace_owned_by_ble_inspector\"}");
+        return;
+    }
     const auto capture = wifiFrameCapture.stats();
     const auto monitor = wifiFrameCapture.airspaceGuardMonitorStats();
     std::uint32_t findingMask = 0U;
@@ -22975,6 +23044,21 @@ bool startBleDevicesProduct() {
     bleDeviceDetail = {};
     bleDeviceRenderedDetail = {};
     bleDeviceDetailSignal = {};
+    if (airspaceGuardBleControl() !=
+            AirspaceGuardBleWorkerControl::Idle) {
+        productSurveyRuntime = {};
+        productSurveyRuntime.selected = true;
+        productSurveyRuntime.status = "ble_workspace_busy";
+        lastRuntimeEvent = productSurveyRuntime.status;
+        return false;
+    }
+    if (!activateBleInspectorWorkspace()) {
+        productSurveyRuntime = {};
+        productSurveyRuntime.selected = true;
+        productSurveyRuntime.status = "ble_workspace_unavailable";
+        lastRuntimeEvent = productSurveyRuntime.status;
+        return false;
+    }
     resetBleInspectorCapture();
     bleDeviceRenderedRadar = {};
     nextBleDeviceUiRefreshUs = 0U;
@@ -23749,7 +23833,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                     // A terminal unavailable BLE view owns no worker or lease;
                     // only this explicit user Back action closes it.
                     bleProductView = BleProductView::None;
-                    resetBleInspectorCapture();
+                    releaseBleInspectorWorkspace();
                     surveyPipeline.resetToSetup();
                     changed = uiController.apply(
                         action,
@@ -31687,17 +31771,21 @@ void emitBleInspectorCaptureExport(Stream& reply) {
             leshy1::services::ble::bleInspectorExportStatusName(status));
         reply.println(line);
     };
+    if (bleInspectorCapture == nullptr) {
+        emitError(BleInspectorExportStatus::InvalidCapture);
+        return;
+    }
     BleInspectorExportStatus status =
         leshy1::services::ble::formatBleInspectorExportHeader(
-            bleInspectorCapture, line, sizeof(line), &size);
+            *bleInspectorCapture, line, sizeof(line), &size);
     if (status != BleInspectorExportStatus::Formatted) {
         emitError(status);
         return;
     }
     reply.println(line);
-    for (std::size_t index = 0U; index < bleInspectorCapture.size(); ++index) {
+    for (std::size_t index = 0U; index < bleInspectorCapture->size(); ++index) {
         status = leshy1::services::ble::formatBleInspectorExportRecord(
-            bleInspectorCapture, index, line, sizeof(line), &size);
+            *bleInspectorCapture, index, line, sizeof(line), &size);
         if (status != BleInspectorExportStatus::Formatted) {
             emitError(status);
             return;
@@ -31705,7 +31793,7 @@ void emitBleInspectorCaptureExport(Stream& reply) {
         reply.println(line);
     }
     status = leshy1::services::ble::formatBleInspectorExportEnd(
-        bleInspectorCapture, line, sizeof(line), &size);
+        *bleInspectorCapture, line, sizeof(line), &size);
     if (status != BleInspectorExportStatus::Formatted) {
         emitError(status);
         return;

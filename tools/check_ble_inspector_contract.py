@@ -77,8 +77,15 @@ for marker, label in (
 for marker, label in (
     ("BleProductView::InspectorRaw", "visible product view"),
     ("beginBleInspectorCapture(*liveBleDeviceDetail())", "selected detail entry"),
-    ("bleInspectorCapture.ingest(record, monotonicUs)", "scanner capture handoff"),
-    ("bleInspectorCapture.size() == BleInspectorCapture::kRecordCapacity", "zero-drop automatic freeze"),
+    ("bleInspectorCapture->ingest(record, monotonicUs)", "scanner capture handoff"),
+    ("bleInspectorCapture->size() == BleInspectorCapture::kRecordCapacity", "zero-drop automatic freeze"),
+    ("union BleProductSharedWorkspace", "mutually exclusive BLE workspace"),
+    ("sizeof(BleInspectorCapture) <=", "shared workspace size bound"),
+    ("activateBleInspectorWorkspace()", "explicit Inspector workspace lifetime"),
+    ("releaseBleInspectorWorkspace()", "explicit Inspector workspace release"),
+    ("bleInspectorWorkspaceActive()", "shared workspace ownership guard"),
+    ("workspace_owned_by_ble_inspector", "Airspace state inactive-member guard"),
+    ('"ble_workspace_busy"', "Airspace worker exclusion at BLE entry"),
     ('"ble.inspector.export.raw"', "local raw export action"),
     ("renderBleInspectorRawData(false)", "incremental inspector repaint"),
     ("nowUs + kBleDeviceUiRefreshPeriodUs", "bounded inspector refresh cadence"),
@@ -92,6 +99,7 @@ for marker, label in (
     ("expected_fingerprint", "expected CID preflight"),
     ("observed_fingerprint", "observed CID preflight"),
     ("mounted_read_only", "read-only storage preflight"),
+    ("wait_stable_ble_entry(device)", "bounded Bluetooth entry stability"),
     ("cardputer_touched\": False", "Cardputer isolation evidence"),
 ):
     require(hil, marker, label)

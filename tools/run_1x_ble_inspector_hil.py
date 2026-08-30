@@ -14,7 +14,11 @@ from typing import Any
 
 from capture_1x_ui import PassiveSerial, read_json, synchronize_console
 from esp_app_identity import app_elf_sha256
-from run_1x_ble_nearby_hil import home_ble, wait_live
+from run_1x_ble_nearby_hil import (
+    home_ble,
+    wait_live,
+    wait_stable_ble_entry,
+)
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_home_hil import stabilized_boot_metrics
 from run_1x_product_survey_hil import (
@@ -195,6 +199,7 @@ def main() -> int:
     preflight: dict[str, Any] = {}
     boot: dict[str, Any] = {}
     recovery: dict[str, Any] = {}
+    entry_stability: dict[str, Any] = {}
     detail: dict[str, Any] = {}
     running_first: dict[str, Any] = {}
     running_second: dict[str, Any] = {}
@@ -226,6 +231,7 @@ def main() -> int:
                 query(device, b"ui.language ru", "leshy.ui.v1", "state")
                 home_ble(device)
                 trace.append(action(device, "right"))
+                entry_stability = wait_stable_ble_entry(device)
                 live = wait_live(device)
                 trace.append(live)
                 detail_ui = action(device, "right")
@@ -349,6 +355,7 @@ def main() -> int:
         "preflight": preflight,
         "boot": boot,
         "recovery": recovery,
+        "entry_stability": entry_stability,
         "detail": detail,
         "running_first": running_first,
         "running_second": running_second,
