@@ -172,8 +172,8 @@ def main() -> int:
             "About must retain the full firmware version")
 
     catalog = CATALOG.read_text(encoding="utf-8")
-    require(failures, "kCapacity = 8" in CATALOG_HEADER.read_text(encoding="utf-8"),
-            "Home must expose eight implemented user tasks")
+    require(failures, "kCapacity = 9" in CATALOG_HEADER.read_text(encoding="utf-8"),
+            "Home must expose nine implemented user tasks")
     require(failures,
             '"targets", "TARGETS"' in catalog and
             'UiTextId::NoteTargetsReady' in renderer and
