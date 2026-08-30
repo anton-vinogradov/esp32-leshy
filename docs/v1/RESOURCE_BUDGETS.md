@@ -1464,6 +1464,21 @@ and 3,808 B padded app beyond dev.276. The resident credential/state objects are
 fixed-size; no PIN or evidence buffer is retained. Runtime KDF latency, transient
 heap and watchdog margin remain unclaimed until physical dev.278-or-later HIL.
 
+Device Lock physical UI/KDF bound `RB-M206`: exact `1.0.0-dev.278` at source
+`e6d6ecbaa957015335bec986fe11d32809072d39` uses 230,960 B static RAM and a
+3,495,264 B app image, leaving 699,040 B in the 4 MiB OTA slot. The
+app/factory/ELF/map SHA-256 values are
+`b832b856ba60ce6dfb49ebd0c1d6e4ad0810f500e140b02ec631ee85185e7fd1`/
+`f9c8950d2175643325e3c3e60a80486bffeb1d6ac42647a1dbe829c725c2d365`/
+`ec752911e4250e26b1c8be67f7fd4470f82339ccd4f46cbeb6f00a674e6b46e5`/
+`374f448add21961d6eb6da5e87b7f3a257814d0510032aed0e7d1494d2c4c507`.
+On original board-01, one-time crypto initialization consumes exactly 120 B
+(67,608→67,488 B); the next full 120,000-round KDF is byte-invariant at
+67,488 B and takes 7,467,462 us. Cooperative 256-round batches acknowledge an
+injected UI event in 19.929 ms without input drops or a watchdog reset. This bound
+does not reserve storage or resident buffers for enrollment, protected-action
+admission or encrypted data at rest.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

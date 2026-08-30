@@ -1451,6 +1451,21 @@ padded app поверх dev.276. Resident objects credential/state имеют fi
 или evidence buffer не сохраняются. Runtime latency KDF, transient heap и watchdog
 margin не заявляются до physical HIL dev.278 или новее.
 
+Physical UI/KDF bound Device Lock `RB-M206`: exact `1.0.0-dev.278` на source
+`e6d6ecbaa957015335bec986fe11d32809072d39` использует 230 960 B static RAM и
+app image 3 495 264 B, оставляя 699 040 B в OTA slot 4 MiB. SHA-256
+app/factory/ELF/map —
+`b832b856ba60ce6dfb49ebd0c1d6e4ad0810f500e140b02ec631ee85185e7fd1`/
+`f9c8950d2175643325e3c3e60a80486bffeb1d6ac42647a1dbe829c725c2d365`/
+`ec752911e4250e26b1c8be67f7fd4470f82339ccd4f46cbeb6f00a674e6b46e5`/
+`374f448add21961d6eb6da5e87b7f3a257814d0510032aed0e7d1494d2c4c507`.
+На original board-01 one-time crypto initialization потребляет ровно 120 B
+(67 608→67 488 B); следующий полный KDF 120 000 rounds byte-invariant при
+67 488 B и занимает 7 467 462 us. Cooperative batches по 256 rounds подтверждают
+injected UI event за 19,929 ms без input drops или watchdog reset. Этот bound не
+резервирует storage или resident buffers для enrollment, admission protected actions
+или encrypted data at rest.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

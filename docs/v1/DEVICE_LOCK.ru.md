@@ -8,11 +8,15 @@ Device Lock — локальная граница безопасности дл�
 
 ## Текущая граница реализации
 
-Exact host/build `1.0.0-dev.277` содержит state machine, credential record,
-production adapters crypto/NVS ESP32-S3 и read-only restore при загрузке. Product UI
-пока не настраивает PIN, а существующие screens/exports ещё не проходят admission
-через эту границу. Поэтому checkpoint является foundation, а не заявлением, что
-сохранённые данные уже защищены от physical access.
+Exact physical `1.0.0-dev.278` добавляет непостоянные on-device status/PIN editor и
+watchdog-cooperative production PBKDF2 к принятому foundation dev.277: state,
+credential, crypto/NVS и read-only restore при загрузке. На original board-01 два
+последовательных KDF по 120 000 rounds подтверждают known vector; повторный проход
+занимает 7,467 s при byte-invariant warm heap, а injected UI event подтверждается за
+19,929 ms и перерисовывает только изменившуюся цифру PIN. Этот slice намеренно не
+enroll-ит и не сохраняет credential, существующие protected actions ещё не проходят
+admission через boundary. Поэтому cold retry/recovery и защита сохранённых данных
+пока не объявляются завершёнными.
 
 ## Пользовательский контракт
 
@@ -64,9 +68,12 @@ update/recovery; один access-control не выдаётся за data-at-rest
 
 1. `done` — pure state machine, retry/recovery negatives, corruption record,
    production crypto/NVS build и read-only boot restore (`dev.277`).
-2. `next` — on-device UI PIN setup/lock/unlock, измеренный PBKDF2 watchdog budget,
-   cold persistence, reset-resistant retry и HIL безопасных операций.
-3. `planned` — admission каждого protected UI/export/backup/companion/settings
+2. `done` — physical непостоянные status/PIN editor, два exact production KDF,
+   cooperative watchdog scheduling, incremental repaint и zero credential/storage/
+   radio mutation (`dev.278`).
+3. `next` — physical enrollment PIN и cold restore credential, reset-resistant
+   retry delay, переход recovery-only и HIL безопасных операций.
+4. `planned` — admission каждого protected UI/export/backup/companion/settings
    action через access matrix и authenticated-encryption key envelope.
-4. `planned` — destructive recovery/power-cut matrix, взаимодействие signed
+5. `planned` — destructive recovery/power-cut matrix, взаимодействие signed
    update/recovery, privacy review и release HIL.

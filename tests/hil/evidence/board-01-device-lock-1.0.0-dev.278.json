@@ -1,0 +1,67 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "ec752911e4250e26b1c8be67f7fd4470f82339ccd4f46cbeb6f00a674e6b46e5",
+    "firmware_sha256": "b832b856ba60ce6dfb49ebd0c1d6e4ad0810f500e140b02ec631ee85185e7fd1",
+    "flash_mode": "fresh",
+    "flashed": true,
+    "source_commit": "e6d6ecbaa957015335bec986fe11d32809072d39",
+    "version": "1.0.0-dev.278"
+  },
+  "evidence": {
+    "delta_precursor_run_sha256": "9218e350313040d5301c611e6352c359f8efe63ee4f549321460d18b41821546",
+    "run_id": "ad1bbae5b9e1d70954b1119e97f3b7ee",
+    "run_sha256": "9015c0d3c26f6c3161f9f939b6d67897d0b49ccc4e18f56d186983acc1224169",
+    "runner_sha256": "3585aa62320e63cacdff15c7c1b41845e48625a71568e6cdd04e7c980fab6947",
+    "watchdog_metrics_sha256": "1a2aab34a6dd49c8d0c8ad7f067f070a7f13ee613eff1e5d550183dbde325a2b",
+    "watchdog_precursor_run_sha256": "82cac3ac982f14937161baf2f49bcc0b3978156b59982bbf8b8c5457b5e1bd3e",
+    "watchdog_safety_sha256": "c10604b24fa77926c55264509029d39cfcc68ae11936b5797837e314abb1e34e"
+  },
+  "evidence_ids": [
+    "E-BUILD-195",
+    "E-AUTO-170",
+    "E-HIL-207",
+    "E-UX-064"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "open": [
+    "physical credential enrollment and cold credential restore",
+    "physical retry-delay and recovery-only transitions",
+    "protected-action admission",
+    "encrypted data at rest"
+  ],
+  "schema": "leshy.device_lock_hil.acceptance.v1",
+  "status": "pass_ui_kdf_slice",
+  "verified": {
+    "benchmark_vector_verified_twice": true,
+    "cardputer_touched": false,
+    "clone_touched": false,
+    "credential_enrollment": false,
+    "credential_generation_after": 0,
+    "credential_generation_before": 0,
+    "editor_png_sha256": "52fc55e57257cad76158b36fb2b9028b004062210f6d9d3db3a8e14ea9e6a309",
+    "editor_render_mode": "full",
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "final_safety_state": "armed",
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "mac_wifi_touched": false,
+    "one_time_heap_initialization_bytes": 120,
+    "pbkdf2_hmac_sha256_iterations": 120000,
+    "pin_delta_png_sha256": "bf08a15796ca32e894ea4240d6251edda590716a6306346a03c1c1caa640080d",
+    "pin_navigation_render_mode": "incremental",
+    "radio_touched": false,
+    "repeat_elapsed_us": 7467462,
+    "repeat_heap_after": 67488,
+    "repeat_heap_before": 67488,
+    "status_png_sha256": "44877f4eb1bbb71fa3ddad87253bf40f0704bc7502e39be248028e9a7f09028c",
+    "status_render_mode": "full",
+    "storage_generation_after": 176,
+    "storage_generation_before": 176,
+    "storage_physical_write_calls": 0,
+    "ui_ack_during_kdf_ms": 19.929,
+    "warmup_elapsed_us": 7468529
+  }
+}
