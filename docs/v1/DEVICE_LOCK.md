@@ -8,15 +8,14 @@ panic, cleanup, update recovery or a destructive factory reset.
 
 ## Current implementation boundary
 
-Exact physical `1.0.0-dev.278` adds the non-persistent on-device status/PIN editor
-and a watchdog-cooperative production PBKDF2 path to the accepted dev.277 state,
-credential, crypto/NVS and read-only boot-restore foundation. On original board-01,
-two consecutive 120,000-round KDFs verify the known vector; the repeated run takes
-7.467 s with byte-invariant warm heap, while an injected UI event is acknowledged in
-19.929 ms and repaints only the changed PIN cell. This slice deliberately does not
-enroll or persist a credential and existing protected actions are not yet admitted
-through the boundary. It is therefore not a claim that cold retry/recovery or stored
-content protection is complete.
+Exact physical `1.0.0-dev.278` accepts the responsive on-device status/PIN editor
+and watchdog-cooperative production PBKDF2 path over the dev.277 foundation. Exact
+physical `1.0.0-dev.280` then accepts isolated PIN enrollment, cold locked restore,
+full post-KDF 5/15-second retry intervals, cold retry restore, generation-4 unlock
+and explicit cleanup while proving the product namespace remains virgin. Existing
+protected actions are not yet admitted through the boundary, the fifth-attempt
+`recovery_only` path is not physically accepted, and access control is not a claim
+of encrypted stored content.
 
 ## User contract
 
@@ -65,6 +64,13 @@ offline reading of stored evidence requires the planned authenticated-encryption
 envelope and signed update/recovery chain; access-control wiring alone is not
 represented as data-at-rest encryption.
 
+Physical persistence HIL uses the separate disposable namespace
+`leshy1-lock-hil`. Every boot defaults to the product namespace; a surviving HIL
+fixture only raises `cleanup_required` and prevents the HIL session from ending
+until explicit cleanup. The runner never reads or copies the whole NVS partition,
+never writes or erases `leshy1-lock`, wipes the ephemeral PIN buffer, and proves a
+virgin product state again after a final cold boot.
+
 ## Evidence gates
 
 1. `done` — pure state machine, retry/recovery negatives, record corruption,
@@ -72,9 +78,10 @@ represented as data-at-rest encryption.
 2. `done` — physical non-persistent status/PIN editor, two exact production KDFs,
    cooperative watchdog scheduling, incremental repaint and zero credential/storage/
    radio mutation (`dev.278`).
-3. `next` — physical PIN enrollment and cold credential restore, reset-resistant
-   retry delay, recovery-only transition and safe-operation HIL.
-4. `planned` — route every protected UI/export/backup/companion/settings action
+3. `done` — physical PIN enrollment, cold credential restore, reset-resistant
+   5/15-second retry delay and explicit isolated-fixture cleanup (`dev.280`).
+4. `next` — physical fifth-attempt `recovery_only`, destructive recovery ordering,
+   and safe-operation HIL; route every protected UI/export/backup/companion/settings action
    through the access matrix and add an authenticated-encryption key envelope.
 5. `planned` — destructive recovery/power-cut matrix, signed update/recovery
    interaction, privacy review and release HIL.

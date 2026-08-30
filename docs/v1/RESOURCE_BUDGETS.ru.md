@@ -1466,6 +1466,21 @@ injected UI event за 19,929 ms без input drops или watchdog reset. Эт�
 резервирует storage или resident buffers для enrollment, admission protected actions
 или encrypted data at rest.
 
+Bound persistence Device Lock `RB-M207`: exact `1.0.0-dev.280` на firmware source
+`c79e1d24d65e38e3fd1878f2893c8879f43a1b6e` использует 230 968 B static RAM и
+app image 3 497 472 B, оставляя 696 832 B в OTA slot 4 MiB. SHA-256
+app/factory/ELF/map —
+`df62eee22ecd4dc17b9e33c2189a1081bb154ec42950905341e0136aa21a4653`/
+`2f7c11a263e2e335b5e0129aec2ecb623f0917ee6866d283d7df3f0ac4916b21`/
+`c1d60e205635a296c6651dd068b8720683152c0b9e94ed2ff1504e14317841dc`/
+`d6850af5e2dd79a8ac03a04786a9883bd88ad9572742d8de693c14e400790ff2`.
+Восемь static bytes и 2 208 padded app bytes поверх dev.278 добавляют только
+selector namespace HIL и flags continuity cleanup; production по умолчанию всё так
+же выбирает `leshy1-lock`. На original board-01 final cold boot сохраняет
+74 332/74 104 B free/minimum heap после четырёх KDF по 7,47–7,48 s, двух cold
+restore retry и explicit cleanup fixture. Runner не сохраняет PIN/digest или image
+NVS и не пишет product namespace, поэтому этот bound не заявляет encrypted data at rest.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

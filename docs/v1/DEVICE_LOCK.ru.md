@@ -8,15 +8,14 @@ Device Lock — локальная граница безопасности дл�
 
 ## Текущая граница реализации
 
-Exact physical `1.0.0-dev.278` добавляет непостоянные on-device status/PIN editor и
-watchdog-cooperative production PBKDF2 к принятому foundation dev.277: state,
-credential, crypto/NVS и read-only restore при загрузке. На original board-01 два
-последовательных KDF по 120 000 rounds подтверждают known vector; повторный проход
-занимает 7,467 s при byte-invariant warm heap, а injected UI event подтверждается за
-19,929 ms и перерисовывает только изменившуюся цифру PIN. Этот slice намеренно не
-enroll-ит и не сохраняет credential, существующие protected actions ещё не проходят
-admission через boundary. Поэтому cold retry/recovery и защита сохранённых данных
-пока не объявляются завершёнными.
+Exact physical `1.0.0-dev.278` принимает responsive on-device status/PIN editor и
+watchdog-cooperative production PBKDF2 поверх foundation dev.277. Exact physical
+`1.0.0-dev.280` затем принимает isolated enrollment PIN, cold restore locked,
+полные post-KDF задержки 5/15 секунд, cold restore retry, unlock generation 4 и
+explicit cleanup, одновременно доказывая virgin product namespace. Existing
+protected actions ещё не проходят admission через boundary, physical path
+`recovery_only` пятой попытки не принят, а access control не выдаётся за encryption
+сохранённого content.
 
 ## Пользовательский контракт
 
@@ -64,6 +63,13 @@ Latch отличает действительно virgin device от пропа�
 от offline чтения требует planned authenticated-encryption envelope и signed chain
 update/recovery; один access-control не выдаётся за data-at-rest encryption.
 
+Physical HIL persistence использует отдельный disposable namespace
+`leshy1-lock-hil`. Каждый boot по умолчанию выбирает product namespace; surviving
+fixture HIL только поднимает `cleanup_required` и не даёт завершить session HIL до
+explicit cleanup. Runner не читает и не копирует весь partition NVS, не пишет и не
+стирает `leshy1-lock`, затирает buffer временного PIN и после final cold boot снова
+доказывает virgin product state.
+
 ## Evidence gates
 
 1. `done` — pure state machine, retry/recovery negatives, corruption record,
@@ -71,9 +77,10 @@ update/recovery; один access-control не выдаётся за data-at-rest
 2. `done` — physical непостоянные status/PIN editor, два exact production KDF,
    cooperative watchdog scheduling, incremental repaint и zero credential/storage/
    radio mutation (`dev.278`).
-3. `next` — physical enrollment PIN и cold restore credential, reset-resistant
-   retry delay, переход recovery-only и HIL безопасных операций.
-4. `planned` — admission каждого protected UI/export/backup/companion/settings
+3. `done` — physical enrollment PIN, cold restore credential, reset-resistant
+   задержки 5/15 секунд и explicit cleanup isolated fixture (`dev.280`).
+4. `next` — physical `recovery_only` на пятой попытке, ordering destructive recovery
+   и HIL safe operations; admission каждого protected UI/export/backup/companion/settings
    action через access matrix и authenticated-encryption key envelope.
 5. `planned` — destructive recovery/power-cut matrix, взаимодействие signed
    update/recovery, privacy review и release HIL.
