@@ -205,6 +205,9 @@ def main() -> int:
         (arduino_entry, "DeviceLockOperation::SensitiveSettings"),
         (arduino_entry, "renderAutomationTrustPage(clearContent)"),
         (arduino_entry, "AutomationTrustMutationAuthorization"),
+        (arduino_entry, '"automation.trust.state"'),
+        (arduino_entry, '"private_key_stored\\\":false'),
+        (arduino_entry, '"execution_connected\\\":false'),
     )
     for text, token in required_product:
         if token not in text:

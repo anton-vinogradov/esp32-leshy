@@ -30796,6 +30796,109 @@ void emitAutomationInspectorState(Stream& reply) {
     reply.println(line);
 }
 
+const char* automationTrustUiViewName(AutomationTrustUiView view) {
+    switch (view) {
+        case AutomationTrustUiView::List: return "list";
+        case AutomationTrustUiView::ImportReview: return "import_review";
+        case AutomationTrustUiView::RevokeReview: return "revoke_review";
+        case AutomationTrustUiView::Result: return "result";
+    }
+    return "invalid";
+}
+
+const char* automationTrustUiResultName(AutomationTrustUiResult result) {
+    switch (result) {
+        case AutomationTrustUiResult::None: return "none";
+        case AutomationTrustUiResult::StorageBusy: return "storage_busy";
+        case AutomationTrustUiResult::StorageUnavailable:
+            return "storage_unavailable";
+        case AutomationTrustUiResult::BundleReadFailed:
+            return "bundle_read_failed";
+        case AutomationTrustUiResult::BundleInvalid: return "bundle_invalid";
+        case AutomationTrustUiResult::Applied: return "applied";
+        case AutomationTrustUiResult::AuthenticationRequired:
+            return "authentication_required";
+        case AutomationTrustUiResult::ConfirmationExpired:
+            return "confirmation_expired";
+        case AutomationTrustUiResult::InvalidKey: return "invalid_key";
+        case AutomationTrustUiResult::DuplicateKey: return "duplicate_key";
+        case AutomationTrustUiResult::KeyIdConflict:
+            return "key_id_conflict";
+        case AutomationTrustUiResult::Full: return "full";
+        case AutomationTrustUiResult::NotFound: return "not_found";
+        case AutomationTrustUiResult::PersistenceFailed:
+            return "persistence_failed";
+        case AutomationTrustUiResult::StoreUnavailable:
+            return "store_unavailable";
+    }
+    return "invalid";
+}
+
+bool automationTrustSnapshotCryptographicallyValid() {
+    const AutomationTrustSnapshot& snapshot = automationTrustStore.snapshot();
+    for (std::size_t index = 0U; index < snapshot.count; ++index) {
+        std::array<std::uint8_t,
+                   leshy1::apps::automation::kAutomationKeyIdBytes> derived{};
+        if (!leshy1::platform::arduino::validateAutomationP256PublicKey(
+                snapshot.keys[index].publicKey) ||
+            !leshy1::platform::arduino::deriveAutomationP256KeyId(
+                snapshot.keys[index].publicKey, &derived) ||
+            !std::equal(derived.begin(), derived.end(),
+                        snapshot.keys[index].keyId.begin())) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void emitAutomationTrustState(Stream& reply) {
+    std::uint64_t nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0U) nowUs = 1U;
+    const AutomationTrustSnapshot& snapshot = automationTrustStore.snapshot();
+    char line[1024] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.automation.trust.state.v1\","
+        "\"kind\":\"state\",\"ready\":%s,\"load_status\":\"%s\","
+        "\"generation\":%lu,\"count\":%u,\"capacity\":%u,"
+        "\"all_keys_p256_and_id_bound\":%s,"
+        "\"page\":\"%s\",\"ui_view\":\"%s\",\"ui_selection\":%u,"
+        "\"ui_result\":\"%s\",\"confirmation_open\":%s,"
+        "\"confirmation_fresh\":%s,\"device_unlocked\":%s,"
+        "\"bundle_read_status\":\"%s\",\"bundle_parse_status\":\"%s\","
+        "\"bundle_root\":\"%s\",\"bundle_name\":\"%s\","
+        "\"public_keys_only\":true,\"private_key_stored\":false,"
+        "\"execution_connected\":false,\"action_invocations\":0,"
+        "\"hid_reports\":0,\"rf_transmit_attempts\":0,"
+        "\"runtime_owner\":\"%s\",\"lease_mask\":%lu}",
+        automationTrustStore.ready() ? "true" : "false",
+        leshy1::apps::automation::automationTrustLoadStatusName(
+            automationTrustStore.loadStatus()),
+        static_cast<unsigned long>(snapshot.generation),
+        static_cast<unsigned>(snapshot.count),
+        static_cast<unsigned>(
+            leshy1::apps::automation::kAutomationTrustMaximumKeys),
+        automationTrustSnapshotCryptographicallyValid() ? "true" : "false",
+        leshy1::ui::probePageName(uiController.page()),
+        automationTrustUiViewName(automationTrustUiView),
+        static_cast<unsigned>(automationTrustUiSelection),
+        automationTrustUiResultName(automationTrustUiResult),
+        automationTrustConfirmationOpenedUs != 0U ? "true" : "false",
+        automationTrustConfirmationFresh(nowUs) ? "true" : "false",
+        deviceLock.state() ==
+                leshy1::services::security::DeviceLockState::Unlocked
+            ? "true" : "false",
+        leshy1::platform::arduino::boardAutomationTrustBundleStatusName(
+            automationTrustBundleReadStatus),
+        leshy1::apps::automation::automationTrustBundleStatusName(
+            automationTrustBundleParseStatus),
+        leshy1::platform::arduino::kAutomationTrustBundleRoot,
+        leshy1::platform::arduino::kAutomationTrustBundleName,
+        appRuntime.activeApp(),
+        static_cast<unsigned long>(appRuntime.activeResources()));
+    reply.println(line);
+}
+
 void emitAutomationInspectorFixture(Stream& reply, const char* command,
                                     bool begin) {
     const char* prefix = begin
@@ -36754,6 +36857,8 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitUiState(reply, UiAction::Unknown, false);
     } else if (std::strcmp(command, "automation.inspector.state") == 0) {
         emitAutomationInspectorState(reply);
+    } else if (std::strcmp(command, "automation.trust.state") == 0) {
+        emitAutomationTrustState(reply);
     } else if (std::strncmp(
                    command, kAutomationInspectorFixtureBeginPrefix,
                    std::strlen(kAutomationInspectorFixtureBeginPrefix)) == 0) {
@@ -37639,7 +37744,7 @@ void setup() {
               "\"hardware.cc1101.spectrum\","
               "\"capture.subghz.test-fixture fixed-rx-only\","
               "\"ui.state\",\"ui.key <action>\","
-              "\"automation.inspector.state\","
+              "\"automation.inspector.state\",\"automation.trust.state\","
               "\"automation.inspector-fixture begin disposable-write <CID32> <run-id>\","
               "\"automation.inspector-fixture cleanup disposable-write <CID32> <run-id>\","
               "\"survey.browser\","
