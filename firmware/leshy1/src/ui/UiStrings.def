@@ -910,7 +910,7 @@ LESHY_UI_TEXT(TargetsBleRowFormat, Meta, 196, "BLUETOOTH | %d DBM", u8"BLUETOOTH
 LESHY_UI_TEXT(TargetsEmpty, Body, 212, "NO IDENTITIES IN SESSION", u8"В СЕССИИ НЕТ ЦЕЛЕЙ")
 LESHY_UI_TEXT(TargetsLoadFailed, Body, 212, "SESSIONS COULD NOT BE READ", u8"СЕССИИ НЕ ПРОЧИТАНЫ")
 LESHY_UI_TEXT(TargetsNoSessions, Body, 212, "NO TARGETS YET", u8"ЦЕЛЕЙ ПОКА НЕТ")
-LESHY_UI_TEXT(TargetsNoSessionsHint, Meta, 212, "SCAN WI-FI OR BLUETOOTH", u8"ЗАПУСТИТЕ WI-FI ИЛИ BLUETOOTH")
+LESHY_UI_TEXT(TargetsNoSessionsHint, Meta, 212, "SCAN WI-FI OR BLUETOOTH", u8"ЗАПУСТИТЕ ПОИСК WI-FI/BLE")
 LESHY_UI_TEXT(TargetsLoadFailedHint, Meta, 212, "REPEAT OR CHECK STORAGE", u8"ПОВТОРИТЕ ИЛИ ПРОВЕРЬТЕ SD")
 LESHY_UI_TEXT(TargetsDetail, Body, 206, "TARGET / DETAIL", u8"ЦЕЛЬ / ДЕТАЛИ")
 LESHY_UI_TEXT(TargetsActions, Body, 206, "TARGET / ACTIONS", u8"ЦЕЛЬ / ДЕЙСТВИЯ")
