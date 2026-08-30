@@ -31,6 +31,13 @@ def main() -> int:
     ).read_text(encoding="utf-8") + (
         ROOT / "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.h"
     ).read_text(encoding="utf-8")
+    passive_contract = (
+        ROOT / "firmware/leshy1/src/drivers/ble/BlePassiveContract.cpp"
+    ).read_text(encoding="utf-8")
+    if "record.rssiDbm < -127 || record.rssiDbm > 0" not in passive_contract:
+        raise SystemExit(
+            "BLE ingress RSSI range differs from the persistent Session codec"
+        )
     gatt_boundary = "bool BoardBleGattInspectorTransport::bind("
     if gatt_boundary not in adapter:
         raise SystemExit("passive/GATT BLE source boundary is missing")

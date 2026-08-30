@@ -2413,6 +2413,14 @@ struct ProductSurveyRuntimeState final {
     std::uint8_t runtimeSourceFailureInjectedMask = 0;
     bool storeOpenAttempted = false;
     std::uint64_t storeBytesWritten = 0;
+    SurveyPipelineStatus commitPipelineStatus = SurveyPipelineStatus::Ready;
+    SurveyWorkflowStatus commitWorkflowStatus = SurveyWorkflowStatus::Ready;
+    leshy1::storage::SessionStoreStatus commitStoreStatus =
+        leshy1::storage::SessionStoreStatus::Empty;
+    bool commitWorkspaceBound = true;
+    std::uint8_t commitWorkspaceOwner = 0;
+    SessionState commitSessionState = SessionState::Idle;
+    std::uint16_t commitSessionSize = 0;
     bool cancelRequestedDuringScan = false;
     std::uint32_t scanCycles = 0;
     std::uint32_t wifiScanCycles = 0;
@@ -5507,6 +5515,18 @@ SurveyPipelineStatus stopProductSurvey() {
     }
     const SurveyPipelineStatus status = surveyPipeline.stopAndCommit(
         static_cast<std::uint64_t>(esp_timer_get_time()));
+    // Retain the exact terminal boundary before release/reset returns the UI
+    // to Setup. HIL can therefore distinguish codec, recovery, backend and
+    // workspace-lifetime failures instead of seeing only `commit_failed`.
+    productSurveyRuntime.commitPipelineStatus = status;
+    productSurveyRuntime.commitWorkflowStatus = surveyWorkflow.lastStatus();
+    productSurveyRuntime.commitStoreStatus = surveyWorkflow.lastStoreStatus();
+    productSurveyRuntime.commitWorkspaceBound = surveyWorkflow.workspaceBound();
+    productSurveyRuntime.commitWorkspaceOwner = static_cast<std::uint8_t>(
+        targetsStoreCodecWorkspaceOwner);
+    productSurveyRuntime.commitSessionState = surveySession.state();
+    productSurveyRuntime.commitSessionSize = static_cast<std::uint16_t>(
+        surveySession.size());
     const bool cleanup = closeProductSurveyBackend();
     productSurveyRuntime.status =
         status == SurveyPipelineStatus::Committed
@@ -23057,6 +23077,13 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_product_runtime_source_injection_armed_mask\":%u,"
                       "\"survey_product_store_open_attempted\":%s,"
                       "\"survey_product_store_bytes_written\":%llu,"
+                      "\"survey_product_commit_pipeline_status\":\"%s\","
+                      "\"survey_product_commit_workflow_status\":\"%s\","
+                      "\"survey_product_commit_store_status\":\"%s\","
+                      "\"survey_product_commit_workspace_bound\":%s,"
+                      "\"survey_product_commit_workspace_owner\":%u,"
+                      "\"survey_product_commit_session_state\":%u,"
+                      "\"survey_product_commit_session_size\":%u,"
                       "\"survey_product_scan_active\":%s,"
                       "\"survey_product_cancel_requested_during_scan\":%s,"
                       "\"survey_product_scan_cycles\":%lu,"
@@ -23339,6 +23366,20 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       productSurveyRuntime.storeOpenAttempted ? "true" : "false",
                       static_cast<unsigned long long>(
                           productSurveyRuntime.storeBytesWritten),
+                      leshy1::apps::survey::surveyPipelineStatusName(
+                          productSurveyRuntime.commitPipelineStatus),
+                      leshy1::apps::survey::surveyWorkflowStatusName(
+                          productSurveyRuntime.commitWorkflowStatus),
+                      leshy1::storage::sessionStoreStatusName(
+                          productSurveyRuntime.commitStoreStatus),
+                      productSurveyRuntime.commitWorkspaceBound
+                          ? "true" : "false",
+                      static_cast<unsigned>(
+                          productSurveyRuntime.commitWorkspaceOwner),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.commitSessionState),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.commitSessionSize),
                       productSurveyScanActive() ? "true" : "false",
                       productSurveyRuntime.cancelRequestedDuringScan
                           ? "true" : "false",

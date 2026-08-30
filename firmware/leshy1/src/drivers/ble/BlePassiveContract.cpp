@@ -19,7 +19,11 @@ bool normalizePassiveRecord(
     const BleAdvertisementRecord& record, std::uint64_t monotonicUs,
     domain::observations::Observation* observation) {
     if (observation == nullptr || monotonicUs == 0 ||
-        record.rssiDbm < -127 || record.rssiDbm > 20 ||
+        // SessionCodec persists RSSI as the physical dBm range -127..0.
+        // Positive values from the controller are invalid/sentinel readings;
+        // admitting one here would make the entire otherwise valid Survey
+        // fail atomically at terminal commit.
+        record.rssiDbm < -127 || record.rssiDbm > 0 ||
         record.payloadLength > record.payload.size() ||
         record.nameLength > domain::observations::Observation::kLabelCapacity ||
         (record.nameLength != 0 && record.name == nullptr)) {

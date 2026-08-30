@@ -3418,7 +3418,7 @@ void testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations() {
     CHECK(!leshy1::drivers::ble::normalizePassiveRecord(
         record, 3000, &observation));
     record.address = {1, 2, 3, 4, 5, 6};
-    record.rssiDbm = 21;
+    record.rssiDbm = 1;
     CHECK(!leshy1::drivers::ble::normalizePassiveRecord(
         record, 3000, &observation));
     record.rssiDbm = -61;
