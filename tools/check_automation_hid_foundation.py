@@ -182,6 +182,7 @@ def main() -> int:
         '"delta_only": True',
         '"--skip-flash"',
         '"installed_candidate_reused"',
+        "run_id = secrets.token_hex(16)",
         '"automation-inspector-physical-v1"',
     )
     for token in required_runner:

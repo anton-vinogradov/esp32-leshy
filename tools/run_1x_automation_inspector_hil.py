@@ -182,7 +182,7 @@ def main() -> int:
     candidate = args.output / "firmware.bin"
     shutil.copyfile(args.firmware, candidate)
     app_identity = app_elf_sha256(candidate)
-    run_id = f"automation-{secrets.token_hex(6)}"
+    run_id = secrets.token_hex(16)
     runner_hash = sha256_file(Path(__file__))
     trace: list[dict[str, Any]] = []
     reports: dict[str, Any] = {}
