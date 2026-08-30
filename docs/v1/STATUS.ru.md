@@ -13,8 +13,9 @@
 - **Активный этап:** `S6 — Targets, сравнение, локализация и companion`.
 - **Последний закрытый этап:** `S4 — Cross-radio passive platform`.
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
+- **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
 - **Проверенный checkpoint:** `E-BUILD-210`/`E-AUTO-185`/`E-HIL-218`/`E-SEC-085`/`E-STORAGE-068`/`RB-M221` принимают exact physical `1.0.0-dev.308` на firmware source `c70ab42739faab639b65c2fb77905718921fa676`. Public-only bundle `LHAK` 128 bytes, созданный GitHub, durable размещается в одном exact-CID каталоге `/leshy-hil/<run-id>`, проходит review и enrollment `0/0→1/1`, переживает cold boot как `1/1`, проходит review/revoke как `0/2`, затем оставляет product trust и Device Lock точно восстановленными. Сохранены две stable пары review, две cold boot с одной попыткой, точные file/directory barriers и cleanup одного файла при zero private-key/Action/HID/RF output. False-negative telemetry dev.307 сохранён рядом с accepted evidence, а не скрыт. Exact dev.302 остаётся periodic full anchor.
-- **Следующий evidence gate:** с реально enrolled signer физически классифицировать подписанные packages как trusted, unknown-signer и invalid-signature при отключённом execution; только после этого подключать первый named Action-only executor через shared dispatcher. Positive Serial Console traffic всё ещё ждёт explicitly reviewed no-RF fixture `mux56-3v3`; optional GPS, physical HTTP parity и deferred S5 RF carrier gate остаются externally blocked.
+- **Следующий evidence gate:** выполнить одну физическую пользовательскую ревью-сборку всех доступных passive top-level workflows на original board-01, сохранить stable screen/navigation evidence и issue ledger, затем закрыть первый corrective vertical slice `FUNC-17` Radar/localize. Automation/HID заморожен на принятом безопасном public-trust checkpoint dev.308 при отключённом execution; positive Serial Console traffic всё ещё ждёт explicitly reviewed no-RF fixture `mux56-3v3`, а optional GPS, physical HTTP parity и deferred S5 RF carrier gate остаются externally blocked.
 - **Последний принятый physical baseline:** exact `1.0.0-dev.308` — последний focused delta; exact `1.0.0-dev.302` остаётся последним periodic full checkpoint. Вместе они сохраняют supervised commits Product Survey, все девять top-level routes, bounded no-PSRAM startup BLE, protected Targets/read-only companion parity, stock-profile fail-closed UI/CLI Serial Console, authenticated encrypted product storage, recovery/admission Device Lock, complete CAP-051, passive nested inspection Automation, owner-visible trust UI и positive public-only trust lifecycle. Execution Automation/HID, positive UART traffic, qualification optional GPS и parity HTTP payload не заявлены.
 - **Принятые physical baselines:** exact `0.171.0-antenna-status-leds` для восстановленного per-antenna LED-контракта 0.x и периодического полного checkpoint Home/RF/Targets/companion; exact `0.170.0-companion-usb-rx` для bounded read-only projections Session/Target/Compare по native USB; exact `0.160.0-targets-load-memory` для bounded post-Survey persistence decode и foreground allocation; exact `0.156.0-targets-reject-rebuild` для bounded Reject без изменения ownership и cold recovery; exact `0.155.7-targets-shared-codec` для объяснимого review correlation, bounded Accept и cold recovery решения; exact `0.154.0-targets-notes-edit` для bounded записи/очистки заметки и двух cold reopen; exact `0.153.0-targets-tags-edit` для bounded добавления/удаления тегов Target и двух cold reopen; exact `0.152.0-targets-name-edit` для bounded on-device имени Target и cold reopen; exact `0.151.2-targets-favorite-compact` для первой durable on-device mutation Target; exact `0.150.0-targets-evidence` для стабильных class/signal-sorted строк compare и exact evidence drilldown; exact `0.149.0-targets-inplace-reset` для первого реального on-device slice Targets/Compare; exact `0.145.0-interface-settings` для сохраняемых настроек интерфейса и безопасно недоступного Звука; exact `0.144.0-full-guided-s5-rx` для автономной половины Full/Guided passive receivers/artifacts; exact `0.139.0-s5-runtime-complete` для assembly/power/low-voltage/light-sleep и software-only path Store Sub-GHz; exact `0.138.0-safety-restart-noos` для preparation/admission Product Survey, калиброванных workers Wi-Fi+BLE и safety paths Wi-Fi/IR Capture Store; exact `0.129.0-pre-app-watchdog` остаётся retained baseline cold Library export IR. Все прежние checkpoints сохранены ниже.
 - **Текущий source checkpoint:** exact physical `1.0.0-dev.308` на firmware source `c70ab42739faab639b65c2fb77905718921fa676` использует 233 632 B static RAM, 3 563 004 B linked flash и app/factory images 3 563 504/3 629 040 B, оставляя 630 800 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map — `d68155a47d47181547843d1ab2f89056fd98a5ce5863a05846604fae2637e866`/`658eb147d214ac8f0fdd0b8bfe40d9a15b6928167974b69efae0cb28e590522f`/`66e29c6337fddf89a3fe554def643c3cc167843c5a88125f765c952951e9c4c0`/`96f803134e9dc83f849cdc6856a252be1035cb329c36dc3f873859b7d87e0128`. Focused checks C++ ASan/UBSan, Python bundle/foundation/runner, production build и retained physical evidence проходят. Прошит только original board-01; accepted run переиспользует установленный exact candidate без новой прошивки. Clone, Cardputer и Wi-Fi Mac не затронуты.
@@ -78,10 +79,11 @@
   bundle через enrollment, cold restore и revocation, доказывает cleanup isolated
   NVS/SD и сохраняет всё execution disconnected. См.
   [пофункциональный аудит](COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
-- **Главная цель текущего этапа:** физически принять классификацию real signed package
-  для trusted, unknown-signer и invalid-signature без добавления execution или HID
-  output path, затем начать named Action-only executor через shared dispatcher, пока positive fixture
-  Serial Console и physical-HTTP parity gate S6/S6.5 externally blocked.
+- **Главная цель текущего этапа:** выполнить `FF-0`, физическую пользовательскую
+  ревью-сборку, затем закрыть vertical slice Radar/localize `FF-1` и двигаться по
+  опубликованной functional-first очереди. Classification и execution signed package
+  остаются замороженными на безопасном zero-output checkpoint dev.308, пока positive
+  fixture Serial Console и physical-HTTP parity gate S6/S6.5 externally blocked.
   Сохранять завершённые Product Survey terminal, receive-only boundaries CAP-048,
   CAP-049 и CAP-051, а также принятые CAP-048 и integrated device/offline path
   S6.6; physical HTTP parity закрывать только с dedicated client, никогда через
@@ -160,6 +162,24 @@
 | S5.5 | Полнота runtime: exact 0.139 принимает унаследованную от 0.138 safety Product Survey/workers плюс truthful applicability stock assembly, debounced отказ Store при low voltage, реальный light-sleep/resume и public RX-only software-fixture path Store Sub-GHz; exact 0.145 добавляет сохраняемые язык/яркость/тему с безопасно недоступным Звуком; physical positive RF остаётся в S5.3/S5.4 | `done` |
 | S5.6 | Интегральный hardware gate S5: exact 0.144 уже принимает автономную on-device половину Full receivers/artifacts без утечки leases/outputs. One-build/one-flash-per-role runner IR→nRF24→OOK→FSK build-checked на source `4f97b3a`; strict cross-child acceptance host-checked на `95079ec`, а независимая commit-bound перепроверка — на `3feb3bd`; выполнить physical половину с qualified source после S5.3/S5.4 | `planned` |
 
+### Functional-first очередь поставки
+
+Эта очередь управляет порядком реализации; стабильный каталог `FUNC-*` ниже
+по-прежнему управляет scope и traceability. `Parked` означает сохранённую безопасную
+принятую границу, а не отказ от функции или заявление о её готовности.
+
+<!-- LESHY-DELIVERY-QUEUE:START -->
+| Приоритет | Пользовательский срез | Состояние |
+|---|---|---|
+| FF-0 | Физическая ревью-сборка: пройти все доступные passive top-level workflows, сохранить stable screens/navigation и записать только пользовательские findings | `active` |
+| FF-1 | Завершить `FUNC-17` Radar/localize для Wi-Fi, BLE и Targets как одно согласованное interaction | `next` |
+| FF-2 | Поставить `FUNC-43` screenshot устройства → Library → export с provenance build/state/time | `queued` |
+| FF-3 | Поставить первый receive-only срез `FUNC-37` Protocol Workbench над immutable Captures | `queued` |
+| FF-4 | Завершить `FUNC-38` local USB/Web browse, search, compare и export, не делая сеть зависимостью устройства | `queued` |
+| FF-5 | Поставить `FUNC-34` IR replay из одного выбранного immutable Capture с preview, confirmation и доказанным Stop/timeout | `queued` |
+| FF-6 | Вернуться к classification/execution signed packages `FUNC-54`, затем к отдельно допускаемым действиям Safe Lab; Automation/HID остаётся zero-output до активации этой строки | `parked` |
+<!-- LESHY-DELIVERY-QUEUE:END -->
+
 ### План фаз S6
 
 <!-- LESHY-ACTIVE-PHASES:START -->
@@ -169,7 +189,7 @@
 | S6.2 | Объяснимая correlation предлагает связи с features/confidence; accept/reject и обратимые merge/split никогда не уничтожают source evidence | `done` |
 | S6.3 | Baseline/diff сравнивает две Session и классифицирует новые, исчезнувшие и изменившиеся Targets; каждый вывод открывает своё evidence | `done` |
 | S6.4 | On-device workflows Targets и Compare сначала показывают полезный результат, сохраняют стабильную навигацию и полноэкранные detail views | `done` |
-| S6.5 | Local companion USB/Web использует те же Actions и versioned schemas с ограниченными connectivity и secrets | `active` |
+| S6.5 | Functional-first product train ревьюит и завершает пользовательские вертикальные срезы, пока local companion USB/Web развивается над общими Actions и versioned schemas | `active` |
 | S6.6 | Integrated device/offline path DEMO-S6 физически принят; завершение фазы ждёт отложенный physical predecessor gate S5 перед acceptance S6 | `blocked` |
 <!-- LESHY-ACTIVE-PHASES:END -->
 

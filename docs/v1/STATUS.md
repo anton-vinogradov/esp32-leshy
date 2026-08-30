@@ -13,8 +13,9 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 - **Active stage:** `S6 — Targets, comparison, localization, and companion`.
 - **Last completed stage:** `S4 — Cross-radio passive platform`.
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
+- **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
 - **Verified checkpoint:** `E-BUILD-210`/`E-AUTO-185`/`E-HIL-218`/`E-SEC-085`/`E-STORAGE-068`/`RB-M221` accept exact physical `1.0.0-dev.308` at firmware source `c70ab42739faab639b65c2fb77905718921fa676`. A GitHub-generated 128-byte public-only `LHAK` bundle is durably staged under one exact-CID `/leshy-hil/<run-id>` directory, reviewed and enrolled as trust `0/0→1/1`, survives a cold boot as `1/1`, is reviewed and revoked as `0/2`, then leaves both product trust and Device Lock exactly restored. Two stable review pairs, two single-attempt cold boots, exact file/directory barriers and one-file cleanup are retained with zero private-key/Action/HID/RF output. The dev.307 false-negative telemetry failure is retained beside the accepted evidence instead of being hidden. Exact dev.302 remains the periodic full anchor.
-- **Next evidence gate:** use the enrolled real signer to physically classify signed packages as trusted, unknown-signer and invalid-signature while keeping execution disconnected; only after that gate may the first named Action-only executor be wired through the shared dispatcher. Positive Serial Console traffic still waits for an explicitly reviewed no-RF `mux56-3v3` fixture; optional GPS, physical HTTP parity and the deferred S5 RF carrier gate remain externally blocked.
+- **Next evidence gate:** run one physical user review build across every available passive top-level workflow on original board-01, retain stable screen/navigation evidence and an issue ledger, then close the first corrective vertical slice for `FUNC-17` Radar/localize. Automation/HID is parked at the accepted safe dev.308 public-trust checkpoint with execution disconnected; positive Serial Console traffic still waits for an explicitly reviewed no-RF `mux56-3v3` fixture, while optional GPS, physical HTTP parity and the deferred S5 RF carrier gate remain externally blocked.
 - **Latest accepted physical baseline:** exact `1.0.0-dev.308` is the latest focused delta; exact `1.0.0-dev.302` remains the latest periodic full checkpoint. Together they retain supervised Product Survey commits, all nine top-level routes, bounded no-PSRAM BLE startup, protected Targets/read-only companion parity, Serial Console stock-profile fail-closed UI/CLI, authenticated encrypted product storage, Device Lock recovery/admission, complete CAP-051, passive nested Automation inspection, owner-visible trust UI and the positive public-only trust lifecycle. Automation/HID execution, positive UART traffic, optional-GPS qualification and HTTP payload parity are not claimed.
 - **Accepted physical baselines:** exact `0.171.0-antenna-status-leds` for the restored per-antenna 0.x LED contract and periodic Home/RF/Targets/companion full checkpoint; exact `0.170.0-companion-usb-rx` for bounded read-only native-USB Session/Target/Compare projections; exact `0.160.0-targets-load-memory` for bounded post-Survey persistence decode and foreground allocation; exact `0.156.0-targets-reject-rebuild` for bounded Reject without ownership mutation and cold recovery; exact `0.155.7-targets-shared-codec` for explainable correlation review, bounded Accept and cold decision recovery; exact `0.154.0-targets-notes-edit` for bounded note set/clear and two cold reopens; exact `0.153.0-targets-tags-edit` for bounded on-device Target tag add/remove and two cold reopens; exact `0.152.0-targets-name-edit` for bounded on-device Target naming and cold reopen; exact `0.151.2-targets-favorite-compact` for the first durable on-device Target mutation; exact `0.150.0-targets-evidence` for stable class/signal-sorted comparison rows and exact evidence drilldown; exact `0.149.0-targets-inplace-reset` for the first real on-device Targets/Compare slice; exact `0.145.0-interface-settings` for persisted interface preferences and safe unavailable Sound; exact `0.144.0-full-guided-s5-rx` for the autonomous Full/Guided passive-receiver/artifact half-gate; exact `0.139.0-s5-runtime-complete` for assembly/power/low-voltage/light-sleep and the software-only Sub-GHz Store route; exact `0.138.0-safety-restart-noos` for Product Survey preparation/admission, calibrated Wi-Fi+BLE workers and Wi-Fi/IR Capture Store worker safety; exact `0.129.0-pre-app-watchdog` remains the retained cold Library IR export baseline. Earlier accepted checkpoints remain retained below.
 - **Working source checkpoint:** exact physical `1.0.0-dev.308` at firmware source `c70ab42739faab639b65c2fb77905718921fa676` uses 233,632 B static RAM, 3,563,004 B linked flash and 3,563,504/3,629,040 B app/factory images, leaving 630,800 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 are `d68155a47d47181547843d1ab2f89056fd98a5ce5863a05846604fae2637e866`/`658eb147d214ac8f0fdd0b8bfe40d9a15b6928167974b69efae0cb28e590522f`/`66e29c6337fddf89a3fe554def643c3cc167843c5a88125f765c952951e9c4c0`/`96f803134e9dc83f849cdc6856a252be1035cb329c36dc3f873859b7d87e0128`. Focused ASan/UBSan C++, Python bundle/foundation/runner checks, production build and retained physical-evidence checker pass. Only original board-01 was flashed; the accepted run reused the installed exact candidate without another flash. Clone, Cardputer and Mac Wi-Fi were untouched.
@@ -78,11 +79,11 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   bundle through enrollment, cold restoration and revocation, proves isolated
   NVS/SD cleanup and keeps all execution disconnected. See the
   [feature-level audit](COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
-- **Current objective:** physically accept real signed-package classification for
-  trusted, unknown-signer and invalid-signature cases without adding an execution or
-  HID output path, then begin the named Action-only executor through the shared
-  dispatcher while the positive Serial
-  Console fixture and S6/S6.5 physical-HTTP parity gate are externally blocked.
+- **Current objective:** execute `FF-0`, the physical user review build, then close
+  the `FF-1` Radar/localize vertical slice before advancing through the published
+  functional-first queue. Signed-package classification and execution remain parked
+  at the safe zero-output dev.308 checkpoint while the positive Serial Console
+  fixture and S6/S6.5 physical-HTTP parity gate are externally blocked.
   Preserve the completed Product Survey terminal, receive-only CAP-048,
   CAP-049 and CAP-051 boundaries and the accepted
   CAP-048 and integrated S6.6 device/offline paths;
@@ -163,6 +164,24 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S5.5 | Runtime completeness: exact 0.139 accepts Product Survey/worker safety inherited from 0.138 plus truthful stock assembly applicability, debounced low-voltage Store refusal, real light-sleep/resume and a public RX-only Sub-GHz software-fixture Store path; exact 0.145 adds persistent language/brightness/theme with safe unavailable Sound; physical positive RF remains owned by S5.3/S5.4 | `done` |
 | S5.6 | Integrated S5 hardware gate: exact 0.144 already accepts the autonomous on-device Full receiver/artifact half with zero leaked leases/outputs. The one-build/one-flash-per-role IR→nRF24→OOK→FSK runner is build-checked at source `4f97b3a`; strict cross-child acceptance is host-checked at `95079ec`, and independent commit-bound re-verification at `3feb3bd`; execute the qualified-source physical half after S5.3/S5.4 | `planned` |
 
+### Functional-first delivery queue
+
+This queue controls implementation order; the stable `FUNC-*` catalog below still
+controls scope and traceability. `Parked` means retained at a safe accepted boundary,
+not abandoned or claimed complete.
+
+<!-- LESHY-DELIVERY-QUEUE:START -->
+| Priority | User-visible slice | State |
+|---|---|---|
+| FF-0 | Physical review build: traverse every available passive top-level workflow, retain stable screens/navigation and record only user-visible findings | `active` |
+| FF-1 | Finish `FUNC-17` Radar/localize for Wi-Fi, BLE and Targets as one coherent interaction | `next` |
+| FF-2 | Deliver `FUNC-43` on-device screenshot → Library → export with build/state/time provenance | `queued` |
+| FF-3 | Deliver the receive-only first slice of `FUNC-37` Protocol Workbench over immutable Captures | `queued` |
+| FF-4 | Finish `FUNC-38` local USB/Web browse, search, compare and export without making network access a device dependency | `queued` |
+| FF-5 | Deliver `FUNC-34` IR replay from one selected immutable Capture with preview, confirmation and proven Stop/timeout | `queued` |
+| FF-6 | Resume signed-package classification/execution for `FUNC-54`, then individually admitted Safe Lab actions; Automation/HID remains zero-output until this row becomes active | `parked` |
+<!-- LESHY-DELIVERY-QUEUE:END -->
+
 ### S6 phase plan
 
 <!-- LESHY-ACTIVE-PHASES:START -->
@@ -172,7 +191,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S6.2 | Explainable correlation proposes links with features/confidence; accept/reject and reversible merge/split never destroy source evidence | `done` |
 | S6.3 | Baseline/diff compares two Sessions and classifies new, disappeared and changed Targets with every conclusion opening its evidence | `done` |
 | S6.4 | On-device Targets and Compare workflows expose the useful result first, stable navigation and full-area detail views | `done` |
-| S6.5 | Local USB/Web companion uses the same Actions and versioned schemas with scoped connectivity and secrets | `active` |
+| S6.5 | Functional-first product train reviews and completes user-visible vertical slices while the local USB/Web companion continues over shared Actions and versioned schemas | `active` |
 | S6.6 | Integrated DEMO-S6 device/offline path is physically accepted; final phase completion waits for the deferred S5 physical predecessor gate before S6 acceptance | `blocked` |
 <!-- LESHY-ACTIVE-PHASES:END -->
 

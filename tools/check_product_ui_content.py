@@ -34,6 +34,12 @@ REQUIRED_OUTCOME_IDS = {
     "LibraryWifiCapture",
     "LibrarySubGhzCapture",
     "LibraryInfraredCapture",
+    "AutomationLibraryNoMediaHint",
+    "AutomationLibraryEmptyHint",
+    "AutomationLibraryReadOnly",
+    "TargetsNoSessions",
+    "TargetsNoSessionsHint",
+    "TargetsLoadFailedHint",
 }
 
 # These remain valid in diagnostics/USB evidence, but they must not be rendered
@@ -135,6 +141,25 @@ def main() -> int:
         )
         if display_path:
             failures.append(f"internal persistence status rendered: {internal}")
+
+    if "UiTextId::AutomationLibraryPath" in renderer:
+        failures.append(
+            "internal automation storage path rendered on the product screen"
+        )
+
+    targets_empty_state = re.search(
+        r"controller\.status\(\) == TargetsLoadStatus::SessionUnavailable"
+        r".*?UiTextId::TargetsNoSessions.*?UiTextId::TargetsNoSessionsHint"
+        r".*?controller\.status\(\) != TargetsLoadStatus::Ready"
+        r".*?UiTextId::TargetsLoadFailed.*?UiTextId::TargetsLoadFailedHint",
+        renderer,
+        re.DOTALL,
+    )
+    if targets_empty_state is None:
+        failures.append(
+            "Targets must distinguish the no-session next step from a real "
+            "storage/read failure"
+        )
 
     if failures:
         for failure in failures:

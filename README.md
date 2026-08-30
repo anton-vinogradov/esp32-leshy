@@ -15,8 +15,21 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts. The checklist is complete for the accepted 55-capability 1.x baseline; the audit accepted eight additions and explicitly defers Peer Link until after 1.0 in the [feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
+- **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
 - **Verified checkpoint:** `E-BUILD-210`/`E-AUTO-185`/`E-HIL-218`/`E-SEC-085`/`E-STORAGE-068`/`RB-M221` accept exact physical `1.0.0-dev.308` at firmware source `c70ab42739faab639b65c2fb77905718921fa676`. A GitHub-generated 128-byte public-only `LHAK` bundle is durably staged under one exact-CID `/leshy-hil/<run-id>` directory, reviewed and enrolled as trust `0/0→1/1`, survives a cold boot as `1/1`, is reviewed and revoked as `0/2`, then leaves both product trust and Device Lock exactly restored. Two stable review pairs, two single-attempt cold boots, exact file/directory barriers and one-file cleanup are retained with zero private-key/Action/HID/RF output. The dev.307 false-negative telemetry failure is retained beside the accepted evidence instead of being hidden. Exact dev.302 remains the periodic full anchor.
-- **Next gate:** use the enrolled real signer to physically classify signed packages as trusted, unknown-signer and invalid-signature while keeping execution disconnected; only after that gate may the first named Action-only executor be wired through the shared dispatcher. Positive Serial Console traffic still waits for an explicitly reviewed no-RF `mux56-3v3` fixture; optional GPS, physical HTTP parity and the deferred S5 RF carrier gate remain externally blocked.
+- **Next gate:** run one physical user review build across every available passive top-level workflow on original board-01, retain stable screen/navigation evidence and an issue ledger, then close the first corrective vertical slice for `FUNC-17` Radar/localize. Automation/HID is parked at the accepted safe dev.308 public-trust checkpoint with execution disconnected; positive Serial Console traffic still waits for an explicitly reviewed no-RF `mux56-3v3` fixture, while optional GPS, physical HTTP parity and the deferred S5 RF carrier gate remain externally blocked.
+
+### Functional-first delivery queue
+
+| Priority | User-visible slice | State |
+|---|---|---|
+| FF-0 | Physical review build: traverse every available passive top-level workflow, retain stable screens/navigation and record only user-visible findings | 🟡 active |
+| FF-1 | Finish `FUNC-17` Radar/localize for Wi-Fi, BLE and Targets as one coherent interaction | ➡️ next |
+| FF-2 | Deliver `FUNC-43` on-device screenshot → Library → export with build/state/time provenance | ⬜ queued |
+| FF-3 | Deliver the receive-only first slice of `FUNC-37` Protocol Workbench over immutable Captures | ⬜ queued |
+| FF-4 | Finish `FUNC-38` local USB/Web browse, search, compare and export without making network access a device dependency | ⬜ queued |
+| FF-5 | Deliver `FUNC-34` IR replay from one selected immutable Capture with preview, confirmation and proven Stop/timeout | ⬜ queued |
+| FF-6 | Resume signed-package classification/execution for `FUNC-54`, then individually admitted Safe Lab actions; Automation/HID remains zero-output until this row becomes active | ⏸️ safely parked |
 
 ### Current stage phases
 
@@ -26,10 +39,10 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | S6.2 | Explainable correlation proposes links with features/confidence; accept/reject and reversible merge/split never destroy source evidence | ✅ complete |
 | S6.3 | Baseline/diff compares two Sessions and classifies new, disappeared and changed Targets with every conclusion opening its evidence | ✅ complete |
 | S6.4 | On-device Targets and Compare workflows expose the useful result first, stable navigation and full-area detail views | ✅ complete |
-| S6.5 | Local USB/Web companion uses the same Actions and versioned schemas with scoped connectivity and secrets | 🟡 in progress |
+| S6.5 | Functional-first product train reviews and completes user-visible vertical slices while the local USB/Web companion continues over shared Actions and versioned schemas | 🟡 in progress |
 | S6.6 | Integrated DEMO-S6 device/offline path is physically accepted; final phase completion waits for the deferred S5 physical predecessor gate before S6 acceptance | 🔴 blocked |
 
-### User functionality in implementation order
+### Complete user functionality catalog
 
 | Functionality | Delivery stage | Status |
 |---|---|---|

@@ -15,6 +15,8 @@ START_MARKER = "<!-- LESHY-ROADMAP:START -->"
 END_MARKER = "<!-- LESHY-ROADMAP:END -->"
 PHASES_START_MARKER = "<!-- LESHY-ACTIVE-PHASES:START -->"
 PHASES_END_MARKER = "<!-- LESHY-ACTIVE-PHASES:END -->"
+QUEUE_START_MARKER = "<!-- LESHY-DELIVERY-QUEUE:START -->"
+QUEUE_END_MARKER = "<!-- LESHY-DELIVERY-QUEUE:END -->"
 FUNCTIONS_START_MARKER = "<!-- LESHY-FUNCTIONS:START -->"
 FUNCTIONS_END_MARKER = "<!-- LESHY-FUNCTIONS:END -->"
 EXPECTED_STAGES = tuple(f"S{index}" for index in range(9))
@@ -36,6 +38,9 @@ class LanguageConfig:
     snapshot_fields: tuple[tuple[str, str], ...]
     phases_heading: str
     phase_columns: tuple[str, str, str]
+    queue_heading: str
+    queue_columns: tuple[str, str, str]
+    queue_status_labels: dict[str, str]
     functions_heading: str
     function_columns: tuple[str, str, str]
 
@@ -64,12 +69,19 @@ CONFIGS = (
         },
         snapshot_fields=(
             ("Current phase", "Current phase"),
+            ("Delivery mode", "Delivery mode"),
             ("Verified checkpoint", "Verified checkpoint"),
             ("Next evidence gate", "Next gate"),
         ),
         phases_heading="Current stage phases",
         phase_columns=("Phase", "Outcome / exit gate", "Status"),
-        functions_heading="User functionality in implementation order",
+        queue_heading="Functional-first delivery queue",
+        queue_columns=("Priority", "User-visible slice", "State"),
+        queue_status_labels={
+            "active": "active", "next": "next", "queued": "queued",
+            "parked": "safely parked",
+        },
+        functions_heading="Complete user functionality catalog",
         function_columns=("Functionality", "Delivery stage", "Status"),
     ),
     LanguageConfig(
@@ -95,12 +107,19 @@ CONFIGS = (
         },
         snapshot_fields=(
             ("Текущая фаза", "Текущая фаза"),
+            ("Режим поставки", "Режим поставки"),
             ("Проверенный checkpoint", "Проверенный checkpoint"),
             ("Следующий evidence gate", "Следующий gate"),
         ),
         phases_heading="Фазы текущего этапа",
         phase_columns=("Фаза", "Результат / exit gate", "Статус"),
-        functions_heading="Пользовательские возможности по очереди реализации",
+        queue_heading="Functional-first очередь поставки",
+        queue_columns=("Приоритет", "Пользовательский срез", "Состояние"),
+        queue_status_labels={
+            "active": "в работе", "next": "следующий", "queued": "в очереди",
+            "parked": "безопасно заморожен",
+        },
+        functions_heading="Полный каталог пользовательских возможностей",
         function_columns=("Возможность", "Этап поставки", "Статус"),
     ),
 )
@@ -200,6 +219,39 @@ def parse_snapshot(config: LanguageConfig,
     return snapshot
 
 
+def parse_delivery_queue(config: LanguageConfig) -> list[tuple[str, str, str]]:
+    text = config.status.read_text(encoding="utf-8")
+    pattern = re.compile(
+        rf"{re.escape(QUEUE_START_MARKER)}(.*?){re.escape(QUEUE_END_MARKER)}",
+        re.DOTALL,
+    )
+    blocks = pattern.findall(text)
+    if len(blocks) != 1:
+        raise ValueError(
+            f"{config.status}: expected exactly one functional-first queue")
+    rows = re.findall(
+        r"^\| (FF-\d+) \| (.+?) \| `([^`]+)` \|$",
+        blocks[0], re.MULTILINE)
+    if not rows:
+        raise ValueError(f"{config.status}: functional-first queue is empty")
+    expected_ids = [f"FF-{index}" for index in range(len(rows))]
+    actual_ids = [row[0] for row in rows]
+    if actual_ids != expected_ids:
+        raise ValueError(
+            f"{config.status}: expected sequential queue IDs {expected_ids}, "
+            f"got {actual_ids}")
+    unknown = sorted(
+        {row[2] for row in rows} - set(config.queue_status_labels))
+    if unknown:
+        raise ValueError(
+            f"{config.status}: unsupported delivery-queue states {unknown}")
+    active = [row[0] for row in rows if row[2] == "active"]
+    if active != ["FF-0"]:
+        raise ValueError(
+            f"{config.status}: expected only FF-0 active, got {active}")
+    return rows
+
+
 def parse_functionality(config: LanguageConfig) -> list[tuple[str, str, str, str]]:
     text = config.status.read_text(encoding="utf-8")
     pattern = re.compile(
@@ -243,6 +295,7 @@ def render(config: LanguageConfig) -> str:
     states = parse_stage_states(config.status)
     active = next(stage for stage in EXPECTED_STAGES if states[stage] == "active")
     phases = parse_active_phases(config, active)
+    queue = parse_delivery_queue(config)
     functionality = sorted(
         parse_functionality(config), key=functionality_implementation_key)
     active_phase = next(row[0] for row in phases if row[2] == "active")
@@ -263,6 +316,21 @@ def render(config: LanguageConfig) -> str:
     ]
     for label, value in snapshot:
         lines.append(f"- **{label}:** {value}")
+    priority, slice_name, queue_state = config.queue_columns
+    lines.extend((
+        "",
+        f"### {config.queue_heading}",
+        "",
+        f"| {priority} | {slice_name} | {queue_state} |",
+        "|---|---|---|",
+    ))
+    queue_icon = {
+        "active": "🟡", "next": "➡️", "queued": "⬜", "parked": "⏸️",
+    }
+    for queue_id, queue_slice, state in queue:
+        lines.append(
+            f"| {queue_id} | {queue_slice} | {queue_icon[state]} "
+            f"{config.queue_status_labels[state]} |")
     phase, outcome, status = config.phase_columns
     lines.extend((
         "",
@@ -322,6 +390,7 @@ def drift_errors() -> list[str]:
     errors: list[str] = []
     try:
         phase_shapes = []
+        queue_shapes = []
         function_shapes = []
         for config in CONFIGS:
             states = parse_stage_states(config.status)
@@ -332,6 +401,10 @@ def drift_errors() -> list[str]:
                 (phase_id, state) for phase_id, _outcome, state
                 in parse_active_phases(config, active)
             ])
+            queue_shapes.append([
+                (queue_id, state) for queue_id, _slice, state
+                in parse_delivery_queue(config)
+            ])
             function_shapes.append([
                 (function_id, stage, state)
                 for function_id, _label, stage, state
@@ -340,6 +413,9 @@ def drift_errors() -> list[str]:
         if phase_shapes[0] != phase_shapes[1]:
             errors.append(
                 "EN/RU active-phase IDs or states differ in canonical STATUS")
+        if queue_shapes[0] != queue_shapes[1]:
+            errors.append(
+                "EN/RU functional-first queue IDs or states differ in canonical STATUS")
         if function_shapes[0] != function_shapes[1]:
             errors.append(
                 "EN/RU functionality IDs, stages or states differ in canonical STATUS")

@@ -6,6 +6,26 @@ This document defines stable stage boundaries. Current state, evidence, and next
 actions live only in [STATUS.md](STATUS.md). A stage closes on a verifiable outcome,
 not on code volume; every technical stage after S1 leaves a working vertical slice.
 
+## Functional-first implementation order
+
+Stages remain acceptance boundaries, but they do not require every invisible
+subsystem to finish before useful product behavior appears. Once the common safety,
+resource and persistence boundaries needed by a function exist, delivery proceeds as
+a vertical user-visible slice:
+
+1. agree the user outcome and final on-device interaction;
+2. make the bounded happy path usable on the real DIV;
+3. run the affected delta HIL and adjacent cleanup/negative assertions;
+4. add error, recovery and persistence behavior for that slice;
+5. run the broad matrix at a block/stage boundary, RC, cross-cutting change or the
+   documented cadence limit.
+
+The live functional-first queue is canonical in [STATUS.md](STATUS.md) and projected
+onto the repository front page. A subsystem may be parked at a demonstrably safe
+checkpoint while a higher-value user slice moves ahead. Parking never relaxes an
+applicable ResourceBroker, Safety Supervisor, confirmation, Stop, watchdog, storage
+or zero-TX boundary.
+
 ## Stage map
 
 ```text

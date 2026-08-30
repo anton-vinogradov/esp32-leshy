@@ -13357,15 +13357,17 @@ void renderAutomationLibraryPage(bool clearContent) {
     if (automationCatalogStatus != BoardAutomationPackageStatus::Ready) {
         renderMetric(0, tr(UiTextId::AutomationLibraryNoMedia),
                      Tone::Warning);
-        renderMetric(2, tr(UiTextId::AutomationLibraryPath), Tone::Muted);
-        renderMetric(4, tr(UiTextId::AutomationLibraryReadOnly),
+        renderMetric(2, tr(UiTextId::AutomationLibraryNoMediaHint),
+                     Tone::Neutral);
+        renderMetric(5, tr(UiTextId::AutomationLibraryReadOnly),
                      Tone::Positive);
         return;
     }
     if (automationPackageCatalog.size() == 0U) {
         renderMetric(0, tr(UiTextId::AutomationLibraryEmpty), Tone::Muted);
-        renderMetric(2, tr(UiTextId::AutomationLibraryPath), Tone::Neutral);
-        renderMetric(4, tr(UiTextId::AutomationLibraryReadOnly),
+        renderMetric(2, tr(UiTextId::AutomationLibraryEmptyHint),
+                     Tone::Neutral);
+        renderMetric(5, tr(UiTextId::AutomationLibraryReadOnly),
                      Tone::Positive);
         return;
     }
@@ -20280,8 +20282,14 @@ void renderTargetsPage(bool clearContent) {
     }
     renderHeader(controller.truncated() ? title : tr(UiTextId::AppTargets),
                  clearContent);
+    if (controller.status() == TargetsLoadStatus::SessionUnavailable) {
+        renderMetric(0, tr(UiTextId::TargetsNoSessions), Tone::Muted);
+        renderMetric(2, tr(UiTextId::TargetsNoSessionsHint), Tone::Positive);
+        return;
+    }
     if (controller.status() != TargetsLoadStatus::Ready) {
         renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+        renderMetric(2, tr(UiTextId::TargetsLoadFailedHint), Tone::Warning);
         return;
     }
     if (controller.entryCount() == 0) {

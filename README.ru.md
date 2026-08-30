@@ -15,8 +15,21 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline из 55 capabilities; аудит принял восемь additions и явно отложил Peer Link до версии после 1.0 в [пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
+- **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
 - **Проверенный checkpoint:** `E-BUILD-210`/`E-AUTO-185`/`E-HIL-218`/`E-SEC-085`/`E-STORAGE-068`/`RB-M221` принимают exact physical `1.0.0-dev.308` на firmware source `c70ab42739faab639b65c2fb77905718921fa676`. Public-only bundle `LHAK` 128 bytes, созданный GitHub, durable размещается в одном exact-CID каталоге `/leshy-hil/<run-id>`, проходит review и enrollment `0/0→1/1`, переживает cold boot как `1/1`, проходит review/revoke как `0/2`, затем оставляет product trust и Device Lock точно восстановленными. Сохранены две stable пары review, две cold boot с одной попыткой, точные file/directory barriers и cleanup одного файла при zero private-key/Action/HID/RF output. False-negative telemetry dev.307 сохранён рядом с accepted evidence, а не скрыт. Exact dev.302 остаётся periodic full anchor.
-- **Следующий gate:** с реально enrolled signer физически классифицировать подписанные packages как trusted, unknown-signer и invalid-signature при отключённом execution; только после этого подключать первый named Action-only executor через shared dispatcher. Positive Serial Console traffic всё ещё ждёт explicitly reviewed no-RF fixture `mux56-3v3`; optional GPS, physical HTTP parity и deferred S5 RF carrier gate остаются externally blocked.
+- **Следующий gate:** выполнить одну физическую пользовательскую ревью-сборку всех доступных passive top-level workflows на original board-01, сохранить stable screen/navigation evidence и issue ledger, затем закрыть первый corrective vertical slice `FUNC-17` Radar/localize. Automation/HID заморожен на принятом безопасном public-trust checkpoint dev.308 при отключённом execution; positive Serial Console traffic всё ещё ждёт explicitly reviewed no-RF fixture `mux56-3v3`, а optional GPS, physical HTTP parity и deferred S5 RF carrier gate остаются externally blocked.
+
+### Functional-first очередь поставки
+
+| Приоритет | Пользовательский срез | Состояние |
+|---|---|---|
+| FF-0 | Физическая ревью-сборка: пройти все доступные passive top-level workflows, сохранить stable screens/navigation и записать только пользовательские findings | 🟡 в работе |
+| FF-1 | Завершить `FUNC-17` Radar/localize для Wi-Fi, BLE и Targets как одно согласованное interaction | ➡️ следующий |
+| FF-2 | Поставить `FUNC-43` screenshot устройства → Library → export с provenance build/state/time | ⬜ в очереди |
+| FF-3 | Поставить первый receive-only срез `FUNC-37` Protocol Workbench над immutable Captures | ⬜ в очереди |
+| FF-4 | Завершить `FUNC-38` local USB/Web browse, search, compare и export, не делая сеть зависимостью устройства | ⬜ в очереди |
+| FF-5 | Поставить `FUNC-34` IR replay из одного выбранного immutable Capture с preview, confirmation и доказанным Stop/timeout | ⬜ в очереди |
+| FF-6 | Вернуться к classification/execution signed packages `FUNC-54`, затем к отдельно допускаемым действиям Safe Lab; Automation/HID остаётся zero-output до активации этой строки | ⏸️ безопасно заморожен |
 
 ### Фазы текущего этапа
 
@@ -26,10 +39,10 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | S6.2 | Объяснимая correlation предлагает связи с features/confidence; accept/reject и обратимые merge/split никогда не уничтожают source evidence | ✅ готово |
 | S6.3 | Baseline/diff сравнивает две Session и классифицирует новые, исчезнувшие и изменившиеся Targets; каждый вывод открывает своё evidence | ✅ готово |
 | S6.4 | On-device workflows Targets и Compare сначала показывают полезный результат, сохраняют стабильную навигацию и полноэкранные detail views | ✅ готово |
-| S6.5 | Local companion USB/Web использует те же Actions и versioned schemas с ограниченными connectivity и secrets | 🟡 в работе |
+| S6.5 | Functional-first product train ревьюит и завершает пользовательские вертикальные срезы, пока local companion USB/Web развивается над общими Actions и versioned schemas | 🟡 в работе |
 | S6.6 | Integrated device/offline path DEMO-S6 физически принят; завершение фазы ждёт отложенный physical predecessor gate S5 перед acceptance S6 | 🔴 заблокировано |
 
-### Пользовательские возможности по очереди реализации
+### Полный каталог пользовательских возможностей
 
 | Возможность | Этап поставки | Статус |
 |---|---|---|

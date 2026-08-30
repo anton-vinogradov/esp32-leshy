@@ -49,6 +49,7 @@ from run_1x_product_home_hil import stabilized_boot_metrics
 from run_1x_product_survey_hil import (
     artifact_manifest,
     boot_failures,
+    capture,
     expect,
     query,
     valid_cid,
@@ -339,6 +340,40 @@ def result_contract_failures(result: dict[str, Any]) -> list[str]:
             "page": "home", "selected_id": case.item_id,
             "runtime_owner": "none", "lease_mask": 0,
         }, f"{label}.home_settled"))
+    screens = result.get("screens", {})
+    if policy.get("screenshots_requested") is True:
+        if not isinstance(screens, dict) or list(screens) != expected_ids:
+            failures.append("result.screens: complete catalog-order set missing")
+        else:
+            for case in MENU_CASES:
+                screen = screens.get(case.item_id, {})
+                label = f"result.screens.{case.item_id}"
+                if not isinstance(screen, dict):
+                    failures.append(f"{label}: invalid record")
+                    continue
+                begin = screen.get("frame_begin", {})
+                if not isinstance(begin, dict) or (
+                        begin.get("width"), begin.get("height"),
+                        begin.get("bytes")) != (240, 320, 153600):
+                    failures.append(f"{label}: invalid TFT geometry")
+                failures.extend(state_failures(
+                    case,
+                    screen.get("state", {})
+                    if isinstance(screen.get("state"), dict) else {},
+                    label))
+                for field in ("rgb565_sha256", "png_sha256"):
+                    value = screen.get(field)
+                    if (not isinstance(value, str) or len(value) != 64 or
+                            any(character not in "0123456789abcdef"
+                                for character in value)):
+                        failures.append(f"{label}.{field}: invalid digest")
+                attempts = screen.get("transport_attempts")
+                retries = screen.get("transport_transient_retries")
+                if (not isinstance(attempts, int) or isinstance(attempts, bool) or
+                        not 1 <= attempts <= 2 or retries != attempts - 1):
+                    failures.append(f"{label}: invalid transport attempts")
+    elif screens not in ({}, None):
+        failures.append("result.screens: unrequested screenshots retained")
     cleanup = result.get("cleanup_after", {})
     if not isinstance(cleanup, dict) or cleanup.get("complete") is not True:
         failures.append("result.cleanup_after: incomplete")
@@ -425,6 +460,7 @@ def main() -> int:
                         default=DEFAULT_DWELL_SECONDS)
     parser.add_argument("--sample-seconds", type=float,
                         default=DEFAULT_SAMPLE_SECONDS)
+    parser.add_argument("--capture-screens", action="store_true")
     args = parser.parse_args()
     validate_args(parser, args)
 
@@ -437,6 +473,7 @@ def main() -> int:
     failures: list[str] = []
     trace: list[dict[str, Any]] = []
     menus: list[dict[str, Any]] = []
+    screens: dict[str, dict[str, Any]] = {}
     boot: dict[str, Any] = {}
     boot_metrics_samples: list[dict[str, Any]] = []
     recovery_before: dict[str, Any] = {}
@@ -455,6 +492,9 @@ def main() -> int:
     hil_started = False
     lock_fixture_started = False
     lock_pin = ephemeral_pin()
+    frames_dir = args.output / "frames"
+    if args.capture_screens:
+        frames_dir.mkdir()
 
     try:
         if args.flash:
@@ -550,6 +590,12 @@ def main() -> int:
                                 bool)
                         ]
                         record["failures"].extend(dwell_failures)
+                        if args.capture_screens:
+                            screen = capture(
+                                device, frames_dir,
+                                f"{case.index:02d}-{case.item_id}")
+                            screens[case.item_id] = screen
+                            record["screen"] = screen
                         back_trace, settled = wait_clean_home(device, case)
                         trace.extend(back_trace)
                         trace.append(settled)
@@ -683,6 +729,7 @@ def main() -> int:
             "isolated_device_lock_fixture": True,
             "pin_or_digest_retained": False,
             "product_lock_namespace_written_or_erased": False,
+            "screenshots_requested": args.capture_screens,
             "requested_dwell_seconds": args.dwell_seconds,
             "sample_seconds": args.sample_seconds,
         },
@@ -697,6 +744,7 @@ def main() -> int:
         "input": input_state,
         "safe_outputs": safe_outputs,
         "menus": menus,
+        "screens": screens,
         "device_lock_fixture": device_lock_fixture,
         "catalog_boundary": catalog_boundary,
         "trace": trace,

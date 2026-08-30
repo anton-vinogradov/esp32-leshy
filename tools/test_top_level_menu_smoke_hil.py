@@ -110,6 +110,18 @@ def passing_result() -> dict[str, Any]:
             "selected_id": runner.MENU_CASES[-1].item_id,
             "changed": False, "runtime_owner": "none", "lease_mask": 0,
         },
+        "screens": {},
+    }
+
+
+def screen_record(case: runner.MenuCase) -> dict[str, Any]:
+    return {
+        "frame_begin": {"width": 240, "height": 320, "bytes": 153600},
+        "state": ui_state(case),
+        "rgb565_sha256": "1" * 64,
+        "png_sha256": "2" * 64,
+        "transport_attempts": 1,
+        "transport_transient_retries": 0,
     }
 
 
@@ -236,6 +248,27 @@ class DwellTests(unittest.TestCase):
 class RetainedContractTests(unittest.TestCase):
     def test_complete_evidence_passes(self) -> None:
         self.assertEqual([], runner.result_contract_failures(passing_result()))
+
+    def test_complete_automatic_screenshot_set_passes(self) -> None:
+        result = passing_result()
+        result["policy"]["screenshots_requested"] = True
+        result["screens"] = {
+            case.item_id: screen_record(case) for case in runner.MENU_CASES
+        }
+        self.assertEqual([], runner.result_contract_failures(result))
+
+    def test_missing_or_mismatched_screenshot_is_rejected(self) -> None:
+        result = passing_result()
+        result["policy"]["screenshots_requested"] = True
+        result["screens"] = {
+            case.item_id: screen_record(case) for case in runner.MENU_CASES
+        }
+        result["screens"].pop("ble")
+        self.assertTrue(any("complete catalog-order" in failure
+                            for failure in runner.result_contract_failures(result)))
+        result["screens"]["ble"] = screen_record(runner.MENU_CASES[1])
+        result["screens"]["ble"]["state"]["runtime_owner"] = "none"
+        self.assertTrue(runner.result_contract_failures(result))
 
     def test_missing_menu_is_rejected(self) -> None:
         result = passing_result()
