@@ -21,6 +21,14 @@ from typing import Any, Callable
 
 from capture_1x_ui import PassiveSerial, synchronize_console
 from esp_app_identity import app_elf_sha256
+from run_1x_device_lock_hil import LOCK_SCHEMA, device_lock_page, home_device
+from run_1x_device_lock_persistence_hil import (
+    enter_pin,
+    ephemeral_pin,
+    fixture_command as device_lock_fixture_command,
+    wait_lock_state,
+    wipe_pin,
+)
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_survey_hil import action, artifact_manifest, capture, query
 from run_1x_ui_typography_hil import normalize_home
@@ -137,7 +145,7 @@ def return_home(device: PassiveSerial,
     raise RuntimeError(f"cannot return to clean Home: {state!r}")
 
 
-def fixture_command(
+def automation_fixture_command(
     device: PassiveSerial, operation: str, expected_cid: str, run_id: str,
 ) -> dict[str, Any]:
     command = (
@@ -190,6 +198,7 @@ def main() -> int:
     failures: list[str] = []
     cleanup: dict[str, Any] = {
         "attempted": False, "complete": False, "errors": []}
+    lock_pin = ephemeral_pin()
     record: dict[str, Any] = {
         "schema": RUN_SCHEMA,
         "status": "in_progress",
@@ -219,6 +228,9 @@ def main() -> int:
             "forbidden_ports_touched": [],
             "full_hil": False,
             "delta_only": True,
+            "isolated_device_lock_fixture": True,
+            "pin_or_digest_retained": False,
+            "product_lock_namespace_written_or_erased": False,
         },
     }
     write_json(args.output / "run.json", record)
@@ -227,6 +239,7 @@ def main() -> int:
     initial_language = ""
     hil_begun = False
     fixture_may_exist = False
+    lock_fixture_started = False
     try:
         if not args.skip_flash:
             flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
@@ -250,7 +263,31 @@ def main() -> int:
         reports["hil_begin"] = begun
         hil_begun = True
 
-        fixture = fixture_command(
+        reports["device_lock_before"] = query(
+            device, b"device-lock.state", LOCK_SCHEMA, "state")
+        lock_fixture = device_lock_fixture_command(device, "begin")
+        require(
+            lock_fixture, "Device Lock fixture begin", status="begun",
+            active=True, product_namespace_written_or_erased=False)
+        reports["device_lock_fixture_begin"] = lock_fixture
+        lock_fixture_started = True
+        home_device(device)
+        device_lock_page(device)
+        opened = action(device, "right")
+        if opened.get("runtime_event") != "device_lock_editor_opened":
+            raise RuntimeError("Device Lock fixture editor did not open")
+        enter_pin(device, lock_pin)
+        enter_pin(device, lock_pin)
+        unlocked = wait_lock_state(
+            device, lambda state: state.get("status") == "unlocked",
+            "isolated Automation Inspector unlock")
+        require(
+            unlocked, "Device Lock fixture unlock", protected_access=True,
+            persistence_fixture_active=True)
+        reports["device_lock_unlocked"] = unlocked
+        return_home(device, trace)
+
+        fixture = automation_fixture_command(
             device, "begin", args.expected_cid, run_id)
         fixture_may_exist = bool(
             fixture.get("cleanup_required") or fixture.get("fixture_active"))
@@ -323,7 +360,7 @@ def main() -> int:
         reports["malformed_ru"] = malformed_ru
 
         reports["home_before_cleanup"] = return_home(device, trace)
-        removed = fixture_command(
+        removed = automation_fixture_command(
             device, "cleanup", args.expected_cid, run_id)
         fixture_may_exist = not bool(removed.get("cleanup_complete"))
         require(
@@ -349,6 +386,23 @@ def main() -> int:
 
         if initial_language != "ru":
             set_language(device, initial_language)
+        lock_removed = device_lock_fixture_command(device, "cleanup")
+        require(
+            lock_removed, "Device Lock fixture cleanup", status="cleaned",
+            active=False, product_restored=True,
+            product_namespace_written_or_erased=False)
+        reports["device_lock_fixture_cleanup"] = lock_removed
+        lock_fixture_started = False
+        lock_after = query(
+            device, b"device-lock.state", LOCK_SCHEMA, "state")
+        for key in ("status", "failure", "failed_attempts",
+                    "credential_generation"):
+            if lock_after.get(key) != reports["device_lock_before"].get(key):
+                raise RuntimeError(
+                    f"Device Lock product state changed at {key}: "
+                    f"{reports['device_lock_before'].get(key)!r} != "
+                    f"{lock_after.get(key)!r}")
+        reports["device_lock_after"] = lock_after
         final = query(device, b"ui.state", UI_SCHEMA, "state")
         require(final, "final Home", page="home", language=initial_language,
                 runtime_owner="none", lease_mask=0, safety_latched=False)
@@ -374,6 +428,7 @@ def main() -> int:
             "attempted": True,
             "complete": True,
             "fixture_removed": True,
+            "device_lock_fixture_removed": True,
             "language_restored": True,
             "hil_ended": True,
             "final_home": True,
@@ -393,7 +448,7 @@ def main() -> int:
                         f"home: {type(error).__name__}: {error}")
                 if fixture_may_exist:
                     try:
-                        removed = fixture_command(
+                        removed = automation_fixture_command(
                             device, "cleanup", args.expected_cid, run_id)
                         reports["fixture_cleanup_best_effort"] = removed
                         fixture_may_exist = not bool(
@@ -408,7 +463,20 @@ def main() -> int:
                     except Exception as error:
                         cleanup["errors"].append(
                             f"language: {type(error).__name__}: {error}")
-                if hil_begun and not fixture_may_exist:
+                if lock_fixture_started and not fixture_may_exist:
+                    try:
+                        lock_removed = device_lock_fixture_command(
+                            device, "cleanup")
+                        reports["device_lock_fixture_cleanup_best_effort"] = \
+                            lock_removed
+                        lock_fixture_started = not bool(
+                            lock_removed.get("product_restored"))
+                    except Exception as error:
+                        cleanup["errors"].append(
+                            f"device_lock_fixture: {type(error).__name__}: "
+                            f"{error}")
+                if hil_begun and not fixture_may_exist and \
+                        not lock_fixture_started:
                     try:
                         ended = query(
                             device, f"hil.end {run_id}".encode("ascii"),
@@ -419,13 +487,17 @@ def main() -> int:
                         cleanup["errors"].append(
                             f"hil: {type(error).__name__}: {error}")
                 cleanup["fixture_removed"] = not fixture_may_exist
+                cleanup["device_lock_fixture_removed"] = \
+                    not lock_fixture_started
                 cleanup["hil_ended"] = not hil_begun
                 cleanup["complete"] = (
-                    not fixture_may_exist and not hil_begun and
+                    not fixture_may_exist and not lock_fixture_started and
+                    not hil_begun and
                     cleanup.get("language_restored") is True and
                     cleanup.get("final_home") is True and
                     cleanup["errors"] == [])
             device.close()
+    wipe_pin(lock_pin)
 
     record.update({
         "status": "pass" if not failures and cleanup.get("complete") else
