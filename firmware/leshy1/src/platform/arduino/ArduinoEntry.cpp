@@ -23077,13 +23077,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_product_runtime_source_injection_armed_mask\":%u,"
                       "\"survey_product_store_open_attempted\":%s,"
                       "\"survey_product_store_bytes_written\":%llu,"
-                      "\"survey_product_commit_pipeline_status\":\"%s\","
-                      "\"survey_product_commit_workflow_status\":\"%s\","
-                      "\"survey_product_commit_store_status\":\"%s\","
-                      "\"survey_product_commit_workspace_bound\":%s,"
-                      "\"survey_product_commit_workspace_owner\":%u,"
-                      "\"survey_product_commit_session_state\":%u,"
-                      "\"survey_product_commit_session_size\":%u,"
+                      "\"survey_product_commit\":\"%s/%s/%s/%u/%u/%u/%u\","
                       "\"survey_product_scan_active\":%s,"
                       "\"survey_product_cancel_requested_during_scan\":%s,"
                       "\"survey_product_scan_cycles\":%lu,"
@@ -23372,8 +23366,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           productSurveyRuntime.commitWorkflowStatus),
                       leshy1::storage::sessionStoreStatusName(
                           productSurveyRuntime.commitStoreStatus),
-                      productSurveyRuntime.commitWorkspaceBound
-                          ? "true" : "false",
+                      productSurveyRuntime.commitWorkspaceBound ? 1U : 0U,
                       static_cast<unsigned>(
                           productSurveyRuntime.commitWorkspaceOwner),
                       static_cast<unsigned>(
