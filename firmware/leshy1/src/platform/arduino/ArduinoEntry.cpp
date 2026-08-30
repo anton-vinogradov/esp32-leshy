@@ -12807,10 +12807,22 @@ void runDeviceLockWorker(void*) {
         for (std::size_t index = 0; index < salt.size(); ++index) {
             salt[index] = static_cast<std::uint8_t>(0x31U + index * 7U);
         }
-        event.success = deviceLockCrypto.deriveVerifier(
+        const bool derived = deviceLockCrypto.deriveVerifier(
             pin.data(), pin.size() - 1U, salt,
             leshy1::services::security::kDeviceLockPbkdf2Iterations,
             &verifier);
+        constexpr std::array<std::uint8_t, 32> expected{{
+            0xefU, 0x8cU, 0x61U, 0x23U, 0xe7U, 0xbfU, 0xd8U, 0x1cU,
+            0xb9U, 0xd7U, 0x93U, 0xa9U, 0xb5U, 0xd9U, 0xebU, 0x84U,
+            0x78U, 0xd2U, 0xa2U, 0x14U, 0xb3U, 0xf4U, 0x71U, 0x18U,
+            0x25U, 0x88U, 0x94U, 0x48U, 0x3bU, 0xecU, 0x75U, 0xa1U,
+        }};
+        std::uint8_t difference = 0U;
+        for (std::size_t index = 0; index < verifier.size(); ++index) {
+            difference = static_cast<std::uint8_t>(
+                difference | (verifier[index] ^ expected[index]));
+        }
+        event.success = derived && difference == 0U;
         volatile char* pinBytes = pin.data();
         for (std::size_t index = 0; index < pin.size(); ++index) {
             pinBytes[index] = '\0';
@@ -12943,6 +12955,7 @@ void emitDeviceLockState(Stream& reply) {
         "\"worker_active\":%s,\"last_kdf_us\":%llu,"
         "\"benchmark_requested\":%s,\"benchmark_complete\":%s,"
         "\"benchmark_success\":%s,\"benchmark_elapsed_us\":%llu,"
+        "\"benchmark_vector_verified\":%s,"
         "\"benchmark_heap_before\":%lu,\"benchmark_heap_after\":%lu,"
         "\"benchmark_minimum_heap_after\":%lu,"
         "\"persistence_touched_by_benchmark\":false,"
@@ -12959,6 +12972,7 @@ void emitDeviceLockState(Stream& reply) {
         deviceLockKdfBenchmark.complete ? "true" : "false",
         deviceLockKdfBenchmark.success ? "true" : "false",
         static_cast<unsigned long long>(deviceLockKdfBenchmark.elapsedUs),
+        deviceLockKdfBenchmark.success ? "true" : "false",
         static_cast<unsigned long>(deviceLockKdfBenchmark.heapBefore),
         static_cast<unsigned long>(deviceLockKdfBenchmark.heapAfter),
         static_cast<unsigned long>(

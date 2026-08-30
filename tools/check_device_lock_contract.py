@@ -98,8 +98,10 @@ def main() -> int:
 
     for marker, label in (
         ("esp_fill_random(output, size)", "hardware RNG salt"),
-        ("mbedtls_pkcs5_pbkdf2_hmac_ext", "PBKDF2 implementation"),
+        ("mbedtls_md_hmac_reset", "cooperative PBKDF2 implementation"),
         ("MBEDTLS_MD_SHA256", "SHA-256 KDF"),
+        ("kDeviceLockKdfYieldInterval = 256", "KDF watchdog yield bound"),
+        ("vTaskDelay(1)", "KDF idle-task scheduling point"),
         ("credential.v1", "versioned NVS credential"),
         ("enrolled.v1", "separate provisioned latch"),
         ("nvs_set_blob(storage.get(), kCredentialKey", "credential write"),
@@ -174,6 +176,7 @@ def main() -> int:
         ("volatile char* pinBytes", "KDF vector PIN wipe"),
         ("volatile std::uint8_t* verifierBytes",
          "KDF vector verifier wipe"),
+        ("benchmark_vector_verified", "exact PBKDF2 HIL vector report"),
     ):
         require(entry, marker, label, failures)
 

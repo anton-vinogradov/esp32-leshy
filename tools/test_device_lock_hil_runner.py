@@ -35,6 +35,7 @@ class DeviceLockHilRunnerTests(unittest.TestCase):
             "benchmark_requested": True,
             "benchmark_complete": True,
             "benchmark_success": True,
+            "benchmark_vector_verified": True,
             "benchmark_elapsed_us": 850_000,
             "benchmark_heap_before": 100_000,
             "benchmark_heap_after": 100_000,
@@ -60,4 +61,3 @@ class DeviceLockHilRunnerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

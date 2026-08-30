@@ -69,6 +69,7 @@ def benchmark_failures(report: dict[str, Any]) -> list[str]:
         "benchmark_requested": True,
         "benchmark_complete": True,
         "benchmark_success": True,
+        "benchmark_vector_verified": True,
         "persistence_touched_by_benchmark": False,
         "radio_touched": False,
         "worker_active": False,
@@ -375,4 +376,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

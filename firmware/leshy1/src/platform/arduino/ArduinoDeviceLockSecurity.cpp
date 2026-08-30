@@ -5,8 +5,9 @@
 #include <cstring>
 
 #include <esp_random.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <mbedtls/md.h>
-#include <mbedtls/pkcs5.h>
 #include <nvs.h>
 
 #include "services/security/DeviceLockRecord.h"
@@ -21,6 +22,7 @@ constexpr const char* kNamespace = "leshy1-lock";
 constexpr const char* kCredentialKey = "credential.v1";
 constexpr const char* kProvisionedLatchKey = "enrolled.v1";
 constexpr std::uint32_t kProvisionedLatch = 0x4c4f434bU;
+constexpr std::uint32_t kDeviceLockKdfYieldInterval = 256U;
 
 class ScopedNvsHandle final {
 public:
@@ -72,11 +74,65 @@ bool MbedTlsDeviceLockCrypto::deriveVerifier(
         return false;
     }
     output->fill(0);
-    const int status = mbedtls_pkcs5_pbkdf2_hmac_ext(
-        MBEDTLS_MD_SHA256,
-        reinterpret_cast<const unsigned char*>(pin), pinLength,
-        salt.data(), salt.size(), iterations,
-        static_cast<std::uint32_t>(output->size()), output->data());
+    const mbedtls_md_info_t* info =
+        mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+    if (info == nullptr || output->size() != 32U) return false;
+
+    mbedtls_md_context_t context;
+    mbedtls_md_init(&context);
+    std::array<std::uint8_t, 32> u{};
+    std::array<std::uint8_t, 32> block{};
+    constexpr std::array<std::uint8_t, 4> blockIndex{{0U, 0U, 0U, 1U}};
+    int status = mbedtls_md_setup(&context, info, 1);
+    if (status == 0) {
+        status = mbedtls_md_hmac_starts(
+            &context, reinterpret_cast<const unsigned char*>(pin),
+            pinLength);
+    }
+    if (status == 0) {
+        status = mbedtls_md_hmac_update(
+            &context, salt.data(), salt.size());
+    }
+    if (status == 0) {
+        status = mbedtls_md_hmac_update(
+            &context, blockIndex.data(), blockIndex.size());
+    }
+    if (status == 0) {
+        status = mbedtls_md_hmac_finish(&context, u.data());
+        block = u;
+    }
+    for (std::uint32_t iteration = 1U;
+         status == 0 && iteration < iterations; ++iteration) {
+        status = mbedtls_md_hmac_reset(&context);
+        if (status == 0) {
+            status = mbedtls_md_hmac_update(
+                &context, u.data(), u.size());
+        }
+        if (status == 0) {
+            status = mbedtls_md_hmac_finish(&context, u.data());
+        }
+        if (status == 0) {
+            for (std::size_t index = 0; index < block.size(); ++index) {
+                block[index] = static_cast<std::uint8_t>(
+                    block[index] ^ u[index]);
+            }
+        }
+        // The ESP-IDF Task WDT supervises each core's idle task. A monolithic
+        // PBKDF2 call can starve idle0 even though loopTask on the other core
+        // remains conceptually responsive. Blocking for one tick makes the
+        // KDF cooperative without weakening the five-second safety watchdog.
+        if (iteration % kDeviceLockKdfYieldInterval == 0U) {
+            vTaskDelay(1);
+        }
+    }
+    if (status == 0) *output = block;
+    mbedtls_md_free(&context);
+    volatile std::uint8_t* uBytes = u.data();
+    volatile std::uint8_t* blockBytes = block.data();
+    for (std::size_t index = 0; index < u.size(); ++index) {
+        uBytes[index] = 0U;
+        blockBytes[index] = 0U;
+    }
     if (status != 0) output->fill(0);
     return status == 0;
 }
