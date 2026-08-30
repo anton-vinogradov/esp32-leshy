@@ -130,7 +130,9 @@ def gatt_failures(state: dict[str, Any], expected_state: str,
             "characteristics": 0,
             "host_ready": False,
             "connected": False,
-            "cleanup_complete": True,
+            # The selected permission flow is intentionally non-terminal even
+            # though it has not acquired a radio or created a host yet.
+            "cleanup_complete": False,
             "owns_radio": False,
             "esp_rf_owner": 1,
         }, label))
@@ -159,6 +161,7 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash", action="store_true")
+    parser.add_argument("--reuse-exact-flash", action="store_true")
     parser.add_argument("--flash-baud", type=int, default=460800)
     parser.add_argument("--external-ble-label", required=True)
     parser.add_argument("--external-ble-executable", required=True, type=Path)
@@ -173,8 +176,8 @@ def main() -> int:
         parser.error("--expected-cid must be 32 uppercase hexadecimal characters")
     if len(args.source_commit) != 40:
         parser.error("--source-commit must be a full Git commit ID")
-    if not args.flash:
-        parser.error("focused gate requires one explicit --flash")
+    if args.flash == args.reuse_exact_flash:
+        parser.error("choose exactly one of --flash or --reuse-exact-flash")
     if not 1 <= len(args.external_ble_label.encode("utf-8")) <= 29:
         parser.error("external BLE label must occupy 1..29 UTF-8 bytes")
 
@@ -235,8 +238,9 @@ def main() -> int:
                 fixture_state.get("label") != args.external_ble_label):
             raise RuntimeError(f"external BLE fixture start failed: {fixture_state}")
 
-        flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
-        time.sleep(0.5)
+        if args.flash:
+            flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            time.sleep(0.5)
         with PassiveSerial(args.port, 115200, timeout=0.25) as device:
             try:
                 synchronize_console(device, 30.0)
@@ -437,8 +441,8 @@ def main() -> int:
             "source_commit": args.source_commit,
             "firmware_sha256": firmware_sha,
             "app_elf_sha256": app_identity,
-            "flashed": candidate_verified,
-            "flash_mode": "fresh",
+            "flashed": args.flash and candidate_verified,
+            "flash_mode": "fresh" if args.flash else "reuse_exact",
         },
         "expected_cid": args.expected_cid,
         "preflight": preflight,
@@ -459,7 +463,7 @@ def main() -> int:
         "cleanup_before": cleanup_before,
         "cleanup_after": cleanup_after,
         "scope": {
-            "single_flash": candidate_verified,
+            "single_flash_or_exact_reuse": candidate_verified,
             "manual_button_presses": 0,
             "screenshots_automatic": bool(screens),
             "exact_fixture_selected_without_identifier_disclosure": bool(selector),
