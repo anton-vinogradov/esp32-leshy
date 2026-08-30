@@ -72,18 +72,34 @@ def main() -> int:
                 f"admission: {token}"
             )
 
-    terminal_begin = entry.find("void releaseProductSurveyAfterTerminal(")
-    terminal_end = entry.find(
-        "void recoverProductCatalogForFingerprint(", terminal_begin
-    )
-    terminal = entry[terminal_begin:terminal_end]
+    release_begin = entry.find("void releaseProductSurveyAfterTerminal(")
+    release_end = entry.find("void serviceProductSurveyWorker()", release_begin)
+    terminal_release = entry[release_begin:release_end]
     if (
-        terminal.count("bleProductSurveyMemoryCompact &&") < 2
-        or terminal.count("!restoreBleProductSurveyMemory()") < 2
+        "!appRuntime.running() && bleProductSurveyMemoryCompact &&"
+            not in terminal_release
+        or "!restoreBleProductSurveyMemory()" not in terminal_release
     ):
         raise SystemExit(
-            "BLE Survey memory is not restored after both failed/cancelled "
-            "and committed terminal paths"
+            "BLE Survey memory may be expanded before the foreground app "
+            "releases its workspace"
+        )
+    wifi_menu_begin = entry.find(
+        "} else if (wifiProductView == WifiProductView::Menu) {"
+    )
+    wifi_menu_end = entry.find(
+        "} else if (rfSpectrumView == RfSpectrumView::SourceMenu)",
+        wifi_menu_begin,
+    )
+    wifi_menu = entry[wifi_menu_begin:wifi_menu_end]
+    if (
+        "if (changed) appRuntime.stop();" not in wifi_menu
+        or "restoreBleProductSurveyMemory()" not in wifi_menu
+        or wifi_menu.find("appRuntime.stop()") >
+            wifi_menu.find("restoreBleProductSurveyMemory()")
+    ):
+        raise SystemExit(
+            "mixed Survey memory is not restored after leaving Wi-Fi Home"
         )
 
     required_entry = (

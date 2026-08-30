@@ -6793,7 +6793,7 @@ void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
     // Mixed Field Visits compact the observation queue too. Restore the
     // ordinary Survey capacity only after every radio/store owner is terminal,
     // independently of which product page will remain visible.
-    if (bleProductSurveyMemoryCompact &&
+    if (!appRuntime.running() && bleProductSurveyMemoryCompact &&
         !restoreBleProductSurveyMemory()) {
         productSurveyRuntime.status = "ble_memory_restore_failed";
         lastRuntimeEvent = productSurveyRuntime.status;
@@ -7032,12 +7032,6 @@ void serviceProductSurveyWorker() {
                     completeFieldSurveyVisit(surveySession);
                 }
                 setProductSurveyControl(ProductSurveyWorkerControl::Idle);
-                if (bleProductSurveyMemoryCompact &&
-                    !restoreBleProductSurveyMemory()) {
-                    productSurveyRuntime.status =
-                        "ble_memory_restore_failed";
-                    lastRuntimeEvent = productSurveyRuntime.status;
-                }
                 render = true;
             }
         } else if (event.kind == ProductSurveyWorkerEventKind::Cancelled) {
@@ -26259,7 +26253,11 @@ bool applyUiAction(UiAction action, bool render = true) {
                     action, static_cast<std::uint8_t>(appCatalog.size()),
                     true, 2);
                 if (changed) appRuntime.stop();
-                lastRuntimeEvent = "wifi_home";
+                const bool memoryRestored = !changed ||
+                    restoreBleProductSurveyMemory();
+                lastRuntimeEvent = changed && memoryRestored
+                    ? "wifi_home" : "ble_memory_restore_failed";
+                changed = changed && memoryRestored;
             }
         } else if (rfSpectrumView == RfSpectrumView::SourceMenu) {
             handled = true;
