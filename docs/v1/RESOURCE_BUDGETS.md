@@ -1394,6 +1394,25 @@ or reused and the connected lifecycle is re-measured. The compact
 [acceptance](../../tests/hil/evidence/board-01-ble-inspector-1.0.0-dev.270.json)
 retains hashes/counts only; raw BLE addresses, payloads and screenshots are omitted.
 
+BLE Inspector connected-success bound `RB-M202`: exact physical `1.0.0-dev.272` at
+source `fcd0683cb169ac41e42ff302d074a146457c1b1d` uses 231,968 B static RAM. Its
+accepted 3,480,368 B app image leaves 713,936 B in the 4 MiB OTA slot and has
+SHA-256 `5b6e12091e5704ef05b29f8e8095ce48b50eee4c0753f3931bda3fde3e70e1ca`;
+the embedded ELF identity is
+`afe1793ec768a65b914c878bddaf2f6150cfa767d43035a9bc582c102e786e11`.
+The live product has one bounded static recursive task mutex; it replaces the
+interrupt-disabling spinlock that caused the rejected dev.271 interrupt-watchdog
+reset and adds no callback-time heap allocation. Physical boot heap total/free is
+146,836/73,668 B. After releasing passive scan/catalog ownership, GATT admission
+starts with 72,664 B free; after NimBLE host initialization it reports 908 B free
+and an 820 B lifecycle minimum while retaining 5 services/7 characteristics inside
+fixed 16/48 capacities. This is sufficient for the accepted single connection and
+metadata enumeration only; characteristic pair/read/write/subscribe operations are
+absent. The compact [acceptance](../../tests/hil/evidence/board-01-ble-gatt-1.0.0-dev.272.json)
+retains exact hashes/counts and omits the fixture label, PID, BLE address, selected
+identity and screenshots. Physical wrong-peer, timeout, conflict and failed-cleanup
+paths remain mandatory before CAP-051 completion.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

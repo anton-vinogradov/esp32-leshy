@@ -73,6 +73,10 @@ def main() -> int:
         board_ble = BOARD_BLE_HEADER.read_text(encoding="utf-8") + (
             BOARD_BLE_SOURCE.read_text(encoding="utf-8")
         )
+        gatt_boundary = "bool BoardBleGattInspectorTransport::bind("
+        if gatt_boundary not in board_ble:
+            raise OSError("passive/GATT BLE source boundary is missing")
+        passive_board_ble = board_ble.split(gatt_boundary, 1)[0]
         ble_contract = BLE_CONTRACT_HEADER.read_text(encoding="utf-8")
         hil_runner = HIL_RUNNER.read_text(encoding="utf-8")
         start_regression_runner = START_REGRESSION_RUNNER.read_text(
@@ -210,7 +214,7 @@ def main() -> int:
         "ble_gap_connect",
         "ble_gap_ext_connect",
     ):
-        require(failures, forbidden not in board_ble,
+        require(failures, forbidden not in passive_board_ble,
                 f"BLE live retention gained an active path: {forbidden}")
     for marker in (
         '\\"ble_scan_status\\":',

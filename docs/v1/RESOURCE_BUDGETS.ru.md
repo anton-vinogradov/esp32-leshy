@@ -1383,6 +1383,25 @@ passive capture. Live GATT нельзя допускать, пока memory pass
 [acceptance](../../tests/hil/evidence/board-01-ble-inspector-1.0.0-dev.270.json)
 сохраняет только hashes/counts; raw BLE addresses, payloads и screenshots исключены.
 
+Bound connected-success BLE Inspector `RB-M202`: exact physical `1.0.0-dev.272` на
+source `fcd0683cb169ac41e42ff302d074a146457c1b1d` использует 231 968 B static RAM.
+Принятый app image 3 480 368 B оставляет 713 936 B в OTA slot 4 MiB и имеет
+SHA-256 `5b6e12091e5704ef05b29f8e8095ce48b50eee4c0753f3931bda3fde3e70e1ca`;
+embedded ELF identity —
+`afe1793ec768a65b914c878bddaf2f6150cfa767d43035a9bc582c102e786e11`.
+В live product есть один bounded static recursive task mutex; он заменяет
+interrupt-disabling spinlock, вызвавший rejected interrupt-watchdog reset dev.271,
+и не добавляет heap allocation внутри callback. Physical boot heap total/free —
+146 836/73 668 B. После освобождения ownership passive scan/catalog GATT admission
+начинается с 72 664 B free; после инициализации NimBLE host сообщает 908 B free и
+minimum lifecycle 820 B, сохраняя 5 services/7 characteristics в fixed capacities
+16/48. Этого достаточно для принятого single connection и enumeration metadata;
+characteristic pair/read/write/subscribe operations отсутствуют. Compact
+[acceptance](../../tests/hil/evidence/board-01-ble-gatt-1.0.0-dev.272.json)
+сохраняет exact hashes/counts и исключает label fixture, PID, BLE address, selected
+identity и screenshots. Physical paths wrong-peer, timeout, conflict и failed-cleanup
+обязательны до завершения CAP-051.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

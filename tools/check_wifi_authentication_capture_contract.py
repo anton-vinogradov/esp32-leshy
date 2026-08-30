@@ -764,7 +764,7 @@ def main() -> int:
     )
     survey_authentication = section(
         compact_entry,
-        "constboolauthenticationPending=",
+        "render=false;}else{if(surveyWorkflow.state()==",
         "}else{constboolwindowClosed=closeProductSurveyScanWindow(",
     )
     return_after_survey = braced_block(

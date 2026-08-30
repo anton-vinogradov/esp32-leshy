@@ -31,6 +31,10 @@ def main() -> int:
     ).read_text(encoding="utf-8") + (
         ROOT / "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.h"
     ).read_text(encoding="utf-8")
+    gatt_boundary = "bool BoardBleGattInspectorTransport::bind("
+    if gatt_boundary not in adapter:
+        raise SystemExit("passive/GATT BLE source boundary is missing")
+    passive_adapter = adapter.split(gatt_boundary, 1)[0]
     runner = (
         ROOT / "tools/run_1x_ble_nearby_hil.py"
     ).read_text(encoding="utf-8")
@@ -328,7 +332,7 @@ def main() -> int:
     )
     failures.extend(
         f"adapter contains active/TX path: {token}"
-        for token in forbidden_adapter if token in adapter
+        for token in forbidden_adapter if token in passive_adapter
     )
     failures.extend(
         f"BLE HIL lifecycle token missing: {token}"

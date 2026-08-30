@@ -440,6 +440,10 @@ def main() -> int:
         errors.append("explicit passive BLE adapter is missing")
     else:
         passive_ble = passive_ble_adapter.read_text(encoding="utf-8")
+        gatt_boundary = "bool BoardBleGattInspectorTransport::bind("
+        if gatt_boundary not in passive_ble:
+            errors.append("passive/GATT BLE source boundary is missing")
+        passive_ble_only = passive_ble.split(gatt_boundary, 1)[0]
         for marker in (
             "#include <esp32-hal-alloc-ble-mem.h>",
             "registers this low-level adapter as a BLE",
@@ -491,7 +495,7 @@ def main() -> int:
             "ble_gap_connect",
             "process-lifetime",
         ):
-            if marker in passive_ble:
+            if marker in passive_ble_only:
                 errors.append(
                     f"passive BLE adapter contains heap-growing/active path: {marker}"
                 )

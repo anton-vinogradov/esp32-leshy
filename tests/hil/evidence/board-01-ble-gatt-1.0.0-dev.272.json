@@ -1,0 +1,99 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "afe1793ec768a65b914c878bddaf2f6150cfa767d43035a9bc582c102e786e11",
+    "firmware_sha256": "5b6e12091e5704ef05b29f8e8095ce48b50eee4c0753f3931bda3fde3e70e1ca",
+    "flash_mode": "fresh",
+    "flashed": true,
+    "source_commit": "fcd0683cb169ac41e42ff302d074a146457c1b1d",
+    "version": "1.0.0-dev.272"
+  },
+  "evidence": {
+    "fixture_executable_sha256": "da3cec0a11116e563b8d34d7c3ef042b5aeba0978db069b2b7c89bce6d64106d",
+    "raw_artifact_index_sha256": "d1d60dca88069c9dc7637669dd4e8a0fee57d8daeba5e83824146866d7f0389d",
+    "raw_run_sha256": "265cd2e73cc2ac46e8735aa44d8d3fa87f6960f9514c882781e1b7b798e4fc2e",
+    "run_id": "c914f1a08283bc557bbab00af2cb1851",
+    "runner_sha256": "fb45bb53c446e9be9f32bd4360a4648876e141bdcbce45d07a516cc4976bd2c4",
+    "screenshots": {
+      "permission": {
+        "png_sha256": "204f23d9ffea84f1043f167a06a9c594a5da9162506b823fc7d66d50646baa32",
+        "rgb565_sha256": "e6eabedeb8a941fdb9421c944986ad1ff0fee7d6cebbd487a29959122452df02"
+      },
+      "ready_first": {
+        "png_sha256": "be84ef57b0353a45dc2ee1fdde8f9b950664ed9ecb6fcc2bed346295f6b650d2",
+        "rgb565_sha256": "efca5cff79b27cdc78bbc08f1d66ac13e1fbf75cd21be375c80efa33edc8ca1c"
+      },
+      "ready_second": {
+        "png_sha256": "be84ef57b0353a45dc2ee1fdde8f9b950664ed9ecb6fcc2bed346295f6b650d2",
+        "rgb565_sha256": "efca5cff79b27cdc78bbc08f1d66ac13e1fbf75cd21be375c80efa33edc8ca1c"
+      }
+    },
+    "source_guard_sha256": "06a57dbc5b6d4e2a8170325d594df846985739bb2d1465f6783a9f08fc0de8d1"
+  },
+  "evidence_ids": [
+    "E-BUILD-191",
+    "E-AUTO-166",
+    "E-HIL-204",
+    "E-UX-061",
+    "RB-M202"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "privacy": {
+    "fixture_pid_retained": false,
+    "raw_ble_addresses_retained": false,
+    "raw_fixture_label_retained": false,
+    "screenshot_hashes_retained": true,
+    "screenshots_retained": false,
+    "selected_identity_hash_retained": false
+  },
+  "schema": "leshy.ble_gatt_hil.acceptance.v1",
+  "scope": {
+    "active_connection_explicitly_confirmed_twice": true,
+    "cardputer_touched": false,
+    "characteristic_reads": 0,
+    "characteristic_writes": 0,
+    "clone_touched": false,
+    "enumeration_only": true,
+    "exact_fixture_selected_without_identifier_disclosure": true,
+    "host_wifi_control_calls": 0,
+    "manual_button_presses": 0,
+    "pairings": 0,
+    "screenshots_automatic": true,
+    "single_flash_or_exact_reuse": true,
+    "stable_ready_card_changed_pixels": 0,
+    "storage_write_authorized": false,
+    "subscriptions": 0,
+    "terminal_zero_lease": true
+  },
+  "status": "pass_ble_gatt_enumeration",
+  "verified": {
+    "boot_heap_free": 73668,
+    "boot_heap_total": 146836,
+    "boot_reset_reason_code": 1,
+    "characteristic_capacity": 48,
+    "characteristic_reads": 0,
+    "characteristic_writes": 0,
+    "characteristics": 7,
+    "content_clears": 1,
+    "exact_connectable_match_count": 1,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "final_safety_state": "armed",
+    "fixture_terminated": true,
+    "heap_free_after_init": 908,
+    "heap_free_before": 72664,
+    "heap_minimum": 820,
+    "host_wifi_control_calls": 0,
+    "pairings": 0,
+    "permission_review": true,
+    "preflight_before_flash": true,
+    "second_confirmation": true,
+    "service_capacity": 16,
+    "services": 5,
+    "single_application_flash": true,
+    "stable_changed_pixels": 0,
+    "stable_total_pixels": 76800,
+    "subscriptions": 0
+  }
+}
