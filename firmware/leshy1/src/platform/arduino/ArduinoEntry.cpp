@@ -1851,6 +1851,32 @@ WifiOuiDatabase wifiOuiDatabase(
     static_cast<std::size_t>(wifiOuiAssetEnd - wifiOuiAssetStart));
 std::size_t wifiDeviceSelection = 0;
 WifiDeviceRecord wifiDeviceDetail;
+struct WifiDeviceDetailVisual final {
+    bool valid = false;
+    WifiDeviceGeneration generation = WifiDeviceGeneration::Unknown;
+    std::uint8_t channel = 0U;
+    std::array<char, 96> association{};
+    std::int16_t rssiDbm = 0;
+    std::int16_t minimumRssiDbm = 0;
+    std::int16_t maximumRssiDbm = 0;
+    std::int16_t rssiTrendDb = 0;
+    WifiDeviceState state = WifiDeviceState::Searching;
+    bool stateVisible = false;
+
+    bool operator==(const WifiDeviceDetailVisual& other) const {
+        return valid == other.valid && generation == other.generation &&
+            channel == other.channel && association == other.association &&
+            rssiDbm == other.rssiDbm &&
+            minimumRssiDbm == other.minimumRssiDbm &&
+            maximumRssiDbm == other.maximumRssiDbm &&
+            rssiTrendDb == other.rssiTrendDb && state == other.state &&
+            stateVisible == other.stateVisible;
+    }
+};
+WifiDeviceDetailVisual wifiDeviceRenderedDetail{};
+std::uint32_t wifiDeviceDetailContentClears = 0U;
+std::uint32_t wifiDeviceRadarFullRepaints = 0U;
+std::uint32_t wifiDeviceRadarDeltaRepaints = 0U;
 std::uint64_t nextWifiDeviceUiRefreshUs = 0;
 
 std::size_t wifiDeviceVisibleSize() {
@@ -2041,9 +2067,9 @@ std::uint32_t bleDeviceRadarFullRepaints = 0U;
 std::uint32_t bleDeviceRadarDeltaRepaints = 0U;
 std::uint32_t bleDeviceDetailRefreshes = 0U;
 std::uint32_t bleDeviceDetailRefreshesDeferred = 0U;
-std::uint32_t bleDeviceAtomicTextRowPushes = 0U;
-std::uint32_t bleDeviceAtomicTextRowAllocationFailures = 0U;
-std::uint32_t bleDeviceDirectTextRowFallbacks = 0U;
+std::uint32_t liveTextRowPushes = 0U;
+std::uint32_t liveTextRowAllocationFailures = 0U;
+std::uint32_t liveTextRowDirectFallbacks = 0U;
 
 std::size_t bleDeviceVisibleSize() {
     return bleDeviceNavigationOrder.size(bleDeviceCatalog);
@@ -12345,7 +12371,7 @@ bool beginLiveTextRow(UiTextRole role, std::uint16_t foreground,
         liveTextRowSprite.setColorDepth(1);
         if (liveTextRowSprite.createSprite(kLiveTextRowWidth,
                                            kLiveTextRowHeight) == nullptr) {
-            ++bleDeviceAtomicTextRowAllocationFailures;
+            ++liveTextRowAllocationFailures;
             return false;
         }
         liveTextRowSprite.setTextWrap(false, false);
@@ -12371,7 +12397,7 @@ void setLiveTextRowCursor(UiTextRole role, std::int16_t x,
 
 void pushLiveTextRow(std::int16_t x, std::int16_t y) {
     liveTextRowSprite.pushSprite(x, y);
-    ++bleDeviceAtomicTextRowPushes;
+    ++liveTextRowPushes;
 }
 
 bool beginLiveMetaTextRow(std::uint16_t foreground,
@@ -12380,7 +12406,7 @@ bool beginLiveMetaTextRow(std::uint16_t foreground,
         liveMetaTextRowSprite.setColorDepth(1);
         if (liveMetaTextRowSprite.createSprite(
                 kLiveTextRowWidth, kLiveMetaTextRowHeight) == nullptr) {
-            ++bleDeviceAtomicTextRowAllocationFailures;
+            ++liveTextRowAllocationFailures;
             return false;
         }
         liveMetaTextRowSprite.setTextWrap(false, false);
@@ -12401,11 +12427,11 @@ bool pushLiveMetaTextRow(const char* text, std::uint16_t foreground,
         liveMetaTextRowSprite.print(text);
         liveMetaTextRowSprite.pushSprite(
             Layout::Edge, top - kLocalTextTop);
-        ++bleDeviceAtomicTextRowPushes;
+        ++liveTextRowPushes;
         return true;
     }
 
-    ++bleDeviceDirectTextRowFallbacks;
+    ++liveTextRowDirectFallbacks;
     display.fillRect(Layout::Edge, top - kLocalTextTop,
                      Layout::ContentWidth, kLiveMetaTextRowHeight,
                      Palette::Canvas);
@@ -15559,7 +15585,7 @@ void renderRadioSignalTextRow(std::int16_t rssiDbm, const Rect& bounds) {
 
     // Fail visibly but safely if even the 648-byte compositor cannot be
     // allocated. Product HIL requires this counter to remain zero.
-    ++bleDeviceDirectTextRowFallbacks;
+    ++liveTextRowDirectFallbacks;
     display.fillRect(bounds.x, bounds.y + 25, bounds.width, 24,
                      Palette::Surface);
     display.setTextColor(tone, Palette::Surface);
@@ -16259,7 +16285,7 @@ void renderBleDeviceRange(const BleDeviceRadarVisual& visual) {
         pushLiveTextRow(Layout::Edge, 242);
         return;
     }
-    ++bleDeviceDirectTextRowFallbacks;
+    ++liveTextRowDirectFallbacks;
     display.fillRect(Layout::Edge, 242, Layout::ContentWidth, 22,
                      Palette::Canvas);
     display.setTextColor(Palette::TextMuted, Palette::Canvas);
@@ -16277,7 +16303,7 @@ void renderBleDeviceTrend(const BleDeviceRadarVisual& visual) {
         pushLiveTextRow(Layout::Edge, 264);
         return;
     }
-    ++bleDeviceDirectTextRowFallbacks;
+    ++liveTextRowDirectFallbacks;
     display.fillRect(Layout::Edge, 264, Layout::ContentWidth,
                      Layout::FooterDividerY - 264, Palette::Canvas);
     display.setTextColor(tone, Palette::Canvas);
@@ -16341,7 +16367,7 @@ void renderBleDevicePrimaryTextRow(const char* text, bool atomic) {
         return;
     }
     if (atomic) {
-        ++bleDeviceDirectTextRowFallbacks;
+        ++liveTextRowDirectFallbacks;
         display.fillRect(Layout::Edge, kRowY, Layout::ContentWidth,
                          kLiveTextRowHeight, Palette::Canvas);
     }
@@ -16900,6 +16926,108 @@ void renderWifiDevices(bool clearContent) {
 
 void renderWifiDeviceDetailLiveData(bool force = true);
 
+WifiDeviceDetailVisual wifiDeviceDetailVisual(
+        const WifiDeviceRecord& device) {
+    WifiDeviceDetailVisual visual{};
+    visual.valid = true;
+    visual.generation = device.generation;
+    visual.channel = device.channel;
+    visual.rssiDbm = device.rssiDbm;
+    visual.minimumRssiDbm = device.minimumRssiDbm;
+    visual.maximumRssiDbm = device.maximumRssiDbm;
+    visual.rssiTrendDb = device.rssiTrendDb;
+    visual.state = device.state;
+    visual.stateVisible = device.ssidLength != 0U || device.bssidKnown;
+    if (device.ssidLength != 0U) {
+        std::snprintf(visual.association.data(), visual.association.size(),
+                      tr(UiTextId::WifiDeviceNetworkFormat),
+                      device.ssid.data());
+    } else if (device.bssidKnown) {
+        std::snprintf(
+            visual.association.data(), visual.association.size(),
+            tr(UiTextId::WifiNetworkBssidFormat),
+            static_cast<unsigned>(device.bssid[0]),
+            static_cast<unsigned>(device.bssid[1]),
+            static_cast<unsigned>(device.bssid[2]),
+            static_cast<unsigned>(device.bssid[3]),
+            static_cast<unsigned>(device.bssid[4]),
+            static_cast<unsigned>(device.bssid[5]));
+    } else {
+        const std::uint64_t observedUs = device.monotonicUs >=
+                device.firstSeenUs
+            ? device.monotonicUs - device.firstSeenUs : 0U;
+        std::snprintf(visual.association.data(), visual.association.size(),
+                      tr(UiTextId::WifiDeviceSeenFormat),
+                      static_cast<unsigned long>(observedUs / 1000000ULL),
+                      tr(wifiDeviceStateText(device.state)));
+    }
+    return visual;
+}
+
+void renderWifiDeviceAtomicRow(const char* text, std::uint16_t tone,
+                               std::int16_t top) {
+    (void)pushLiveMetaTextRow(text, tone, top);
+}
+
+void renderWifiDeviceRadioRow(const WifiDeviceDetailVisual& visual) {
+    char line[96] = {};
+    std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceRadioFormat),
+                  tr(wifiDeviceGenerationText(visual.generation)),
+                  static_cast<unsigned>(visual.channel));
+    renderWifiDeviceAtomicRow(line, Palette::Positive, 108);
+}
+
+void renderWifiDeviceAssociationRow(const WifiDeviceDetailVisual& visual) {
+    const std::uint16_t tone = visual.stateVisible
+        ? Palette::TextSecondary : Palette::TextMuted;
+    renderWifiDeviceAtomicRow(visual.association.data(), tone, 130);
+}
+
+void renderWifiDeviceRangeRow(const WifiDeviceDetailVisual& visual) {
+    char line[64] = {};
+    std::snprintf(line, sizeof(line),
+                  tr(UiTextId::WifiDeviceRssiRangeFormat),
+                  static_cast<int>(visual.minimumRssiDbm),
+                  static_cast<int>(visual.maximumRssiDbm));
+    renderWifiDeviceAtomicRow(line, Palette::TextMuted, 246);
+}
+
+void renderWifiDeviceTrendRow(const WifiDeviceDetailVisual& visual) {
+    const std::uint16_t tone = visual.rssiTrendDb >= 4
+        ? Palette::Positive
+        : (visual.rssiTrendDb <= -4 ? Palette::Danger : Palette::TextMuted);
+    if (beginLiveMetaTextRow(tone, Palette::Canvas)) {
+        liveMetaTextRowSprite.setCursor(
+            2, 2 + kRobotoCondensedMetaAscent);
+        liveMetaTextRowSprite.print(
+            tr(wifiDeviceTrendText(visual.rssiTrendDb)));
+        if (visual.stateVisible) {
+            const char* state = tr(wifiDeviceStateText(visual.state));
+            const std::int16_t stateX = kLiveTextRowWidth - 2 -
+                                        liveMetaTextRowSprite.textWidth(state);
+            liveMetaTextRowSprite.setCursor(
+                stateX, 2 + kRobotoCondensedMetaAscent);
+            liveMetaTextRowSprite.print(state);
+        }
+        liveMetaTextRowSprite.pushSprite(Layout::Edge, 267);
+        ++liveTextRowPushes;
+        return;
+    }
+    ++liveTextRowDirectFallbacks;
+    display.fillRect(Layout::Edge, 267, Layout::ContentWidth,
+                     kLiveMetaTextRowHeight, Palette::Canvas);
+    display.setTextColor(tone, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 269);
+    display.print(tr(wifiDeviceTrendText(visual.rssiTrendDb)));
+    if (visual.stateVisible) {
+        const char* state = tr(wifiDeviceStateText(visual.state));
+        const std::int16_t stateX = Layout::ScreenWidth - Layout::Edge -
+                                    display.textWidth(state);
+        setUiCursor(UiTextRole::Meta, stateX, 269);
+        display.print(state);
+    }
+}
+
 void renderWifiDeviceDetail(bool clearContent) {
     renderHeader(tr(UiTextId::WifiDeviceDetailTitle), clearContent);
     char line[96] = {};
@@ -16963,74 +17091,49 @@ void renderWifiDeviceDetail(bool clearContent) {
 
 void renderWifiDeviceDetailLiveData(bool force) {
     constexpr std::int16_t kLiveTop = 101;
-    if (force) {
+    const WifiDeviceDetailVisual next =
+        wifiDeviceDetailVisual(wifiDeviceDetail);
+    if (!force && wifiDeviceRenderedDetail.valid &&
+        wifiDeviceRenderedDetail == next) {
+        return;
+    }
+    if (force || !wifiDeviceRenderedDetail.valid) {
+        ++wifiDeviceDetailContentClears;
+        ++wifiDeviceRadarFullRepaints;
         display.fillRect(Layout::Edge, kLiveTop, Layout::ContentWidth,
                          Layout::FooterDividerY - kLiveTop, Palette::Canvas);
+        renderWifiDeviceRadioRow(next);
+        renderWifiDeviceAssociationRow(next);
+        renderRadioSignalCard(
+            next.rssiDbm,
+            {Layout::Edge, 150, Layout::ContentWidth, 88}, true);
+        renderWifiDeviceRangeRow(next);
+        renderWifiDeviceTrendRow(next);
     } else {
-        display.fillRect(Layout::Edge, kLiveTop, Layout::ContentWidth, 47,
-                         Palette::Canvas);
+        ++wifiDeviceRadarDeltaRepaints;
+        if (wifiDeviceRenderedDetail.generation != next.generation ||
+            wifiDeviceRenderedDetail.channel != next.channel) {
+            renderWifiDeviceRadioRow(next);
+        }
+        if (wifiDeviceRenderedDetail.association != next.association) {
+            renderWifiDeviceAssociationRow(next);
+        }
+        if (wifiDeviceRenderedDetail.rssiDbm != next.rssiDbm) {
+            renderRadioSignalCardDelta(
+                wifiDeviceRenderedDetail.rssiDbm, next.rssiDbm,
+                {Layout::Edge, 150, Layout::ContentWidth, 88});
+        }
+        if (wifiDeviceRenderedDetail.minimumRssiDbm != next.minimumRssiDbm ||
+            wifiDeviceRenderedDetail.maximumRssiDbm != next.maximumRssiDbm) {
+            renderWifiDeviceRangeRow(next);
+        }
+        if (wifiDeviceRenderedDetail.rssiTrendDb != next.rssiTrendDb ||
+            wifiDeviceRenderedDetail.state != next.state ||
+            wifiDeviceRenderedDetail.stateVisible != next.stateVisible) {
+            renderWifiDeviceTrendRow(next);
+        }
     }
-    char line[96] = {};
-    std::snprintf(
-        line, sizeof(line), tr(UiTextId::WifiDeviceRadioFormat),
-        tr(wifiDeviceGenerationText(wifiDeviceDetail.generation)),
-        static_cast<unsigned>(wifiDeviceDetail.channel));
-    display.setTextColor(Palette::Positive, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 108);
-    display.print(line);
-    if (wifiDeviceDetail.ssidLength != 0U) {
-        std::snprintf(line, sizeof(line),
-                      tr(UiTextId::WifiDeviceNetworkFormat),
-                      wifiDeviceDetail.ssid.data());
-        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 130);
-        display.print(line);
-    } else if (wifiDeviceDetail.bssidKnown) {
-        std::snprintf(
-            line, sizeof(line), tr(UiTextId::WifiNetworkBssidFormat),
-            static_cast<unsigned>(wifiDeviceDetail.bssid[0]),
-            static_cast<unsigned>(wifiDeviceDetail.bssid[1]),
-            static_cast<unsigned>(wifiDeviceDetail.bssid[2]),
-            static_cast<unsigned>(wifiDeviceDetail.bssid[3]),
-            static_cast<unsigned>(wifiDeviceDetail.bssid[4]),
-            static_cast<unsigned>(wifiDeviceDetail.bssid[5]));
-        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 130);
-        display.print(line);
-    } else {
-        const std::uint64_t observedUs = wifiDeviceDetail.monotonicUs >=
-                wifiDeviceDetail.firstSeenUs
-            ? wifiDeviceDetail.monotonicUs - wifiDeviceDetail.firstSeenUs : 0U;
-        std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceSeenFormat),
-                      static_cast<unsigned long>(observedUs / 1000000ULL),
-                      tr(wifiDeviceStateText(wifiDeviceDetail.state)));
-        display.setTextColor(Palette::TextMuted, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 130);
-        display.print(line);
-    }
-    renderRadioSignalCard(
-        wifiDeviceDetail.rssiDbm,
-        {Layout::Edge, 150, Layout::ContentWidth, 88}, force);
-    display.fillRect(Layout::Edge, 242, Layout::ContentWidth,
-                     Layout::FooterDividerY - 242, Palette::Canvas);
-    std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceRssiRangeFormat),
-                  static_cast<int>(wifiDeviceDetail.minimumRssiDbm),
-                  static_cast<int>(wifiDeviceDetail.maximumRssiDbm));
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 246);
-    display.print(line);
-    display.setTextColor(Palette::Positive, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 269);
-    display.print(tr(wifiDeviceTrendText(wifiDeviceDetail.rssiTrendDb)));
-    if (wifiDeviceDetail.ssidLength != 0U || wifiDeviceDetail.bssidKnown) {
-        const char* state = tr(wifiDeviceStateText(wifiDeviceDetail.state));
-        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 0, 269);
-        const std::int16_t stateX = Layout::ScreenWidth - Layout::Edge -
-                                    display.textWidth(state);
-        setUiCursor(UiTextRole::Meta, stateX, 269);
-        display.print(state);
-    }
+    wifiDeviceRenderedDetail = next;
 }
 
 UiTextId wifiDeviceTrendText(std::int16_t trendDb) {
@@ -25804,9 +25907,9 @@ bool startBleDevicesProduct() {
     bleDeviceRadarDeltaRepaints = 0U;
     bleDeviceDetailRefreshes = 0U;
     bleDeviceDetailRefreshesDeferred = 0U;
-    bleDeviceAtomicTextRowPushes = 0U;
-    bleDeviceAtomicTextRowAllocationFailures = 0U;
-    bleDeviceDirectTextRowFallbacks = 0U;
+    liveTextRowPushes = 0U;
+    liveTextRowAllocationFailures = 0U;
+    liveTextRowDirectFallbacks = 0U;
     productSurveyRuntime = {};
     productSurveyRuntime.selected = true;
     productSurveyRuntime.workerReady = productSurveyWorkerReady;
@@ -26008,6 +26111,13 @@ bool startWifiDevicesProduct() {
     wifiDeviceNavigationOrder.reset();
     wifiDeviceSelection = 0;
     wifiDeviceDetail = {};
+    wifiDeviceRenderedDetail = {};
+    wifiDeviceDetailContentClears = 0U;
+    wifiDeviceRadarFullRepaints = 0U;
+    wifiDeviceRadarDeltaRepaints = 0U;
+    liveTextRowPushes = 0U;
+    liveTextRowAllocationFailures = 0U;
+    liveTextRowDirectFallbacks = 0U;
     std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     if (startedUs == 0U) startedUs = 1U;
@@ -28656,6 +28766,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                     wifiDeviceNavigationOrder.reset();
                     wifiDeviceSelection = 0;
                     wifiDeviceDetail = {};
+                    wifiDeviceRenderedDetail = {};
                     nextWifiDeviceUiRefreshUs = 0;
                 }
                 wifiProductView = wifiApp ? WifiProductView::Menu
@@ -35435,6 +35546,51 @@ void emitWifiNetworkDetailState(Stream& reply) {
     reply.println(line);
 }
 
+void emitWifiDeviceDetailState(Stream& reply) {
+    const std::size_t catalogIndex =
+        wifiDeviceCatalog.indexOfAddress(wifiDeviceDetail.address);
+    const bool live = wifiProductView == WifiProductView::DeviceDetail &&
+        catalogIndex < wifiDeviceCatalog.size();
+    const WifiDeviceRecord* current = wifiDeviceCatalog.at(catalogIndex);
+    const WifiDeviceRecord& device = current == nullptr
+        ? wifiDeviceDetail : *current;
+    std::uint32_t identityHash = 2166136261U;
+    for (const std::uint8_t byte : device.address) {
+        identityHash ^= byte;
+        identityHash *= 16777619U;
+    }
+    auto& line = diagnosticJson;
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.wifi.device_detail.v1\",\"kind\":\"state\","
+        "\"active\":%s,\"passive\":true,\"active_probe_allowed\":false,"
+        "\"identity_hash\":%lu,\"channel_locked\":%s,"
+        "\"rssi_dbm\":%d,\"signal_samples\":%lu,"
+        "\"minimum_rssi_dbm\":%d,\"maximum_rssi_dbm\":%d,"
+        "\"rssi_trend_db\":%d,\"catalog_revision\":%lu,"
+        "\"detail_content_clears\":%lu,"
+        "\"radar_full_repaints\":%lu,\"radar_delta_repaints\":%lu,"
+        "\"atomic_text_row_pushes\":%lu,"
+        "\"atomic_text_row_allocation_failures\":%lu,"
+        "\"direct_text_row_fallbacks\":%lu}",
+        live ? "true" : "false",
+        static_cast<unsigned long>(identityHash),
+        wifiFrameCapture.deviceChannelLocked() ? "true" : "false",
+        static_cast<int>(device.rssiDbm),
+        static_cast<unsigned long>(device.framesSeen),
+        static_cast<int>(device.minimumRssiDbm),
+        static_cast<int>(device.maximumRssiDbm),
+        static_cast<int>(device.rssiTrendDb),
+        static_cast<unsigned long>(wifiDeviceCatalog.revision()),
+        static_cast<unsigned long>(wifiDeviceDetailContentClears),
+        static_cast<unsigned long>(wifiDeviceRadarFullRepaints),
+        static_cast<unsigned long>(wifiDeviceRadarDeltaRepaints),
+        static_cast<unsigned long>(liveTextRowPushes),
+        static_cast<unsigned long>(liveTextRowAllocationFailures),
+        static_cast<unsigned long>(liveTextRowDirectFallbacks));
+    reply.println(line);
+}
+
 bool parseWifiNetworkHilSelectCommand(const char* command,
                                       std::uint64_t* requestedHash) {
     if (command == nullptr || requestedHash == nullptr) return false;
@@ -36269,10 +36425,9 @@ void emitBleDeviceDetailState(Stream& reply) {
         static_cast<unsigned long>(bleDeviceDetailRefreshesDeferred),
         static_cast<unsigned long long>(kBleDeviceUiRefreshPeriodUs),
         bleDeviceUiRefreshPending ? "true" : "false",
-        static_cast<unsigned long>(bleDeviceAtomicTextRowPushes),
-        static_cast<unsigned long>(
-            bleDeviceAtomicTextRowAllocationFailures),
-        static_cast<unsigned long>(bleDeviceDirectTextRowFallbacks));
+        static_cast<unsigned long>(liveTextRowPushes),
+        static_cast<unsigned long>(liveTextRowAllocationFailures),
+        static_cast<unsigned long>(liveTextRowDirectFallbacks));
     reply.println(line);
 }
 
@@ -36326,8 +36481,8 @@ void emitBleInspectorCaptureState(Stream& reply) {
         static_cast<unsigned long>(bleInspectorContentClears),
         static_cast<unsigned long>(bleInspectorAtomicRowPushes),
         static_cast<unsigned long>(
-            bleDeviceAtomicTextRowAllocationFailures),
-        static_cast<unsigned long>(bleDeviceDirectTextRowFallbacks));
+            liveTextRowAllocationFailures),
+        static_cast<unsigned long>(liveTextRowDirectFallbacks));
     reply.println(line);
 }
 
@@ -37533,6 +37688,8 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
                 hilSession.active() ? "true" : "false");
             reply.println(line);
         }
+    } else if (std::strcmp(command, "wifi.device.detail") == 0) {
+        emitWifiDeviceDetailState(reply);
     } else if (std::strcmp(command, "wifi.network.detail") == 0) {
         emitWifiNetworkDetailState(reply);
     } else if (std::strcmp(

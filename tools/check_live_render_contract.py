@@ -90,7 +90,7 @@ def main() -> int:
             ("BLE device radar", ble_radar),
             ("Wi-Fi device detail", wifi_device),
         ):
-            if "if (force) {" not in body:
+            if "if (force" not in body:
                 failures.append(f"{label} has no static/dynamic render boundary")
         for marker in (
             "renderBleDeviceRadar(live, signal, false);",

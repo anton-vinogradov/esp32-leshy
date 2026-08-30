@@ -152,6 +152,36 @@ def main() -> int:
             detail_first.get("wifi_device_oui_records") == 39984 and
             detail_first.get("wifi_device_navigation_locked") is True,
             "device intelligence/OUI/navigation contract mismatch")
+    detail_oracle_first = run.get("detail_oracle_first", {})
+    detail_oracle_second = run.get("detail_oracle_second", {})
+    require(failures,
+            detail_oracle_first.get("active") is True and
+            detail_oracle_first.get("passive") is True and
+            detail_oracle_first.get("active_probe_allowed") is False and
+            detail_oracle_first.get("channel_locked") is True and
+            detail_oracle_first.get("detail_content_clears") == 1 and
+            detail_oracle_first.get("radar_full_repaints") == 1 and
+            detail_oracle_first.get("radar_delta_repaints", -1) >= 0 and
+            detail_oracle_first.get(
+                "atomic_text_row_allocation_failures") == 0 and
+            detail_oracle_first.get("direct_text_row_fallbacks") == 0,
+            "initial device-detail render contract mismatch")
+    require(failures,
+            detail_oracle_second.get("active") is True and
+            detail_oracle_second.get("identity_hash") ==
+                detail_oracle_first.get("identity_hash") and
+            detail_oracle_second.get("signal_samples", 0) >
+                detail_oracle_first.get("signal_samples", 0) and
+            detail_oracle_second.get("detail_content_clears") ==
+                detail_oracle_first.get("detail_content_clears") and
+            detail_oracle_second.get("radar_full_repaints") ==
+                detail_oracle_first.get("radar_full_repaints") and
+            detail_oracle_second.get("radar_delta_repaints", 0) >
+                detail_oracle_first.get("radar_delta_repaints", 0) and
+            detail_oracle_second.get(
+                "atomic_text_row_allocation_failures") == 0 and
+            detail_oracle_second.get("direct_text_row_fallbacks") == 0,
+            "device-detail update was not an identity-stable bounded delta")
     for label in ("monitor_after_first", "monitor_after_second"):
         state = run.get(label, {})
         require(failures,
@@ -182,6 +212,8 @@ def main() -> int:
             scope.get("identity_stable_device_navigation") is True and
             scope.get("channel_locked_live_radar") is True and
             scope.get("live_detail_redraw_live_region_only") is True and
+            scope.get("live_detail_atomic_rows") is True and
+            scope.get("live_detail_no_full_repaint_after_entry") is True and
             scope.get("storage_write_authorized") is False,
             "automation/passive/no-flicker scope mismatch")
 

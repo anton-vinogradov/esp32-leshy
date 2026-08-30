@@ -29,6 +29,7 @@ from run_1x_product_survey_hil import (
 
 
 RUN_SCHEMA = "leshy.wifi_devices_hil.run.v3"
+DETAIL_SCHEMA = "leshy.wifi.device_detail.v1"
 CONTENT_X0 = 12
 CONTENT_X1 = 228
 CONTENT_Y0 = 32
@@ -53,6 +54,22 @@ def home_wifi(device: PassiveSerial) -> dict[str, Any]:
         "selected_enabled": True, "runtime_owner": "none", "lease_mask": 0,
     }, "home_wifi")
     return state
+
+
+def query_device_detail(device: PassiveSerial) -> dict[str, Any]:
+    return query(device, b"wifi.device.detail", DETAIL_SCHEMA, "state")
+
+
+def wait_device_detail(device: PassiveSerial, predicate: Any,
+                       timeout: float, description: str) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    last: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        last = query_device_detail(device)
+        if predicate(last):
+            return last
+        time.sleep(0.05)
+    raise TimeoutError(f"{description}: last state {last!r}")
 
 
 def changed_pixels(frames: Path, before_name: str,
@@ -172,6 +189,8 @@ def main() -> int:
     live_second: dict[str, Any] = {}
     detail_first: dict[str, Any] = {}
     detail_second: dict[str, Any] = {}
+    detail_oracle_first: dict[str, Any] = {}
+    detail_oracle_second: dict[str, Any] = {}
     monitor_after_first: dict[str, Any] = {}
     monitor_after_second: dict[str, Any] = {}
     metrics_after_first: dict[str, Any] = {}
@@ -258,6 +277,17 @@ def main() -> int:
                 }, "wifi_device_live_detail")
                 screens["wifi_device_detail_first"] = capture(
                     device, frames, "wifi-device-live-detail-first")
+                detail_oracle_first = query_device_detail(device)
+                require_exact(detail_oracle_first, {
+                    "active": True,
+                    "passive": True,
+                    "active_probe_allowed": False,
+                    "channel_locked": True,
+                    "detail_content_clears": 1,
+                    "radar_full_repaints": 1,
+                    "atomic_text_row_allocation_failures": 0,
+                    "direct_text_row_fallbacks": 0,
+                }, "wifi_device_detail_oracle_first")
                 detail_accepted = int(
                     detail_first.get("wifi_device_clients_accepted", 0))
                 detail_revision = int(
@@ -279,6 +309,30 @@ def main() -> int:
                             detail_last_seen
                     ), 90.0, "integrated device radar saw no live client")
                 trace.append(detail_second)
+                detail_oracle_second = wait_device_detail(
+                    device,
+                    lambda state: (
+                        state.get("active") is True and
+                        state.get("identity_hash") ==
+                            detail_oracle_first.get("identity_hash") and
+                        int(state.get("signal_samples", 0)) >
+                            int(detail_oracle_first.get("signal_samples", 0)) and
+                        int(state.get("radar_delta_repaints", 0)) >
+                            int(detail_oracle_first.get(
+                                "radar_delta_repaints", 0))
+                    ), 90.0,
+                    "integrated device radar produced no bounded delta")
+                if (detail_oracle_second.get("detail_content_clears") !=
+                        detail_oracle_first.get("detail_content_clears") or
+                        detail_oracle_second.get("radar_full_repaints") !=
+                        detail_oracle_first.get("radar_full_repaints") or
+                        detail_oracle_second.get(
+                            "atomic_text_row_allocation_failures") != 0 or
+                        detail_oracle_second.get(
+                            "direct_text_row_fallbacks") != 0):
+                    raise RuntimeError(
+                        "integrated device radar used a full/unsafe repaint: "
+                        f"{detail_oracle_second!r}")
                 if int(detail_second.get("wifi_device_channel_hops", -1)) != \
                         detail_hops:
                     raise RuntimeError(
@@ -409,6 +463,8 @@ def main() -> int:
         "live_second": live_second,
         "detail_first": detail_first,
         "detail_second": detail_second,
+        "detail_oracle_first": detail_oracle_first,
+        "detail_oracle_second": detail_oracle_second,
         "monitor_after_first": monitor_after_first,
         "monitor_after_second": monitor_after_second,
         "metrics_after_first": metrics_after_first,
@@ -437,6 +493,8 @@ def main() -> int:
             "identity_stable_device_navigation": True,
             "channel_locked_live_radar": True,
             "live_detail_redraw_live_region_only": True,
+            "live_detail_atomic_rows": True,
+            "live_detail_no_full_repaint_after_entry": True,
             "two_complete_wifi_lifecycles": True,
             "zero_heap_drift_after_warmup": (
                 metrics_after.get("heap_free") ==
