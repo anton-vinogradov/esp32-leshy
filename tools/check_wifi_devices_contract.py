@@ -147,7 +147,10 @@ def main() -> int:
     if "subtype == 4U" not in catalog_cpp:
         failures.append("searching-client inference does not require probe request")
     for token in (
-            'RUN_SCHEMA = "leshy.wifi_devices_hil.run.v3"',
+            'RUN_SCHEMA = "leshy.wifi_devices_hil.run.v4"',
+            "TemporaryDeviceLockHil",
+            '"device_lock_fixture": device_lock_fixture',
+            '"product_device_lock_namespace_mutated": False',
             '"wifi_product_view": "device_detail"',
             '"wifi_device_channel_locked": True',
             '"wifi_device_detail_last_seen_us"',

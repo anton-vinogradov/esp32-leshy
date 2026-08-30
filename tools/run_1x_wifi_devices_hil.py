@@ -26,9 +26,10 @@ from run_1x_product_survey_hil import (
     valid_cid,
     wait_ui_state,
 )
+from temporary_device_lock_hil import TemporaryDeviceLockHil
 
 
-RUN_SCHEMA = "leshy.wifi_devices_hil.run.v3"
+RUN_SCHEMA = "leshy.wifi_devices_hil.run.v4"
 DETAIL_SCHEMA = "leshy.wifi.device_detail.v1"
 CONTENT_X0 = 12
 CONTENT_X1 = 228
@@ -199,6 +200,8 @@ def main() -> int:
     safe_outputs: dict[str, Any] = {}
     cleanup_before: dict[str, Any] = {"attempted": False}
     cleanup_after: dict[str, Any] = {"attempted": False}
+    device_lock_fixture: dict[str, Any] = {}
+    temporary_lock: TemporaryDeviceLockHil | None = None
     list_pixel_changes: dict[str, int] = {}
     detail_pixel_changes: dict[str, int] = {}
     detail_visual_input_changed = False
@@ -222,6 +225,12 @@ def main() -> int:
                 cleanup_before = best_effort_cleanup(device)
                 if not cleanup_before.get("complete"):
                     raise RuntimeError("initial Home/zero-lease cleanup failed")
+                # Protected product pages must not depend on whichever Device
+                # Lock state happens to be present on the user's board.  Use
+                # the isolated HIL namespace, configure an ephemeral key only
+                # there, and restore the untouched product namespace below.
+                temporary_lock = TemporaryDeviceLockHil(device, app_identity)
+                temporary_lock.start()
                 query(device, b"ui.language ru", "leshy.ui.v1", "state")
 
                 trace.extend(open_devices(device, frames, screens))
@@ -436,6 +445,14 @@ def main() -> int:
                 cleanup_after = best_effort_cleanup(device)
                 if not cleanup_after.get("complete"):
                     failures.append("cleanup_after: Home/zero lease unproven")
+                if temporary_lock is not None:
+                    try:
+                        temporary_lock.close()
+                    except Exception as error:
+                        failures.append(
+                            "device_lock_fixture_cleanup: "
+                            f"{type(error).__name__}: {error}")
+                    device_lock_fixture = temporary_lock.evidence()
     except Exception as error:
         failures.append(f"runner: {type(error).__name__}: {error}")
 
@@ -478,6 +495,7 @@ def main() -> int:
         "trace": trace,
         "cleanup_before": cleanup_before,
         "cleanup_after": cleanup_after,
+        "device_lock_fixture": device_lock_fixture,
         "scope": {
             "single_flash": True,
             "manual_button_presses": 0,
@@ -501,6 +519,7 @@ def main() -> int:
                 metrics_after_first.get("heap_free")
             ),
             "storage_write_authorized": False,
+            "product_device_lock_namespace_mutated": False,
         },
     }
     write_json(args.output / "run.json", result)

@@ -12,7 +12,7 @@ from typing import Any
 from esp_app_identity import app_elf_sha256
 
 
-SCHEMA = "leshy.wifi_devices_hil.run.v3"
+SCHEMA = "leshy.wifi_devices_hil.run.v4"
 SCREENS = {
     "wifi_menu": "wifi-menu",
     "wifi_menu_after": "wifi-menu-after",
@@ -214,8 +214,23 @@ def main() -> int:
             scope.get("live_detail_redraw_live_region_only") is True and
             scope.get("live_detail_atomic_rows") is True and
             scope.get("live_detail_no_full_repaint_after_entry") is True and
-            scope.get("storage_write_authorized") is False,
+            scope.get("storage_write_authorized") is False and
+            scope.get("product_device_lock_namespace_mutated") is False,
             "automation/passive/no-flicker scope mismatch")
+
+    lock = run.get("device_lock_fixture", {})
+    require(failures,
+            lock.get("active_at_end") is False and
+            lock.get("begun") is True and
+            lock.get("configured") is True and
+            lock.get("cleanup_proven") is True and
+            lock.get("hil_ended") is True and
+            lock.get("isolated_namespace") is True and
+            lock.get("pin_length") == 6 and
+            lock.get("pin_or_digest_retained") is False and
+            lock.get("product_namespace_written_or_erased") is False and
+            lock.get("whole_nvs_read_or_copied") is False,
+            "isolated Device Lock fixture was not safely removed")
 
     before = run.get("recovery_before", {})
     after = run.get("recovery_after", {})
