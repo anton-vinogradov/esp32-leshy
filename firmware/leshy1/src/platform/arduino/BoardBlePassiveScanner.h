@@ -153,7 +153,9 @@ public:
     std::uint32_t heapLargestAfterInit() const {
         return heapLargestAfterInit_;
     }
-    std::uint32_t heapMinimum() const { return heapMinimum_; }
+    std::uint32_t heapMinimum() const {
+        return heapFreeBefore_ == 0U ? 0U : heapMinimum_;
+    }
 
     bool startConnect(
         const services::ble::BleInspectorTarget& target) override;

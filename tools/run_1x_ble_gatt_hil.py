@@ -318,7 +318,8 @@ def main() -> int:
                 trace.append(action(device, "right", timeout=20.0))
                 ready = wait_record(
                     device, b"ble.inspector.gatt.state", GATT_SCHEMA,
-                    lambda value: value.get("state") in ("ready", "failed"),
+                    lambda value: value.get("state") in ("ready", "failed") or
+                    value.get("view") == "none",
                     35.0, "GATT connect/discovery did not terminate")
                 if ready.get("state") != "ready":
                     raise RuntimeError(f"GATT enumeration failed closed: {ready!r}")

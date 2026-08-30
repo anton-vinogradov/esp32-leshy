@@ -12,6 +12,7 @@
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
 #include <host/ble_gap.h>
 #include <host/ble_gatt.h>
@@ -54,7 +55,31 @@ struct NimbleObserverState final {
 };
 
 NimbleObserverState nimbleObserver;
-portMUX_TYPE gattInspectorMux = portMUX_INITIALIZER_UNLOCKED;
+StaticSemaphore_t gattInspectorMutexStorage{};
+SemaphoreHandle_t gattInspectorMutex =
+    xSemaphoreCreateRecursiveMutexStatic(&gattInspectorMutexStorage);
+
+class GattInspectorLock final {
+public:
+    GattInspectorLock() {
+        configASSERT(gattInspectorMutex != nullptr);
+        locked_ = xSemaphoreTakeRecursive(
+            gattInspectorMutex, portMAX_DELAY) == pdTRUE;
+        configASSERT(locked_);
+    }
+
+    ~GattInspectorLock() {
+        if (locked_) {
+            (void)xSemaphoreGiveRecursive(gattInspectorMutex);
+        }
+    }
+
+    GattInspectorLock(const GattInspectorLock&) = delete;
+    GattInspectorLock& operator=(const GattInspectorLock&) = delete;
+
+private:
+    bool locked_ = false;
+};
 bool processControllerInitialized = false;
 std::atomic_bool processControllerAvailable{false};
 std::atomic_bool processNimbleSynced{false};
@@ -871,132 +896,132 @@ bool BoardBlePassiveScanner::end() {
 bool BoardBleGattInspectorTransport::bind(
     services::ble::BleGattInspector* inspector) {
     if (inspector == nullptr) return false;
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const bool available = inspector_ == nullptr && !hostReady_ &&
         !connecting_.load(std::memory_order_acquire) &&
         !connected_.load(std::memory_order_acquire);
     if (available) inspector_ = inspector;
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return available;
 }
 
 bool BoardBleGattInspectorTransport::unbind() {
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const bool clean = inspector_ != nullptr &&
         inspector_->cleanupComplete() && !hostReady_ &&
         !connecting_.load(std::memory_order_acquire) &&
         !connected_.load(std::memory_order_acquire);
     if (clean) inspector_ = nullptr;
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return clean;
 }
 
 bool BoardBleGattInspectorTransport::selectTarget(
     const services::ble::BleInspectorTarget& target,
     std::uint64_t nowMonotonicUs) {
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const bool selected = inspector_ != nullptr &&
         inspector_->selectTarget(target, nowMonotonicUs);
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return selected;
 }
 
 bool BoardBleGattInspectorTransport::reviewPermission(
     services::ble::BleGattInspectorPermission permission) {
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const bool reviewed = inspector_ != nullptr &&
         inspector_->reviewPermission(permission);
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return reviewed;
 }
 
 std::uint64_t BoardBleGattInspectorTransport::confirmationToken() const {
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const std::uint64_t token = inspector_ == nullptr
         ? 0U : inspector_->confirmationToken();
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return token;
 }
 
 bool BoardBleGattInspectorTransport::confirm(
     std::uint64_t token, std::uint64_t nowMonotonicUs) {
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const bool confirmed = inspector_ != nullptr &&
         inspector_->confirm(token, nowMonotonicUs);
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return confirmed;
 }
 
 bool BoardBleGattInspectorTransport::back(std::uint64_t nowMonotonicUs) {
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const bool changed = inspector_ != nullptr &&
         inspector_->back(nowMonotonicUs);
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return changed;
 }
 
 bool BoardBleGattInspectorTransport::tick(std::uint64_t nowMonotonicUs) {
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const bool changed = inspector_ != nullptr &&
         inspector_->tick(nowMonotonicUs);
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     updateHeapMinimum();
     return changed;
 }
 
 services::ble::BleGattInspectorState
 BoardBleGattInspectorTransport::state() const {
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const auto value = inspector_ == nullptr
         ? services::ble::BleGattInspectorState::Idle : inspector_->state();
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return value;
 }
 
 services::ble::BleGattInspectorFailure
 BoardBleGattInspectorTransport::failure() const {
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const auto value = inspector_ == nullptr
         ? services::ble::BleGattInspectorFailure::None
         : inspector_->failure();
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return value;
 }
 
 services::ble::BleGattInspectorFailure
 BoardBleGattInspectorTransport::cleanupCause() const {
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const auto value = inspector_ == nullptr
         ? services::ble::BleGattInspectorFailure::None
         : inspector_->cleanupCause();
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return value;
 }
 
 std::size_t BoardBleGattInspectorTransport::serviceCount() const {
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const std::size_t value = inspector_ == nullptr
         ? 0U : inspector_->serviceCount();
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return value;
 }
 
 std::size_t BoardBleGattInspectorTransport::characteristicCount() const {
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const std::size_t value = inspector_ == nullptr
         ? 0U : inspector_->characteristicCount();
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return value;
 }
 
 bool BoardBleGattInspectorTransport::copyService(
     std::size_t index, services::ble::BleGattServiceFact* output) const {
     if (output == nullptr) return false;
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const auto* source = inspector_ == nullptr
         ? nullptr : inspector_->serviceAt(index);
     if (source != nullptr) *output = *source;
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return source != nullptr;
 }
 
@@ -1004,38 +1029,38 @@ bool BoardBleGattInspectorTransport::copyCharacteristic(
     std::size_t index,
     services::ble::BleGattCharacteristicFact* output) const {
     if (output == nullptr) return false;
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const auto* source = inspector_ == nullptr
         ? nullptr : inspector_->characteristicAt(index);
     if (source != nullptr) *output = *source;
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return source != nullptr;
 }
 
 bool BoardBleGattInspectorTransport::copyTarget(
     services::ble::BleInspectorTarget* output) const {
     if (output == nullptr) return false;
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const bool available = inspector_ != nullptr &&
         services::ble::validBleInspectorTarget(inspector_->target());
     if (available) *output = inspector_->target();
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return available;
 }
 
 bool BoardBleGattInspectorTransport::cleanupComplete() const {
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const bool clean = inspector_ == nullptr || inspector_->cleanupComplete();
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return clean && !hostReady_ &&
         !connecting_.load(std::memory_order_acquire) &&
         !connected_.load(std::memory_order_acquire);
 }
 
 bool BoardBleGattInspectorTransport::ownsRadio() const {
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     const bool owned = inspector_ != nullptr && inspector_->ownsRadio();
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return owned;
 }
 
@@ -1157,13 +1182,13 @@ bool BoardBleGattInspectorTransport::service(std::uint64_t nowMonotonicUs) {
     bool changed = false;
     if (remoteDisconnectPending_.exchange(false,
                                           std::memory_order_acq_rel)) {
-        portENTER_CRITICAL(&gattInspectorMux);
+        GattInspectorLock gattLock;
         if (inspector_ != nullptr &&
             inspector_->state() != services::ble::BleGattInspectorState::
                                       CleanupPending) {
             changed = inspector_->onTransportError(nowMonotonicUs);
         }
-        portEXIT_CRITICAL(&gattInspectorMux);
+
     }
     changed = tick(nowMonotonicUs) || changed;
     return changed;
@@ -1177,11 +1202,11 @@ int BoardBleGattInspectorTransport::handleGapEvent(void* rawEvent) {
         if (event->connect.status != 0) {
             disconnected_.store(true, std::memory_order_release);
             cleanupRequested_.store(true, std::memory_order_release);
-            portENTER_CRITICAL(&gattInspectorMux);
+            GattInspectorLock gattLock;
             if (inspector_ != nullptr) {
                 (void)inspector_->onConnectionRefused(monotonicUs());
             }
-            portEXIT_CRITICAL(&gattInspectorMux);
+
             return 0;
         }
         connectionHandle_ = event->connect.conn_handle;
@@ -1196,12 +1221,12 @@ int BoardBleGattInspectorTransport::handleGapEvent(void* rawEvent) {
                               address.begin());
             addressType = description.peer_id_addr.type;
         }
-        portENTER_CRITICAL(&gattInspectorMux);
+        GattInspectorLock gattLock;
         if (inspector_ != nullptr) {
             (void)inspector_->onConnected(
                 address, addressType, monotonicUs());
         }
-        portEXIT_CRITICAL(&gattInspectorMux);
+
         updateHeapMinimum();
         return 0;
     }
@@ -1211,11 +1236,11 @@ int BoardBleGattInspectorTransport::handleGapEvent(void* rawEvent) {
         disconnected_.store(true, std::memory_order_release);
         cleanupRequested_.store(true, std::memory_order_release);
         connectionHandle_ = BLE_HS_CONN_HANDLE_NONE;
-        portENTER_CRITICAL(&gattInspectorMux);
+        GattInspectorLock gattLock;
         const bool cleanupPending = inspector_ != nullptr &&
             inspector_->state() ==
                 services::ble::BleGattInspectorState::CleanupPending;
-        portEXIT_CRITICAL(&gattInspectorMux);
+
         if (!cleanupPending) {
             remoteDisconnectPending_.store(true, std::memory_order_release);
         }
@@ -1228,10 +1253,10 @@ int BoardBleGattInspectorTransport::handleServiceDiscovery(
     std::uint16_t connHandle, const void* rawError, const void* rawService) {
     const auto* error = static_cast<const ble_gatt_error*>(rawError);
     const auto* service = static_cast<const ble_gatt_svc*>(rawService);
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     if (inspector_ == nullptr || connHandle != connectionHandle_ ||
         error == nullptr) {
-        portEXIT_CRITICAL(&gattInspectorMux);
+
         return BLE_HS_EINVAL;
     }
     const std::uint64_t nowUs = monotonicUs();
@@ -1241,19 +1266,19 @@ int BoardBleGattInspectorTransport::handleServiceDiscovery(
         fact.endHandle = service->end_handle;
         fact.uuid = copyGattUuid(&service->uuid.u);
         const bool accepted = inspector_->recordService(fact, nowUs);
-        portEXIT_CRITICAL(&gattInspectorMux);
+
         updateHeapMinimum();
         return accepted ? 0 : BLE_HS_EAPP;
     }
     if (error->status == BLE_HS_EDONE) {
         characteristicServiceIndex_ = 0U;
-        portEXIT_CRITICAL(&gattInspectorMux);
+
         const bool started = startNextCharacteristicDiscovery(nowUs);
         updateHeapMinimum();
         return started ? 0 : BLE_HS_EAPP;
     }
     (void)inspector_->onTransportError(nowUs);
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return BLE_HS_EAPP;
 }
 
@@ -1263,21 +1288,21 @@ bool BoardBleGattInspectorTransport::startNextCharacteristicDiscovery(
     std::uint16_t connectionHandle = BLE_HS_CONN_HANDLE_NONE;
     bool discoveryComplete = false;
     bool servicePresent = false;
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     if (inspector_ == nullptr) {
-        portEXIT_CRITICAL(&gattInspectorMux);
+
         return false;
     }
     if (characteristicServiceIndex_ >= inspector_->serviceCount()) {
         discoveryComplete = inspector_->onDiscoveryComplete(nowMonotonicUs);
-        portEXIT_CRITICAL(&gattInspectorMux);
+
         return discoveryComplete;
     }
     const auto* source = inspector_->serviceAt(characteristicServiceIndex_);
     servicePresent = source != nullptr;
     if (servicePresent) service = *source;
     connectionHandle = connectionHandle_;
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return servicePresent && connectionHandle != BLE_HS_CONN_HANDLE_NONE &&
         ble_gattc_disc_all_chrs(
         connectionHandle, service.startHandle, service.endHandle,
@@ -1290,10 +1315,10 @@ int BoardBleGattInspectorTransport::handleCharacteristicDiscovery(
     const auto* error = static_cast<const ble_gatt_error*>(rawError);
     const auto* characteristic =
         static_cast<const ble_gatt_chr*>(rawCharacteristic);
-    portENTER_CRITICAL(&gattInspectorMux);
+    GattInspectorLock gattLock;
     if (inspector_ == nullptr || connHandle != connectionHandle_ ||
         error == nullptr) {
-        portEXIT_CRITICAL(&gattInspectorMux);
+
         return BLE_HS_EINVAL;
     }
     const std::uint64_t nowUs = monotonicUs();
@@ -1309,19 +1334,19 @@ int BoardBleGattInspectorTransport::handleCharacteristicDiscovery(
         fact.properties = characteristic->properties;
         fact.uuid = copyGattUuid(&characteristic->uuid.u);
         const bool accepted = inspector_->recordCharacteristic(fact, nowUs);
-        portEXIT_CRITICAL(&gattInspectorMux);
+
         updateHeapMinimum();
         return accepted ? 0 : BLE_HS_EAPP;
     }
     if (error->status == BLE_HS_EDONE) {
         ++characteristicServiceIndex_;
-        portEXIT_CRITICAL(&gattInspectorMux);
+
         const bool started = startNextCharacteristicDiscovery(nowUs);
         updateHeapMinimum();
         return started ? 0 : BLE_HS_EAPP;
     }
     (void)inspector_->onTransportError(nowUs);
-    portEXIT_CRITICAL(&gattInspectorMux);
+
     return BLE_HS_EAPP;
 }
 

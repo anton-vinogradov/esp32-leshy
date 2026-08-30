@@ -111,6 +111,8 @@ for marker, label in (
     ("ble_gattc_disc_all_chrs(", "NimBLE characteristic enumeration"),
     ("shutdownProcessControllerObserver()", "complete NimBLE teardown"),
     ("remoteDisconnectPending_", "remote disconnect cleanup handoff"),
+    ("xSemaphoreCreateRecursiveMutexStatic", "non-allocating task mutex"),
+    ("xSemaphoreTakeRecursive", "callback-safe recursive serialization"),
 ):
     require(passive, marker, label)
 
@@ -119,6 +121,7 @@ for forbidden, label in (
     ("ble_gattc_write", "characteristic write"),
     ("ble_gattc_subscribe", "notification subscription"),
     ("ble_gap_security_initiate", "pairing/security initiation"),
+    ("gattInspectorMux", "interrupt-disabling GATT spinlock"),
 ):
     if forbidden in passive:
         raise SystemExit(
