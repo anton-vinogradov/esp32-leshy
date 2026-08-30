@@ -158,6 +158,9 @@ def main() -> int:
     parser.add_argument("--expected-cid", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash-baud", type=int, default=460800)
+    parser.add_argument(
+        "--skip-flash", action="store_true",
+        help="reuse an already installed exact candidate after a runner-only failure")
     args = parser.parse_args()
     if args.port != BOARD_PORT or args.port in FORBIDDEN_PORTS:
         parser.error(f"exact board-01 port required: {BOARD_PORT}")
@@ -225,10 +228,10 @@ def main() -> int:
     hil_begun = False
     fixture_may_exist = False
     try:
-        flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
-        time.sleep(0.5)
+        if not args.skip_flash:
+            flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            time.sleep(0.5)
         device = PassiveSerial(args.port, 115200, timeout=0.25)
-        device.open()
         synchronize_console(device, 30.0)
         metrics = query(device, b"metrics", "leshy.boot.v1", "ready")
         require(metrics, "candidate", version=args.expected_version,
@@ -434,7 +437,8 @@ def main() -> int:
         "trace": trace,
         "captures": captures,
         "cleanup": cleanup,
-        "flash_count": 1,
+        "flash_count": 0 if args.skip_flash else 1,
+        "installed_candidate_reused": args.skip_flash,
         "hardware_reset_count": 0,
         "radio_tx_commands": 0,
     })

@@ -180,6 +180,8 @@ def main() -> int:
         '"wifi_host_touched": False',
         '"full_hil": False',
         '"delta_only": True',
+        '"--skip-flash"',
+        '"installed_candidate_reused"',
         '"automation-inspector-physical-v1"',
     )
     for token in required_runner:
