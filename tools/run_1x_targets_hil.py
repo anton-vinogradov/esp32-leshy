@@ -159,6 +159,13 @@ def main() -> int:
     parser.add_argument(
         "--reuse-existing-pair", action="store_true",
         help="reuse the already persisted exact session pair without new scans")
+    parser.add_argument(
+        "--survey-only", action="store_true",
+        help=(
+            "run only the two mixed Wi-Fi/BLE precursor Survey cycles and "
+            "their terminal cleanup; skip the unchanged Targets UI delta"
+        ),
+    )
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
     for path in (args.firmware, args.elf, args.map):
@@ -251,6 +258,63 @@ def main() -> int:
                     device, int(first["survey_generation"]), trace)
                 first_generation = int(first["survey_generation"])
                 second_generation = int(second["survey_generation"])
+
+            if args.survey_only:
+                if args.reuse_existing_pair:
+                    raise RuntimeError(
+                        "survey-only requires fresh mixed Survey cycles"
+                    )
+                home = normalize_home(device)
+                require(home, "survey-only final Home", page="home",
+                        runtime_owner="none", lease_mask=0,
+                        survey_product_cleanup_complete=True,
+                        survey_product_source_active=False)
+                protected_ui.close()
+                safe = query(device, b"hardware.safe-outputs",
+                             "leshy.hardware.safe-outputs.v1", "state")
+                require(safe, "safe outputs", buzzer_inactive=True,
+                        nrf_ce_inactive=True,
+                        software_quiesce_complete=True)
+                inputs = query(device, b"input.state",
+                               "leshy.input.frontend.v1", "state")
+                require(inputs, "input", status="ready", read_errors=0,
+                        queue_drops=0)
+                cleanup = best_effort_cleanup(device)
+                if not cleanup.get("complete"):
+                    raise RuntimeError("final cleanup state is unproven")
+                record.update({
+                    "status": "pass",
+                    "mode": "survey_only",
+                    "exact_cid": EXPECTED_CID,
+                    "generation_before": generation_before,
+                    "survey_generations": [first_generation,
+                                           second_generation],
+                    "survey_cycles_executed": 2,
+                    "survey_observations": [
+                        int(first["survey_observations"]),
+                        int(second["survey_observations"]),
+                    ],
+                    "survey_terminal_states": [first, second],
+                    "safe_outputs": safe,
+                    "input": inputs,
+                    "trace": trace,
+                    "screens": screens,
+                    "cleanup": cleanup,
+                    "flash_count": 0 if args.reuse_exact_flash else 1,
+                    "radio_tx_commands": 0,
+                    "device_lock_fixture": protected_ui.evidence(),
+                })
+                write_json(args.output / "run.json", record)
+                artifact_manifest(args.output)
+                print(json.dumps({
+                    "schema": SCHEMA,
+                    "status": "pass",
+                    "mode": "survey_only",
+                    "run": str(args.output / "run.json"),
+                    "survey_generations": [first_generation,
+                                           second_generation],
+                }, sort_keys=True))
+                return 0
 
             home = normalize_home(device)
             for _ in range(5):
