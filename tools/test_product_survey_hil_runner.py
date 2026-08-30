@@ -170,6 +170,40 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
         paused["survey_product_source_active"] = True
         self.assertTrue(RUNNER.paused_detail_failures(paused, 17, 1))
 
+    def test_release_cycle_accepts_complete_auto_paused_state(self) -> None:
+        paused = {
+            "page": "survey", "runtime_owner": "wifi", "lease_mask": 15,
+            "survey_view": "list", "survey_workflow_state": "running",
+            "survey_running": True, "survey_observations": 54,
+            "survey_product_scan_cycles": 1,
+            "survey_product_status": "paused",
+            "survey_product_backend_open": False,
+            "survey_product_storage_mounted": False,
+            "survey_product_cleanup_complete": False,
+            "survey_product_source_active": False,
+            "survey_simulated": False, "survey_persistent": True,
+            "survey_pipeline_status": "drained",
+            "survey_product_store_status": "permitted",
+            "survey_product_admission_status": "permitted",
+            "survey_product_expected_cid": CID,
+            "survey_product_observed_cid": CID,
+            "survey_product_identity_status": "valid",
+            "survey_product_identity_attempts": 1,
+            "survey_product_identity_transient_retries": 0,
+            "survey_product_worker_ready": True,
+            "survey_scan_status": "valid", "survey_scan_accepted": 24,
+            "survey_scan_rejected": 0, "survey_scan_dropped": 0,
+            "survey_ble_scan_accepted": 30,
+            "survey_ble_scan_rejected": 0, "survey_ble_scan_dropped": 0,
+            "survey_forwarded": 54, "survey_dropped": 0,
+            "survey_queue_depth": 0,
+        }
+        self.assertEqual(
+            [], RUNNER.paused_cycle_failures(paused, CID, "wifi")
+        )
+        paused["survey_forwarded"] = 53
+        self.assertTrue(RUNNER.paused_cycle_failures(paused, CID, "wifi"))
+
     def test_boot_parser_ignores_noise_and_keeps_product_record(self) -> None:
         raw = (
             b"noise\n"

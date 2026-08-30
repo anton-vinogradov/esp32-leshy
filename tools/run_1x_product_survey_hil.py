@@ -374,6 +374,54 @@ def paused_failures(state: dict[str, Any], observations: int,
     return failures
 
 
+def paused_cycle_failures(state: dict[str, Any], expected_cid: str,
+                          expected_owner: str = "survey") -> list[str]:
+    """Validate a complete one-pass cycle already auto-paused by firmware."""
+    observations = state.get("survey_observations")
+    scan_cycles = state.get("survey_product_scan_cycles")
+    if (not isinstance(observations, int) or isinstance(observations, bool) or
+            observations < 1 or not isinstance(scan_cycles, int) or
+            isinstance(scan_cycles, bool) or scan_cycles < 1):
+        return ["paused_cycle: positive observations/cycles required"]
+    failures = paused_failures(
+        state, observations, scan_cycles, expected_owner
+    )
+    failures.extend(expect(state, {
+        "survey_simulated": False,
+        "survey_persistent": True,
+        "survey_pipeline_status": "drained",
+        "survey_product_store_status": "permitted",
+        "survey_product_admission_status": "permitted",
+        "survey_product_expected_cid": expected_cid,
+        "survey_product_observed_cid": expected_cid,
+        "survey_product_identity_status": "valid",
+        "survey_scan_status": "valid",
+        "survey_scan_rejected": 0,
+        "survey_scan_dropped": 0,
+        "survey_ble_scan_rejected": 0,
+        "survey_ble_scan_dropped": 0,
+        "survey_dropped": 0,
+        "survey_queue_depth": 0,
+        "survey_product_worker_ready": True,
+    }, "paused_cycle"))
+    wifi_accepted = state.get("survey_scan_accepted")
+    ble_accepted = state.get("survey_ble_scan_accepted")
+    if (not isinstance(wifi_accepted, int) or
+            not isinstance(ble_accepted, int) or
+            wifi_accepted + ble_accepted != observations or
+            state.get("survey_forwarded") != observations):
+        failures.append(
+            "paused_cycle.observation_accounting: "
+            "wifi+ble accepted/forwarded/observations differ"
+        )
+    attempts = state.get("survey_product_identity_attempts")
+    retries = state.get("survey_product_identity_transient_retries")
+    if (not isinstance(attempts, int) or isinstance(attempts, bool) or
+            attempts < 1 or attempts > 8 or retries != attempts - 1):
+        failures.append("paused_cycle.identity_attempts: invalid accounting")
+    return failures
+
+
 def paused_detail_failures(state: dict[str, Any], observations: int,
                            scan_cycles: int,
                            expected_owner: str = "survey") -> list[str]:
@@ -948,17 +996,25 @@ def main() -> int:
                     running = wait_ui_state(
                         device,
                         lambda state: (
-                            state.get("survey_product_status") == "running" and
+                            state.get("survey_product_status") in (
+                                ("running", "paused") if args.release_cycle
+                                else ("running",)
+                            ) and
                             state.get("survey_product_scan_cycles", 0) >= 1 and
                             state.get("survey_observations", 0) >= 1
                         ),
-                        20.0,
-                        "product Survey did not reach live running state",
+                        30.0 if args.release_cycle else 20.0,
+                        "product Survey did not reach a complete running cycle",
                     )
                     trace.append(running)
-                    failures.extend(running_failures(
-                        running, expected_cid, "wifi"
-                    ))
+                    if running.get("survey_product_status") == "paused":
+                        failures.extend(paused_cycle_failures(
+                            running, expected_cid, "wifi"
+                        ))
+                    else:
+                        failures.extend(running_failures(
+                            running, expected_cid, "wifi"
+                        ))
                     if not args.release_cycle:
                         captures["running"] = capture(
                             device, frames, "running"
@@ -966,26 +1022,29 @@ def main() -> int:
                 if not failures and args.release_cycle:
                     observations = int(running["survey_observations"])
                     scan_cycles = int(running["survey_product_scan_cycles"])
-                    pause_ack = action(device, "up")
-                    trace.append(pause_ack)
-                    failures.extend(expect(pause_ack, {
-                        "page": "survey",
-                        "survey_view": "list",
-                        "survey_workflow_state": "running",
-                    }, "pause_ack"))
-                    paused = wait_ui_state(
-                        device,
-                        lambda state: (
-                            state.get("survey_product_status") == "paused" and
-                            state.get("survey_product_source_active") is False
-                        ),
-                        20.0,
-                        "product Survey did not reach stable paused state",
-                    )
-                    trace.append(paused)
-                    failures.extend(paused_failures(
-                        paused, observations, scan_cycles, "wifi"
-                    ))
+                    if running.get("survey_product_status") == "paused":
+                        paused = running
+                    else:
+                        pause_ack = action(device, "up")
+                        trace.append(pause_ack)
+                        failures.extend(expect(pause_ack, {
+                            "page": "survey",
+                            "survey_view": "list",
+                            "survey_workflow_state": "running",
+                        }, "pause_ack"))
+                        paused = wait_ui_state(
+                            device,
+                            lambda state: (
+                                state.get("survey_product_status") == "paused" and
+                                state.get("survey_product_source_active") is False
+                            ),
+                            20.0,
+                            "product Survey did not reach stable paused state",
+                        )
+                        trace.append(paused)
+                        failures.extend(paused_failures(
+                            paused, observations, scan_cycles, "wifi"
+                        ))
                     paused_browser = query(
                         device, b"survey.browser",
                         "leshy.survey.browser.v1", "state"
