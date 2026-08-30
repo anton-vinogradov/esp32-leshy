@@ -351,7 +351,9 @@ def main() -> int:
                 in runner and
             "paused_cycle_failures(cycle, EXPECTED_CID, \"wifi\")"
                 in runner and
-            'if cycle.get("survey_product_status") == "paused"' in runner and
+            'automatic_pause = cycle.get("survey_product_status") == "paused"'
+                in runner and
+            "automatic_pause=automatic_pause" in runner and
             '"survey_cycles_executed": 0 if args.reuse_existing_pair else 2'
                 in runner and
             "checked_stack_frames = stack_frames(args.elf)" in runner and

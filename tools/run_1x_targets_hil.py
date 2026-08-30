@@ -87,7 +87,8 @@ def run_survey_cycle(device: PassiveSerial, before_generation: int,
         "Targets precursor Survey did not collect observations",
     )
     trace.append(cycle)
-    if cycle.get("survey_product_status") == "paused":
+    automatic_pause = cycle.get("survey_product_status") == "paused"
+    if automatic_pause:
         failures = paused_cycle_failures(cycle, EXPECTED_CID, "wifi")
     else:
         failures = running_failures(cycle, EXPECTED_CID, "wifi")
@@ -99,7 +100,7 @@ def run_survey_cycle(device: PassiveSerial, before_generation: int,
             survey_product_active_source_mask=3)
     observations = int(cycle["survey_observations"])
     scan_cycles = int(cycle["survey_product_scan_cycles"])
-    if cycle.get("survey_product_status") == "paused":
+    if automatic_pause:
         paused = cycle
     else:
         trace.append(action(device, "up"))
@@ -131,7 +132,9 @@ def run_survey_cycle(device: PassiveSerial, before_generation: int,
             "Targets precursor Survey did not commit",
         )
         trace.append(committed)
-    failures = committed_failures(committed, before_generation, "wifi")
+    failures = committed_failures(
+        committed, before_generation, "wifi",
+        automatic_pause=automatic_pause)
     if failures:
         raise RuntimeError("; ".join(failures))
     menu = action(device, "back")
