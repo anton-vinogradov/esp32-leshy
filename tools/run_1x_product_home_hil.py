@@ -13,6 +13,22 @@ from typing import Any
 
 from capture_1x_ui import PassiveSerial, synchronize_console
 from esp_app_identity import app_elf_sha256
+from run_1x_device_lock_hil import (
+    LOCK_SCHEMA,
+    device_lock_page,
+    home_device,
+)
+from run_1x_device_lock_persistence_hil import (
+    begin_hil,
+    end_hil,
+    enter_pin,
+    ephemeral_pin,
+    fixture_command,
+    fixture_failures,
+    state_failures,
+    wait_lock_state,
+    wipe_pin,
+)
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_survey_hil import (
     action,
@@ -239,6 +255,8 @@ def main() -> int:
     shutil.copyfile(args.firmware, candidate)
     firmware_sha = sha256_file(candidate)
     app_identity = app_elf_sha256(candidate)
+    run_id = secrets.token_hex(16)
+    fixture_pin = ephemeral_pin()
     failures: list[str] = []
     trace: list[dict[str, Any]] = []
     screens: dict[str, Any] = {}
@@ -253,6 +271,14 @@ def main() -> int:
     safe_outputs: dict[str, Any] = {}
     cleanup_before: dict[str, Any] = {"attempted": False}
     cleanup_after: dict[str, Any] = {"attempted": False}
+    hil_sessions: list[dict[str, Any]] = []
+    hil_started = False
+    hil_ended = False
+    fixture_ever_started = False
+    fixture_cleanup_proven = False
+    fixture_begin: dict[str, Any] = {}
+    fixture_configured: dict[str, Any] = {}
+    fixture_cleanup: dict[str, Any] = {}
 
     try:
         if args.flash:
@@ -274,6 +300,38 @@ def main() -> int:
                 if not cleanup_before.get("complete"):
                     raise RuntimeError("initial Home/zero-lease cleanup failed")
                 query(device, b"ui.language ru", "leshy.ui.v1", "state")
+
+                hil_sessions.append(begin_hil(device, run_id, app_identity))
+                hil_started = True
+                # Product UI is deliberately fail-closed until Device Lock is
+                # configured. Exercise it through the existing disposable HIL
+                # namespace: the random credential never reaches the retained
+                # evidence and cleanup restores the untouched product store.
+                fixture_ever_started = True
+                fixture_begin = fixture_command(device, "begin")
+                fixture_begin_failures = fixture_failures(
+                    fixture_begin, "fixture_begin", status="begun",
+                    operation="begin", active=True, selected=True,
+                    cleaned=True, product_restored=False)
+                if fixture_begin_failures:
+                    raise RuntimeError("; ".join(fixture_begin_failures))
+                home_device(device)
+                device_lock_page(device)
+                action(device, "right")
+                enter_pin(device, fixture_pin)
+                enter_pin(device, fixture_pin)
+                fixture_configured = wait_lock_state(
+                    device,
+                    lambda state: state.get("status") == "unlocked",
+                    "temporary HIL credential enrollment")
+                fixture_configuration_failures = state_failures(
+                    fixture_configured, "fixture_configured",
+                    status="unlocked", failure="none", failed_attempts=0,
+                    generation=1, protected=True, fixture_active=True)
+                if fixture_configuration_failures:
+                    raise RuntimeError(
+                        "; ".join(fixture_configuration_failures))
+                home_device(device)
 
                 home_selection(device, 0)
                 screens["home_top"] = capture(device, frames, "home-top")
@@ -531,6 +589,17 @@ def main() -> int:
                 screens["home_en"] = capture(device, frames, "home-en")
                 query(device, b"ui.language ru", "leshy.ui.v1", "state")
                 screens["home_final"] = capture(device, frames, "home-final")
+                fixture_cleanup = fixture_command(device, "cleanup")
+                fixture_cleanup_failures = fixture_failures(
+                    fixture_cleanup, "fixture_cleanup", status="cleaned",
+                    operation="cleanup", active=False, selected=False,
+                    cleaned=True, product_restored=True)
+                failures.extend(fixture_cleanup_failures)
+                fixture_cleanup_proven = not fixture_cleanup_failures
+                if not fixture_cleanup_proven:
+                    raise RuntimeError("temporary Device Lock cleanup failed")
+                hil_sessions.append(end_hil(device, run_id))
+                hil_ended = True
                 input_state = read_only_query(
                     device, b"input.state", "leshy.input.frontend.v1", "state")
                 safe_outputs = read_only_query(
@@ -557,15 +626,39 @@ def main() -> int:
             except Exception as error:
                 failures.append(f"workflow: {type(error).__name__}: {error}")
             finally:
+                if fixture_ever_started and not fixture_cleanup_proven:
+                    try:
+                        fixture_cleanup = fixture_command(device, "cleanup")
+                        fixture_cleanup_failures = fixture_failures(
+                            fixture_cleanup, "fixture_cleanup_finally",
+                            status="cleaned", operation="cleanup",
+                            active=False, selected=False, cleaned=True,
+                            product_restored=True)
+                        failures.extend(fixture_cleanup_failures)
+                        fixture_cleanup_proven = not fixture_cleanup_failures
+                    except Exception as cleanup_error:
+                        failures.append(
+                            "fixture cleanup: "
+                            f"{type(cleanup_error).__name__}: {cleanup_error}")
+                if hil_started and not hil_ended:
+                    try:
+                        hil_sessions.append(end_hil(device, run_id))
+                        hil_ended = True
+                    except Exception as session_error:
+                        failures.append(
+                            "HIL session cleanup: "
+                            f"{type(session_error).__name__}: {session_error}")
                 cleanup_after = best_effort_cleanup(device)
                 if not cleanup_after.get("complete"):
                     failures.append("cleanup_after: Home/zero lease unproven")
     except Exception as error:
         failures.append(f"runner: {type(error).__name__}: {error}")
+    finally:
+        wipe_pin(fixture_pin)
 
     result = {
         "schema": RUN_SCHEMA,
-        "run_id": secrets.token_hex(16),
+        "run_id": run_id,
         "runner_source_sha256": sha256_file(Path(__file__).resolve()),
         "passed": bool(args.flash or args.reuse_exact_flash) and not failures,
         "gate_eligible": bool(args.flash or args.reuse_exact_flash) and
@@ -596,6 +689,20 @@ def main() -> int:
         "trace": trace,
         "cleanup_before": cleanup_before,
         "cleanup_after": cleanup_after,
+        "hil_sessions": hil_sessions,
+        "device_lock_fixture": {
+            "isolated_namespace": True,
+            "temporary_credential": True,
+            "pin_length": 6,
+            "pin_or_digest_retained": False,
+            "pin_editor_replies_retained": False,
+            "product_namespace_written_or_erased": False,
+            "whole_nvs_read_or_copied": False,
+            "begun": fixture_begin.get("status") == "begun",
+            "configured": fixture_configured.get("status") == "unlocked",
+            "cleanup_proven": fixture_cleanup_proven,
+            "active_at_end": fixture_cleanup.get("active"),
+        },
         "scope": {
             "single_flash": True,
             "exact_flash_reused": args.reuse_exact_flash,
@@ -606,6 +713,7 @@ def main() -> int:
             "rf_instrument_available": False,
             "storage_write_authorized": False,
             "home_identity": "bilingual_brand_and_version",
+            "protected_ui_test_fixture": "isolated_ephemeral_credential",
         },
     }
     write_json(args.output / "run.json", result)

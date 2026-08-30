@@ -31,6 +31,15 @@ RUNNER = load_runner()
 
 
 class ProductHomeHilRunnerTests(unittest.TestCase):
+    def test_current_home_includes_lab_before_device(self) -> None:
+        self.assertEqual(
+            ("library", "lab", "device"), RUNNER.HOME_ITEMS[-3:])
+
+    def test_fixture_pin_is_wiped_in_place(self) -> None:
+        pin = bytearray((7, 0, 4, 2, 8, 1))
+        RUNNER.wipe_pin(pin)
+        self.assertEqual(bytearray(6), pin)
+
     def test_read_only_query_retries_one_transport_timeout(self) -> None:
         class Device:
             resets = 0

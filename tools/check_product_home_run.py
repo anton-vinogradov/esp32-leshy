@@ -422,6 +422,33 @@ def main() -> int:
         "rf_instrument_available": False,
         "storage_write_authorized": False,
     }
+    if "protected_ui_test_fixture" in scope:
+        expected_scope["protected_ui_test_fixture"] = \
+            "isolated_ephemeral_credential"
+        fixture = run.get("device_lock_fixture", {})
+        require(failures, fixture == {
+            "active_at_end": False,
+            "begun": True,
+            "cleanup_proven": True,
+            "configured": True,
+            "isolated_namespace": True,
+            "pin_editor_replies_retained": False,
+            "pin_length": 6,
+            "pin_or_digest_retained": False,
+            "product_namespace_written_or_erased": False,
+            "temporary_credential": True,
+            "whole_nvs_read_or_copied": False,
+        }, "temporary Device Lock fixture boundary mismatch")
+        sessions = run.get("hil_sessions", [])
+        require(failures,
+                isinstance(sessions, list) and len(sessions) == 2 and
+                sessions[0].get("kind") == "begun" and
+                sessions[0].get("active") is True and
+                sessions[1].get("kind") == "ended" and
+                sessions[1].get("active") is False and
+                sessions[0].get("run_id") == run.get("run_id") ==
+                    sessions[1].get("run_id"),
+                "temporary Device Lock HIL session mismatch")
     if pixel_contract:
         expected_scope["waterfall_chrome_static_verified"] = True
     if identity_contract:
