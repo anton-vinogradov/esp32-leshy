@@ -77,12 +77,18 @@ struct BoardBlePassiveScanResult final {
     std::uint16_t accepted = 0;
     std::uint16_t rejected = 0;
     std::uint16_t dropped = 0;
+    std::uint16_t queueHighWater = 0;
 
     bool valid() const { return status == BoardBleScanStatus::Valid; }
 };
 
 class BoardBlePassiveScanner final {
 public:
+    // The callback queue is drained every 5 ms. Keeping this burst buffer
+    // bounded at 32 reports returns 1280 bytes of scarce internal RAM to the
+    // subsequent connected GATT transport. Any insufficient burst capacity
+    // remains observable and fail-closed through dropped/queueHighWater.
+    static constexpr std::size_t kReportQueueCapacity = 32U;
     static constexpr std::uint16_t kMaximumScanAttempts = 2U;
     static constexpr std::uint32_t kCompletionGraceMs = 1000U;
     static constexpr std::uint32_t kRetryDelayMs = 100U;

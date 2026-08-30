@@ -42,13 +42,15 @@ struct RawAdvertisement final {
 };
 
 struct NimbleObserverState final {
-    static constexpr std::size_t kQueueCapacity = 64U;
+    static constexpr std::size_t kQueueCapacity =
+        BoardBlePassiveScanner::kReportQueueCapacity;
 
     portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
     std::array<RawAdvertisement, kQueueCapacity> queue{};
     std::size_t readIndex = 0;
     std::size_t writeIndex = 0;
     std::size_t queued = 0;
+    std::size_t queueHighWater = 0;
     std::uint16_t reportsObserved = 0;
     std::uint16_t queueDrops = 0;
     bool acceptingReports = false;
@@ -354,6 +356,7 @@ void clearReportQueue() {
     nimbleObserver.readIndex = 0U;
     nimbleObserver.writeIndex = 0U;
     nimbleObserver.queued = 0U;
+    nimbleObserver.queueHighWater = 0U;
     nimbleObserver.reportsObserved = 0U;
     nimbleObserver.queueDrops = 0U;
     portEXIT_CRITICAL(&nimbleObserver.lock);
@@ -383,6 +386,14 @@ std::uint16_t takeQueueDrops() {
     return drops;
 }
 
+std::uint16_t queueHighWater() {
+    portENTER_CRITICAL(&nimbleObserver.lock);
+    const std::uint16_t highWater = static_cast<std::uint16_t>(
+        nimbleObserver.queueHighWater);
+    portEXIT_CRITICAL(&nimbleObserver.lock);
+    return highWater;
+}
+
 std::uint16_t takeReportsObserved() {
     portENTER_CRITICAL(&nimbleObserver.lock);
     const std::uint16_t observed = nimbleObserver.reportsObserved;
@@ -403,6 +414,8 @@ void queueReport(const RawAdvertisement& report) {
                 (nimbleObserver.writeIndex + 1U) %
                 NimbleObserverState::kQueueCapacity;
             ++nimbleObserver.queued;
+            nimbleObserver.queueHighWater = std::max(
+                nimbleObserver.queueHighWater, nimbleObserver.queued);
         } else if (nimbleObserver.queueDrops != UINT16_MAX) {
             ++nimbleObserver.queueDrops;
         }
@@ -869,6 +882,8 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
                 ? BoardBleScanStatus::Valid
                 : BoardBleScanStatus::ScanTimedOut;
         }
+        result.queueHighWater = std::max(
+            result.queueHighWater, queueHighWater());
         if (result.valid() || attempt == kMaximumScanAttempts) break;
         if (result.status != BoardBleScanStatus::ScannerUnavailable &&
             result.status != BoardBleScanStatus::ScanTimedOut) {

@@ -307,6 +307,14 @@ def run_recovery_success(device: PassiveSerial, fixture_label: str,
         value.get("runtime_owner") == "none" and
         value.get("lease_mask") == 0,
         15.0, "post-negative success did not disconnect to Home")
+    require_exact(home, {"survey_ble_scan_dropped": 0},
+                  "post_negative_passive_queue")
+    queue_high_water = int(
+        home.get("survey_ble_scan_queue_high_water", -1))
+    if not 1 <= queue_high_water <= 32:
+        raise RuntimeError(
+            "post-negative passive queue high-water outside 1..32: "
+            f"{queue_high_water}")
     return {"permission": permission, "ready": ready, "home": home}
 
 

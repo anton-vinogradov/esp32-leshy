@@ -3593,6 +3593,8 @@ void accumulateProductSurveyBleScan(BoardBlePassiveScanResult* total,
         total->rejected + scan.rejected);
     total->dropped = static_cast<std::uint16_t>(
         total->dropped + scan.dropped);
+    total->queueHighWater = std::max(
+        total->queueHighWater, scan.queueHighWater);
 }
 
 SourceFailureClass productSurveyFailureClass(
@@ -21410,6 +21412,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_ble_scan_accepted\":%u,"
                       "\"survey_ble_scan_rejected\":%u,"
                       "\"survey_ble_scan_dropped\":%u,"
+                      "\"survey_ble_scan_queue_high_water\":%u,"
                       "\"ble_begin_stage\":\"%s\","
                       "\"ble_begin_error\":%d,"
                       "\"ble_begin_heap_free_before\":%lu,"
@@ -21680,6 +21683,8 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           productSurveyRuntime.bleScan.rejected),
                       static_cast<unsigned>(
                           productSurveyRuntime.bleScan.dropped),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.bleScan.queueHighWater),
                       leshy1::platform::arduino::boardBleBeginStageName(
                           productSurveyRuntime.bleBegin.stage),
                       productSurveyRuntime.bleBegin.error,

@@ -56,6 +56,9 @@ for marker, label in (
     ("record.payload.begin()", "raw payload storage"),
     ("record.payloadLength = source.payloadLength", "raw payload length handoff"),
     ("record.eventType = source.eventType", "event type handoff"),
+    ("BoardBlePassiveScanner::kReportQueueCapacity",
+     "bounded passive report queue"),
+    ("queueHighWater", "measured passive queue high-water"),
 ):
     require(passive, marker, label)
 
@@ -186,6 +189,8 @@ for marker, label in (
     ('"host_wifi_control_calls": 0', "host Wi-Fi isolation"),
     ('"clone_touched": False', "clone isolation"),
     ('"cardputer_touched": False', "Cardputer isolation"),
+    ('survey_ble_scan_queue_high_water',
+     "physical passive queue high-water gate"),
 ):
     require(gatt_negative_hil, marker, label)
 
