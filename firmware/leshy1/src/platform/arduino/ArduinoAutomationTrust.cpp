@@ -53,6 +53,14 @@ bool constantTimeEqual(
     return difference == 0U;
 }
 
+bool validStoredKey(const apps::automation::AutomationTrustedKey& key) {
+    std::array<std::uint8_t, apps::automation::kAutomationKeyIdBytes>
+        derivedKeyId{};
+    return validateAutomationP256PublicKey(key.publicKey) &&
+        deriveAutomationP256KeyId(key.publicKey, &derivedKeyId) &&
+        constantTimeEqual(derivedKeyId, key.keyId);
+}
+
 bool sha256(const std::uint8_t* bytes, std::size_t size,
             std::array<std::uint8_t, 32U>* output) {
     if (bytes == nullptr || size == 0U || output == nullptr) return false;
@@ -98,10 +106,19 @@ AutomationTrustLoadStatus NvsAutomationTrustStore::load(
         *output = {};
         return AutomationTrustLoadStatus::Corrupt;
     }
+    for (std::size_t index = 0U; index < output->count; ++index) {
+        if (!validStoredKey(output->keys[index])) {
+            *output = {};
+            return AutomationTrustLoadStatus::Corrupt;
+        }
+    }
     return AutomationTrustLoadStatus::Loaded;
 }
 
 bool NvsAutomationTrustStore::save(const AutomationTrustSnapshot& snapshot) {
+    for (std::size_t index = 0U; index < snapshot.count; ++index) {
+        if (!validStoredKey(snapshot.keys[index])) return false;
+    }
     AutomationTrustRecord record{};
     if (!apps::automation::encodeAutomationTrustRecord(snapshot, &record)) {
         return false;

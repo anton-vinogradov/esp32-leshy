@@ -49,6 +49,12 @@ ARDUINO_TRUST_HEADER = (
 ARDUINO_TRUST_SOURCE = (
     ROOT / "firmware/leshy1/src/platform/arduino/ArduinoAutomationTrust.cpp"
 )
+TRUST_BOARD_READER_HEADER = (
+    ROOT / "firmware/leshy1/src/platform/arduino/BoardAutomationTrustBundleReader.h"
+)
+TRUST_BOARD_READER_SOURCE = (
+    ROOT / "firmware/leshy1/src/platform/arduino/BoardAutomationTrustBundleReader.cpp"
+)
 TRUST_BUILDER = ROOT / "tools/build_automation_trust_bundle.py"
 TRUST_WORKFLOW = ROOT / ".github/workflows/automation-trust-bundle.yml"
 PHYSICAL_HIL_RUNNER = ROOT / "tools/run_1x_automation_inspector_hil.py"
@@ -74,6 +80,10 @@ def main() -> int:
     trust_bundle_source = TRUST_BUNDLE_SOURCE.read_text(encoding="utf-8")
     arduino_trust_header = ARDUINO_TRUST_HEADER.read_text(encoding="utf-8")
     arduino_trust_source = ARDUINO_TRUST_SOURCE.read_text(encoding="utf-8")
+    trust_board_reader_header = TRUST_BOARD_READER_HEADER.read_text(
+        encoding="utf-8")
+    trust_board_reader_source = TRUST_BOARD_READER_SOURCE.read_text(
+        encoding="utf-8")
     trust_builder = TRUST_BUILDER.read_text(encoding="utf-8")
     trust_workflow = TRUST_WORKFLOW.read_text(encoding="utf-8")
     physical_hil_runner = PHYSICAL_HIL_RUNNER.read_text(encoding="utf-8")
@@ -182,6 +192,19 @@ def main() -> int:
         (arduino_entry, "serviceAutomationPackageUi();"),
         (arduino_entry, "renderAutomationInspectorPage(clearContent)"),
         (arduino_entry, "kAutomationStorageResources"),
+        (trust_board_reader_header, 'kAutomationTrustBundleName = "automation-owner.lhak"'),
+        (trust_board_reader_header, 'kAutomationTrustBundleRoot = "/leshy/automation/v1"'),
+        (trust_board_reader_source, "f_open(&workspace_.file, path, FA_READ)"),
+        (trust_board_reader_source, "observed != output->size()"),
+        (arduino_entry, "kAutomationTrustPage = 15"),
+        (arduino_entry, "AutomationTrustUiView::ImportReview"),
+        (arduino_entry, "AutomationTrustUiView::RevokeReview"),
+        (arduino_entry, "kAutomationTrustConfirmationWindowUs = 30000000ULL"),
+        (arduino_entry, "validateAutomationP256PublicKey("),
+        (arduino_entry, "deriveAutomationP256KeyId("),
+        (arduino_entry, "DeviceLockOperation::SensitiveSettings"),
+        (arduino_entry, "renderAutomationTrustPage(clearContent)"),
+        (arduino_entry, "AutomationTrustMutationAuthorization"),
     )
     for text, token in required_product:
         if token not in text:
@@ -199,6 +222,17 @@ def main() -> int:
     for token in forbidden_product:
         if token in passive_product:
             failures.append(f"passive product contains forbidden path: {token}")
+
+    trust_import_product = "\n".join(
+        (trust_board_reader_header, trust_board_reader_source))
+    for token in (
+        "FA_WRITE", "FA_CREATE", "f_write(", "f_unlink(", "f_mkdir(",
+        "PRIVATE KEY", "privateKey", "private_key", "ActionDispatcher",
+        "USBHID", "Keyboard.", "Mouse.", "BLEHID", "execute(",
+    ):
+        if token in trust_import_product:
+            failures.append(
+                f"public-only trust import contains forbidden path: {token}")
 
     fixture_contract = "\n".join((hil_fixture_header, hil_fixture_source))
     required_fixture = (

@@ -102,6 +102,7 @@
 #include "platform/arduino/BoardSdFilesystem.h"
 #include "platform/arduino/BoardAutomationPackageReader.h"
 #include "platform/arduino/BoardAutomationPackageHilFixture.h"
+#include "platform/arduino/BoardAutomationTrustBundleReader.h"
 #include "platform/arduino/BoardStorageAdapter.h"
 #include "platform/arduino/BoardTouchInput.h"
 #include "platform/arduino/BoardBlePassiveScanner.h"
@@ -194,6 +195,12 @@ using leshy1::apps::automation::AutomationParseStatus;
 using leshy1::apps::automation::AutomationPolicyStatus;
 using leshy1::apps::automation::AutomationTargetClass;
 using leshy1::apps::automation::AutomationTrustStatus;
+using leshy1::apps::automation::AutomationTrustBundle;
+using leshy1::apps::automation::AutomationTrustBundleStatus;
+using leshy1::apps::automation::AutomationTrustMutationAuthorization;
+using leshy1::apps::automation::AutomationTrustMutationStatus;
+using leshy1::apps::automation::AutomationTrustSnapshot;
+using leshy1::apps::automation::AutomationTrustedKey;
 using leshy1::apps::guard::AirspaceGuardController;
 using leshy1::apps::guard::AirspaceGuardView;
 using leshy1::apps::auth::WifiAuthenticationCaptureAction;
@@ -559,6 +566,8 @@ leshy1::apps::automation::AutomationTrustStore automationTrustStore(
     automationTrustBackend);
 leshy1::platform::arduino::MbedTlsAutomationSignatureVerifier
     automationSignatureVerifier(automationTrustStore);
+using leshy1::platform::arduino::BoardAutomationTrustBundleReader;
+using leshy1::platform::arduino::BoardAutomationTrustBundleStatus;
 BoardAutomationPackageStatus automationCatalogStatus =
     BoardAutomationPackageStatus::DirectoryUnavailable;
 std::uint32_t automationCatalogOmittedEntries = 0U;
@@ -1028,9 +1037,46 @@ constexpr std::uint8_t kPowerPage = 11;
 constexpr std::uint8_t kDeviceLockPage = 12;
 constexpr std::uint8_t kSerialConsolePage = 13;
 constexpr std::uint8_t kAutomationInspectorPage = 14;
+constexpr std::uint8_t kAutomationTrustPage = 15;
 constexpr std::uint16_t kAutomationActionApiVersion = 1U;
-constexpr std::uint8_t kDeviceItemCount = 7;
+constexpr std::uint8_t kDeviceItemCount = 8;
 std::uint8_t deviceSelection = 0;
+enum class AutomationTrustUiView : std::uint8_t {
+    List,
+    ImportReview,
+    RevokeReview,
+    Result,
+};
+enum class AutomationTrustUiResult : std::uint8_t {
+    None,
+    StorageBusy,
+    StorageUnavailable,
+    BundleReadFailed,
+    BundleInvalid,
+    Applied,
+    AuthenticationRequired,
+    ConfirmationExpired,
+    InvalidKey,
+    DuplicateKey,
+    KeyIdConflict,
+    Full,
+    NotFound,
+    PersistenceFailed,
+    StoreUnavailable,
+};
+AutomationTrustUiView automationTrustUiView = AutomationTrustUiView::List;
+AutomationTrustUiResult automationTrustUiResult =
+    AutomationTrustUiResult::None;
+std::uint8_t automationTrustUiSelection = 0U;
+AutomationTrustedKey automationTrustPendingKey{};
+AutomationTrustBundle automationTrustBundleScratch{};
+BoardAutomationTrustBundleStatus automationTrustBundleReadStatus =
+    BoardAutomationTrustBundleStatus::InvalidArgument;
+AutomationTrustBundleStatus automationTrustBundleParseStatus =
+    AutomationTrustBundleStatus::InvalidArgument;
+std::uint64_t automationTrustConfirmationOpenedUs = 0U;
+bool automationTrustLastMutationWasEnroll = false;
+constexpr std::uint64_t kAutomationTrustConfirmationWindowUs = 30000000ULL;
 enum class SerialConsoleUiView : std::uint8_t {
     Setup,
     Confirm,
@@ -1173,7 +1219,8 @@ bool deviceLockOperationAllowed(
 
 bool deviceLockProtectedPage(std::uint8_t page) {
     return page == 2U || page == 3U || page == 4U || page == 5U ||
-        page == 7U || page == 8U || page == kAutomationInspectorPage;
+        page == 7U || page == 8U || page == kAutomationInspectorPage ||
+        page == kAutomationTrustPage;
 }
 
 void noteDeviceLockAdmissionBlocked() {
@@ -2927,6 +2974,154 @@ bool automationStorageReady() {
 void releaseAutomationStorage() {
     resourceBroker.release(AppRuntime::kForegroundOwner,
                            kAutomationStorageResources);
+}
+
+void clearAutomationTrustTransientState() {
+    volatile std::uint8_t* keyBytes = reinterpret_cast<volatile std::uint8_t*>(
+        &automationTrustPendingKey);
+    for (std::size_t index = 0U;
+         index < sizeof(automationTrustPendingKey); ++index) {
+        keyBytes[index] = 0U;
+    }
+    volatile std::uint8_t* bundleBytes = automationTrustBundleScratch.data();
+    for (std::size_t index = 0U;
+         index < automationTrustBundleScratch.size(); ++index) {
+        bundleBytes[index] = 0U;
+    }
+    automationTrustConfirmationOpenedUs = 0U;
+    automationTrustBundleReadStatus =
+        BoardAutomationTrustBundleStatus::InvalidArgument;
+    automationTrustBundleParseStatus =
+        AutomationTrustBundleStatus::InvalidArgument;
+}
+
+void resetAutomationTrustUi() {
+    clearAutomationTrustTransientState();
+    automationTrustUiView = AutomationTrustUiView::List;
+    automationTrustUiResult = AutomationTrustUiResult::None;
+    const std::uint8_t itemCount = static_cast<std::uint8_t>(
+        automationTrustStore.snapshot().count + 1U);
+    if (automationTrustUiSelection >= itemCount) {
+        automationTrustUiSelection = itemCount == 0U ? 0U : itemCount - 1U;
+    }
+}
+
+bool automationTrustConfirmationFresh(std::uint64_t nowUs) {
+    return automationTrustConfirmationOpenedUs != 0U &&
+        nowUs >= automationTrustConfirmationOpenedUs &&
+        nowUs - automationTrustConfirmationOpenedUs <=
+            kAutomationTrustConfirmationWindowUs;
+}
+
+AutomationTrustUiResult automationTrustUiResultFromMutation(
+    AutomationTrustMutationStatus status) {
+    switch (status) {
+        case AutomationTrustMutationStatus::Applied:
+            return AutomationTrustUiResult::Applied;
+        case AutomationTrustMutationStatus::AuthenticationRequired:
+            return AutomationTrustUiResult::AuthenticationRequired;
+        case AutomationTrustMutationStatus::ConfirmationRequired:
+            return AutomationTrustUiResult::ConfirmationExpired;
+        case AutomationTrustMutationStatus::InvalidKey:
+            return AutomationTrustUiResult::InvalidKey;
+        case AutomationTrustMutationStatus::DuplicateKey:
+            return AutomationTrustUiResult::DuplicateKey;
+        case AutomationTrustMutationStatus::KeyIdConflict:
+            return AutomationTrustUiResult::KeyIdConflict;
+        case AutomationTrustMutationStatus::Full:
+            return AutomationTrustUiResult::Full;
+        case AutomationTrustMutationStatus::NotFound:
+            return AutomationTrustUiResult::NotFound;
+        case AutomationTrustMutationStatus::PersistenceFailed:
+            return AutomationTrustUiResult::PersistenceFailed;
+        case AutomationTrustMutationStatus::StoreUnavailable:
+            return AutomationTrustUiResult::StoreUnavailable;
+    }
+    return AutomationTrustUiResult::StoreUnavailable;
+}
+
+void readAutomationTrustBundleForReview() {
+    clearAutomationTrustTransientState();
+    automationTrustUiResult = AutomationTrustUiResult::None;
+    automationTrustLastMutationWasEnroll = true;
+    if (!automationStorageReady()) {
+        automationTrustUiResult = AutomationTrustUiResult::StorageBusy;
+        automationTrustUiView = AutomationTrustUiView::Result;
+        return;
+    }
+
+    BoardSdFilesystem filesystem;
+    if (filesystem.beginReadOnly() && filesystem.readOnlyGuaranteed()) {
+        BoardAutomationTrustBundleReader reader(sdSessionStoreIoWorkspace);
+        automationTrustBundleReadStatus = reader.read(
+            filesystem.driveNumber(), &automationTrustBundleScratch);
+    } else {
+        automationTrustUiResult =
+            AutomationTrustUiResult::StorageUnavailable;
+    }
+    filesystem.end();
+    if (!filesystem.cleanupComplete()) {
+        automationTrustUiResult = AutomationTrustUiResult::BundleReadFailed;
+    }
+    releaseAutomationStorage();
+
+    if (automationTrustUiResult != AutomationTrustUiResult::None) {
+        automationTrustUiView = AutomationTrustUiView::Result;
+        return;
+    }
+    if (automationTrustBundleReadStatus !=
+        BoardAutomationTrustBundleStatus::Ready) {
+        automationTrustUiResult = AutomationTrustUiResult::BundleReadFailed;
+        automationTrustUiView = AutomationTrustUiView::Result;
+        return;
+    }
+
+    AutomationTrustedKey parsed{};
+    automationTrustBundleParseStatus =
+        leshy1::apps::automation::parseAutomationTrustBundle(
+            automationTrustBundleScratch.data(),
+            automationTrustBundleScratch.size(), &parsed);
+    std::array<std::uint8_t,
+               leshy1::apps::automation::kAutomationKeyIdBytes> derived{};
+    const bool validPublicKey =
+        automationTrustBundleParseStatus ==
+            AutomationTrustBundleStatus::Parsed &&
+        leshy1::platform::arduino::validateAutomationP256PublicKey(
+            parsed.publicKey) &&
+        leshy1::platform::arduino::deriveAutomationP256KeyId(
+            parsed.publicKey, &derived) &&
+        std::equal(derived.begin(), derived.end(), parsed.keyId.begin());
+    automationTrustBundleScratch.fill(0U);
+    if (!validPublicKey) {
+        automationTrustUiResult = AutomationTrustUiResult::BundleInvalid;
+        automationTrustUiView = AutomationTrustUiView::Result;
+        return;
+    }
+    automationTrustPendingKey = parsed;
+    automationTrustConfirmationOpenedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (automationTrustConfirmationOpenedUs == 0U) {
+        automationTrustConfirmationOpenedUs = 1U;
+    }
+    automationTrustUiView = AutomationTrustUiView::ImportReview;
+}
+
+void applyAutomationTrustMutation(bool enroll) {
+    std::uint64_t nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0U) nowUs = 1U;
+    const AutomationTrustMutationAuthorization authorization{
+        deviceLock.state() ==
+            leshy1::services::security::DeviceLockState::Unlocked,
+        automationTrustConfirmationFresh(nowUs),
+    };
+    automationTrustLastMutationWasEnroll = enroll;
+    const AutomationTrustMutationStatus status = enroll
+        ? automationTrustStore.enroll(automationTrustPendingKey, authorization)
+        : automationTrustStore.revoke(automationTrustPendingKey.keyId,
+                                      authorization);
+    automationTrustUiResult = automationTrustUiResultFromMutation(status);
+    automationTrustConfirmationOpenedUs = 0U;
+    automationTrustUiView = AutomationTrustUiView::Result;
 }
 
 BoardAutomationPackageStatus scanAutomationPackageCatalog() {
@@ -12636,6 +12831,17 @@ NavigationFooter navigationFooterForCurrentState() {
     if (uiController.page() == kAutomationInspectorPage) {
         return {back, {}, {}};
     }
+    if (uiController.page() == kAutomationTrustPage) {
+        if (automationTrustUiView == AutomationTrustUiView::List) {
+            return {back, choose, enter};
+        }
+        if (automationTrustUiView == AutomationTrustUiView::ImportReview ||
+            automationTrustUiView == AutomationTrustUiView::RevokeReview) {
+            return {{NavigationKey::Left, UiTextId::NavBack}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavConfirm}};
+        }
+        return {back, {}, {}};
+    }
     if (uiController.page() == kDeviceLockPage) {
         const DeviceLockView view = deviceLockController.view();
         if (view == DeviceLockView::Working) return {};
@@ -13246,6 +13452,153 @@ void renderAutomationInspectorPage(bool clearContent) {
                  Tone::Positive);
 }
 
+std::uint8_t automationTrustItemCount() {
+    return static_cast<std::uint8_t>(
+        automationTrustStore.snapshot().count + 1U);
+}
+
+std::uint8_t automationTrustFirstVisible(std::uint8_t selection) {
+    return selection < kVisibleHomeRows
+        ? 0U
+        : static_cast<std::uint8_t>(selection - (kVisibleHomeRows - 1U));
+}
+
+void formatAutomationTrustKeyId(
+    const AutomationTrustedKey& key, char* output, std::size_t outputSize) {
+    if (output == nullptr || outputSize == 0U) return;
+    std::snprintf(
+        output, outputSize, tr(UiTextId::AutomationTrustKeyIdFormat),
+        key.keyId[0], key.keyId[1], key.keyId[2], key.keyId[3],
+        key.keyId[6], key.keyId[7]);
+}
+
+void renderAutomationTrustRow(std::uint8_t index,
+                              std::uint8_t firstVisible) {
+    const std::uint8_t count = automationTrustItemCount();
+    if (index < firstVisible || index >= firstVisible + kVisibleHomeRows ||
+        index >= count) {
+        return;
+    }
+    const Rect bounds = Components::homeRow(
+        static_cast<std::uint8_t>(index - firstVisible));
+    const AutomationTrustSnapshot& snapshot = automationTrustStore.snapshot();
+    if (index < snapshot.count) {
+        char keyId[40] = {};
+        formatAutomationTrustKeyId(snapshot.keys[index], keyId,
+                                   sizeof(keyId));
+        renderMenuRow(bounds, snapshot.keys[index].label.data(), keyId,
+                      automationTrustUiSelection == index, true,
+                      Tone::Positive);
+        return;
+    }
+    renderMenuRow(bounds, tr(UiTextId::AutomationTrustImport),
+                  tr(UiTextId::AutomationTrustImportNote),
+                  automationTrustUiSelection == index,
+                  automationTrustStore.ready(),
+                  automationTrustStore.ready() ? Tone::Positive
+                                               : Tone::Warning);
+}
+
+UiTextId automationTrustResultText() {
+    switch (automationTrustUiResult) {
+        case AutomationTrustUiResult::None:
+            return UiTextId::AutomationTrustStoreUnavailable;
+        case AutomationTrustUiResult::StorageBusy:
+            return UiTextId::AutomationTrustStorageBusy;
+        case AutomationTrustUiResult::StorageUnavailable:
+            return UiTextId::AutomationTrustStorageUnavailable;
+        case AutomationTrustUiResult::BundleReadFailed:
+            return UiTextId::AutomationTrustReadFailed;
+        case AutomationTrustUiResult::BundleInvalid:
+            return UiTextId::AutomationTrustBundleInvalid;
+        case AutomationTrustUiResult::Applied:
+            return automationTrustLastMutationWasEnroll
+                ? UiTextId::AutomationTrustEnrolled
+                : UiTextId::AutomationTrustRevoked;
+        case AutomationTrustUiResult::AuthenticationRequired:
+            return UiTextId::AutomationTrustUnlockRequired;
+        case AutomationTrustUiResult::ConfirmationExpired:
+            return UiTextId::AutomationTrustConfirmationExpired;
+        case AutomationTrustUiResult::InvalidKey:
+            return UiTextId::AutomationTrustInvalidKey;
+        case AutomationTrustUiResult::DuplicateKey:
+            return UiTextId::AutomationTrustDuplicate;
+        case AutomationTrustUiResult::KeyIdConflict:
+            return UiTextId::AutomationTrustConflict;
+        case AutomationTrustUiResult::Full:
+            return UiTextId::AutomationTrustFull;
+        case AutomationTrustUiResult::NotFound:
+            return UiTextId::AutomationTrustNotFound;
+        case AutomationTrustUiResult::PersistenceFailed:
+            return UiTextId::AutomationTrustSaveFailed;
+        case AutomationTrustUiResult::StoreUnavailable:
+            return UiTextId::AutomationTrustStoreUnavailable;
+    }
+    return UiTextId::AutomationTrustStoreUnavailable;
+}
+
+Tone automationTrustResultTone() {
+    if (automationTrustUiResult == AutomationTrustUiResult::Applied) {
+        return Tone::Positive;
+    }
+    if (automationTrustUiResult == AutomationTrustUiResult::StorageBusy ||
+        automationTrustUiResult ==
+            AutomationTrustUiResult::AuthenticationRequired ||
+        automationTrustUiResult ==
+            AutomationTrustUiResult::ConfirmationExpired ||
+        automationTrustUiResult == AutomationTrustUiResult::DuplicateKey ||
+        automationTrustUiResult == AutomationTrustUiResult::Full) {
+        return Tone::Warning;
+    }
+    return Tone::Danger;
+}
+
+void renderAutomationTrustPage(bool clearContent) {
+    renderHeader(tr(UiTextId::AutomationTrustTitle), clearContent);
+    if (automationTrustUiView == AutomationTrustUiView::List) {
+        const std::uint8_t first =
+            automationTrustFirstVisible(automationTrustUiSelection);
+        const std::uint8_t count = automationTrustItemCount();
+        const std::uint8_t end = count < first + kVisibleHomeRows
+            ? count : static_cast<std::uint8_t>(first + kVisibleHomeRows);
+        for (std::uint8_t index = first; index < end; ++index) {
+            renderAutomationTrustRow(index, first);
+        }
+        return;
+    }
+
+    char keyId[40] = {};
+    formatAutomationTrustKeyId(automationTrustPendingKey, keyId,
+                               sizeof(keyId));
+    if (automationTrustUiView == AutomationTrustUiView::ImportReview ||
+        automationTrustUiView == AutomationTrustUiView::RevokeReview) {
+        renderMetric(
+            0, tr(automationTrustUiView ==
+                          AutomationTrustUiView::ImportReview
+                      ? UiTextId::AutomationTrustImportReview
+                      : UiTextId::AutomationTrustRevokeReview),
+            Tone::Warning);
+        renderMetric(2, automationTrustPendingKey.label.data(), Tone::Neutral);
+        renderMetric(3, keyId, Tone::Muted);
+        renderMetric(4, tr(UiTextId::AutomationTrustPublicOnly),
+                     Tone::Positive);
+        renderMenuRow(Components::homeRow(3),
+                      tr(UiTextId::AutomationTrustConfirmAction),
+                      tr(UiTextId::AutomationTrustConfirmWindow), true, true,
+                      Tone::Warning);
+        return;
+    }
+
+    renderMetric(0, tr(automationTrustResultText()),
+                 automationTrustResultTone());
+    if (automationTrustPendingKey.label[0] != '\0') {
+        renderMetric(2, automationTrustPendingKey.label.data(), Tone::Neutral);
+        renderMetric(3, keyId, Tone::Muted);
+    }
+    renderMetric(7, tr(UiTextId::AutomationTrustNoExecution),
+                 Tone::Positive);
+}
+
 std::uint8_t deviceFirstVisible(std::uint8_t selection) {
     return selection < kVisibleHomeRows
                ? 0U
@@ -13261,7 +13614,8 @@ UiTextId deviceLabel(std::uint8_t index) {
         case 3: return UiTextId::DeviceSerialConsole;
         case 4: return UiTextId::DeviceAbout;
         case 5: return UiTextId::AppDiagnostics;
-        default: return UiTextId::AppSelfTest;
+        case 6: return UiTextId::AppSelfTest;
+        default: return UiTextId::AutomationTrustDeviceItem;
     }
 }
 
@@ -13292,7 +13646,8 @@ UiTextId deviceNote(std::uint8_t index) {
                 : UiTextId::DeviceSerialConsoleReady;
         case 4: return UiTextId::DeviceAboutNote;
         case 5: return UiTextId::DeviceDiagnosticsNote;
-        default: return UiTextId::NoteSelfTest;
+        case 6: return UiTextId::NoteSelfTest;
+        default: return UiTextId::AutomationTrustDeviceNote;
     }
 }
 
@@ -19977,6 +20332,10 @@ struct UiRenderSnapshot final {
     bool automationCatalogPending = false;
     std::uint32_t automationInspectorRevision = 0U;
     bool automationInspectionPending = false;
+    std::uint8_t automationTrustView = 0U;
+    std::uint8_t automationTrustSelection = 0U;
+    std::uint8_t automationTrustCount = 0U;
+    std::uint32_t automationTrustGeneration = 0U;
     std::uint8_t targetsView = 0;
     std::size_t targetsSelection = 0;
     std::size_t targetsSize = 0;
@@ -20055,6 +20414,10 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         automationCatalogRefreshPending,
         automationInspectorController.model().revision,
         automationInspectionPending,
+        static_cast<std::uint8_t>(automationTrustUiView),
+        automationTrustUiSelection,
+        automationTrustStore.snapshot().count,
+        automationTrustStore.snapshot().generation,
         targetsProductRuntime == nullptr
             ? static_cast<std::uint8_t>(0)
             : static_cast<std::uint8_t>(
@@ -20130,6 +20493,34 @@ bool renderSelectionDelta() {
         renderAutomationPackageRow(static_cast<std::uint8_t>(
             renderedUi.automationSelection));
         renderAutomationPackageRow(static_cast<std::uint8_t>(current));
+        return true;
+    }
+
+    if (uiController.page() == kAutomationTrustPage &&
+        automationTrustUiView == AutomationTrustUiView::List &&
+        renderedUi.automationTrustView ==
+            static_cast<std::uint8_t>(AutomationTrustUiView::List)) {
+        const AutomationTrustSnapshot& snapshot =
+            automationTrustStore.snapshot();
+        if (renderedUi.automationTrustCount != snapshot.count ||
+            renderedUi.automationTrustGeneration != snapshot.generation) {
+            return false;
+        }
+        if (renderedUi.automationTrustSelection ==
+            automationTrustUiSelection) {
+            return false;
+        }
+        const std::uint8_t oldFirst = automationTrustFirstVisible(
+            renderedUi.automationTrustSelection);
+        const std::uint8_t currentFirst = automationTrustFirstVisible(
+            automationTrustUiSelection);
+        if (oldFirst != currentFirst) {
+            renderAutomationTrustPage(false);
+            return true;
+        }
+        renderAutomationTrustRow(renderedUi.automationTrustSelection,
+                                 currentFirst);
+        renderAutomationTrustRow(automationTrustUiSelection, currentFirst);
         return true;
     }
 
@@ -20772,6 +21163,8 @@ void renderInteractiveScreen(bool clearContent) {
             renderAutomationLibraryPage(clearContent);
         } else if (uiController.page() == kAutomationInspectorPage) {
             renderAutomationInspectorPage(clearContent);
+        } else if (uiController.page() == kAutomationTrustPage) {
+            renderAutomationTrustPage(clearContent);
         } else if (uiController.page() == kDevicePage) {
             renderDevicePage(clearContent);
         } else if (uiController.page() == kPowerPage) {
@@ -26146,6 +26539,10 @@ bool selectionCanRepaintInPlace(UiAction action) {
         return action == UiAction::Up || action == UiAction::Down ||
             action == UiAction::Select || action == UiAction::Right;
     }
+    if (uiController.page() == kAutomationTrustPage &&
+        automationTrustUiView == AutomationTrustUiView::List) {
+        return action == UiAction::Up || action == UiAction::Down;
+    }
     if (action != UiAction::Up && action != UiAction::Down) return false;
     if (uiController.isRoot()) return true;
     if (uiController.page() == 8U) return true;
@@ -27621,6 +28018,96 @@ bool applyUiAction(UiAction action, bool render = true) {
         }
         }
     }
+    if (!wasRoot && uiController.page() == kAutomationTrustPage) {
+        bool handled = true;
+        bool changed = false;
+        bool controllerRecorded = true;
+        if (automationTrustUiView == AutomationTrustUiView::List) {
+            const std::uint8_t count = automationTrustItemCount();
+            if (action == UiAction::Up && automationTrustUiSelection > 0U) {
+                --automationTrustUiSelection;
+                changed = true;
+            } else if (action == UiAction::Down &&
+                       automationTrustUiSelection + 1U < count) {
+                ++automationTrustUiSelection;
+                changed = true;
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                if (!automationTrustStore.ready()) {
+                    automationTrustUiResult =
+                        AutomationTrustUiResult::StoreUnavailable;
+                    automationTrustUiView = AutomationTrustUiView::Result;
+                    lastRuntimeEvent = "automation_trust_store_unavailable";
+                } else if (automationTrustUiSelection <
+                           automationTrustStore.snapshot().count) {
+                    clearAutomationTrustTransientState();
+                    automationTrustPendingKey = automationTrustStore
+                        .snapshot().keys[automationTrustUiSelection];
+                    automationTrustConfirmationOpenedUs =
+                        static_cast<std::uint64_t>(esp_timer_get_time());
+                    if (automationTrustConfirmationOpenedUs == 0U) {
+                        automationTrustConfirmationOpenedUs = 1U;
+                    }
+                    automationTrustLastMutationWasEnroll = false;
+                    automationTrustUiView =
+                        AutomationTrustUiView::RevokeReview;
+                    lastRuntimeEvent = "automation_trust_revoke_review";
+                } else {
+                    readAutomationTrustBundleForReview();
+                    lastRuntimeEvent = automationTrustUiView ==
+                            AutomationTrustUiView::ImportReview
+                        ? "automation_trust_import_review"
+                        : "automation_trust_import_rejected";
+                }
+                changed = true;
+            } else if (action == UiAction::Back ||
+                       action == UiAction::Left) {
+                resetAutomationTrustUi();
+                changed = uiController.apply(
+                    action, static_cast<std::uint8_t>(appCatalog.size()),
+                    true, kAutomationTrustPage);
+                controllerRecorded = false;
+                lastRuntimeEvent = changed
+                    ? "automation_trust_device_menu"
+                    : "automation_trust_back_rejected";
+            } else {
+                handled = false;
+            }
+        } else if (automationTrustUiView ==
+                       AutomationTrustUiView::ImportReview ||
+                   automationTrustUiView ==
+                       AutomationTrustUiView::RevokeReview) {
+            if (action == UiAction::Back || action == UiAction::Left) {
+                resetAutomationTrustUi();
+                changed = true;
+                lastRuntimeEvent = "automation_trust_review_cancelled";
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                const bool enroll = automationTrustUiView ==
+                    AutomationTrustUiView::ImportReview;
+                applyAutomationTrustMutation(enroll);
+                changed = true;
+                lastRuntimeEvent = automationTrustUiResult ==
+                        AutomationTrustUiResult::Applied
+                    ? (enroll ? "automation_trust_enrolled"
+                              : "automation_trust_revoked")
+                    : "automation_trust_mutation_rejected";
+            } else {
+                handled = false;
+            }
+        } else if (action == UiAction::Back || action == UiAction::Left ||
+                   action == UiAction::Select || action == UiAction::Right) {
+            resetAutomationTrustUi();
+            changed = true;
+            lastRuntimeEvent = "automation_trust_list";
+        } else {
+            handled = false;
+        }
+        if (handled) {
+            if (controllerRecorded) uiController.recordHandledAction(action);
+            return finish(changed);
+        }
+    }
     if (!wasRoot && uiController.page() == kSerialConsolePage) {
         bool handled = true;
         bool changed = false;
@@ -27830,9 +28317,11 @@ bool applyUiAction(UiAction action, bool render = true) {
             handled = true;
             constexpr std::uint8_t pages[kDeviceItemCount] = {
                 kPowerPage, 5, kDeviceLockPage, kSerialConsolePage,
-                kAboutPage, 1, 6,
+                kAboutPage, 1, 6, kAutomationTrustPage,
             };
-            const bool settingsAllowed = deviceSelection != 1U ||
+            const bool sensitiveItem = deviceSelection == 1U ||
+                deviceSelection == 7U;
+            const bool settingsAllowed = !sensitiveItem ||
                 deviceLockOperationAllowed(
                     leshy1::services::security::
                         DeviceLockOperation::SensitiveSettings);
@@ -27849,6 +28338,9 @@ bool applyUiAction(UiAction action, bool render = true) {
             }
             if (changed && deviceSelection == 3) {
                 enterSerialConsoleUi();
+            }
+            if (changed && deviceSelection == 7) {
+                resetAutomationTrustUi();
             }
             if (settingsAllowed) {
                 lastRuntimeEvent = changed ? "device_item_opened"
@@ -28514,6 +29006,25 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                 TouchTargetLayout::HomeRows, point, first, kDeviceItemCount),
             deviceSelection,
         };
+    }
+    if (uiController.page() == kAutomationTrustPage &&
+        automationTrustUiView == AutomationTrustUiView::List) {
+        const std::uint8_t first = automationTrustFirstVisible(
+            automationTrustUiSelection);
+        return {
+            leshy1::ui::hitTouchTarget(
+                TouchTargetLayout::HomeRows, point, first,
+                automationTrustItemCount()),
+            automationTrustUiSelection,
+        };
+    }
+    if (uiController.page() == kAutomationTrustPage &&
+        (automationTrustUiView == AutomationTrustUiView::ImportReview ||
+         automationTrustUiView == AutomationTrustUiView::RevokeReview)) {
+        return leshy1::ui::visual::containsPoint(
+                   Components::homeRow(3), point.x, point.y)
+            ? TouchDispatchTarget{{true, 3}, 3}
+            : TouchDispatchTarget{};
     }
     if (uiController.page() == 6 &&
         selfTestController.view() == SelfTestView::ModeMenu) {
