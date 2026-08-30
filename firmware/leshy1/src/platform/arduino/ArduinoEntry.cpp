@@ -5263,6 +5263,21 @@ bool startProductSurvey() {
     if (productSurveyRuntime.selectedSourceMask == 0) {
         productSurveyRuntime.status = "source_plan_empty";
         productSurveyRuntime.timelineStatus = "invalid_mask";
+        productSurveyRuntime.cleanupComplete = true;
+        lastRuntimeEvent = productSurveyRuntime.status;
+        return false;
+    }
+    const bool bleSelected =
+        (productSurveyRuntime.selectedSourceMask &
+         leshy1::services::survey::sourceMask(RadioKind::Ble)) != 0;
+    // NimBLE needs a contiguous internal-RAM reserve even when it starts only
+    // after a complete Wi-Fi teardown. Reserve it before the worker owns the
+    // session so mixed Field Visits have the same fail-closed admission as the
+    // BLE-only product and can never reach NimBLE's allocation assertion.
+    if (bleSelected && !prepareBleProductSurveyMemory()) {
+        productSurveyRuntime.status = "ble_memory_unavailable";
+        productSurveyRuntime.timelineStatus = "memory_unavailable";
+        productSurveyRuntime.cleanupComplete = true;
         lastRuntimeEvent = productSurveyRuntime.status;
         return false;
     }
@@ -6775,7 +6790,11 @@ void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
         appRuntime.stop();
     }
     setProductSurveyControl(ProductSurveyWorkerControl::Idle);
-    if (returnFromBle && !restoreBleProductSurveyMemory()) {
+    // Mixed Field Visits compact the observation queue too. Restore the
+    // ordinary Survey capacity only after every radio/store owner is terminal,
+    // independently of which product page will remain visible.
+    if (bleProductSurveyMemoryCompact &&
+        !restoreBleProductSurveyMemory()) {
         productSurveyRuntime.status = "ble_memory_restore_failed";
         lastRuntimeEvent = productSurveyRuntime.status;
     }
@@ -7013,6 +7032,12 @@ void serviceProductSurveyWorker() {
                     completeFieldSurveyVisit(surveySession);
                 }
                 setProductSurveyControl(ProductSurveyWorkerControl::Idle);
+                if (bleProductSurveyMemoryCompact &&
+                    !restoreBleProductSurveyMemory()) {
+                    productSurveyRuntime.status =
+                        "ble_memory_restore_failed";
+                    lastRuntimeEvent = productSurveyRuntime.status;
+                }
                 render = true;
             }
         } else if (event.kind == ProductSurveyWorkerEventKind::Cancelled) {

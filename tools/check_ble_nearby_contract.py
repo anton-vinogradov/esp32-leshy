@@ -54,6 +54,38 @@ def main() -> int:
         ROOT / "firmware/leshy1/src/ui/UiStrings.def"
     ).read_text(encoding="utf-8")
 
+    logical_start_begin = entry.find("bool startProductSurvey()")
+    logical_start_end = entry.find(
+        "bool reopenProductSurveyBackendForCommit()", logical_start_begin
+    )
+    logical_start = entry[logical_start_begin:logical_start_end]
+    for token in (
+        "const bool bleSelected =",
+        "sourceMask(RadioKind::Ble)",
+        "bleSelected && !prepareBleProductSurveyMemory()",
+        'productSurveyRuntime.status = "ble_memory_unavailable";',
+        'productSurveyRuntime.timelineStatus = "memory_unavailable";',
+    ):
+        if token not in logical_start:
+            raise SystemExit(
+                "mixed Wi-Fi/BLE Survey lacks pre-worker NimBLE memory "
+                f"admission: {token}"
+            )
+
+    terminal_begin = entry.find("void releaseProductSurveyAfterTerminal(")
+    terminal_end = entry.find(
+        "void recoverProductCatalogForFingerprint(", terminal_begin
+    )
+    terminal = entry[terminal_begin:terminal_end]
+    if (
+        terminal.count("bleProductSurveyMemoryCompact &&") < 2
+        or terminal.count("!restoreBleProductSurveyMemory()") < 2
+    ):
+        raise SystemExit(
+            "BLE Survey memory is not restored after both failed/cancelled "
+            "and committed terminal paths"
+        )
+
     required_entry = (
         "BleProductView::Devices",
         "BleProductView::DeviceDetail",
