@@ -318,6 +318,7 @@ def main() -> int:
         sessions.append(session)
         product_after_reset = read_only_query(
             device, b"device-lock.state", LOCK_SCHEMA, "state")
+        reports["product_after_reset"] = product_after_reset
         failures.extend(state_failures(
             product_after_reset, "product_after_reset", status="unconfigured",
             failure="none", failed_attempts=0, generation=0,
@@ -379,6 +380,14 @@ def main() -> int:
         device, session = reopen_after_reset(
             args.port, run_id, app_identity)
         sessions.append(session)
+        product_after_retry_reset = read_only_query(
+            device, b"device-lock.state", LOCK_SCHEMA, "state")
+        reports["product_after_retry_reset"] = product_after_retry_reset
+        failures.extend(state_failures(
+            product_after_retry_reset, "product_after_retry_reset",
+            status="unconfigured", failure="none", failed_attempts=0,
+            generation=0, protected=False, fixture_active=False,
+            fixture_cleanup_required=True))
         fixture_resume_retry = fixture_command(device, "resume")
         reports["fixture_resume_retry"] = fixture_resume_retry
         failures.extend(fixture_failures(
