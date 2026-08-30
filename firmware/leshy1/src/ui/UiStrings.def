@@ -195,7 +195,7 @@ LESHY_UI_TEXT(PowerVoltageUnavailable, Body, 212, "BATTERY     UNAVAILABLE", u8"
 LESHY_UI_TEXT(PowerWriteProtection, Body, 212, "WRITES      ATOMIC + GATE", u8"ЗАПИСЬ      АТОМАРНО + БЛОК")
 LESHY_UI_TEXT(PowerSleepAction, Body, 212, "OK: SLEEP 1 SECOND", u8"OK: СОН НА 1 СЕКУНДУ")
 LESHY_UI_TEXT(PowerTruthNote, Meta, 212, "GPIO2 ADC OFF: BUZZER SAFE", u8"GPIO2 ADC ВЫКЛ: БАЗЗЕР ТИХИЙ")
-LESHY_UI_TEXT(DeviceLockTitle, Body, 206, "DEVICE LOCK", u8"БЛОКИРОВКА")
+LESHY_UI_TEXT(DeviceLockTitle, Body, 96, "LOCK", u8"ЗАЩИТА")
 LESHY_UI_TEXT(DeviceLockUnconfigured, Body, 212, "PIN NOT SET", u8"PIN НЕ ЗАДАН")
 LESHY_UI_TEXT(DeviceLockLocked, Body, 212, "DEVICE LOCKED", u8"УСТРОЙСТВО ЗАКРЫТО")
 LESHY_UI_TEXT(DeviceLockRetry, Body, 212, "RETRY DELAY", u8"ПОВТОР ПОЗЖЕ")
