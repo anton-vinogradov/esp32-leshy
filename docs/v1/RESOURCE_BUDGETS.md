@@ -1529,6 +1529,18 @@ writes, ending Home/none/lease 0. The dev.282 synchronous path tripped the 5 s t
 watchdog fail closed; dev.283 checkpoints each bounded phase and 256-byte chunk
 without increasing the watchdog deadline.
 
+CAP-053 Action-boundary foundation `RB-M210`: exact host/build
+`1.0.0-dev.284` at source `82453d60c17647d894c8f988c35d9cb412883669`
+uses 231,488 B static RAM and a 3,512,464 B app image, leaving 681,840 B in the
+4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`967fb68f870711f06ffe63b504430969e6ec206fc4bd53722c8cf940f94b7f26`/
+`11e12acc3c941096382f4ffbc9597a4fb0e3676e666deffa86bb35f3ed6f4463`/
+`893056fff6fd0c5136c0346fe75279e67cf65038f98201cf43efdd746279789c`/
+`30c1751b73b7a0078af267c273a15f5598da75814adcb1cbb3187ea98a94ac02`.
+The typed dispatcher, strict CLI and two ownership bits add 144 B app and zero
+static RAM beyond dev.283. No UART buffer or product screen is funded yet, and no
+physical serial, radio, device or host-network claim is made by this bound.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

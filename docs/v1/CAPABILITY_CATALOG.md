@@ -194,7 +194,7 @@ receiver, calibrated range, historical Target tracking or proof of packet traffi
 | CAP-050 | Offline Field Survey joins Wi-Fi AP/station and BLE observations with optional GPS track, deduplication, revisit comparison, and WiGLE-compatible local export | P1, GPS conditional | J-01, J-07, PR-022 | S7 |
 | CAP-051 | BLE Inspector preserves compatible raw packets and offers an explicit permissioned connected-GATT mode with deterministic disconnect and provenance | P1 | J-02, J-07, PR-023 | S7 |
 | CAP-052 | [Device Lock](DEVICE_LOCK.md) provides local PIN setup, bounded retry/recovery, and protects secrets/evidence without blocking safe cleanup or recovery | P0 before sensitive data ships | J-05, J-08, PR-017, PR-024 | S7 |
-| CAP-053 | Device → Serial Console provides a bounded UART bridge and shared Actions CLI under explicit configuration, permissions, leases, and cleanup | P1 | J-05, J-08, PR-012, PR-025 | S7 |
+| CAP-053 | [Device → Serial Console](SERIAL_CONSOLE.md) provides a bounded UART bridge and shared Actions CLI under explicit configuration, permissions, leases, and cleanup | P1 | J-05, J-08, PR-012, PR-025 | S7 |
 | CAP-054 | Automation/HID runs signed permissioned scripts with preview, ceilings, finite runtime and scoped USB/BLE HID; defensive BadUSB inspection is passive by default | P1 | J-08, PR-013, PR-026 | S7 |
 | CAP-055 | Authorized wireless Lab contains only named, individually accepted Wi-Fi/BLE/nRF fixture recipes with bounded region/power/channel/time and physical stop | P0 for any shipped wireless TX | J-06, J-08, PR-013, PR-027 | S7 |
 

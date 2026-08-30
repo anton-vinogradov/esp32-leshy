@@ -1515,6 +1515,18 @@ queue/append drops и cold-reopen-ит предыдущую generation с zero p
 watchdog 5 s; dev.283 checkpoint-ит каждую bounded phase и chunk 256 bytes без
 увеличения watchdog deadline.
 
+Action-boundary foundation CAP-053 `RB-M210`: exact host/build
+`1.0.0-dev.284` на source `82453d60c17647d894c8f988c35d9cb412883669`
+использует 231 488 B static RAM и app image 3 512 464 B, оставляя 681 840 B в
+OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`967fb68f870711f06ffe63b504430969e6ec206fc4bd53722c8cf940f94b7f26`/
+`11e12acc3c941096382f4ffbc9597a4fb0e3676e666deffa86bb35f3ed6f4463`/
+`893056fff6fd0c5136c0346fe75279e67cf65038f98201cf43efdd746279789c`/
+`30c1751b73b7a0078af267c273a15f5598da75814adcb1cbb3187ea98a94ac02`.
+Typed dispatcher, strict CLI и два ownership bits добавляют 144 B app и zero
+static RAM к dev.283. UART buffer и product screen ещё не финансируются; этот
+bound не заявляет physical serial, radio, device или host-network acceptance.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты
