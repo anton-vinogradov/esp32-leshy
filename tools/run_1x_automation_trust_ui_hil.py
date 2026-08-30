@@ -87,7 +87,7 @@ def enter_trust_page(device: PassiveSerial,
     current = action(device, "right")
     trace.append(current)
     require(current, "open trust", page="automation_trust",
-            device_selection=7, runtime_owner="device", lease_mask=0)
+            device_selection=7, runtime_owner="device", lease_mask=1)
     return current
 
 
@@ -129,7 +129,7 @@ def verify_passive(state: dict[str, Any], label: str) -> None:
         all_keys_p256_and_id_bound=True, public_keys_only=True,
         private_key_stored=False, execution_connected=False,
         action_invocations=0, hid_reports=0, rf_transmit_attempts=0,
-        runtime_owner="device", lease_mask=0)
+        runtime_owner="device", lease_mask=1)
 
 
 def main() -> int:
