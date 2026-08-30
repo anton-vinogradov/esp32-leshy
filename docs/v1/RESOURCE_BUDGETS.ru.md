@@ -1611,6 +1611,24 @@ final product state — Home/none/lease 0 с persistent generation 8. Этот f
 не заменяет обязательный periodic full checkpoint, stage-end/RC matrix или часовую
 release qualification.
 
+Bound periodic full checkpoint и protected read-only HIL `RB-M216`: exact physical
+`1.0.0-dev.302` на firmware source
+`48a27c74cfb3dca1ff1c2ed612bb4a3019133451` использует 232 496 B static RAM,
+3 533 980 B linked flash и app image 3 534 480 B, оставляя 659 824 B в OTA slot
+4 MiB. SHA-256 app/factory/ELF/map —
+`bf20b0d6f163e5bb27d9fb948c72a0a5c7635bc5c8039cdf5878e5ca2be7cbc0`/
+`1b570ea9fcfc43b563aa0dc9ab3dec34a4aa576dbdf6b227fc2fcb326a115bf9`/
+`f10daa7434e147b0dedbac03d8724de5d68c2596ac59ee1ceb096a98a3928559`/
+`dc6b90c1749fb7f45f9aa76d17d3fe3819a77fa290e13be11ce6103ae1871262`.
+Относительно dev.301 это zero static RAM, +724 B linked flash и +720 B padded app,
+с уменьшением OTA headroom на 720 B. Delta финансирует RAM-only protected-read HIL
+boundary и stripping scope; он не выделяет persistent credential, data key, product
+file или companion buffer. Full checkpoint стабилизируется на 146 308 B total/
+71 744 B free heap после одного retained cold lazy initialization 260 B и точно
+возвращается к этому warm baseline после matrices Home/RF, Targets и companion.
+Это regression budget, а не evidence release endurance, physical LED color или
+instrumented RF.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

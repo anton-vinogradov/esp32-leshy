@@ -1,0 +1,235 @@
+{
+  "schema": "leshy.hil_cadence_full.summary.v2",
+  "status": "pass_full_checkpoint",
+  "evidence_ids": [
+    "E-BUILD-205",
+    "E-AUTO-180",
+    "E-HIL-214",
+    "E-CADENCE-003",
+    "RB-M216"
+  ],
+  "firmware_source_commit": "48a27c74cfb3dca1ff1c2ed612bb4a3019133451",
+  "harness_commits": [
+    "48a27c74cfb3dca1ff1c2ed612bb4a3019133451",
+    "a7c9aca3bad9e278e857271df5f331bf72ad9f26"
+  ],
+  "candidate": {
+    "version": "1.0.0-dev.302",
+    "firmware_sha256": "bf20b0d6f163e5bb27d9fb948c72a0a5c7635bc5c8039cdf5878e5ca2be7cbc0",
+    "factory_sha256": "1b570ea9fcfc43b563aa0dc9ab3dec34a4aa576dbdf6b227fc2fcb326a115bf9",
+    "app_elf_sha256": "f10daa7434e147b0dedbac03d8724de5d68c2596ac59ee1ceb096a98a3928559",
+    "map_sha256": "dc6b90c1749fb7f45f9aa76d17d3fe3819a77fa290e13be11ce6103ae1871262",
+    "partitions_sha256": "325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3",
+    "firmware_bytes": 3534480,
+    "factory_bytes": 3600016,
+    "static_ram_bytes": 232496,
+    "linked_flash_bytes": 3533980,
+    "ota_slot_free_bytes": 659824
+  },
+  "board": {
+    "id": "board-01",
+    "port": "/dev/cu.usbmodem2101",
+    "mac": "1c:db:d4:87:90:d4",
+    "exact_cid": "FE343253440000002000000055019CB7",
+    "candidate_flash_count": 1,
+    "additional_full_checkpoint_flashes": 0,
+    "serial_port_discovery_calls": 0,
+    "cardputer_ports_opened": 0,
+    "active_mac_wifi_touched": false
+  },
+  "home_matrix": {
+    "raw_run_sha256": "9d40570591e6f31eed07a9897da60911eac7ac6f8cccb5503fbc62907d85f1ba",
+    "independent_checker": "pass",
+    "home_items": [
+      "wifi",
+      "ble",
+      "spectrum24",
+      "subghz",
+      "capture",
+      "targets",
+      "library",
+      "lab",
+      "device"
+    ],
+    "automatic_screens": 21,
+    "manual_button_presses": 0,
+    "nrf24_waterfall": {
+      "history_rows": 224,
+      "measurements_consumed": 234,
+      "source_sweeps": 234,
+      "measurements_skipped": 0,
+      "graph_changed_pixels": 2230,
+      "chrome_changed_pixels": 0,
+      "rx_only": true
+    },
+    "cc1101_waterfall": {
+      "history_rows": 224,
+      "measurements_consumed": 224,
+      "source_sweeps": 224,
+      "measurements_skipped": 0,
+      "graph_changed_pixels": 228,
+      "chrome_changed_pixels": 0,
+      "rx_only": true
+    },
+    "tx_or_storage_side_effects": 0
+  },
+  "targets_matrix": {
+    "raw_run_sha256": "a91e66200a9dab27981bfb7ffd7aa5b3fcdea7a96dff2693222c0050df9b1932",
+    "exact_flash_reused": true,
+    "survey_pair": [7, 8],
+    "new_survey_cycles": 0,
+    "catalog_count": 16,
+    "visible_target_count": 16,
+    "comparison_count": 16,
+    "compare_counts": {
+      "added": 1,
+      "changed": 1,
+      "removed": 1,
+      "unchanged": 13
+    },
+    "evidence_views_opened": 16,
+    "automatic_screens": 4,
+    "released_heap_bytes": 71744,
+    "cleanup_complete": true,
+    "radio_tx_commands": 0,
+    "storage_writes": 0,
+    "device_lock_fixture": {
+      "ram_only_admission": true,
+      "protected_ui_only": true,
+      "credential_written": false,
+      "data_key_replaced": false,
+      "product_namespace_written_or_erased": false,
+      "cleanup_proven": true,
+      "hil_ended": true
+    }
+  },
+  "companion_matrix": {
+    "raw_run_sha256": "1a38f0d2b7ba987004af84c78e836ca02894e3342f26d532ad48e0b9d167af88",
+    "exact_flash_reused": true,
+    "transport": "usb_serial_ndjson",
+    "max_frame_bytes": 512,
+    "sessions": 2,
+    "session_generations": [7, 8],
+    "catalog_count": 16,
+    "comparison_count": 16,
+    "compare_counts": {
+      "added": 1,
+      "changed": 1,
+      "removed": 1,
+      "unchanged": 13
+    },
+    "read_scopes": [
+      "session.read",
+      "target.read",
+      "target.compare"
+    ],
+    "negative_contracts": {
+      "home": "scope_unavailable",
+      "oversized_513": "frame_too_large",
+      "truncated": "malformed_json",
+      "unknown_field": "unknown_field",
+      "invalid_offset": "offset_out_of_range",
+      "mutation": "scope_denied",
+      "after_exit": "not_connected"
+    },
+    "offline_snapshot": {
+      "snapshot_id": "93997691f1d95149cce0c3e11cb611f6b325f334d4fea5b8a385ef7576e6ab3d",
+      "sha256": "7b471c94f30c77f953c8aa85caf7e3880b8b88e997f3fb4784a72dc0df9a8aea",
+      "canonical_round_trip": true
+    },
+    "heap_free_before": 71744,
+    "heap_free_after": 71744,
+    "radio_tx_commands": 0,
+    "storage_write_commands": 0,
+    "host_network_tools_invoked": false,
+    "active_mac_wifi_touched": false,
+    "device_lock_fixture": {
+      "ram_only_admission": true,
+      "protected_ui_allowed": true,
+      "companion_read_only": true,
+      "mutation_scope_allowed": false,
+      "credential_written": false,
+      "data_key_replaced": false,
+      "product_namespace_written_or_erased": false,
+      "cleanup_proven": true,
+      "hil_ended": true
+    }
+  },
+  "continuity": {
+    "generation_before": 8,
+    "generation_after": 8,
+    "observations_before": 54,
+    "observations_after": 54,
+    "physical_write_calls": 0,
+    "heap_total_before": 146308,
+    "heap_total_after": 146308,
+    "heap_free_before": 71744,
+    "heap_free_after": 71744,
+    "input_read_errors": 0,
+    "input_queue_drops": 0
+  },
+  "cold_runtime_warmup": {
+    "raw_run_sha256": "d492d54ec147c13acf5808c91c8124ce26001bd11aabcdb188ee1501b29c0496",
+    "result": "fail_closed_then_stable",
+    "cold_baseline_heap_free": 72004,
+    "post_matrix_heap_free": 71744,
+    "one_time_lazy_init_bytes": 260,
+    "second_matrix_baseline_heap_free": 71744,
+    "second_matrix_final_heap_free": 71744,
+    "resources_released": true,
+    "storage_continuity_preserved": true
+  },
+  "final": {
+    "page": "home",
+    "runtime_owner": "none",
+    "lease_mask": 0,
+    "antenna_led_brightness_raw": 2,
+    "antenna_led_receive_mask": 0,
+    "antenna_led_fault_mask": 0,
+    "buzzer_inactive": true,
+    "nrf_ce_inactive": true,
+    "software_quiesce_complete": true
+  },
+  "fail_closed_lineage": [
+    {
+      "raw_run_sha256": "c84d6daa4cd1a60bf79cae3aaa9bad393ed2ac0759598094f426a75999ba5913",
+      "reason": "dev.301 Home sandbox denied serial access before board interaction"
+    },
+    {
+      "raw_run_sha256": "14f77dd6e68137d3f7ec54a26d32c05f42b8564ff0f3db28b0471d06e306e2ca",
+      "reason": "dev.301 Targets runner lacked protected UI admission"
+    },
+    {
+      "raw_run_sha256": "c0963a804776959369522ab22e8fe8b1093765af051d14360ea15199ce4075d3",
+      "reason": "dev.301 Targets runner used a stale boot-recovery generation oracle"
+    },
+    {
+      "raw_run_sha256": "d0f4fa0af19d618f2da6b4d00985f5680cc7290298904696b8d0be046d1af64c",
+      "reason": "dev.301 companion remained locked by UI-only admission"
+    },
+    {
+      "raw_run_sha256": "79ce57854dcff73290e8b36f413a850c77dd3e19acf37db733195d85fb7c95c4",
+      "reason": "dev.302 first companion delta expected weaker dependency denial instead of scope denial"
+    },
+    {
+      "raw_run_sha256": "d492d54ec147c13acf5808c91c8124ce26001bd11aabcdb188ee1501b29c0496",
+      "reason": "dev.302 cold Home run exposed and retained a one-time 260-byte lazy initialization"
+    }
+  ],
+  "cadence": {
+    "trigger": "accepted_delta_interval",
+    "accepted_deltas_before_checkpoint": 15,
+    "full_after_accepted_deltas": 15,
+    "previous_anchor": "tests/hil/evidence/board-01-cadence-full-1.0.0-dev.252.json",
+    "next_anchor": "tests/hil/evidence/board-01-cadence-full-1.0.0-dev.302.json",
+    "accepted_deltas_after_checkpoint": 0
+  },
+  "limitations": {
+    "release_promotion": false,
+    "s5_rf_positive_gate": false,
+    "instrumented_rf_claim": false,
+    "physical_led_color_photo_claim": false,
+    "cold_first_matrix_heap_invariance": false,
+    "reason": "This periodic checkpoint is a regression reset, not a release or instrumented RF proof; the retained cold run shows a bounded one-time 260-byte lazy initialization before the stable warm invariant."
+  }
+}

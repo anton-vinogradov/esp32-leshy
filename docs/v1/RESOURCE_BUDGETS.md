@@ -1624,6 +1624,23 @@ final product state is Home/none/lease 0 with persistent generation 8. This focu
 bound does not replace the due periodic full checkpoint, stage-end/RC matrix or the
 one-hour release qualification.
 
+Periodic full checkpoint and protected read-only HIL bound `RB-M216`: exact physical
+`1.0.0-dev.302` at firmware source
+`48a27c74cfb3dca1ff1c2ed612bb4a3019133451` uses 232,496 B static RAM,
+3,533,980 B linked flash and a 3,534,480 B app image, leaving 659,824 B in the
+4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`bf20b0d6f163e5bb27d9fb948c72a0a5c7635bc5c8039cdf5878e5ca2be7cbc0`/
+`1b570ea9fcfc43b563aa0dc9ab3dec34a4aa576dbdf6b227fc2fcb326a115bf9`/
+`f10daa7434e147b0dedbac03d8724de5d68c2596ac59ee1ceb096a98a3928559`/
+`dc6b90c1749fb7f45f9aa76d17d3fe3819a77fa290e13be11ce6103ae1871262`.
+Against dev.301 this is zero static RAM, +724 B linked flash and +720 B padded app,
+with 720 B less OTA headroom. The delta funds a RAM-only protected-read HIL boundary
+and scope stripping; it allocates no persistent credential, data key, product file or
+companion buffer. The full checkpoint stabilizes at 146,308 B total/71,744 B free
+heap after one retained 260 B cold lazy initialization and returns exactly to that
+warm baseline after Home/RF, Targets and companion matrices. This is a regression
+budget, not release endurance, physical LED-color or instrumented RF evidence.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

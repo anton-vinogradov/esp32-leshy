@@ -3,7 +3,7 @@
   "revision": 1,
   "default_scope": "delta",
   "full_after_accepted_deltas": 15,
-  "anchor_evidence": "tests/hil/evidence/board-01-cadence-full-1.0.0-dev.252.json",
+  "anchor_evidence": "tests/hil/evidence/board-01-cadence-full-1.0.0-dev.302.json",
   "full_triggers": [
     "stage_end",
     "release_candidate",
