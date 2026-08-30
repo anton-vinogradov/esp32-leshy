@@ -96,6 +96,7 @@
 #include "platform/arduino/ArduinoCompanionWebService.h"
 #include "platform/arduino/ArduinoDeviceLockSecurity.h"
 #include "platform/arduino/ArduinoLittleFsSessionStoreIo.h"
+#include "platform/arduino/ArduinoSerialConsoleEndpoint.h"
 #include "platform/arduino/BoardSdFilesystem.h"
 #include "platform/arduino/BoardStorageAdapter.h"
 #include "platform/arduino/BoardTouchInput.h"
@@ -106,6 +107,8 @@
 #include "platform/arduino/DisposableOtaLittleFs.h"
 #include "platform/arduino/RamSessionStoreIo.h"
 #include "services/companion/CompanionProtocol.h"
+#include "services/actions/ActionDispatcher.h"
+#include "services/actions/ActionsCli.h"
 #include "services/companion/CompanionConnectivity.h"
 #include "services/companion/CompanionWebAdapter.h"
 #include "services/companion/CompanionMutationAdapter.h"
@@ -117,6 +120,7 @@
 #include "services/ble/BleInspectorExport.h"
 #include "services/power/PowerSafetyPolicy.h"
 #include "services/security/DeviceLock.h"
+#include "services/serial/SerialConsoleContract.h"
 #include "services/targets/CorrelationService.h"
 #include "services/targets/SessionTargetAdmission.h"
 #include "services/targets/SurveySessionTargetEvidenceLookup.h"
@@ -505,6 +509,15 @@ leshy1::services::security::DeviceLock deviceLock(deviceLockStore,
                                                    deviceLockCrypto);
 bool deviceLockRestoreSucceeded = false;
 ResourceBroker resourceBroker;
+leshy1::platform::arduino::ArduinoSerialConsoleEndpoint
+    serialConsoleEndpoint(Serial1);
+leshy1::services::actions::ActionDispatcher
+    serialConsoleActionDispatcher(resourceBroker);
+leshy1::services::serial::SerialConsoleConfig serialConsoleLastConfig{};
+leshy1::services::serial::SerialConsolePreflightStatus
+    serialConsoleLastPreflight =
+        leshy1::services::serial::SerialConsolePreflightStatus::
+            ProfileUnavailable;
 AppRuntime appRuntime(resourceBroker);
 SurveySession surveySession;
 SurveyController surveyController(surveySession);
@@ -969,8 +982,37 @@ constexpr std::uint8_t kDevicePage = 9;
 constexpr std::uint8_t kAboutPage = 10;
 constexpr std::uint8_t kPowerPage = 11;
 constexpr std::uint8_t kDeviceLockPage = 12;
-constexpr std::uint8_t kDeviceItemCount = 6;
+constexpr std::uint8_t kSerialConsolePage = 13;
+constexpr std::uint8_t kDeviceItemCount = 7;
 std::uint8_t deviceSelection = 0;
+enum class SerialConsoleUiView : std::uint8_t {
+    Setup,
+    Confirm,
+    Running,
+    Result,
+};
+SerialConsoleUiView serialConsoleUiView = SerialConsoleUiView::Setup;
+std::uint8_t serialConsoleUiSelection = 0;
+std::uint8_t serialConsoleBaudIndex = 4;
+std::uint8_t serialConsoleDurationIndex = 1;
+constexpr std::array<std::uint32_t, 5> kSerialConsoleUiBauds = {
+    9600U, 19200U, 38400U, 57600U, 115200U,
+};
+constexpr std::array<std::uint32_t, 3> kSerialConsoleUiDurationsMs = {
+    30000U, 60000U, 300000U,
+};
+leshy1::services::serial::SerialConsoleMode serialConsoleUiMode =
+    leshy1::services::serial::SerialConsoleMode::Monitor;
+leshy1::services::actions::ActionStatus serialConsoleUiActionStatus =
+    leshy1::services::actions::ActionStatus::Ready;
+std::array<char, 41> serialConsoleLiveLine{};
+std::uint8_t serialConsoleLiveLineLength = 0;
+bool serialConsoleLiveDirty = false;
+std::uint32_t serialConsoleNextUiRefreshMs = 0;
+leshy1::services::serial::SerialConsoleHardware serialConsoleHardware();
+leshy1::services::actions::ActionContext serialConsoleActionContext(
+    const leshy1::services::actions::ActionDescriptor& descriptor,
+    bool confirmed);
 DeviceLockController deviceLockController;
 enum class DeviceLockWorkerMode : std::uint8_t {
     Product,
@@ -2059,7 +2101,8 @@ const char* capturePersistStateName(CapturePersistState state) {
     }
     return "failed";
 }
-constexpr std::size_t kConsoleCommandCapacity = 192;
+constexpr std::size_t kConsoleCommandCapacity =
+    leshy1::services::actions::kActionsCliMaximumLineLength + 1U;
 constexpr std::size_t kUsbCommandCapacity =
     leshy1::services::companion::kCompanionMaxFrameBytes + 1U;
 // The Arduino HW-CDC default RX queue is only 256 bytes.  A valid bounded
@@ -12246,6 +12289,28 @@ NavigationFooter navigationFooterForCurrentState() {
         }
         return {back, {}, {}};
     }
+    if (uiController.page() == kSerialConsolePage) {
+        if (serialConsoleUiView == SerialConsoleUiView::Running) {
+            return {{NavigationKey::Left, UiTextId::NavCancel}, {}, {}};
+        }
+        if (serialConsoleUiView == SerialConsoleUiView::Confirm) {
+            return {{NavigationKey::Left, UiTextId::NavBack}, {},
+                    {NavigationKey::RightAndSelect,
+                     UiTextId::NavConfirm}};
+        }
+        if (serialConsoleUiView == SerialConsoleUiView::Result) {
+            return {back, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavAgain}};
+        }
+        if (serialConsoleLastPreflight !=
+            leshy1::services::serial::SerialConsolePreflightStatus::Ready) {
+            return {back, {}, {}};
+        }
+        return {back, choose,
+                {NavigationKey::RightAndSelect,
+                 serialConsoleUiSelection == 3U
+                     ? UiTextId::NavStart : UiTextId::NavToggle}};
+    }
     if (uiController.page() == kDevicePage) return {back, choose, enter};
     return {back, {}, {}};
 }
@@ -12647,8 +12712,9 @@ UiTextId deviceLabel(std::uint8_t index) {
         case 0: return UiTextId::DevicePower;
         case 1: return UiTextId::DeviceSettings;
         case 2: return UiTextId::DeviceLockMenu;
-        case 3: return UiTextId::DeviceAbout;
-        case 4: return UiTextId::AppDiagnostics;
+        case 3: return UiTextId::DeviceSerialConsole;
+        case 4: return UiTextId::DeviceAbout;
+        case 5: return UiTextId::AppDiagnostics;
         default: return UiTextId::AppSelfTest;
     }
 }
@@ -12674,8 +12740,12 @@ UiTextId deviceNote(std::uint8_t index) {
         case 0: return UiTextId::DevicePowerNote;
         case 1: return UiTextId::DeviceSettingsNote;
         case 2: return deviceLockMenuNote();
-        case 3: return UiTextId::DeviceAboutNote;
-        case 4: return UiTextId::DeviceDiagnosticsNote;
+        case 3:
+            return BoardProfile::kRfShieldDeclared
+                ? UiTextId::DeviceSerialConsoleConflict
+                : UiTextId::DeviceSerialConsoleReady;
+        case 4: return UiTextId::DeviceAboutNote;
+        case 5: return UiTextId::DeviceDiagnosticsNote;
         default: return UiTextId::NoteSelfTest;
     }
 }
@@ -13403,6 +13473,182 @@ void renderAboutPage(bool clearContent) {
     display.setTextColor(Palette::Positive, Palette::Canvas);
     setUiCursor(UiTextRole::Meta, 14, 168);
     display.print(tr(UiTextId::AboutOpenSource));
+}
+
+void clearSerialConsoleLivePreview() {
+    volatile char* bytes = serialConsoleLiveLine.data();
+    for (std::size_t index = 0; index < serialConsoleLiveLine.size(); ++index) {
+        bytes[index] = '\0';
+    }
+    serialConsoleLiveLineLength = 0U;
+    serialConsoleLiveDirty = false;
+}
+
+void refreshSerialConsoleUiConfig() {
+    serialConsoleLastConfig = {};
+    serialConsoleLastConfig.mode = serialConsoleUiMode;
+    serialConsoleLastConfig.baud =
+        kSerialConsoleUiBauds[serialConsoleBaudIndex];
+    serialConsoleLastConfig.durationMs =
+        kSerialConsoleUiDurationsMs[serialConsoleDurationIndex];
+    leshy1::services::serial::setSerialConsoleTarget(
+        &serialConsoleLastConfig, "wired-device", 12U);
+    serialConsoleLastPreflight =
+        leshy1::services::serial::validateSerialConsoleConfig(
+            serialConsoleLastConfig, serialConsoleHardware());
+}
+
+void enterSerialConsoleUi() {
+    serialConsoleUiSelection = 0U;
+    serialConsoleNextUiRefreshMs = 0U;
+    clearSerialConsoleLivePreview();
+    if (serialConsoleActionDispatcher.running()) {
+        serialConsoleUiView = SerialConsoleUiView::Running;
+        serialConsoleUiActionStatus =
+            serialConsoleActionDispatcher.status();
+        return;
+    }
+    serialConsoleUiView = SerialConsoleUiView::Setup;
+    serialConsoleUiActionStatus =
+        leshy1::services::actions::ActionStatus::Ready;
+    refreshSerialConsoleUiConfig();
+}
+
+void renderSerialConsoleMetric(std::uint8_t index, const char* text,
+                               Tone tone = Tone::Neutral) {
+    const Rect bounds = Components::metricRow(index);
+    display.fillRect(bounds.x, bounds.y - 2, bounds.width, bounds.height,
+                     Palette::Canvas);
+    renderMetric(index, text, tone);
+}
+
+void renderSerialConsolePage(bool clearContent) {
+    renderHeader(tr(UiTextId::SerialConsoleTitle), clearContent);
+    char line[96] = {};
+    if (serialConsoleUiView == SerialConsoleUiView::Setup) {
+        refreshSerialConsoleUiConfig();
+        if (serialConsoleLastPreflight !=
+            leshy1::services::serial::SerialConsolePreflightStatus::Ready) {
+            renderSerialConsoleMetric(
+                0, tr(UiTextId::SerialConsoleConflict), Tone::Warning);
+            renderSerialConsoleMetric(
+                1, tr(UiTextId::SerialConsoleConflictPins), Tone::Muted);
+            renderSerialConsoleMetric(
+                2, tr(UiTextId::SerialConsoleConflictSafe), Tone::Positive);
+            renderSerialConsoleMetric(
+                4, tr(UiTextId::SerialConsoleProfileNote), Tone::Muted);
+            return;
+        }
+        renderMenuRow(
+            Components::homeRow(0), tr(UiTextId::SerialConsoleMode),
+            tr(serialConsoleUiMode ==
+                       leshy1::services::serial::SerialConsoleMode::Monitor
+                   ? UiTextId::SerialConsoleModeMonitor
+                   : UiTextId::SerialConsoleModeBridge),
+            serialConsoleUiSelection == 0U, true, Tone::Positive);
+        std::snprintf(line, sizeof(line), "%lu BIT/S",
+                      static_cast<unsigned long>(serialConsoleLastConfig.baud));
+        renderMenuRow(Components::homeRow(1),
+                      tr(UiTextId::SerialConsoleBaud), line,
+                      serialConsoleUiSelection == 1U, true, Tone::Positive);
+        std::snprintf(
+            line, sizeof(line), "%lu S / VOLATILE",
+            static_cast<unsigned long>(serialConsoleLastConfig.durationMs /
+                                       1000U));
+        renderMenuRow(Components::homeRow(2),
+                      tr(UiTextId::SerialConsoleDuration), line,
+                      serialConsoleUiSelection == 2U, true, Tone::Positive);
+        renderMenuRow(Components::homeRow(3),
+                      tr(UiTextId::SerialConsoleStart),
+                      tr(deviceLock.state() ==
+                                 leshy1::services::security::
+                                     DeviceLockState::Unlocked
+                             ? UiTextId::SerialConsoleStartReady
+                             : UiTextId::SerialConsoleStartLocked),
+                      serialConsoleUiSelection == 3U,
+                      deviceLock.state() ==
+                          leshy1::services::security::
+                              DeviceLockState::Unlocked,
+                      deviceLock.state() ==
+                              leshy1::services::security::
+                                  DeviceLockState::Unlocked
+                          ? Tone::Positive : Tone::Warning);
+        return;
+    }
+
+    if (serialConsoleUiView == SerialConsoleUiView::Confirm) {
+        renderSerialConsoleMetric(
+            0, tr(UiTextId::SerialConsoleConfirm), Tone::Warning);
+        renderSerialConsoleMetric(
+            1, tr(UiTextId::SerialConsoleConfirmRx), Tone::Neutral);
+        renderSerialConsoleMetric(
+            2,
+            tr(serialConsoleLastConfig.mode ==
+                       leshy1::services::serial::SerialConsoleMode::Bridge
+                   ? UiTextId::SerialConsoleConfirmTx
+                   : UiTextId::SerialConsoleModeMonitor),
+            Tone::Neutral);
+        renderSerialConsoleMetric(
+            3, tr(UiTextId::SerialConsoleConfirmVolatile), Tone::Positive);
+        renderMenuRow(Components::homeRow(3),
+                      tr(UiTextId::SerialConsoleConfirmAction),
+                      tr(UiTextId::SerialConsoleProfileNote), true, true,
+                      Tone::Warning);
+        return;
+    }
+
+    if (serialConsoleUiView == SerialConsoleUiView::Running) {
+        const auto stats = serialConsoleEndpoint.stats();
+        renderSerialConsoleMetric(
+            0, tr(UiTextId::SerialConsoleRunning), Tone::Positive);
+        std::snprintf(
+            line, sizeof(line), tr(UiTextId::SerialConsoleStatusFormat),
+            static_cast<unsigned long>(stats.bytesReceived),
+            static_cast<unsigned long>(stats.bytesTransmitted),
+            static_cast<unsigned long>(stats.droppedBytes));
+        renderSerialConsoleMetric(1, line,
+                                  stats.droppedBytes == 0U
+                                      ? Tone::Neutral : Tone::Danger);
+        std::snprintf(
+            line, sizeof(line), tr(UiTextId::SerialConsoleBufferFormat),
+            static_cast<unsigned>(stats.bufferedBytes),
+            static_cast<unsigned>(stats.highWaterBytes));
+        renderSerialConsoleMetric(2, line, Tone::Muted);
+        renderSerialConsoleMetric(
+            3, serialConsoleLiveLineLength == 0U
+                   ? tr(UiTextId::SerialConsoleWaiting)
+                   : serialConsoleLiveLine.data(),
+            Tone::Positive);
+        return;
+    }
+
+    std::snprintf(
+        line, sizeof(line), tr(UiTextId::SerialConsoleResultFormat),
+        leshy1::services::actions::actionStatusName(
+            serialConsoleUiActionStatus));
+    const auto stats = serialConsoleEndpoint.stats();
+    renderSerialConsoleMetric(
+        0, line,
+        serialConsoleUiActionStatus ==
+                    leshy1::services::actions::ActionStatus::Completed ||
+                serialConsoleUiActionStatus ==
+                    leshy1::services::actions::ActionStatus::Cancelled
+            ? Tone::Positive : Tone::Warning);
+    renderSerialConsoleMetric(
+        1, tr(stats.cleanupComplete
+                  ? UiTextId::SerialConsoleCleanupDone
+                  : UiTextId::SerialConsoleCleanupPending),
+        stats.cleanupComplete ? Tone::Positive : Tone::Danger);
+    std::snprintf(
+        line, sizeof(line), tr(UiTextId::SerialConsoleStatusFormat),
+        static_cast<unsigned long>(stats.bytesReceived),
+        static_cast<unsigned long>(stats.bytesTransmitted),
+        static_cast<unsigned long>(stats.droppedBytes));
+    renderSerialConsoleMetric(2, line, Tone::Muted);
+    renderMenuRow(Components::homeRow(3),
+                  tr(UiTextId::SerialConsoleAgain),
+                  tr(UiTextId::SerialConsoleProfileNote), true, true,
+                  Tone::Positive);
 }
 
 void renderPowerPage(bool clearContent) {
@@ -19093,6 +19339,13 @@ struct UiRenderSnapshot final {
     std::uint8_t deviceLockView = 0;
     std::uint8_t deviceLockCursor = 0;
     std::uint8_t deviceLockDigit = 0;
+    std::uint8_t serialConsoleView = 0;
+    std::uint8_t serialConsoleSelection = 0;
+    std::uint8_t serialConsoleBaudIndex = 0;
+    std::uint8_t serialConsoleDurationIndex = 0;
+    std::uint8_t serialConsoleMode = 0;
+    std::uint8_t serialConsoleActionStatus = 0;
+    std::uint32_t serialConsoleRxBytes = 0;
 };
 
 UiRenderSnapshot renderedUi{};
@@ -19163,6 +19416,13 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         static_cast<std::uint8_t>(deviceLockController.view()),
         static_cast<std::uint8_t>(deviceLockController.cursor()),
         deviceLockController.digit(),
+        static_cast<std::uint8_t>(serialConsoleUiView),
+        serialConsoleUiSelection,
+        serialConsoleBaudIndex,
+        serialConsoleDurationIndex,
+        static_cast<std::uint8_t>(serialConsoleUiMode),
+        static_cast<std::uint8_t>(serialConsoleUiActionStatus),
+        serialConsoleEndpoint.stats().bytesReceived,
     };
 }
 
@@ -19202,6 +19462,28 @@ bool renderSelectionDelta() {
         }
         renderDeviceRow(renderedUi.deviceSelection, currentFirst);
         renderDeviceRow(deviceSelection, currentFirst);
+        return true;
+    }
+
+    if (uiController.page() == kSerialConsolePage) {
+        const bool viewChanged = renderedUi.serialConsoleView !=
+            static_cast<std::uint8_t>(serialConsoleUiView);
+        const bool changed = viewChanged ||
+            renderedUi.serialConsoleSelection != serialConsoleUiSelection ||
+            renderedUi.serialConsoleBaudIndex != serialConsoleBaudIndex ||
+            renderedUi.serialConsoleDurationIndex !=
+                serialConsoleDurationIndex ||
+            renderedUi.serialConsoleMode !=
+                static_cast<std::uint8_t>(serialConsoleUiMode) ||
+            renderedUi.serialConsoleActionStatus !=
+                static_cast<std::uint8_t>(serialConsoleUiActionStatus) ||
+            renderedUi.serialConsoleRxBytes !=
+                serialConsoleEndpoint.stats().bytesReceived ||
+            serialConsoleLiveDirty;
+        if (!changed) return false;
+        renderSerialConsolePage(viewChanged);
+        renderNavigationFooter();
+        serialConsoleLiveDirty = false;
         return true;
     }
 
@@ -19824,6 +20106,8 @@ void renderInteractiveScreen(bool clearContent) {
             renderPowerPage(clearContent);
         } else if (uiController.page() == kDeviceLockPage) {
             renderDeviceLockPage(clearContent);
+        } else if (uiController.page() == kSerialConsolePage) {
+            renderSerialConsolePage(clearContent);
         } else {
             renderAboutPage(clearContent);
         }
@@ -25162,6 +25446,10 @@ bool selectionCanRepaintInPlace(UiAction action) {
             (action == UiAction::Up || action == UiAction::Down ||
              action == UiAction::Select || action == UiAction::Right);
     }
+    if (uiController.page() == kSerialConsolePage) {
+        return action == UiAction::Up || action == UiAction::Down ||
+            action == UiAction::Select || action == UiAction::Right;
+    }
     if (action != UiAction::Up && action != UiAction::Down) return false;
     if (uiController.isRoot()) return true;
     if (uiController.page() == 2) {
@@ -26608,6 +26896,135 @@ bool applyUiAction(UiAction action, bool render = true) {
         }
         }
     }
+    if (!wasRoot && uiController.page() == kSerialConsolePage) {
+        bool handled = true;
+        bool changed = false;
+        if (serialConsoleUiView == SerialConsoleUiView::Running) {
+            if (action == UiAction::Back || action == UiAction::Left) {
+                serialConsoleUiActionStatus =
+                    serialConsoleActionDispatcher.cancel();
+                clearSerialConsoleLivePreview();
+                serialConsoleUiView = SerialConsoleUiView::Result;
+                lastRuntimeEvent = "serial_console_cancelled";
+                changed = true;
+            } else {
+                handled = false;
+            }
+        } else if (serialConsoleUiView == SerialConsoleUiView::Confirm) {
+            if (action == UiAction::Back || action == UiAction::Left) {
+                serialConsoleUiView = SerialConsoleUiView::Setup;
+                lastRuntimeEvent = "serial_console_confirmation_cancelled";
+                changed = true;
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                refreshSerialConsoleUiConfig();
+                const auto descriptor =
+                    leshy1::services::serial::serialConsoleActionDescriptor(
+                        serialConsoleLastConfig);
+                const auto context =
+                    serialConsoleActionContext(descriptor, true);
+                serialConsoleLastPreflight = serialConsoleEndpoint.configure(
+                    serialConsoleLastConfig, serialConsoleHardware());
+                serialConsoleUiActionStatus =
+                    serialConsoleLastPreflight ==
+                            leshy1::services::serial::
+                                SerialConsolePreflightStatus::Ready
+                        ? serialConsoleActionDispatcher.invoke(
+                              descriptor, context, serialConsoleEndpoint,
+                              millis())
+                        : leshy1::services::actions::ActionStatus::
+                              CapabilityUnavailable;
+                if (serialConsoleUiActionStatus ==
+                    leshy1::services::actions::ActionStatus::Running) {
+                    serialConsoleUiView = SerialConsoleUiView::Running;
+                    serialConsoleNextUiRefreshMs = 0U;
+                    lastRuntimeEvent = "serial_console_started";
+                } else {
+                    // configure() never touches pins.  Scrub even that staged
+                    // state when admission (lock, permission, lease) fails.
+                    serialConsoleEndpoint.cancel();
+                    serialConsoleUiView = SerialConsoleUiView::Result;
+                    lastRuntimeEvent = "serial_console_start_rejected";
+                }
+                changed = true;
+            } else {
+                handled = false;
+            }
+        } else if (serialConsoleUiView == SerialConsoleUiView::Result) {
+            if (action == UiAction::Select || action == UiAction::Right) {
+                enterSerialConsoleUi();
+                lastRuntimeEvent = "serial_console_setup";
+                changed = true;
+            } else if (action == UiAction::Back || action == UiAction::Left) {
+                changed = uiController.apply(
+                    action, static_cast<std::uint8_t>(appCatalog.size()),
+                    true, kSerialConsolePage);
+                lastRuntimeEvent = changed ? "serial_console_device_menu"
+                                           : "serial_console_back_rejected";
+            } else {
+                handled = false;
+            }
+        } else {
+            refreshSerialConsoleUiConfig();
+            const bool ready = serialConsoleLastPreflight ==
+                leshy1::services::serial::
+                    SerialConsolePreflightStatus::Ready;
+            if (action == UiAction::Back || action == UiAction::Left) {
+                changed = uiController.apply(
+                    action, static_cast<std::uint8_t>(appCatalog.size()),
+                    true, kSerialConsolePage);
+                lastRuntimeEvent = changed ? "serial_console_device_menu"
+                                           : "serial_console_back_rejected";
+            } else if (ready && action == UiAction::Up &&
+                       serialConsoleUiSelection > 0U) {
+                --serialConsoleUiSelection;
+                changed = true;
+            } else if (ready && action == UiAction::Down &&
+                       serialConsoleUiSelection < 3U) {
+                ++serialConsoleUiSelection;
+                changed = true;
+            } else if (ready && (action == UiAction::Select ||
+                                 action == UiAction::Right)) {
+                if (serialConsoleUiSelection == 0U) {
+                    serialConsoleUiMode = serialConsoleUiMode ==
+                            leshy1::services::serial::
+                                SerialConsoleMode::Monitor
+                        ? leshy1::services::serial::SerialConsoleMode::Bridge
+                        : leshy1::services::serial::SerialConsoleMode::Monitor;
+                } else if (serialConsoleUiSelection == 1U) {
+                    serialConsoleBaudIndex = static_cast<std::uint8_t>(
+                        (serialConsoleBaudIndex + 1U) %
+                        kSerialConsoleUiBauds.size());
+                } else if (serialConsoleUiSelection == 2U) {
+                    serialConsoleDurationIndex = static_cast<std::uint8_t>(
+                        (serialConsoleDurationIndex + 1U) %
+                        kSerialConsoleUiDurationsMs.size());
+                } else {
+                    if (deviceLock.state() !=
+                        leshy1::services::security::
+                            DeviceLockState::Unlocked) {
+                        serialConsoleUiActionStatus =
+                            leshy1::services::actions::ActionStatus::
+                                AuthenticationRequired;
+                        serialConsoleUiView = SerialConsoleUiView::Result;
+                        lastRuntimeEvent =
+                            "serial_console_authentication_required";
+                    } else {
+                        refreshSerialConsoleUiConfig();
+                        serialConsoleUiView = SerialConsoleUiView::Confirm;
+                        lastRuntimeEvent = "serial_console_confirmation";
+                    }
+                }
+                changed = true;
+            } else {
+                handled = ready;
+            }
+        }
+        if (handled) {
+            uiController.recordHandledAction(action);
+            return finish(changed);
+        }
+    }
     if (!wasRoot && uiController.page() == kDeviceLockPage) {
         bool handled = true;
         bool changed = false;
@@ -26687,7 +27104,8 @@ bool applyUiAction(UiAction action, bool render = true) {
         } else if (action == UiAction::Select || action == UiAction::Right) {
             handled = true;
             constexpr std::uint8_t pages[kDeviceItemCount] = {
-                kPowerPage, 5, kDeviceLockPage, kAboutPage, 1, 6,
+                kPowerPage, 5, kDeviceLockPage, kSerialConsolePage,
+                kAboutPage, 1, 6,
             };
             const bool settingsAllowed = deviceSelection != 1U ||
                 deviceLockOperationAllowed(
@@ -26703,6 +27121,9 @@ bool applyUiAction(UiAction action, bool render = true) {
                 const std::uint64_t nowUs =
                     static_cast<std::uint64_t>(esp_timer_get_time());
                 deviceLockController.enter(deviceLock.audit(nowUs));
+            }
+            if (changed && deviceSelection == 3) {
+                enterSerialConsoleUi();
             }
             if (settingsAllowed) {
                 lastRuntimeEvent = changed ? "device_item_opened"
@@ -33869,6 +34290,10 @@ bool commandAllowedDuringSafetyStop(const char* command) {
            std::strcmp(command, "hardware.safe-outputs") == 0 ||
            std::strcmp(command, "safety.state") == 0 ||
            std::strcmp(command, "device-lock.state") == 0 ||
+           std::strcmp(command,
+                       "action.status serial.console.start") == 0 ||
+           std::strcmp(command,
+                       "action.cancel serial.console.start") == 0 ||
            std::strcmp(command, "safety.restart-test confirm") == 0 ||
            std::strcmp(command, "safety.clear confirm") == 0 ||
            std::strcmp(command, "ui.state") == 0 ||
@@ -33908,6 +34333,10 @@ bool commandAllowedWhileSessionWorkspaceBorrowed(const char* command) {
            std::strcmp(command, "hardware.cc1101.finder") == 0 ||
            std::strcmp(command, "safety.state") == 0 ||
            std::strcmp(command, "device-lock.state") == 0 ||
+           std::strcmp(command,
+                       "action.status serial.console.start") == 0 ||
+           std::strcmp(command,
+                       "action.cancel serial.console.start") == 0 ||
            std::strcmp(command, "ping") == 0 ||
            std::strcmp(command, "ui.state") == 0 ||
            std::strcmp(command, "survey.field-visit") == 0 ||
@@ -34406,6 +34835,214 @@ void emitDeviceLockBlocked(Stream& reply,
     reply.println(line);
 }
 
+leshy1::services::serial::SerialConsoleHardware serialConsoleHardware() {
+    leshy1::services::serial::SerialConsoleHardware hardware{};
+    hardware.externalMux56UartDeclared =
+        BoardProfile::kExternalMux56UartDeclared;
+    hardware.rfShieldDeclared = BoardProfile::kRfShieldDeclared;
+    hardware.gpsDeclared = BoardProfile::kGpsDeclared;
+    hardware.pn532Declared = BoardProfile::kPn532Declared;
+    hardware.logicMillivolts = 3300U;
+    return hardware;
+}
+
+leshy1::services::actions::ActionContext serialConsoleActionContext(
+    const leshy1::services::actions::ActionDescriptor& descriptor,
+    bool confirmed) {
+    using leshy1::services::security::DeviceLockState;
+    const bool authenticated = deviceLock.state() == DeviceLockState::Unlocked;
+    leshy1::services::actions::ActionContext context{};
+    context.requestSchemaVersion = descriptor.requestSchemaVersion;
+    context.availableCapabilities =
+        serialConsoleLastPreflight ==
+                leshy1::services::serial::SerialConsolePreflightStatus::Ready
+            ? leshy1::services::serial::kExternalMux56UartCapability : 0U;
+    context.grantedPermissions = authenticated
+        ? descriptor.requiredPermissions : 0U;
+    context.authenticated = authenticated;
+    context.confirmed = confirmed;
+    return context;
+}
+
+const char* actionsCliKindName(
+    leshy1::services::actions::ActionsCliRequestKind kind) {
+    using leshy1::services::actions::ActionsCliRequestKind;
+    switch (kind) {
+        case ActionsCliRequestKind::Preview: return "preview";
+        case ActionsCliRequestKind::Run: return "run";
+        case ActionsCliRequestKind::Status: return "status";
+        case ActionsCliRequestKind::Cancel: return "cancel";
+    }
+    return "invalid";
+}
+
+void emitSerialConsoleActionState(
+    Stream& reply, const char* kind,
+    leshy1::services::actions::ActionsCliParseStatus parseStatus,
+    leshy1::services::actions::ActionStatus actionStatus) {
+    const auto stats = serialConsoleEndpoint.stats();
+    const auto resources = serialConsoleActionDispatcher.ownedResources();
+    char line[640] = {};
+    const char* preflight = parseStatus ==
+            leshy1::services::actions::ActionsCliParseStatus::Parsed
+        ? leshy1::services::serial::serialConsolePreflightStatusName(
+              serialConsoleLastPreflight)
+        : "not_evaluated";
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.actions.serial_console.v1\","
+        "\"kind\":\"%s\",\"parse\":\"%s\","
+        "\"preflight\":\"%s\",\"action_status\":\"%s\","
+        "\"active\":%s,\"action\":\"%s\",\"profile\":\"mux56-3v3\","
+        "\"mode\":\"%s\",\"baud\":%lu,\"framing\":\"%s\","
+        "\"duration_ms\":%lu,\"rx_bytes\":%lu,\"tx_bytes\":%lu,"
+        "\"dropped_bytes\":%lu,\"buffered_bytes\":%u,"
+        "\"buffer_high_water\":%u,\"resources\":%lu,"
+        "\"cleanup_complete\":%s,\"pins_touched\":%s}",
+        kind,
+        leshy1::services::actions::actionsCliParseStatusName(parseStatus),
+        preflight,
+        leshy1::services::actions::actionStatusName(actionStatus),
+        serialConsoleActionDispatcher.running() ? "true" : "false",
+        serialConsoleActionDispatcher.activeActionId(),
+        leshy1::services::serial::serialConsoleModeName(
+            serialConsoleLastConfig.mode),
+        static_cast<unsigned long>(serialConsoleLastConfig.baud),
+        leshy1::services::serial::serialConsoleFramingName(
+            serialConsoleLastConfig.framing),
+        static_cast<unsigned long>(serialConsoleLastConfig.durationMs),
+        static_cast<unsigned long>(stats.bytesReceived),
+        static_cast<unsigned long>(stats.bytesTransmitted),
+        static_cast<unsigned long>(stats.droppedBytes),
+        static_cast<unsigned>(stats.bufferedBytes),
+        static_cast<unsigned>(stats.highWaterBytes),
+        static_cast<unsigned long>(resources),
+        stats.cleanupComplete ? "true" : "false",
+        stats.active ? "true" : "false");
+    reply.println(line);
+}
+
+bool handleActionsCliCommand(Stream& reply, const char* command) {
+    if (command == nullptr || std::strncmp(command, "action.", 7U) != 0) {
+        return false;
+    }
+    using namespace leshy1::services::actions;
+    ActionsCliRequest request{};
+    const ActionsCliParseStatus parseStatus = parseActionsCliRequest(
+        command, std::strlen(command), &request);
+    if (parseStatus != ActionsCliParseStatus::Parsed) {
+        emitSerialConsoleActionState(reply, "error", parseStatus,
+                                     ActionStatus::InvalidDescriptor);
+        return true;
+    }
+
+    if (request.kind == ActionsCliRequestKind::Status) {
+        emitSerialConsoleActionState(reply, actionsCliKindName(request.kind),
+                                     parseStatus,
+                                     serialConsoleActionDispatcher.status());
+        return true;
+    }
+    if (request.kind == ActionsCliRequestKind::Cancel) {
+        const ActionStatus status = serialConsoleActionDispatcher.cancel();
+        emitSerialConsoleActionState(reply, actionsCliKindName(request.kind),
+                                     parseStatus, status);
+        return true;
+    }
+
+    serialConsoleLastConfig = request.serialConfig;
+    serialConsoleLastPreflight =
+        leshy1::services::serial::validateSerialConsoleConfig(
+            request.serialConfig, serialConsoleHardware());
+    if (serialConsoleLastPreflight !=
+        leshy1::services::serial::SerialConsolePreflightStatus::Ready) {
+        emitSerialConsoleActionState(
+            reply, actionsCliKindName(request.kind), parseStatus,
+            ActionStatus::CapabilityUnavailable);
+        return true;
+    }
+
+    const ActionDescriptor descriptor =
+        leshy1::services::serial::serialConsoleActionDescriptor(
+            request.serialConfig);
+    const ActionContext context =
+        serialConsoleActionContext(descriptor, request.confirmed);
+    ActionStatus status = ActionStatus::Ready;
+    if (request.kind == ActionsCliRequestKind::Preview) {
+        status = serialConsoleActionDispatcher.preview(descriptor, context)
+                     .status;
+    } else {
+        serialConsoleLastPreflight = serialConsoleEndpoint.configure(
+            request.serialConfig, serialConsoleHardware());
+        status = serialConsoleLastPreflight ==
+                leshy1::services::serial::SerialConsolePreflightStatus::Ready
+            ? serialConsoleActionDispatcher.invoke(
+                  descriptor, context, serialConsoleEndpoint, millis())
+            : ActionStatus::CapabilityUnavailable;
+        if (status != ActionStatus::Running) {
+            serialConsoleEndpoint.cancel();
+        }
+    }
+    emitSerialConsoleActionState(reply, actionsCliKindName(request.kind),
+                                 parseStatus, status);
+    return true;
+}
+
+void serviceSerialConsoleAction() {
+    if (safetySupervisor.latched()) {
+        if (serialConsoleActionDispatcher.running()) {
+            serialConsoleUiActionStatus =
+                serialConsoleActionDispatcher.cancel();
+            clearSerialConsoleLivePreview();
+            if (serialConsoleUiView == SerialConsoleUiView::Running) {
+                serialConsoleUiView = SerialConsoleUiView::Result;
+            }
+            lastRuntimeEvent = "serial_console_safety_cancelled";
+        }
+        return;
+    }
+    const std::uint32_t nowMs = millis();
+    const auto before = serialConsoleActionDispatcher.status();
+    const auto after = serialConsoleActionDispatcher.tick(nowMs);
+    bool received = false;
+    std::uint8_t value = 0U;
+    while (serialConsoleEndpoint.pop(&value)) {
+        received = true;
+        char printable = value >= 0x20U && value <= 0x7eU
+            ? static_cast<char>(value) : ' ';
+        if (serialConsoleLiveLineLength + 1U >=
+            serialConsoleLiveLine.size()) {
+            std::memmove(serialConsoleLiveLine.data(),
+                         serialConsoleLiveLine.data() + 1U,
+                         serialConsoleLiveLine.size() - 2U);
+            serialConsoleLiveLineLength = static_cast<std::uint8_t>(
+                serialConsoleLiveLine.size() - 2U);
+        }
+        serialConsoleLiveLine[serialConsoleLiveLineLength++] = printable;
+        serialConsoleLiveLine[serialConsoleLiveLineLength] = '\0';
+    }
+    if (received) serialConsoleLiveDirty = true;
+    if (before == leshy1::services::actions::ActionStatus::Running &&
+        after != before) {
+        serialConsoleUiActionStatus = after;
+        clearSerialConsoleLivePreview();
+        if (serialConsoleUiView == SerialConsoleUiView::Running) {
+            serialConsoleUiView = SerialConsoleUiView::Result;
+        }
+        lastRuntimeEvent = "serial_console_terminal";
+        if (uiController.page() == kSerialConsolePage) {
+            renderInteractiveScreen(false);
+        }
+        return;
+    }
+    if (serialConsoleLiveDirty &&
+        uiController.page() == kSerialConsolePage &&
+        serialConsoleUiView == SerialConsoleUiView::Running &&
+        static_cast<std::int32_t>(nowMs - serialConsoleNextUiRefreshMs) >= 0) {
+        serialConsoleNextUiRefreshMs = nowMs + 100U;
+        renderInteractiveScreen(false);
+    }
+}
+
 void handleCommand(Stream& reply, char* command, std::size_t capacity,
                    bool companionAllowed) {
     if (safetySupervisor.latched() &&
@@ -34441,6 +35078,9 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
     }
     if (companionAllowed && command[0] == '{') {
         handleUsbCompanionFrame(reply, command, capacity);
+        return;
+    }
+    if (handleActionsCliCommand(reply, command)) {
         return;
     }
     if (std::strncmp(command, "hil.begin ", 10) == 0) {
@@ -35306,6 +35946,18 @@ void setup() {
     inventory.add({"assembly.profile", CapabilityState::Available,
                    BoardProfile::kAssemblyProfileId,
                    "explicit_no_autodetect"});
+    inventory.add({
+        "serial.console",
+        BoardProfile::kExternalMux56UartDeclared &&
+                !BoardProfile::kRfShieldDeclared &&
+                !BoardProfile::kGpsDeclared && !BoardProfile::kPn532Declared
+            ? CapabilityState::Available : CapabilityState::NotApplicable,
+        "typed_action_mux56_3v3",
+        BoardProfile::kRfShieldDeclared
+            ? "mux_conflict_rf_shield_gpio5_gpio6"
+            : (BoardProfile::kExternalMux56UartDeclared
+                   ? "bounded_monitor_bridge_ready"
+                   : "external_mux56_profile_not_declared")});
     inventory.add({"assembly.gps", CapabilityState::NotApplicable,
                    BoardProfile::kAssemblyProfileId,
                    "not_fitted_by_explicit_profile"});
@@ -35359,6 +36011,10 @@ void setup() {
               "\"safety.state\",\"safety.watchdog-test confirm\","
               "\"device-lock.state\","
               "\"device-lock.kdf-benchmark confirm-no-persist\","
+              "\"action.preview serial.console.start profile=mux56-3v3 target=<id> baud=<supported> framing=8N1|8E1|8O1|8N2 mode=monitor|bridge duration_ms=<1000..300000>\","
+              "\"action.run serial.console.start profile=mux56-3v3 target=<id> baud=<supported> framing=8N1|8E1|8O1|8N2 mode=monitor|bridge duration_ms=<1000..300000> confirm=yes\","
+              "\"action.status serial.console.start\","
+              "\"action.cancel serial.console.start\","
               "\"safety.worker-deadline-test confirm\","
               "\"safety.worker-preparation-deadline-test confirm\","
               "\"safety.capture-store-deadline-test confirm\","
@@ -35449,6 +36105,7 @@ void loop() {
     }
     serviceWorkerDeadlineSupervisor();
     serviceDeviceLock();
+    serviceSerialConsoleAction();
     serviceWifiAuthenticationSyntheticHilExpiry();
     if (safetySupervisor.latched()) {
         quiesceSpectrumOnSafetyStop();

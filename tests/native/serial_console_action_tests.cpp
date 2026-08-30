@@ -5,6 +5,7 @@
 #include "kernel/runtime/ResourceBroker.h"
 #include "services/actions/ActionDispatcher.h"
 #include "services/actions/ActionsCli.h"
+#include "services/serial/SerialConsoleBuffer.h"
 #include "services/serial/SerialConsoleContract.h"
 
 using namespace leshy1::kernel::runtime;
@@ -89,6 +90,10 @@ void testSerialPreflightIsNamedAndFailClosed() {
     hardware.externalMux56UartDeclared = false;
     CHECK(validateSerialConsoleConfig(config, hardware) ==
           SerialConsolePreflightStatus::ProfileUnavailable);
+    hardware.rfShieldDeclared = true;
+    CHECK(validateSerialConsoleConfig(config, hardware) ==
+          SerialConsolePreflightStatus::MuxConflict);
+    hardware.rfShieldDeclared = false;
     hardware.externalMux56UartDeclared = true;
     hardware.rfShieldDeclared = true;
     CHECK(validateSerialConsoleConfig(config, hardware) ==
@@ -306,6 +311,34 @@ void testDispatcherTimeoutFailureAndConflictAreTerminal() {
     CHECK(dispatcher.ownedResources() == 0U);
 }
 
+void testVolatileRingIsBoundedOrderedAndScrubbed() {
+    SerialConsoleBuffer buffer;
+    for (std::size_t index = 0U;
+         index < SerialConsoleBuffer::kCapacity; ++index) {
+        CHECK(buffer.push(static_cast<std::uint8_t>(index)));
+    }
+    CHECK(buffer.size() == SerialConsoleBuffer::kCapacity);
+    CHECK(buffer.highWater() == SerialConsoleBuffer::kCapacity);
+    CHECK(!buffer.push(0x55U));
+    CHECK(buffer.dropped() == 1U);
+    for (std::size_t index = 0U;
+         index < SerialConsoleBuffer::kCapacity; ++index) {
+        std::uint8_t value = 0U;
+        CHECK(buffer.pop(&value));
+        CHECK(value == static_cast<std::uint8_t>(index));
+    }
+    CHECK(buffer.empty());
+    CHECK(!buffer.pop(nullptr));
+    CHECK(buffer.push(0xa5U));
+    buffer.scrub();
+    CHECK(buffer.empty());
+    CHECK(buffer.dropped() == 1U);
+    CHECK(buffer.highWater() == SerialConsoleBuffer::kCapacity);
+    buffer.reset();
+    CHECK(buffer.dropped() == 0U);
+    CHECK(buffer.highWater() == 0U);
+}
+
 }  // namespace
 
 int main() {
@@ -315,6 +348,7 @@ int main() {
     testCliRejectsRawGpioAndAmbiguousInput();
     testDispatcherOrderAndLeaseCleanup();
     testDispatcherTimeoutFailureAndConflictAreTerminal();
+    testVolatileRingIsBoundedOrderedAndScrubbed();
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";

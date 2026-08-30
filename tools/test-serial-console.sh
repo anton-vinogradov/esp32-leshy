@@ -15,7 +15,9 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/firmware/leshy1/src/kernel/runtime/ResourceBroker.cpp" \
     "$repo_dir/firmware/leshy1/src/services/actions/ActionDispatcher.cpp" \
     "$repo_dir/firmware/leshy1/src/services/actions/ActionsCli.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/serial/SerialConsoleBuffer.cpp" \
     "$repo_dir/firmware/leshy1/src/services/serial/SerialConsoleContract.cpp" \
     -o "$test_tmp/serial_console_action_tests"
 
 "$test_tmp/serial_console_action_tests"
+python3 "$repo_dir/tools/check_serial_console_product_acceptance.py"

@@ -129,15 +129,15 @@ SerialConsolePreflightStatus validateSerialConsoleConfig(
     if (config.pinProfile != SerialConsolePinProfile::Mux56_3v3) {
         return SerialConsolePreflightStatus::UnsupportedPinProfile;
     }
-    if (!hardware.externalMux56UartDeclared) {
-        return SerialConsolePreflightStatus::ProfileUnavailable;
-    }
     if (hardware.logicMillivolts != 3300U) {
         return SerialConsolePreflightStatus::VoltageMismatch;
     }
     if (hardware.rfShieldDeclared || hardware.gpsDeclared ||
         hardware.pn532Declared) {
         return SerialConsolePreflightStatus::MuxConflict;
+    }
+    if (!hardware.externalMux56UartDeclared) {
+        return SerialConsolePreflightStatus::ProfileUnavailable;
     }
     return SerialConsolePreflightStatus::Ready;
 }

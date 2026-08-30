@@ -83,6 +83,7 @@ const char* probePageName(std::uint8_t page) {
         case 10: return "about";
         case 11: return "power";
         case 12: return "device_lock";
+        case 13: return "serial_console";
         default: return "unknown";
     }
 }

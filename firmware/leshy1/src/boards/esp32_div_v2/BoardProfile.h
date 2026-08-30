@@ -54,6 +54,11 @@ struct BoardProfile final {
     // GPS/PN532 modules are excluded. Receiver identity is still probed only from
     // explicit Full/Guided Self-Test, never automatically during boot.
     static constexpr bool kRfShieldDeclared = true;
+    // GPIO5/GPIO6 may be leased as a 3.3 V UART only by an explicitly reviewed
+    // assembly without the stock RF shield.  The product stock profile keeps
+    // this false: software must report the concrete mux conflict and must not
+    // reconfigure either pin.
+    static constexpr bool kExternalMux56UartDeclared = false;
     // Temporary read-only fault-localization candidate. Full/Guided Self-Test
     // samples each carrier CSN as an input under its weak pull-up, then exits
     // before generating any SPI clock. Remove this gate after board-02 has a
