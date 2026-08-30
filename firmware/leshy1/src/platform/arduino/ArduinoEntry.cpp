@@ -29678,6 +29678,11 @@ WifiRecordDisposition collectWifiQueueRecord(
 
 void emitProductStoreBootstrap(Stream& reply,
                                const char* expectedFingerprint) {
+    const auto supervisedCheckpoint = []() {
+        feedRuntimeSafetyWatchdog();
+        return !safetySupervisor.latched();
+    };
+    supervisedCheckpoint();
     auto& line = sdPhysicalEvidence.line;
     auto& cidHex = sdPhysicalEvidence.cidHex;
     cidHex[0] = '\0';
@@ -29704,6 +29709,7 @@ void emitProductStoreBootstrap(Stream& reply,
             policy);
         identityTransport.end();
     }
+    supervisedCheckpoint();
     const bool identityCleanup = identityTransport.cleanupComplete();
     formatCidFingerprint(identity.identity, cidHex,
                          sizeof(sdPhysicalEvidence.cidHex));
@@ -29713,6 +29719,7 @@ void emitProductStoreBootstrap(Stream& reply,
 
     BoardSdFilesystem filesystem;
     const bool mounted = fingerprintMatched && filesystem.begin();
+    supervisedCheckpoint();
     const std::uint64_t cardCapacity =
         mounted ? filesystem.cardCapacityBytes() : 0;
     const std::uint64_t filesystemCapacity =
@@ -29747,7 +29754,8 @@ void emitProductStoreBootstrap(Stream& reply,
         leshy1::storage::authorizeProductStore(media, request);
 
     ArduinoFsSessionStoreIo io(filesystem.driveNumber(),
-                               sdSessionStoreIoWorkspace, nullptr,
+                               sdSessionStoreIoWorkspace,
+                               supervisedCheckpoint,
                                &protectedDataCipher, &deviceLock);
     const bool opened = permit.allowed() &&
         (rootExisted ? io.openExistingWritable(permit) : io.prepare(permit));
@@ -29767,7 +29775,11 @@ void emitProductStoreBootstrap(Stream& reply,
             SessionStatus::Started && scanner.begin();
     WifiQueueSinkContext sink{&surveyIngressQueue, 0};
     BoardWifiPassiveScanResult scan;
-    if (scannerBegun) scan = scanner.scan(wifiPlan, collectWifiQueueRecord, &sink);
+    supervisedCheckpoint();
+    if (scannerBegun) {
+        scan = scanner.scan(wifiPlan, collectWifiQueueRecord, &sink);
+    }
+    supervisedCheckpoint();
     Observation observation;
     std::uint32_t appendDropped = 0;
     while (surveyIngressQueue.pop(&observation)) {
@@ -29781,6 +29793,7 @@ void emitProductStoreBootstrap(Stream& reply,
         scan.dropped == 0 && appendDropped == 0 &&
         surveySession.stop(stoppedUs) == SessionStatus::Stopped;
     const bool scannerCleanup = scanner.end() && scanner.cleanupComplete();
+    supervisedCheckpoint();
     const std::uint32_t queueHighWater = surveyIngressQueue.highWater();
     const std::uint32_t queueDropped = surveyIngressQueue.dropped();
     surveyIngressQueue.reset();
@@ -29793,6 +29806,7 @@ void emitProductStoreBootstrap(Stream& reply,
         commit = leshy1::storage::commitNextSession(
             io, sessionStoreWorkspace(), surveySession);
         if (commit.complete()) {
+            supervisedCheckpoint();
             cataloged = sessionCatalog.recoverLatest(
                 io, sessionStoreWorkspace(), librarySession, libraryController,
                 true, false);
@@ -29805,6 +29819,7 @@ void emitProductStoreBootstrap(Stream& reply,
                     segmentPath, sessionStoreWorkspace().segment.data(),
                     sessionStoreWorkspace().segmentSize,
                     &protectedInspection);
+            supervisedCheckpoint();
         }
     }
     const std::uint64_t bytesWritten = io.bytesWritten();
@@ -29813,7 +29828,9 @@ void emitProductStoreBootstrap(Stream& reply,
     const char* ioFailure = io.lastFailure();
     const char* ioResult = io.lastFresultName();
     io.end();
+    supervisedCheckpoint();
     if (fingerprintMatched) filesystem.end();
+    supervisedCheckpoint();
     const bool filesystemCleanup =
         !fingerprintMatched || filesystem.cleanupComplete();
     resourceBroker.releaseAll(kSdIdentificationOwner);

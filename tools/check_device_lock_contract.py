@@ -176,6 +176,11 @@ def main() -> int:
         ("physical_size_exact\\\":%s", "physical size report"),
         ("ciphertext_differs\\\":%s", "ciphertext/plaintext separation"),
         ("protectedFileInspected", "physical inspection acceptance gate"),
+        ("const auto supervisedCheckpoint = []()",
+         "bounded product-bootstrap watchdog checkpoint"),
+        ("sdSessionStoreIoWorkspace,\n"
+         "                               supervisedCheckpoint,",
+         "encrypted chunk watchdog callback"),
     ):
         require(entry, marker, label, failures)
 

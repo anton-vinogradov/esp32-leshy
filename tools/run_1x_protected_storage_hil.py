@@ -33,6 +33,21 @@ def positive_integer(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
+def cleanup_summary(cleanup: dict[str, Any]) -> dict[str, Any]:
+    final = cleanup.get("final_state", {})
+    return {
+        "attempted": cleanup.get("attempted") is True,
+        "complete": cleanup.get("complete") is True,
+        "action_count": len(cleanup.get("actions", [])),
+        "errors": cleanup.get("errors", []),
+        "final_state": {
+            key: final.get(key)
+            for key in ("page", "runtime_owner", "lease_mask",
+                        "safety_state", "safety_reason")
+        },
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", required=True)
@@ -112,7 +127,7 @@ def main() -> int:
                 failures.append(
                     "recovery_before.status: expected empty or admitted")
             cleanup = best_effort_cleanup(device)
-            records["cleanup_before"] = cleanup
+            records["cleanup_before"] = cleanup_summary(cleanup)
             if not cleanup.get("complete"):
                 failures.append("initial Home/zero-lease cleanup failed")
             if failures:
@@ -178,7 +193,7 @@ def main() -> int:
                 failures.append("protected envelope has no authentication overhead")
 
             cleanup = best_effort_cleanup(device)
-            records["cleanup_after"] = cleanup
+            records["cleanup_after"] = cleanup_summary(cleanup)
             if not cleanup.get("complete"):
                 failures.append("final Home/zero-lease cleanup failed")
             records["hil_end"] = query(
@@ -194,7 +209,8 @@ def main() -> int:
         try:
             with PassiveSerial(args.port, 115200, timeout=0.05) as device:
                 synchronize_console(device, 10.0)
-                records["failure_cleanup"] = best_effort_cleanup(device)
+                cleanup = best_effort_cleanup(device)
+                records["failure_cleanup"] = cleanup_summary(cleanup)
                 if hil_begun:
                     records["failure_hil_end"] = query(
                         device, f"hil.end {run_id}".encode("ascii"),
