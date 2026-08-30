@@ -609,10 +609,10 @@ def main() -> int:
             checkpoint(args.output, record, "scope_denial")
             denied = connect(device, "mutation-denied", ["target.mutate"])
             require(denied.get("status") == "denied" and
-                    denied.get("reason") == "scope_dependency_missing" and
+                    denied.get("reason") == "scope_denied" and
                     denied.get("scopes") == [] and
                     denied.get("capabilities") == [],
-                    f"mutation dependency did not fail closed: {denied}")
+                    f"read-only HIL admitted mutation scope: {denied}")
             ready_again = connect(device, "targets-reconnect", READ_SCOPES)
             require(ready_again.get("status") == "ready",
                     f"read reconnect failed: {ready_again}")
