@@ -453,11 +453,11 @@ def main() -> int:
 
         fixture_resume = trust_fixture_command(
             device, "resume", args.expected_cid, run_id, bundle_sha256)
+        reports["trust_fixture_resume"] = fixture_resume
         verify_fixture(
             fixture_resume, "trust fixture resume", operation="resume",
             cid=args.expected_cid, run_id=run_id,
             bundle_sha256=bundle_sha256, key_id=key_id)
-        reports["trust_fixture_resume"] = fixture_resume
         restored = trust_state(device)
         verify_trust_state(
             restored, "isolated restored", count=1, generation=1,

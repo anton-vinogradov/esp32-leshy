@@ -31246,6 +31246,7 @@ void emitAutomationTrustFixture(Stream& reply, const char* command,
                 validAutomationTrustFixtureBundle(
                     observed, expectedSha256, &parsedKey, observedSha256,
                     sizeof(observedSha256));
+            fixtureReport.bundleMatched = bundleValid;
             if (resume && bundleValid) {
                 automationTrustBackend.useHilFixtureNamespace(true);
                 fixtureStoreRestored = automationTrustStore.restore();
