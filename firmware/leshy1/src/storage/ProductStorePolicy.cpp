@@ -38,7 +38,7 @@ bool exactRoot(const char* value) {
 ProductStorePermit rejected(ProductStoreAccessStatus status,
                             const ProductStoreRequest& request) {
     return {status, request.operation, kProductStoreResources,
-            kProductSessionStoreRoot, 0, false};
+            kProductSessionStoreRoot, 0, false, false};
 }
 
 }  // namespace
@@ -157,7 +157,8 @@ ProductStorePermit authorizeProductStore(const MediaIdentity& media,
     }
     return {ProductStoreAccessStatus::Permitted, request.operation,
             kProductStoreResources, kProductSessionStoreRoot,
-            recovery ? 0 : request.requiredBytes, !recovery};
+            recovery ? 0 : request.requiredBytes, request.rootExists,
+            !recovery};
 }
 
 }  // namespace leshy1::storage

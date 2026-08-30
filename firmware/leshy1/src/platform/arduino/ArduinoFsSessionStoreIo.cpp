@@ -203,27 +203,34 @@ bool ArduinoFsSessionStoreIo::prepare(
 bool ArduinoFsSessionStoreIo::openExistingWritable(
     const storage::ProductStorePermit& permit) {
     return permit.allowed() && permit.writable && permit.byteLimit != 0 &&
+           permit.existingRootVerified &&
            permit.operation == storage::ProductStoreOperation::CommitSession &&
-           openExistingPath(permit.rootPath, permit.byteLimit, true, true);
+           // The policy has already authenticated the exact product root using
+           // boot recovery evidence. Avoid a redundant f_stat on a freshly
+           // remounted removable medium; the first real file operation still
+           // fails closed if the directory is no longer accessible.
+           openExistingPath(permit.rootPath, permit.byteLimit, true, true,
+                            false);
 }
 
 bool ArduinoFsSessionStoreIo::openExistingReadOnly(
     const storage::WritePermit& permit) {
     return permit.allowed() && permit.byteLimit != 0 &&
-           openExistingPath(permit.scratchPath, permit.byteLimit, false, false);
+           openExistingPath(permit.scratchPath, permit.byteLimit, false, false,
+                            true);
 }
 
 bool ArduinoFsSessionStoreIo::openExistingReadOnly(
     const storage::ReadPermit& permit) {
     return permit.allowed() &&
-           openExistingPath(permit.scratchPath, 0, false, false);
+           openExistingPath(permit.scratchPath, 0, false, false, true);
 }
 
 bool ArduinoFsSessionStoreIo::openExistingReadOnly(
     const storage::ProductStorePermit& permit) {
-    return permit.allowed() && !permit.writable &&
+    return permit.allowed() && !permit.writable && permit.existingRootVerified &&
            permit.operation == storage::ProductStoreOperation::RecoverCatalog &&
-           openExistingPath(permit.rootPath, 0, false, true);
+           openExistingPath(permit.rootPath, 0, false, true, true);
 }
 
 bool ArduinoFsSessionStoreIo::removeScratch(
@@ -320,7 +327,7 @@ bool ArduinoFsSessionStoreIo::selectDrive(std::uint8_t driveNumber) {
 
 bool ArduinoFsSessionStoreIo::openExistingPath(
     const char* path, std::uint64_t byteLimit, bool writable,
-    bool productRoot) {
+    bool productRoot, bool verifyDirectory) {
     const bool approvedRoot = productRoot
         ? path != nullptr &&
               std::strcmp(path, storage::kProductSessionStoreRoot) == 0
@@ -330,7 +337,8 @@ bool ArduinoFsSessionStoreIo::openExistingPath(
     if (ready_ || driveNumber_ >= FF_VOLUMES || path == nullptr ||
         (productRoot && !protectedReady()) ||
         !approvedRoot ||
-        std::strlen(path) >= sizeof(rootPath_) || !directoryExists(path)) {
+        std::strlen(path) >= sizeof(rootPath_) ||
+        (verifyDirectory && !directoryExists(path))) {
         return false;
     }
     std::strcpy(rootPath_, path);

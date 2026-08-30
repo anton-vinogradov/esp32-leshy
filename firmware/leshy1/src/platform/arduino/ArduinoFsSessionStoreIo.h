@@ -115,7 +115,8 @@ private:
     bool formatFullPath(const char* path, char* output,
                         std::size_t capacity) const;
     bool openExistingPath(const char* path, std::uint64_t byteLimit,
-                          bool writable, bool productRoot);
+                          bool writable, bool productRoot,
+                          bool verifyDirectory);
     void recordFailure(const char* stage, FRESULT result);
     bool progress(const char* stage);
     bool protectedReady() const;

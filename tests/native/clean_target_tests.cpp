@@ -5233,6 +5233,7 @@ void testProductStorePolicySeparatesReadOnlyBootFromExplicitWrites() {
     ProductStorePermit permit = authorizeProductStore(media, recovery);
     CHECK(permit.allowed());
     CHECK(!permit.writable);
+    CHECK(permit.existingRootVerified);
     CHECK(permit.byteLimit == 0);
     CHECK(permit.operation == ProductStoreOperation::RecoverCatalog);
     CHECK(permit.requiredResources == storeResources);
@@ -5294,6 +5295,7 @@ void testProductStorePolicySeparatesReadOnlyBootFromExplicitWrites() {
     permit = authorizeProductStore(media, initialize);
     CHECK(permit.allowed());
     CHECK(permit.writable);
+    CHECK(!permit.existingRootVerified);
     CHECK(permit.byteLimit == 65536);
     CHECK(permit.operation == ProductStoreOperation::InitializeStore);
 
@@ -5325,6 +5327,7 @@ void testProductStorePolicySeparatesReadOnlyBootFromExplicitWrites() {
     permit = authorizeProductStore(media, commit);
     CHECK(permit.allowed());
     CHECK(permit.writable);
+    CHECK(permit.existingRootVerified);
     CHECK(permit.operation == ProductStoreOperation::CommitSession);
     CHECK(std::strcmp(productStoreAccessStatusName(permit.status),
                       "permitted") == 0);

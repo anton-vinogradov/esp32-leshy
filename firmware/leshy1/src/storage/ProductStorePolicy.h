@@ -63,6 +63,7 @@ struct ProductStorePermit final {
     kernel::runtime::ResourceMask requiredResources = 0;
     const char* rootPath = nullptr;
     std::uint64_t byteLimit = 0;
+    bool existingRootVerified = false;
     bool writable = false;
 
     bool allowed() const { return status == ProductStoreAccessStatus::Permitted; }

@@ -572,6 +572,7 @@ def main() -> int:
             "storage::ProductStoreOperation::InitializeStore",
             "storage::ProductStoreOperation::CommitSession",
             "storage::ProductStoreOperation::RecoverCatalog",
+            "permit.existingRootVerified",
             "kProductSessionsParent",
             "openExistingWritable",
             "directoryExists(permit.scratchPath)",
@@ -591,6 +592,23 @@ def main() -> int:
         ):
             if re.search(pattern, session_adapter):
                 errors.append(f"guarded SessionStore adapter can mutate existing paths: {pattern}")
+        writable_open_start = session_adapter.find(
+            "bool ArduinoFsSessionStoreIo::openExistingWritable(")
+        writable_open_end = session_adapter.find(
+            "bool ArduinoFsSessionStoreIo::openExistingReadOnly(",
+            writable_open_start,
+        )
+        writable_open = session_adapter[writable_open_start:writable_open_end]
+        for marker in (
+            "permit.existingRootVerified",
+            "openExistingPath(permit.rootPath, permit.byteLimit, true, true,",
+            "false);",
+        ):
+            if marker not in writable_open:
+                errors.append(
+                    "product writable store does not reuse authenticated root "
+                    f"evidence without a redundant media probe: {marker}"
+                )
         cleanup_markers = (
             "removeScratch(",
             "ScratchCleanupPermit",
