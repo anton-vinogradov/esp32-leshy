@@ -2708,8 +2708,13 @@ constexpr UBaseType_t kProductSurveyObservationCapacity =
 // drop counters still fail closed if a denser environment exceeds this burst
 // allowance.
 constexpr UBaseType_t kBleProductSurveyObservationCapacity = 32;
-constexpr std::uint32_t kBleProductMinimumFreeHeapBeforeBegin = 74000U;
-constexpr std::uint32_t kBleProductMinimumLargestHeapBeforeBegin = 30000U;
+// These are admission floors, not clean-boot expectations. Exact no-PSRAM
+// HIL has already completed physical BLE initialization at 73,360 B free and
+// a 28,660 B largest block (dev.261).  Keep a small fail-closed margin below
+// that accepted boundary so a completed Survey/SD lifecycle can start another
+// session without treating normal allocator placement as a radio failure.
+constexpr std::uint32_t kBleProductMinimumFreeHeapBeforeBegin = 73000U;
+constexpr std::uint32_t kBleProductMinimumLargestHeapBeforeBegin = 28000U;
 static_assert(kBleProductSurveyObservationCapacity >= 32U);
 constexpr std::uint32_t kProductSurveyScanIntervalMs = 1000;
 constexpr std::uint16_t kFieldSurveyStationChannelDwellMs = 120U;
