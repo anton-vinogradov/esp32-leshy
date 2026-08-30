@@ -33,6 +33,7 @@ enum class TargetsView : std::uint8_t {
 };
 
 enum class TargetActionItem : std::uint8_t {
+    Radar,
     Favorite,
     Name,
     Tags,
@@ -91,7 +92,7 @@ struct TargetsWorkspace final {
 
 class TargetsController final {
 public:
-    static constexpr std::size_t kActionCount = 7;
+    static constexpr std::size_t kActionCount = 8;
     static constexpr std::size_t kCorrelationReviewControlCount = 4;
     static constexpr std::size_t kNameEditControlCount = 4;
     static constexpr std::size_t kTagEditControlCount = 4;

@@ -65,6 +65,7 @@
 #include "apps/survey/SurveySourceController.h"
 #include "apps/survey/SurveyWorkflow.h"
 #include "apps/targets/TargetsController.h"
+#include "apps/targets/TargetRadar.h"
 #include "apps/ble/BleCompanyDatabase.h"
 #include "apps/ble/BleDeviceCatalog.h"
 #include "apps/ble/BleDeviceIntelligence.h"
@@ -271,6 +272,11 @@ using leshy1::apps::survey::SurveyWorkflow;
 using leshy1::apps::survey::SurveyWorkflowState;
 using leshy1::apps::survey::SurveyWorkflowStatus;
 using leshy1::apps::targets::TargetListRow;
+using leshy1::apps::targets::TargetRadar;
+using leshy1::apps::targets::TargetRadarIngestStatus;
+using leshy1::apps::targets::TargetRadarSignal;
+using leshy1::apps::targets::TargetRadarSnapshot;
+using leshy1::apps::targets::TargetRadarStatus;
 using leshy1::apps::targets::TargetComparisonSide;
 using leshy1::apps::targets::TargetProductBinding;
 using leshy1::apps::targets::TargetsController;
@@ -753,6 +759,31 @@ std::uint32_t webCompanionHeapAfterSuspend = 0;
 bool webCompanionSurveyWorkerSuspended = false;
 std::uint32_t webCompanionHeapBeforeWorkerSuspend = 0;
 std::uint32_t webCompanionHeapAfterWorkerSuspend = 0;
+
+enum class TargetRadarWorkerControl : std::uint8_t {
+    Idle,
+    Running,
+    CancelRequested,
+};
+
+TargetRadar* targetRadarTracker = nullptr;
+TaskHandle_t targetRadarTaskHandle = nullptr;
+portMUX_TYPE targetRadarMux = portMUX_INITIALIZER_UNLOCKED;
+TargetRadarWorkerControl targetRadarWorkerControl =
+    TargetRadarWorkerControl::Idle;
+std::array<char, TargetRecord::kNameCapacity + 1U> targetRadarName{};
+bool targetRadarOverlay = false;
+bool targetRadarWorkerFinished = false;
+bool targetRadarCleanupComplete = true;
+bool targetRadarPassiveOnly = true;
+std::uint32_t targetRadarCycles = 0U;
+std::uint32_t targetRadarWifiScans = 0U;
+std::uint32_t targetRadarBleScans = 0U;
+std::uint32_t targetRadarFullRepaints = 0U;
+std::uint32_t targetRadarDeltaRepaints = 0U;
+std::uint32_t targetRadarContentClears = 0U;
+std::uint32_t targetRadarRenderedRevision = 0U;
+std::uint64_t targetRadarNextUiRefreshUs = 0U;
 
 void clearWebCompanionEntropy(std::array<std::uint8_t, 16>& entropy) {
     volatile std::uint8_t* cursor = entropy.data();
@@ -2967,6 +2998,7 @@ bool infraredCaptureStoreDeadlineCancelRequested = false;
 bool targetsStoreDeadlineCancelRequested = false;
 
 void renderInteractiveScreen(bool clearContent = true);
+void renderTargetRadarLive(const TargetRadarSnapshot& snapshot, bool force);
 void broadcast(const char* line);
 bool boundedSleepReady();
 bool performBoundedLightSleep(std::uint64_t requestedUs);
@@ -8884,6 +8916,302 @@ bool restoreTargetsAfterWebCompanion() {
     return rebuilt;
 }
 
+TargetRadarSnapshot targetRadarSnapshot() {
+    portENTER_CRITICAL(&targetRadarMux);
+    const TargetRadarSnapshot snapshot = targetRadarTracker == nullptr
+        ? TargetRadarSnapshot{} : targetRadarTracker->snapshot();
+    portEXIT_CRITICAL(&targetRadarMux);
+    return snapshot;
+}
+
+TargetRadarWorkerControl targetRadarControl() {
+    portENTER_CRITICAL(&targetRadarMux);
+    const TargetRadarWorkerControl control = targetRadarWorkerControl;
+    portEXIT_CRITICAL(&targetRadarMux);
+    return control;
+}
+
+void targetRadarSetTerminal(TargetRadarStatus status) {
+    portENTER_CRITICAL(&targetRadarMux);
+    if (targetRadarTracker != nullptr) {
+        switch (status) {
+            case TargetRadarStatus::Stopped: targetRadarTracker->stop(); break;
+            case TargetRadarStatus::SourceLost:
+                targetRadarTracker->sourceLost();
+                break;
+            case TargetRadarStatus::Failed: targetRadarTracker->fail(); break;
+            default: break;
+        }
+    }
+    portEXIT_CRITICAL(&targetRadarMux);
+}
+
+WifiRecordDisposition retainTargetRadarWifiRecord(
+        const WifiScanRecord& record, std::uint64_t monotonicUs, void*) {
+    Observation observation{};
+    if (!leshy1::drivers::wifi::normalizePassiveRecord(
+            record, monotonicUs, &observation)) {
+        return WifiRecordDisposition::Rejected;
+    }
+    portENTER_CRITICAL(&targetRadarMux);
+    const TargetRadarIngestStatus status = targetRadarTracker == nullptr
+        ? TargetRadarIngestStatus::InvalidArgument
+        : targetRadarTracker->ingest(observation);
+    portEXIT_CRITICAL(&targetRadarMux);
+    return status == TargetRadarIngestStatus::Matched
+        ? WifiRecordDisposition::Accepted
+        : WifiRecordDisposition::Rejected;
+}
+
+BleRecordDisposition retainTargetRadarBleRecord(
+        const BleAdvertisementRecord& record, std::uint64_t monotonicUs,
+        void*) {
+    Observation observation{};
+    if (!leshy1::drivers::ble::normalizePassiveRecord(
+            record, monotonicUs, &observation)) {
+        return BleRecordDisposition::Rejected;
+    }
+    portENTER_CRITICAL(&targetRadarMux);
+    const TargetRadarIngestStatus status = targetRadarTracker == nullptr
+        ? TargetRadarIngestStatus::InvalidArgument
+        : targetRadarTracker->ingest(observation);
+    portEXIT_CRITICAL(&targetRadarMux);
+    return status == TargetRadarIngestStatus::Matched
+        ? BleRecordDisposition::Accepted
+        : BleRecordDisposition::Rejected;
+}
+
+bool targetRadarHasRadio(const TargetRadarSnapshot& snapshot,
+                         RadioKind radio) {
+    for (std::size_t index = 0; index < snapshot.identityCount; ++index) {
+        if (snapshot.signals[index].supported &&
+            snapshot.signals[index].radio == radio) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void runTargetRadarWorker(void*) {
+    const TargetRadarSnapshot initial = targetRadarSnapshot();
+    const bool listenWifi = targetRadarHasRadio(initial, RadioKind::Wifi);
+    const bool listenBle = targetRadarHasRadio(initial, RadioKind::Ble);
+    bool cleanupComplete = true;
+    bool terminalFailure = !listenWifi && !listenBle;
+    bool anySourceHealthy = false;
+
+    while (!terminalFailure &&
+           targetRadarControl() == TargetRadarWorkerControl::Running) {
+        bool cycleSourceHealthy = false;
+        if (listenWifi &&
+            targetRadarControl() == TargetRadarWorkerControl::Running) {
+            BoardWifiPassiveScanner scanner;
+            const bool begun = scanner.begin();
+            BoardWifiPassiveScanResult scan{};
+            if (begun) {
+                auto plan = leshy1::drivers::wifi::defaultPassivePlan();
+                // Full 2.4-GHz coverage stays responsive to Back while
+                // remaining strictly passive (no directed SSID/probe).
+                plan.maxMsPerChannel = 40U;
+                scan = scanner.scan(plan, retainTargetRadarWifiRecord,
+                                    nullptr);
+            }
+            const bool cleanup = scanner.end() && scanner.cleanupComplete();
+            cleanupComplete = cleanupComplete && cleanup;
+            cycleSourceHealthy = cycleSourceHealthy ||
+                (begun && scan.valid() && cleanup);
+            portENTER_CRITICAL(&targetRadarMux);
+            ++targetRadarWifiScans;
+            portEXIT_CRITICAL(&targetRadarMux);
+        }
+        if (listenBle &&
+            targetRadarControl() == TargetRadarWorkerControl::Running) {
+            BoardBlePassiveScanner scanner;
+            const bool begun = scanner.begin();
+            BoardBlePassiveScanResult scan{};
+            if (begun) {
+                auto plan = leshy1::drivers::ble::defaultPassivePlan();
+                plan.deduplicateAddresses = false;
+                plan.durationMs = 1200U;
+                plan.maximumRecords = 128U;
+                scan = scanner.scan(plan, retainTargetRadarBleRecord,
+                                    nullptr);
+            }
+            const bool cleanup = scanner.end() && scanner.cleanupComplete();
+            cleanupComplete = cleanupComplete && cleanup;
+            cycleSourceHealthy = cycleSourceHealthy ||
+                (begun && scan.valid() && cleanup);
+            portENTER_CRITICAL(&targetRadarMux);
+            ++targetRadarBleScans;
+            portEXIT_CRITICAL(&targetRadarMux);
+        }
+        anySourceHealthy = anySourceHealthy || cycleSourceHealthy;
+        if (!cycleSourceHealthy &&
+            targetRadarControl() == TargetRadarWorkerControl::Running) {
+            terminalFailure = true;
+            break;
+        }
+        portENTER_CRITICAL(&targetRadarMux);
+        ++targetRadarCycles;
+        portEXIT_CRITICAL(&targetRadarMux);
+        vTaskDelay(1U);
+    }
+
+    const bool cancelled = targetRadarControl() ==
+        TargetRadarWorkerControl::CancelRequested;
+    if (!cleanupComplete) {
+        targetRadarSetTerminal(TargetRadarStatus::Failed);
+    } else if (cancelled) {
+        targetRadarSetTerminal(TargetRadarStatus::Stopped);
+    } else if (terminalFailure || !anySourceHealthy) {
+        targetRadarSetTerminal(TargetRadarStatus::SourceLost);
+    }
+    portENTER_CRITICAL(&targetRadarMux);
+    targetRadarCleanupComplete = cleanupComplete;
+    targetRadarWorkerControl = TargetRadarWorkerControl::Idle;
+    targetRadarTaskHandle = nullptr;
+    targetRadarWorkerFinished = true;
+    portEXIT_CRITICAL(&targetRadarMux);
+    vTaskDelete(nullptr);
+}
+
+void requestTargetRadarStop() {
+    portENTER_CRITICAL(&targetRadarMux);
+    if (targetRadarWorkerControl == TargetRadarWorkerControl::Running) {
+        targetRadarWorkerControl =
+            TargetRadarWorkerControl::CancelRequested;
+    }
+    portEXIT_CRITICAL(&targetRadarMux);
+    BoardWifiPassiveScanner::cancelActiveScan();
+    BoardBlePassiveScanner::cancelActiveScan();
+}
+
+bool startTargetRadar() {
+    if (targetRadarOverlay || webCompanionOverlay ||
+        targetsProductRuntime == nullptr ||
+        targetsProductRuntime->controller.view() != TargetsView::Actions ||
+        targetsProductRuntime->controller.selectedAction() !=
+            TargetActionItem::Radar ||
+        targetRadarTaskHandle != nullptr || targetRadarTracker != nullptr ||
+        safetySupervisor.latched()) {
+        return false;
+    }
+    const auto* selected = targetsProductRuntime->controller.selectedTarget();
+    if (selected == nullptr) return false;
+
+    auto* tracker = new (std::nothrow) TargetRadar();
+    if (tracker == nullptr || !tracker->begin(*selected, false)) {
+        delete tracker;
+        lastRuntimeEvent = "target_radar_workspace_unavailable";
+        return true;
+    }
+    targetRadarName.fill('\0');
+    if (selected->nameLength != 0U) {
+        std::memcpy(targetRadarName.data(), selected->name.data(),
+                    selected->nameLength);
+    } else {
+        const auto& identity = selected->identities[0];
+        std::snprintf(
+            targetRadarName.data(), targetRadarName.size(),
+            "%02X:%02X:%02X:%02X:%02X:%02X",
+            static_cast<unsigned>(identity.value[0]),
+            static_cast<unsigned>(identity.value[1]),
+            static_cast<unsigned>(identity.value[2]),
+            static_cast<unsigned>(identity.value[3]),
+            static_cast<unsigned>(identity.value[4]),
+            static_cast<unsigned>(identity.value[5]));
+    }
+    const auto espRf =
+        leshy1::kernel::runtime::resourceMask(Resource::EspRf);
+    if (!resourceBroker.acquire(AppRuntime::kForegroundOwner, espRf)) {
+        delete tracker;
+        lastRuntimeEvent = "target_radar_resource_busy";
+        return true;
+    }
+    if (!suspendTargetsForWebCompanion()) {
+        resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
+        delete tracker;
+        lastRuntimeEvent = "target_radar_suspend_failed";
+        return true;
+    }
+    if (!suspendProductSurveyWorkerForWebCompanion()) {
+        restoreTargetsAfterWebCompanion();
+        resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
+        delete tracker;
+        lastRuntimeEvent = "target_radar_worker_suspend_failed";
+        return true;
+    }
+
+    portENTER_CRITICAL(&targetRadarMux);
+    targetRadarTracker = tracker;
+    targetRadarWorkerControl = TargetRadarWorkerControl::Running;
+    targetRadarWorkerFinished = false;
+    targetRadarCleanupComplete = true;
+    targetRadarCycles = 0U;
+    targetRadarWifiScans = 0U;
+    targetRadarBleScans = 0U;
+    targetRadarRenderedRevision = 0U;
+    targetRadarNextUiRefreshUs = 0U;
+    targetRadarOverlay = true;
+    portEXIT_CRITICAL(&targetRadarMux);
+    const bool started = xTaskCreatePinnedToCore(
+        runTargetRadarWorker, "leshy-target-radar", 8192, nullptr, 1,
+        &targetRadarTaskHandle, 0) == pdPASS;
+    if (!started) {
+        portENTER_CRITICAL(&targetRadarMux);
+        targetRadarWorkerControl = TargetRadarWorkerControl::Idle;
+        targetRadarOverlay = false;
+        targetRadarTracker = nullptr;
+        portEXIT_CRITICAL(&targetRadarMux);
+        delete tracker;
+        restoreTargetsAfterWebCompanion();
+        resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
+        lastRuntimeEvent = "target_radar_worker_unavailable";
+        return true;
+    }
+    lastRuntimeEvent = "target_radar_started";
+    return true;
+}
+
+bool serviceTargetRadar() {
+    bool finished = false;
+    portENTER_CRITICAL(&targetRadarMux);
+    finished = targetRadarWorkerFinished;
+    if (finished) targetRadarWorkerFinished = false;
+    portEXIT_CRITICAL(&targetRadarMux);
+    if (!finished) {
+        std::uint64_t nowUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (nowUs == 0U) nowUs = 1U;
+        if (targetRadarOverlay && uiController.page() == 7U &&
+            nowUs >= targetRadarNextUiRefreshUs) {
+            const TargetRadarSnapshot snapshot = targetRadarSnapshot();
+            if (snapshot.revision != targetRadarRenderedRevision) {
+                display.startWrite();
+                renderTargetRadarLive(snapshot, false);
+                display.endWrite();
+            }
+            targetRadarNextUiRefreshUs = nowUs + 100000U;
+        }
+        return false;
+    }
+
+    const auto espRf =
+        leshy1::kernel::runtime::resourceMask(Resource::EspRf);
+    resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
+    const bool restored = restoreTargetsAfterWebCompanion();
+    portENTER_CRITICAL(&targetRadarMux);
+    TargetRadar* tracker = targetRadarTracker;
+    targetRadarTracker = nullptr;
+    targetRadarOverlay = false;
+    portEXIT_CRITICAL(&targetRadarMux);
+    delete tracker;
+    targetsProductStatus = restored ? "ready" : "radar_restore_failed";
+    lastRuntimeEvent = restored ? "target_radar_stopped"
+                                : "target_radar_restore_failed";
+    return true;
+}
+
 const TargetMergeRecord* activeTargetMerge(
     const TargetMergeHistory& history, const TargetId& targetId) {
     for (std::size_t offset = 0; offset < history.size(); ++offset) {
@@ -10063,12 +10391,17 @@ void serviceTargetsMutationWorker() {
         }
     } else if (!event.companion && rebuilt && event.correlation &&
                targetsProductRuntime != nullptr) {
-        for (std::size_t index = 0; index < 4; ++index) {
+        for (std::size_t index = 0; index < 5; ++index) {
             targetsProductRuntime->controller.next();
         }
     } else if (!event.companion && rebuilt &&
+               event.actionKind == TargetActionKind::SetFavorite &&
+               targetsProductRuntime != nullptr) {
+        targetsProductRuntime->controller.next();
+    } else if (!event.companion && rebuilt &&
         event.actionKind == TargetActionKind::SetName &&
         targetsProductRuntime != nullptr) {
+        targetsProductRuntime->controller.next();
         targetsProductRuntime->controller.next();
     } else if (!event.companion && rebuilt &&
                (event.actionKind == TargetActionKind::AddTag ||
@@ -10076,10 +10409,12 @@ void serviceTargetsMutationWorker() {
                targetsProductRuntime != nullptr) {
         targetsProductRuntime->controller.next();
         targetsProductRuntime->controller.next();
+        targetsProductRuntime->controller.next();
         targetsProductRuntime->controller.openTagList();
     } else if (!event.companion && rebuilt &&
                event.actionKind == TargetActionKind::SetNotes &&
                targetsProductRuntime != nullptr) {
+        targetsProductRuntime->controller.next();
         targetsProductRuntime->controller.next();
         targetsProductRuntime->controller.next();
         targetsProductRuntime->controller.next();
@@ -12772,6 +13107,9 @@ NavigationFooter navigationFooterForCurrentState() {
     if (uiController.page() == 7) {
         if (targetsMutationState == TargetsMutationState::Saving) {
             return {{}, {}, {}};
+        }
+        if (targetRadarOverlay) {
+            return {{NavigationKey::Left, UiTextId::NavStop}, {}, {}};
         }
         if (webCompanionOverlay) {
             return {{NavigationKey::Left,
@@ -19796,7 +20134,185 @@ void renderWebCompanionPage(bool clearContent) {
     renderMetric(4, line, Tone::Muted);
 }
 
+struct TargetRadarVisual final {
+    bool valid = false;
+    TargetRadarStatus status = TargetRadarStatus::Idle;
+    std::uint8_t identityIndex = 0xffU;
+    std::uint8_t identityCount = 0U;
+    std::uint8_t supportedIdentityCount = 0U;
+    std::uint32_t samples = 0U;
+    std::uint32_t wifiSamples = 0U;
+    std::uint32_t bleSamples = 0U;
+    RadioKind radio = RadioKind::Wifi;
+    std::int16_t rssiDbm = 0;
+    std::int16_t minimumRssiDbm = 0;
+    std::int16_t maximumRssiDbm = 0;
+    std::int16_t trendDb = 0;
+    std::uint16_t channel = 0U;
+};
+
+TargetRadarVisual targetRadarRenderedVisual{};
+
+TargetRadarVisual targetRadarVisual(const TargetRadarSnapshot& snapshot) {
+    TargetRadarVisual visual{};
+    visual.valid = true;
+    visual.status = snapshot.status;
+    visual.identityIndex = snapshot.matchedIdentityIndex;
+    visual.identityCount = snapshot.identityCount;
+    visual.supportedIdentityCount = snapshot.supportedIdentityCount;
+    visual.samples = snapshot.samples;
+    visual.wifiSamples = snapshot.wifiSamples;
+    visual.bleSamples = snapshot.bleSamples;
+    if (snapshot.matchedIdentityIndex < snapshot.identityCount) {
+        const auto& signal =
+            snapshot.signals[snapshot.matchedIdentityIndex];
+        visual.radio = signal.radio;
+        visual.rssiDbm = signal.rssiDbm;
+        visual.minimumRssiDbm = signal.minimumRssiDbm;
+        visual.maximumRssiDbm = signal.maximumRssiDbm;
+        visual.trendDb = signal.trendDb;
+        visual.channel = signal.channel;
+    }
+    return visual;
+}
+
+void renderTargetRadarLiveRow(const char* text, std::uint16_t tone,
+                              std::int16_t top) {
+    (void)pushLiveMetaTextRow(text, tone, top);
+}
+
+void renderTargetRadarLive(const TargetRadarSnapshot& snapshot, bool force) {
+    constexpr std::int16_t kLiveTop = 82;
+    const TargetRadarVisual next = targetRadarVisual(snapshot);
+    const bool hasSignal = next.samples != 0U &&
+        next.identityIndex < next.identityCount;
+    const bool modeChanged = !targetRadarRenderedVisual.valid ||
+        targetRadarRenderedVisual.identityIndex != next.identityIndex ||
+        (targetRadarRenderedVisual.samples == 0U) != (next.samples == 0U) ||
+        targetRadarRenderedVisual.status != next.status;
+    if (force || modeChanged) {
+        ++targetRadarContentClears;
+        ++targetRadarFullRepaints;
+        display.fillRect(Layout::Edge, kLiveTop, Layout::ContentWidth,
+                         Layout::FooterDividerY - kLiveTop, Palette::Canvas);
+    } else {
+        ++targetRadarDeltaRepaints;
+    }
+
+    if (!hasSignal) {
+        if (force || modeChanged) {
+            const UiTextId text = next.status == TargetRadarStatus::Failed
+                ? UiTextId::TargetsRadarFailed
+                : next.status == TargetRadarStatus::SourceLost
+                    ? UiTextId::TargetsRadarSourceLost
+                    : UiTextId::TargetsRadarWaiting;
+            display.setTextColor(
+                next.status == TargetRadarStatus::Failed
+                    ? Palette::Danger : Palette::TextMuted,
+                Palette::Canvas);
+            setUiCursor(UiTextRole::Body, 14, 106);
+            display.print(tr(text));
+            char line[64] = {};
+            std::snprintf(line, sizeof(line),
+                          tr(UiTextId::TargetsRadarSourcesFormat),
+                          static_cast<unsigned long>(next.wifiSamples),
+                          static_cast<unsigned long>(next.bleSamples));
+            renderTargetRadarLiveRow(line, Palette::TextMuted, 145);
+        }
+        targetRadarRenderedVisual = next;
+        targetRadarRenderedRevision = snapshot.revision;
+        return;
+    }
+
+    char line[72] = {};
+    std::snprintf(line, sizeof(line),
+                  tr(UiTextId::TargetsRadarIdentityFormat),
+                  static_cast<unsigned>(next.identityIndex + 1U),
+                  static_cast<unsigned>(next.identityCount));
+    char source[28] = {};
+    if (next.radio == RadioKind::Wifi) {
+        std::snprintf(source, sizeof(source), "WI-FI / CH %u",
+                      static_cast<unsigned>(next.channel));
+    } else {
+        std::snprintf(source, sizeof(source), "BLUETOOTH");
+    }
+    std::snprintf(line + std::strlen(line), sizeof(line) - std::strlen(line),
+                  " | %s", source);
+    if (force || modeChanged ||
+        targetRadarRenderedVisual.channel != next.channel ||
+        targetRadarRenderedVisual.radio != next.radio) {
+        renderTargetRadarLiveRow(line, Palette::Positive, 86);
+    }
+
+    const Rect signalRect{Layout::Edge, 111, Layout::ContentWidth, 88};
+    if (force || modeChanged) {
+        renderRadioSignalCard(next.rssiDbm, signalRect, true);
+    } else if (targetRadarRenderedVisual.rssiDbm != next.rssiDbm) {
+        renderRadioSignalCardDelta(targetRadarRenderedVisual.rssiDbm,
+                                   next.rssiDbm, signalRect);
+    }
+    if (force || modeChanged ||
+        targetRadarRenderedVisual.minimumRssiDbm != next.minimumRssiDbm ||
+        targetRadarRenderedVisual.maximumRssiDbm != next.maximumRssiDbm) {
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::TargetsRadarRangeFormat),
+                      static_cast<int>(next.minimumRssiDbm),
+                      static_cast<int>(next.maximumRssiDbm));
+        renderTargetRadarLiveRow(line, Palette::TextMuted, 207);
+    }
+    if (force || modeChanged ||
+        targetRadarRenderedVisual.wifiSamples != next.wifiSamples ||
+        targetRadarRenderedVisual.bleSamples != next.bleSamples) {
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::TargetsRadarSourcesFormat),
+                      static_cast<unsigned long>(next.wifiSamples),
+                      static_cast<unsigned long>(next.bleSamples));
+        renderTargetRadarLiveRow(line, Palette::TextMuted, 230);
+    }
+    if (force || modeChanged ||
+        targetRadarRenderedVisual.trendDb != next.trendDb) {
+        renderTargetRadarLiveRow(
+            tr(wifiDeviceTrendText(next.trendDb)),
+            next.trendDb >= 4 ? Palette::Positive
+                : next.trendDb <= -4 ? Palette::Danger
+                                     : Palette::TextMuted,
+            253);
+    }
+    if (snapshot.status == TargetRadarStatus::Partial &&
+        (force || modeChanged)) {
+        renderTargetRadarLiveRow(tr(UiTextId::TargetsRadarPartial),
+                                 Palette::Warning, 276);
+    }
+    targetRadarRenderedVisual = next;
+    targetRadarRenderedRevision = snapshot.revision;
+}
+
+void renderTargetRadarPage(bool clearContent) {
+    renderHeader(tr(UiTextId::TargetsRadarTitle), clearContent);
+    display.setTextColor(Palette::Focus, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, 14, 42);
+    display.print(targetRadarName.data());
+    const TargetRadarSnapshot snapshot = targetRadarSnapshot();
+    char line[64] = {};
+    std::snprintf(line, sizeof(line),
+                  tr(UiTextId::TargetsRadarIdentityFormat),
+                  static_cast<unsigned>(snapshot.supportedIdentityCount),
+                  static_cast<unsigned>(snapshot.identityCount));
+    display.setTextColor(
+        snapshot.supportedIdentityCount == snapshot.identityCount
+            ? Palette::TextSecondary : Palette::Warning,
+        Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 66);
+    display.print(line);
+    targetRadarRenderedVisual = {};
+    renderTargetRadarLive(snapshot, true);
+}
+
 void renderTargetsPage(bool clearContent) {
+    if (targetRadarOverlay) {
+        renderTargetRadarPage(clearContent);
+        return;
+    }
     if (webCompanionOverlay) {
         renderWebCompanionPage(clearContent);
         return;
@@ -20249,6 +20765,13 @@ void renderTargetsPage(bool clearContent) {
             Tone tone = Tone::Neutral;
             switch (index) {
                 case 0: {
+                    label = tr(UiTextId::TargetsRadarAction);
+                    std::snprintf(note, sizeof(note), "%s",
+                                  tr(UiTextId::TargetsRadarActionNote));
+                    tone = Tone::Positive;
+                    break;
+                }
+                case 1: {
                     label = tr(UiTextId::TargetsFavorite);
                     const char* value = tr(target->favorite
                         ? UiTextId::TargetsFavoriteOn
@@ -20261,7 +20784,7 @@ void renderTargetsPage(bool clearContent) {
                     tone = target->favorite ? Tone::Positive : Tone::Muted;
                     break;
                 }
-                case 1:
+                case 2:
                     label = tr(UiTextId::TargetsName);
                     if (target->nameLength != 0) {
                         std::memcpy(note, target->name.data(),
@@ -20271,7 +20794,7 @@ void renderTargetsPage(bool clearContent) {
                                       tr(UiTextId::TargetsNameEmpty));
                     }
                     break;
-                case 2:
+                case 3:
                     label = tr(UiTextId::TargetsTags);
                     std::snprintf(note, sizeof(note),
                                   tr(UiTextId::TargetsTagsCountFormat),
@@ -20281,7 +20804,7 @@ void renderTargetsPage(bool clearContent) {
                     tone = target->tagCount != 0
                         ? Tone::Positive : Tone::Muted;
                     break;
-                case 3:
+                case 4:
                     label = tr(UiTextId::TargetsNotes);
                     if (target->notesLength != 0) {
                         std::memcpy(note, target->notes.data(),
@@ -20293,7 +20816,7 @@ void renderTargetsPage(bool clearContent) {
                         tone = Tone::Muted;
                     }
                     break;
-                case 4: {
+                case 5: {
                     label = tr(UiTextId::TargetsCorrelations);
                     const std::size_t count =
                         controller.selectedCorrelationCount();
@@ -20305,7 +20828,7 @@ void renderTargetsPage(bool clearContent) {
                     tone = enabled ? Tone::Positive : Tone::Muted;
                     break;
                 }
-                case 5:
+                case 6:
                     label = tr(UiTextId::CompanionWebAction);
                     std::snprintf(note, sizeof(note), "%s",
                                   tr(UiTextId::CompanionWebActionNote));
@@ -20482,6 +21005,7 @@ struct UiRenderSnapshot final {
     std::uint8_t targetsView = 0;
     std::size_t targetsSelection = 0;
     std::size_t targetsSize = 0;
+    bool targetRadarOverlay = false;
     bool webCompanionOverlay = false;
     bool webCompanionAuthorized = false;
     std::uint8_t deviceLockView = 0;
@@ -20569,6 +21093,7 @@ UiRenderSnapshot captureUiRenderSnapshot() {
             ? 0U : targetsProductRuntime->controller.navigationSelection(),
         targetsProductRuntime == nullptr
             ? 0U : targetsProductRuntime->controller.navigationCount(),
+        targetRadarOverlay,
         webCompanionOverlay,
         webCompanionConnectivity.authorized(),
         static_cast<std::uint8_t>(deviceLockController.view()),
@@ -20603,7 +21128,8 @@ bool renderSelectionDelta() {
     }
 
     if (uiController.page() == 7 &&
-        (renderedUi.webCompanionOverlay != webCompanionOverlay ||
+        (renderedUi.targetRadarOverlay != targetRadarOverlay ||
+         renderedUi.webCompanionOverlay != webCompanionOverlay ||
          renderedUi.webCompanionAuthorized !=
              webCompanionConnectivity.authorized())) {
         return false;
@@ -24978,6 +25504,97 @@ void emitTargetsState(Stream& reply) {
     reply.println(line);
 }
 
+void emitTargetRadarState(Stream& reply) {
+    const TargetRadarSnapshot snapshot = targetRadarSnapshot();
+    TargetRadarWorkerControl control{};
+    bool overlay = false;
+    bool finished = false;
+    bool cleanup = false;
+    std::uint32_t cycles = 0U;
+    std::uint32_t wifiScans = 0U;
+    std::uint32_t bleScans = 0U;
+    TaskHandle_t task = nullptr;
+    portENTER_CRITICAL(&targetRadarMux);
+    control = targetRadarWorkerControl;
+    overlay = targetRadarOverlay;
+    finished = targetRadarWorkerFinished;
+    cleanup = targetRadarCleanupComplete;
+    cycles = targetRadarCycles;
+    wifiScans = targetRadarWifiScans;
+    bleScans = targetRadarBleScans;
+    task = targetRadarTaskHandle;
+    portEXIT_CRITICAL(&targetRadarMux);
+    const char* controlName = control == TargetRadarWorkerControl::Running
+        ? "running"
+        : control == TargetRadarWorkerControl::CancelRequested
+            ? "cancel_requested" : "idle";
+    const bool matched = snapshot.matchedIdentityIndex <
+        snapshot.identityCount;
+    const TargetRadarSignal* radarSignal = matched
+        ? &snapshot.signals[snapshot.matchedIdentityIndex] : nullptr;
+    char line[1536] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.targets.radar.v1\",\"kind\":\"state\","
+        "\"status\":\"%s\",\"overlay_open\":%s,"
+        "\"worker_control\":\"%s\",\"task_active\":%s,"
+        "\"worker_finished\":%s,\"cleanup_complete\":%s,"
+        "\"passive_only\":%s,\"wifi_station_supported\":%s,"
+        "\"identity_count\":%u,\"supported_identity_count\":%u,"
+        "\"matched_identity_index\":%u,\"samples\":%lu,"
+        "\"wifi_samples\":%lu,\"ble_samples\":%lu,"
+        "\"unmatched\":%lu,\"stale\":%lu,\"revision\":%lu,"
+        "\"signal_radio\":\"%s\",\"rssi_dbm\":%d,"
+        "\"previous_rssi_dbm\":%d,\"minimum_rssi_dbm\":%d,"
+        "\"maximum_rssi_dbm\":%d,\"trend_db\":%d,"
+        "\"channel\":%u,\"signal_samples\":%lu,"
+        "\"cycles\":%lu,\"wifi_scans\":%lu,\"ble_scans\":%lu,"
+        "\"full_repaints\":%lu,\"delta_repaints\":%lu,"
+        "\"content_clears\":%lu,\"rendered_revision\":%lu,"
+        "\"blocked_write_attempts\":%lu,\"physical_write_calls\":0,"
+        "\"lease_mask\":%lu,\"heap_free\":%lu,"
+        "\"identity_disclosed\":false}",
+        targetRadarStatusName(snapshot.status), overlay ? "true" : "false",
+        controlName, task != nullptr ? "true" : "false",
+        finished ? "true" : "false", cleanup ? "true" : "false",
+        targetRadarPassiveOnly ? "true" : "false",
+        snapshot.wifiStationSupported ? "true" : "false",
+        static_cast<unsigned>(snapshot.identityCount),
+        static_cast<unsigned>(snapshot.supportedIdentityCount),
+        static_cast<unsigned>(snapshot.matchedIdentityIndex),
+        static_cast<unsigned long>(snapshot.samples),
+        static_cast<unsigned long>(snapshot.wifiSamples),
+        static_cast<unsigned long>(snapshot.bleSamples),
+        static_cast<unsigned long>(snapshot.unmatched),
+        static_cast<unsigned long>(snapshot.stale),
+        static_cast<unsigned long>(snapshot.revision),
+        radarSignal == nullptr ? "none"
+            : radarSignal->radio == RadioKind::Wifi ? "wifi" : "ble",
+        static_cast<int>(radarSignal == nullptr ? 0 : radarSignal->rssiDbm),
+        static_cast<int>(radarSignal == nullptr
+                             ? 0 : radarSignal->previousRssiDbm),
+        static_cast<int>(radarSignal == nullptr
+                             ? 0 : radarSignal->minimumRssiDbm),
+        static_cast<int>(radarSignal == nullptr
+                             ? 0 : radarSignal->maximumRssiDbm),
+        static_cast<int>(radarSignal == nullptr ? 0 : radarSignal->trendDb),
+        static_cast<unsigned>(radarSignal == nullptr
+                                  ? 0U : radarSignal->channel),
+        static_cast<unsigned long>(radarSignal == nullptr
+                                       ? 0U : radarSignal->samples),
+        static_cast<unsigned long>(cycles),
+        static_cast<unsigned long>(wifiScans),
+        static_cast<unsigned long>(bleScans),
+        static_cast<unsigned long>(targetRadarFullRepaints),
+        static_cast<unsigned long>(targetRadarDeltaRepaints),
+        static_cast<unsigned long>(targetRadarContentClears),
+        static_cast<unsigned long>(targetRadarRenderedRevision),
+        static_cast<unsigned long>(targetsBlockedWriteAttempts),
+        static_cast<unsigned long>(appRuntime.activeResources()),
+        static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)));
+    reply.println(line);
+}
+
 void emitCompanionWebState(Stream& reply) {
     namespace companion = leshy1::services::companion;
     char line[1536] = {};
@@ -27823,6 +28440,15 @@ bool applyUiAction(UiAction action, bool render = true) {
         uiController.recordHandledAction(action);
         return finish(false);
     }
+    if (!wasRoot && uiController.page() == 7 && targetRadarOverlay) {
+        const bool stop = action == UiAction::Back || action == UiAction::Left;
+        if (stop) {
+            requestTargetRadarStop();
+            lastRuntimeEvent = "target_radar_stop_requested";
+        }
+        uiController.recordHandledAction(action);
+        return finish(stop);
+    }
     if (!wasRoot && uiController.page() == 7 && webCompanionOverlay) {
         bool changed = false;
         if (action == UiAction::Back || action == UiAction::Left) {
@@ -27876,6 +28502,9 @@ bool applyUiAction(UiAction action, bool render = true) {
                    (action == UiAction::Select || action == UiAction::Right)) {
             handled = true;
             switch (controller.selectedAction()) {
+                case TargetActionItem::Radar:
+                    changed = startTargetRadar();
+                    break;
                 case TargetActionItem::Favorite:
                     changed = requestTargetsFavoriteMutation();
                     break;
@@ -29017,6 +29646,9 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                         TouchTargetLayout::ThreeChoices, point),
                     static_cast<std::uint8_t>(surveyController.draftFilter())};
         }
+    }
+    if (uiController.page() == 7 && targetRadarOverlay) {
+        return {};
     }
     if (uiController.page() == 7 && webCompanionOverlay) {
         return {leshy1::ui::hitTouchTarget(
@@ -37637,6 +38269,8 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         }
     } else if (std::strcmp(command, "targets.state") == 0) {
         emitTargetsState(reply);
+    } else if (std::strcmp(command, "targets.radar") == 0) {
+        emitTargetRadarState(reply);
     } else if (std::strncmp(command, "companion.web.hil-seed ", 23) == 0) {
         armCompanionWebHilEntropy(reply, command);
     } else if (std::strcmp(command, "companion.web.hil-proof") == 0) {
@@ -38499,6 +39133,7 @@ void setup() {
               "\"companion.web.hil-seed <32-hex-entropy>\","
               "\"companion.web.hil-proof\","
               "\"companion.web.state\","
+              "\"targets.state\",\"targets.radar\","
               "\"capture.state\",\"capture.export.pcap\","
               "\"airspace.guard.state\","
               "\"capture.subghz.state\","
@@ -38571,6 +39206,7 @@ void loop() {
         quiesceAirspaceGuardOnSafetyStop();
         quiesceWifiAuthenticationOnSafetyStop();
         quiesceBleGattOnSafetyStop();
+        requestTargetRadarStop();
     }
     if (!safetySupervisor.latched()) {
         serviceAutomationPackageUi();
@@ -38594,6 +39230,9 @@ void loop() {
         serviceSpectrumWaterfallCadence();
     }
     if (serviceWebCompanion() && uiController.page() == 7) {
+        renderInteractiveScreen();
+    }
+    if (serviceTargetRadar() && uiController.page() == 7U) {
         renderInteractiveScreen();
     }
     serviceAntennaStatusLeds();

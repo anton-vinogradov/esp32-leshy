@@ -17,8 +17,11 @@ if [[ $# -gt 0 ]]; then
         if [[ "$2" == "automation-hid" ]]; then
             exec "$(cd "$(dirname "$0")" && pwd)/test-automation-hid.sh"
         fi
+        if [[ "$2" == "target-radar" ]]; then
+            exec "$(cd "$(dirname "$0")" && pwd)/test-target-radar.sh"
+        fi
     fi
-    echo "usage: $0 [--only automation-hid|device-lock|serial-console]" >&2
+    echo "usage: $0 [--only automation-hid|device-lock|serial-console|target-radar]" >&2
     exit 2
 fi
 
@@ -529,6 +532,8 @@ python3 "$repo_dir/tools/check_field_survey_trusted_context_acceptance.py"
     -o "$test_tmp/targets_controller_tests"
 
 "$test_tmp/targets_controller_tests"
+
+"$repo_dir/tools/test-target-radar.sh"
 
 "${CXX:-c++}" \
     -std=c++17 \

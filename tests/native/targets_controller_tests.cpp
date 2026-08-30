@@ -169,6 +169,8 @@ void pairIsUsefulFirstAndStable() {
     CHECK(controller.openSelected());
     CHECK(controller.view() == TargetsView::Actions);
     CHECK(controller.actionSelection() == 0);
+    CHECK(controller.selectedAction() == TargetActionItem::Radar);
+    CHECK(controller.next());
     CHECK(controller.selectedAction() == TargetActionItem::Favorite);
     CHECK(controller.next());
     CHECK(controller.selectedAction() == TargetActionItem::Name);
@@ -460,6 +462,7 @@ void persistedMetadataFollowsIdentityAcrossVisits() {
     CHECK(currentController.openSelected());
     CHECK(currentController.openSelected());
     CHECK(currentController.next());
+    CHECK(currentController.next());
     CHECK(currentController.openNameEditor());
     CHECK(!currentController.nameEditorDirty());
     CHECK(currentController.eraseNameEditorGlyph());
@@ -503,7 +506,7 @@ void correlationReviewKeepsCandidateUnownedUntilDecision() {
     CHECK(controller.next());
     CHECK(controller.openSelected());
     CHECK(controller.openSelected());
-    for (std::size_t index = 0; index < 4; ++index) CHECK(controller.next());
+    for (std::size_t index = 0; index < 5; ++index) CHECK(controller.next());
     CHECK(controller.selectedAction() == TargetActionItem::Correlations);
     CHECK(controller.selectedCorrelationCount() == 1);
     CHECK(controller.openCorrelationList());
@@ -612,7 +615,7 @@ void rejectedCorrelationAtCatalogBoundReopensTruncated() {
     CHECK(review.next());
     CHECK(review.openSelected());
     CHECK(review.openSelected());
-    for (std::size_t index = 0; index < 4; ++index) CHECK(review.next());
+    for (std::size_t index = 0; index < 5; ++index) CHECK(review.next());
     CHECK(review.selectedCorrelationCount() == 1);
     CHECK(review.openCorrelationList());
     CHECK(review.openSelected());

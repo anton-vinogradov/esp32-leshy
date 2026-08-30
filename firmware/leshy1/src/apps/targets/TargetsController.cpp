@@ -888,12 +888,13 @@ bool TargetsController::openNameEditor() {
 
 TargetActionItem TargetsController::selectedAction() const {
     switch (actionSelection_) {
-        case 0: return TargetActionItem::Favorite;
-        case 1: return TargetActionItem::Name;
-        case 2: return TargetActionItem::Tags;
-        case 3: return TargetActionItem::Notes;
-        case 4: return TargetActionItem::Correlations;
-        case 5: return TargetActionItem::CompanionWeb;
+        case 0: return TargetActionItem::Radar;
+        case 1: return TargetActionItem::Favorite;
+        case 2: return TargetActionItem::Name;
+        case 3: return TargetActionItem::Tags;
+        case 4: return TargetActionItem::Notes;
+        case 5: return TargetActionItem::Correlations;
+        case 6: return TargetActionItem::CompanionWeb;
         default: return TargetActionItem::MergeSplit;
     }
 }
