@@ -1425,6 +1425,18 @@ Compact [acceptance](../../tests/hil/evidence/board-01-ble-gatt-negative-1.0.0-d
 identity и screenshots. Это завершает CAP-051 без использования clone, Cardputer
 или Wi-Fi Mac.
 
+Bound terminal/cold reopen Product Survey `RB-M204`: exact physical
+`1.0.0-dev.276` переиспользует принятый image dev.276 и поэтому не добавляет
+resource delta прошивки поверх `RB-M203`. Один автоматически paused pass Wi-Fi+BLE
+передаёт 20+31=51 observations с zero drops и commits generation 175→176. Cold
+reset read-only открывает exact generation 176/51 и enrolled CID на attempt 1 с
+zero physical/blocked writes; boot heap остаётся 148 124/74 828 B. Library export
+переиспользует retained result `field-visit-live`, final cleanup — Home/none/lease 0.
+Compact acceptance сохраняет только hashes/counts и допускает corrected oracle
+имени session исторического raw run только для exact pinned one-error list и SHA
+raw runner; ambient identities, export payload, screenshots и дополнительный radio
+cycle не сохраняются.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

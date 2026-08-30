@@ -1,0 +1,108 @@
+{
+  "board": "board-01",
+  "build": {
+    "app_elf_sha256": "ae9782374b0a9b17da9e8d7a52c4ed86d9a71b74c10962660c79125d0e561dbd",
+    "factory_bytes": 3546432,
+    "firmware_bytes": 3480896,
+    "firmware_sha256": "e98bf5e4825c438ec5629ffd05ddf58168552a42fef3d40969aa0b9c1206cae9",
+    "linked_flash_bytes": 3480736,
+    "ota_slot_free_bytes": 713408,
+    "static_ram_bytes": 230680
+  },
+  "candidate": {
+    "app_elf_sha256": "ae9782374b0a9b17da9e8d7a52c4ed86d9a71b74c10962660c79125d0e561dbd",
+    "firmware_sha256": "e98bf5e4825c438ec5629ffd05ddf58168552a42fef3d40969aa0b9c1206cae9",
+    "flash_mode": "reuse_exact",
+    "flash_requested": false,
+    "flashed": false,
+    "source_commit": "6b5d27b2253bd7b335bab8754379a5ce51a0a5d2",
+    "version": "1.0.0-dev.276"
+  },
+  "evidence": {
+    "artifact_index_sha256": "e66e443ad4060a02e3b8585285939f8f6fbc3351e861686ce951e67ad11d1aa4",
+    "corrected_runner_sha256": "4cf6028f9e33e5934516554e90445341be17c719ba523c1998406048ced0431c",
+    "raw_run_sha256": "898f8e5a25ef74534d69e25104f3f9a0363763fdce874886006ded6992fafb7a",
+    "raw_runner_sha256": "6d10cbec20d7774615bd050d09532de3d308854169592de124f92679f767651d",
+    "rejected_precursor_run_sha256": [
+      "523288ad9f7844777ab9cb4d0a14d8b89df97d13becaa4c7b72b3eefc664a66a",
+      "ba2d20bcf7c08c6659b4d9ffaed29c87ce6ac6eeef112c4888dd8f58c6f7f2a2"
+    ],
+    "run_id": "be64e5f8bca99d7be5473e6ef26aec20",
+    "runner_test_sha256": "5c6a70c4ee25d0403cb268e87fc5a76afc5f65d571884d7524c3fcac0e2ccdad",
+    "screenshots": {
+      "committed": {
+        "png_sha256": "0022937dbf7c92432ae8d5ce0379228da0a25afe1d4b052f2477db822f479905",
+        "rgb565_sha256": "756d0d0fe8dd45ac8c6d245253c4c3bacc472de9f874304c578a324874edbee7"
+      },
+      "export": {
+        "png_sha256": "0c31c83a19c11bb58444080a290a085e3ad8a43e171e22c94a92c70b77608b88",
+        "rgb565_sha256": "7905f0ad463e5df74e2945c43726301859db8f5206fe24727e84c3d73a1ad30f"
+      },
+      "paused": {
+        "png_sha256": "aae84e00e951d42deb0658422a2ca20315b939505b266bca19e45673752d3c4c",
+        "rgb565_sha256": "63d9e5a137f3922c30531c9c5382a63ec982161acd2e23685ea6959bf6f075bb"
+      },
+      "setup": {
+        "png_sha256": "85d3082ae0c9fc18ff6611c26c5599ff07e7010ea3d09e00283bb31059104b39",
+        "rgb565_sha256": "6a1ff22c8eb750974490333685e2f6e5081c160d3a3081c9cd098a9f09f5b0b3"
+      }
+    },
+    "verifier_sha256": "1686f6890b4b2a5512208fb2ccc8203c5b0d9ae225e6870863e1e72db07f5a59"
+  },
+  "evidence_ids": [
+    "E-BUILD-193",
+    "E-AUTO-168",
+    "E-HIL-206",
+    "E-STORAGE-034",
+    "E-SURVEY-018",
+    "E-UX-063",
+    "RB-M204"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "privacy": {
+    "raw_ble_addresses_retained": false,
+    "raw_export_retained": false,
+    "raw_wifi_identifiers_retained": false,
+    "screenshot_hashes_retained": true,
+    "screenshots_retained": false
+  },
+  "schema": "leshy.product_survey_terminal_hil.acceptance.v1",
+  "scope": {
+    "application_flash": false,
+    "cardputer_touched": false,
+    "clone_touched": false,
+    "exact_firmware_reuse": true,
+    "host_wifi_control_calls": 0,
+    "manual_button_presses": 0,
+    "radio_cycles": 1,
+    "terminal_zero_lease": true
+  },
+  "status": "pass_terminal_commit_and_exact_cold_reopen",
+  "verified": {
+    "ble_observations": 31,
+    "ble_scan_cycles": 1,
+    "cold_reopen_physical_write_calls": 0,
+    "corrected_oracle_failure": "library_export.session.id: 'field-visit-live' != 'product-passive-live'",
+    "corrected_oracle_recheck": true,
+    "drops": 0,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "forwarded": 51,
+    "generation_after": 176,
+    "generation_before": 175,
+    "heap_free_after": 74828,
+    "heap_free_before": 74828,
+    "heap_total_after": 148124,
+    "heap_total_before": 148124,
+    "identity_attempts": 1,
+    "identity_transient_retries": 0,
+    "library_session_id": "field-visit-live",
+    "observations": 51,
+    "queue_depth_final": 0,
+    "raw_runner_passed": false,
+    "scan_cycles": 1,
+    "wifi_observations": 20,
+    "wifi_scan_cycles": 1
+  }
+}

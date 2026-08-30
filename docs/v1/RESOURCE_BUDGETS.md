@@ -1437,6 +1437,18 @@ operations. The compact
 retains hashes/counts only and omits fixture label/PID, raw address, selected identity
 and screenshots. This completes CAP-051 without using clone, Cardputer or Mac Wi-Fi.
 
+Product Survey terminal/cold-reopen bound `RB-M204`: exact physical
+`1.0.0-dev.276` reuses the accepted dev.276 image and therefore adds no firmware
+resource delta beyond `RB-M203`. One automatically paused Wi-Fi+BLE pass forwards
+20+31=51 observations with zero drops and commits generation 175→176. Cold reset
+reopens exact generation 176/51 and enrolled CID read-only on attempt 1 with zero
+physical or blocked writes; boot heap remains 148,124/74,828 B. Library export
+reuses the retained `field-visit-live` result and final cleanup is Home/none/lease 0.
+The compact acceptance retains only hashes/counts and permits the historical raw
+run's corrected session-name oracle solely for its exact pinned one-error list and
+raw-runner SHA; no ambient identity, export payload, screenshot or extra radio cycle
+is retained.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
