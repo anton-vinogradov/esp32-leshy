@@ -7,8 +7,9 @@
 - **Workflow:** WF-08-A1/A2/A4
 - **Architecture:** [ADR-002](adr/ADR-002-resource-policy.md),
   [ADR-004](adr/ADR-004-action-boundary.md)
-- **State:** normative contract; the first implementation slice is a passive,
-  allocation-free package inspector and execution-admission boundary
+- **State:** slice 1 accepted in exact host/build `1.0.0-dev.286`: passive,
+  allocation-free package inspector and execution-admission boundary; no product
+  route or active execution is connected
 
 ## User outcome
 
@@ -96,9 +97,9 @@ inspection.
 
 ## Delivery slices
 
-1. `next` — canonical parser, passive summary, verifier interface, strict
+1. `done` — canonical parser, passive summary, verifier interface, strict
    policy/admission order, and mutation/ceiling/permission/target negative host tests.
-2. `planned` — Library package selection and compact EN/RU Inspector UI; malformed and
+2. `next` — Library package selection and compact EN/RU Inspector UI; malformed and
    unsigned packages remain viewable but not runnable.
 3. `planned` — real P-256 trust adapter and owner-visible key enrollment/revocation;
    cold restore and Device Lock interaction.
@@ -108,4 +109,3 @@ inspection.
    dedicated no-output-before-confirm and physical-stop HIL.
 
 No slice may claim active HID from parser tests, a screenshot, or a simulated target.
-

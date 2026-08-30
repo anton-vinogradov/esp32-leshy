@@ -1542,6 +1542,22 @@ integration. Stock-profile HIL сохраняет free heap byte-invariant 72 57
 positive serial traffic, второй transcript buffer или encrypted storage transcript;
 они остаются gated reviewed no-RF fixture и отдельной action Save.
 
+Bound passive package foundation CAP-054 `RB-M212`: exact host/build
+`1.0.0-dev.286` на source `90a9ada94ce02d446b47cb1bf5f14305a6fea955`
+использует 232 072 B static RAM и app image 3 523 504 B, оставляя 670 800 B в
+OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`1b2c42a4e7f13906cc673324ce0139875105452aa8856f62756cd416bb3c0cca`/
+`9bd7ff81a2516d4eb1b242176610a2d4225f187b770446fe78bccaba73df7683`/
+`963bdde97494ce47499ef82252389cae0a979b15f73a40970eae9257967080a1`/
+`b584a30c7b6f4611306db6b4124e82e6d92fceb92116d22627b475e8a845335e`.
+Static RAM не меняется относительно dev.285. Delta padded app 32 bytes — только
+build/version identity: production project компилирует allocation-free parser, но
+его sections намеренно discarded linker до подключения passive product Inspector.
+Host API допускает packages не больше 4 096 bytes при не более 32 steps, 128 active
+events, 1 024 output bytes и 300 seconds; caller storage package и trust adapter пока
+не финансируются. Resident buffer package/signature/HID report/target/script и
+execution resource не заявляются.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

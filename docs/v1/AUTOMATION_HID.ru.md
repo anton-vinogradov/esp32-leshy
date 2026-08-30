@@ -7,8 +7,9 @@
 - **Workflow:** WF-08-A1/A2/A4
 - **Архитектура:** [ADR-002](adr/ADR-002-resource-policy.ru.md),
   [ADR-004](adr/ADR-004-action-boundary.ru.md)
-- **Состояние:** нормативный контракт; первый implementation slice — пассивный
-  allocation-free inspector package и boundary допуска execution
+- **Состояние:** slice 1 принят в exact host/build `1.0.0-dev.286`: пассивный
+  allocation-free inspector package и boundary допуска execution; product route
+  и active execution не подключены
 
 ## Результат для пользователя
 
@@ -96,9 +97,9 @@ inspection.
 
 ## Delivery slices
 
-1. `next` — canonical parser, passive summary, interface verifier, strict ordering
+1. `done` — canonical parser, passive summary, interface verifier, strict ordering
    policy/admission и mutation/ceiling/permission/target negative host tests.
-2. `planned` — выбор package из Library и compact EN/RU UI Inspector; malformed и
+2. `next` — выбор package из Library и compact EN/RU UI Inspector; malformed и
    unsigned packages можно посмотреть, но нельзя запустить.
 3. `planned` — real P-256 trust adapter и owner-visible enrollment/revocation keys;
    cold restore и interaction Device Lock.
@@ -108,4 +109,3 @@ inspection.
    dedicated HIL no-output-before-confirm и physical stop.
 
 Ни один slice не заявляет active HID по parser tests, screenshot или simulated target.
-

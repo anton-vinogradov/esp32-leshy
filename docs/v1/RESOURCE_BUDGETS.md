@@ -1556,6 +1556,22 @@ and CLI integration. The stock-profile HIL leaves free heap byte-invariant at
 claim positive serial traffic, a second transcript buffer or encrypted transcript
 storage; those remain gated by the reviewed no-RF fixture and a separate Save action.
 
+CAP-054 passive package-foundation bound `RB-M212`: exact host/build
+`1.0.0-dev.286` at source `90a9ada94ce02d446b47cb1bf5f14305a6fea955`
+uses 232,072 B static RAM and a 3,523,504 B app image, leaving 670,800 B in the
+4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`1b2c42a4e7f13906cc673324ce0139875105452aa8856f62756cd416bb3c0cca`/
+`9bd7ff81a2516d4eb1b242176610a2d4225f187b770446fe78bccaba73df7683`/
+`963bdde97494ce47499ef82252389cae0a979b15f73a40970eae9257967080a1`/
+`b584a30c7b6f4611306db6b4124e82e6d92fceb92116d22627b475e8a845335e`.
+Static RAM is unchanged from dev.285. The 32-byte padded-app delta is only the
+build/version identity: the production project compiles the allocation-free parser,
+but its sections are deliberately discarded by the linker until the passive product
+Inspector references them. The host API admits packages no larger than 4,096 bytes
+with at most 32 steps, 128 active events, 1,024 output bytes and 300 seconds; caller
+storage for the package and trust adapter remains unfunded. No resident package,
+signature, HID report, target or script buffer and no execution resource is claimed.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
