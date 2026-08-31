@@ -13735,15 +13735,20 @@ std::int16_t menuRowTextTop(Rect bounds) {
 }
 
 void renderMenuRow(Rect bounds, const char* label, const char* note,
-                   bool selected, bool enabled, Tone noteTone) {
+                   bool selected, bool enabled, Tone noteTone,
+                   Tone labelTone = Tone::Neutral) {
     const std::uint16_t background = selected
         ? (enabled ? Palette::SurfaceFocus : Palette::SurfaceFocusDisabled)
         : Palette::Surface;
     display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
                           Layout::Radius, background);
     renderFocusCue(bounds, selected);
-    display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
-                         background);
+    const std::uint16_t labelColor = !enabled
+        ? Palette::TextMuted
+        : (labelTone == Tone::Neutral
+               ? (selected ? Palette::Focus : Palette::TextSecondary)
+               : toneColor(labelTone));
+    display.setTextColor(labelColor, background);
     const std::int16_t labelTop = menuRowTextTop(bounds);
     setUiCursor(UiTextRole::Body,
                 bounds.x + kInteractiveRowTextInset, labelTop);
@@ -13858,9 +13863,13 @@ void renderHomeRow(std::uint8_t index, std::uint8_t firstVisible) {
     const Rect bounds = Components::homeRow(
         static_cast<std::uint8_t>(index - firstVisible));
     const bool selected = uiController.selection() == index;
+    const bool lab = std::strcmp(item->id, "lab") == 0;
+    const bool device = std::strcmp(item->id, "device") == 0;
+    const Tone itemTone = !item->enabled
+        ? Tone::Muted
+        : (lab ? Tone::Danger : (device ? Tone::Muted : Tone::Positive));
     renderMenuRow(bounds, tr(homeLabel(*item)), tr(homeNote(*item)), selected,
-                  item->enabled,
-                  item->enabled ? Tone::Positive : Tone::Muted);
+                  item->enabled, itemTone, lab ? Tone::Danger : Tone::Neutral);
 }
 
 void renderHome(bool clearContent) {

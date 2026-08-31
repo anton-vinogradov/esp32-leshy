@@ -13,6 +13,10 @@ bool available(const hardware::HardwareInventory& inventory, const char* key) {
 void AppCatalog::rebuild(const hardware::HardwareInventory& inventory,
                          bool targetsMergeFixture) {
     size_ = 0;
+    // Keep stable route identities while presenting one task-first hierarchy:
+    // nearby discovery -> spectrum -> work with evidence -> controlled Lab ->
+    // service. HIL and automation navigate by id; these positions remain a
+    // compatibility contract, not wording exposed to the user.
     const bool persistentSurvey =
         available(inventory, "survey.persistent_passive");
     const bool wifiSurvey = available(inventory, "radio.wifi");

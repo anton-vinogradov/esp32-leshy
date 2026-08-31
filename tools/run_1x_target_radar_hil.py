@@ -137,11 +137,12 @@ def pixel_regions(frames: Path, before: str, after: str) -> dict[str, int]:
 def open_targets(device: PassiveSerial,
                  trace: list[dict[str, Any]]) -> dict[str, Any]:
     state = normalize_home(device)
-    for _ in range(5):
+    for _ in range(16):
+        if state.get("selected_id") == "targets":
+            break
         state = action(device, "down")
         trace.append(state)
-    require(state, "Targets selected", page="home", selection=5,
-            selected_id="targets")
+    require(state, "Targets selected", page="home", selected_id="targets")
     opened = action(device, "right")
     trace.append(opened)
     require(opened, "Targets opened", page="targets",

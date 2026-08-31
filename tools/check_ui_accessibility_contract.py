@@ -80,9 +80,19 @@ def main() -> int:
                    "NavigationKey::RightAndSelect", "renderNavigationFooter"):
         require(failures, marker in renderer,
                 f"spatial navigation footer contract missing: {marker}")
-    require(failures, "item->enabled ? Tone::Positive : Tone::Muted" in renderer and
+    require(failures, "!item->enabled" in renderer and
+            "? Tone::Muted" in renderer and
             "tr(homeNote(*item))" in renderer,
             "disabled Home item must retain a textual reason")
+    require(failures,
+            'std::strcmp(item->id, "lab") == 0' in renderer and
+            "lab ? Tone::Danger" in renderer,
+            "direct Lab entry must retain a non-text danger treatment")
+    require(failures,
+            'LESHY_UI_TEXT(NoteLabReady, Meta, 196, '
+            '"CONTROLLED ZONE / REVIEW FIRST", '
+            'u8"КОНТРОЛЬ / СНАЧАЛА ПРОВЕРКА")' in strings,
+            "direct Lab entry must explain the controlled zone in text")
 
     tests = TESTS.read_text(encoding="utf-8")
     require(failures, "contains(row, Components::focusMarker(row))" in tests,
