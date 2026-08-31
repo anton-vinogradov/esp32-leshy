@@ -2184,7 +2184,6 @@ Cc1101SignalFinderState ccFinderRenderedState =
 std::uint32_t ccFinderRenderedFrequencyKHz = UINT32_MAX;
 bool ccFinderRenderedFound = false;
 SubGhzRawCapture subGhzRawCapture;
-std::uint64_t nextSubGhzCaptureUiRefreshUs = 0;
 std::uint8_t subGhzFskLowCarrierSamples = 0;
 std::uint32_t subGhzFskTransportArms = 0;
 std::uint32_t subGhzFskEdgesDrained = 0;
@@ -3057,6 +3056,24 @@ void feedRuntimeSafetyWatchdog();
 bool lastUiActionUsedIncrementalRender = false;
 bool lastUiRenderWasIncremental = false;
 std::uint64_t lastUiRenderUs = 0;
+enum class UiDeltaRenderResult : std::uint8_t {
+    RequiresFull,
+    NoChange,
+    Rendered,
+};
+const char* uiDeltaRenderResultName(UiDeltaRenderResult result) {
+    switch (result) {
+        case UiDeltaRenderResult::RequiresFull: return "full";
+        case UiDeltaRenderResult::NoChange: return "no_change";
+        case UiDeltaRenderResult::Rendered: return "delta";
+    }
+    return "unknown";
+}
+UiDeltaRenderResult lastUiDeltaRenderResult =
+    UiDeltaRenderResult::RequiresFull;
+std::uint32_t uiFullRepaints = 0U;
+std::uint32_t uiDeltaRepaints = 0U;
+std::uint32_t uiNoChangeRepaintsSuppressed = 0U;
 
 struct SdPhysicalEvidenceWorkspace final {
     // UI state is intentionally a single reusable static workspace.  The
@@ -3394,6 +3411,10 @@ void restartAtLittleFsSessionStoreBoundary(
 constexpr std::int32_t kScreenWidth = Layout::ScreenWidth;
 constexpr std::int32_t kScreenHeight = Layout::ScreenHeight;
 constexpr std::int32_t kCaptureRows = 4;
+// One shared four-row readback window serves both serial diagnostics and the
+// protected product Screenshot path.  The portable board-01 baseline has no
+// usable PSRAM, so a full 153,600-byte framebuffer must never be required.
+std::array<std::uint16_t, kScreenWidth * kCaptureRows> uiCapturePixels{};
 
 bool appendGoldenObservations(SurveySession& session) {
     static constexpr std::uint8_t kBssids[3][6] = {
@@ -13745,6 +13766,11 @@ void formatHomeVersion(char* output, std::size_t capacity) {
 }
 
 void renderHeader(const char* title, bool clearContent) {
+    // A false clearContent value is the shared in-place repaint contract.
+    // Static chrome is already valid for that surface; clearing and drawing
+    // the header again creates a bright flash even when only one row changes.
+    // Dynamic status fields have their own bounded renderHeaderStatus() path.
+    if (!clearContent) return;
     const Rect header = Components::header();
     display.fillRect(header.x, header.y, header.width, header.height,
                      Palette::Header);
@@ -21429,22 +21455,26 @@ UiRenderSnapshot captureUiRenderSnapshot() {
     };
 }
 
-bool renderSelectionDelta() {
-    if (!renderedUi.valid || renderedUi.page != uiController.page()) return false;
+UiDeltaRenderResult renderSelectionDelta() {
+    if (!renderedUi.valid || renderedUi.page != uiController.page()) {
+        return UiDeltaRenderResult::RequiresFull;
+    }
 
     if (uiController.isRoot()) {
         const std::uint8_t current = uiController.selection();
-        if (renderedUi.rootSelection == current) return false;
+        if (renderedUi.rootSelection == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
         const std::uint8_t oldFirst =
             homeFirstVisible(renderedUi.rootSelection);
         const std::uint8_t currentFirst = homeFirstVisible(current);
         if (oldFirst != currentFirst) {
             renderHome(false);
-            return true;
+            return UiDeltaRenderResult::Rendered;
         }
         renderHomeRow(renderedUi.rootSelection, currentFirst);
         renderHomeRow(current, currentFirst);
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 7 &&
@@ -21452,21 +21482,23 @@ bool renderSelectionDelta() {
          renderedUi.webCompanionOverlay != webCompanionOverlay ||
          renderedUi.webCompanionAuthorized !=
              webCompanionConnectivity.authorized())) {
-        return false;
+        return UiDeltaRenderResult::RequiresFull;
     }
 
     if (uiController.page() == kDevicePage) {
-        if (renderedUi.deviceSelection == deviceSelection) return false;
+        if (renderedUi.deviceSelection == deviceSelection) {
+            return UiDeltaRenderResult::NoChange;
+        }
         const std::uint8_t oldFirst =
             deviceFirstVisible(renderedUi.deviceSelection);
         const std::uint8_t currentFirst = deviceFirstVisible(deviceSelection);
         if (oldFirst != currentFirst) {
             renderDevicePage(false);
-            return true;
+            return UiDeltaRenderResult::Rendered;
         }
         renderDeviceRow(renderedUi.deviceSelection, currentFirst);
         renderDeviceRow(deviceSelection, currentFirst);
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 8U) {
@@ -21476,13 +21508,15 @@ bool renderSelectionDelta() {
             renderedUi.automationSize != automationPackageCatalog.size() ||
             renderedUi.automationCatalogPending !=
                 automationCatalogRefreshPending;
-        if (contentChanged) return false;
+        if (contentChanged) return UiDeltaRenderResult::RequiresFull;
         const std::size_t current = automationPackageCatalog.selection();
-        if (renderedUi.automationSelection == current) return false;
+        if (renderedUi.automationSelection == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
         renderAutomationPackageRow(static_cast<std::uint8_t>(
             renderedUi.automationSelection));
         renderAutomationPackageRow(static_cast<std::uint8_t>(current));
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == kAutomationTrustPage &&
@@ -21493,11 +21527,11 @@ bool renderSelectionDelta() {
             automationTrustStore.snapshot();
         if (renderedUi.automationTrustCount != snapshot.count ||
             renderedUi.automationTrustGeneration != snapshot.generation) {
-            return false;
+            return UiDeltaRenderResult::RequiresFull;
         }
         if (renderedUi.automationTrustSelection ==
             automationTrustUiSelection) {
-            return false;
+            return UiDeltaRenderResult::NoChange;
         }
         const std::uint8_t oldFirst = automationTrustFirstVisible(
             renderedUi.automationTrustSelection);
@@ -21505,12 +21539,12 @@ bool renderSelectionDelta() {
             automationTrustUiSelection);
         if (oldFirst != currentFirst) {
             renderAutomationTrustPage(false);
-            return true;
+            return UiDeltaRenderResult::Rendered;
         }
         renderAutomationTrustRow(renderedUi.automationTrustSelection,
                                  currentFirst);
         renderAutomationTrustRow(automationTrustUiSelection, currentFirst);
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == kSerialConsolePage) {
@@ -21528,11 +21562,11 @@ bool renderSelectionDelta() {
             renderedUi.serialConsoleRxBytes !=
                 serialConsoleEndpoint.stats().bytesReceived ||
             serialConsoleLiveDirty;
-        if (!changed) return false;
+        if (!changed) return UiDeltaRenderResult::NoChange;
         renderSerialConsolePage(viewChanged);
         renderNavigationFooter();
         serialConsoleLiveDirty = false;
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == kDeviceLockPage &&
@@ -21544,7 +21578,9 @@ bool renderSelectionDelta() {
             deviceLockController.cursor();
         const bool digitChanged = renderedUi.deviceLockDigit !=
             deviceLockController.digit();
-        if (!cursorChanged && !digitChanged) return true;
+        if (!cursorChanged && !digitChanged) {
+            return UiDeltaRenderResult::NoChange;
+        }
         // PIN navigation is a strictly local repaint. Keeping the header,
         // headline and canvas intact prevents the bright flash that a
         // full-screen clear would create while keys repeat.
@@ -21553,7 +21589,7 @@ bool renderSelectionDelta() {
             renderDeviceLockPinAdvanceAction();
             renderNavigationFooter();
         }
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21562,11 +21598,11 @@ bool renderSelectionDelta() {
             static_cast<std::uint8_t>(BleProductView::InspectorMenu)) {
         if (renderedUi.bleInspectorModeSelection ==
             bleInspectorModeSelection) {
-            return true;
+            return UiDeltaRenderResult::NoChange;
         }
         renderBleInspectorModeMenu(false);
         renderNavigationFooter();
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21576,7 +21612,7 @@ bool renderSelectionDelta() {
         renderBleGattInspectorData(false);
         renderHeaderStatus();
         renderNavigationFooter();
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21591,18 +21627,19 @@ bool renderSelectionDelta() {
             if (nowUs == 0U) nowUs = 1U;
             if (nextBleInspectorUiRefreshUs != 0U &&
                 nowUs < nextBleInspectorUiRefreshUs) {
-                return true;
+                return UiDeltaRenderResult::NoChange;
             }
             nextBleInspectorUiRefreshUs =
                 nowUs + kBleDeviceUiRefreshPeriodUs;
             renderBleInspectorRawData(false);
             renderHeaderStatus();
             renderNavigationFooter();
+            return UiDeltaRenderResult::Rendered;
         }
         // Duplicate advertisements for other devices still wake the shared
         // survey loop. The selected-target capture revision determines the
         // exact delta; never fall through to a full-screen repaint.
-        return true;
+        return UiDeltaRenderResult::NoChange;
     }
 
     if (uiController.page() == 2 &&
@@ -21613,11 +21650,10 @@ bool renderSelectionDelta() {
             renderedUi.bleDeviceRevision != bleDeviceCatalog.revision();
         if (!catalogChanged && !bleDeviceUiRefreshPending) {
             // A scan-window event can request a render even when it produced
-            // no new fact for the selected device. Returning false here would
-            // invoke the generic full-screen fallback and visibly blink the
-            // otherwise unchanged card.
+            // no new fact for the selected device. Publish an explicit no-op
+            // so the generic renderer neither clears nor redraws the card.
             ++bleDeviceDetailRefreshesDeferred;
-            return true;
+            return UiDeltaRenderResult::NoChange;
         }
         std::uint64_t nowUs =
             static_cast<std::uint64_t>(esp_timer_get_time());
@@ -21626,10 +21662,10 @@ bool renderSelectionDelta() {
             nowUs < nextBleDeviceUiRefreshUs) {
             bleDeviceUiRefreshPending = true;
             ++bleDeviceDetailRefreshesDeferred;
-            // Acknowledge the catalog revision without falling through to a
-            // full screen repaint. A later passive sample will publish the
-            // most recent aggregate at the bounded four-Hz visual cadence.
-            return true;
+            // Acknowledge the catalog revision without painting. A later
+            // passive sample publishes the most recent aggregate at the
+            // bounded four-Hz visual cadence.
+            return UiDeltaRenderResult::NoChange;
         }
         nextBleDeviceUiRefreshUs =
             nowUs + kBleDeviceUiRefreshPeriodUs;
@@ -21648,7 +21684,7 @@ bool renderSelectionDelta() {
         bleDeviceDetail = live;
         bleDeviceDetailSignal = signal;
         bleDeviceRenderedDetail = live;
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21666,22 +21702,25 @@ bool renderSelectionDelta() {
             static_cast<std::uint8_t>(surveyWorkflow.state());
         const bool selectionChanged =
             renderedUi.bleDeviceSelection != current;
+        bool painted = false;
         if (dataChanged || oldFirst != currentFirst || selectionChanged ||
             stateChanged) {
             // The visible-row cache compares final pixels, so a catalog
             // revision repaints only rows whose user-facing content changed.
             renderBleDevicesData(false);
+            painted = true;
         }
         if (stateChanged) {
             display.fillRect(128, 0, Layout::ScreenWidth - 128,
                              Layout::HeaderHeight, Palette::Header);
             renderHeaderStatus();
             renderNavigationFooter();
+            painted = true;
         }
         // The shared survey worker can report a duplicate advertisement.
-        // Nothing visible changed, so acknowledge the refresh without a
-        // fallback full-screen repaint.
-        return true;
+        // Nothing visible changed, so acknowledge it as an explicit no-op.
+        return painted ? UiDeltaRenderResult::Rendered
+                       : UiDeltaRenderResult::NoChange;
     }
 
     if (uiController.page() == 2 &&
@@ -21689,7 +21728,7 @@ bool renderSelectionDelta() {
         renderedUi.wifiProductView ==
             static_cast<std::uint8_t>(WifiProductView::Menu)) {
         if (renderedUi.wifiProductSelection == wifiProductSelection) {
-            return false;
+            return UiDeltaRenderResult::NoChange;
         }
         const std::uint8_t oldFirst = wifiProductFirstVisible(
             renderedUi.wifiProductSelection);
@@ -21698,12 +21737,12 @@ bool renderSelectionDelta() {
         if (oldFirst != currentFirst) {
             renderWifiProductMenu(false);
             renderNavigationFooter();
-            return true;
+            return UiDeltaRenderResult::Rendered;
         }
         renderWifiProductRow(renderedUi.wifiProductSelection, currentFirst);
         renderWifiProductRow(wifiProductSelection, currentFirst);
         renderNavigationFooter();
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21716,14 +21755,14 @@ bool renderSelectionDelta() {
                 AirspaceGuardView::EvidenceList ||
             renderedUi.airspaceGuardEvidenceSelection ==
                 airspaceGuardController.evidenceSelection()) {
-            return false;
+            return UiDeltaRenderResult::RequiresFull;
         }
         // Evidence navigation repaints the compact report content only. The
         // display is never cleared, so physical-key repeats cannot create a
         // bright full-screen flash.
         renderAirspaceGuardPage(false);
         renderNavigationFooter();
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21735,7 +21774,7 @@ bool renderSelectionDelta() {
         // stay untouched so lifecycle transitions cannot flash the display.
         renderWifiAuthenticationCapture(false);
         renderNavigationFooter();
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21776,12 +21815,14 @@ bool renderSelectionDelta() {
                 renderHeaderStatus();
                 renderNavigationFooter();
             }
-            return true;
+            return UiDeltaRenderResult::Rendered;
         }
-        if (renderedUi.wifiNetworkSelection == current) return false;
+        if (renderedUi.wifiNetworkSelection == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
         renderWifiNetworkRow(renderedUi.wifiNetworkSelection, currentFirst);
         renderWifiNetworkRow(current, currentFirst);
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21789,7 +21830,7 @@ bool renderSelectionDelta() {
         renderedUi.wifiProductView ==
             static_cast<std::uint8_t>(WifiProductView::NetworkDetail)) {
         if (renderedUi.wifiNetworkRevision == wifiNetworkCatalog.revision()) {
-            return false;
+            return UiDeltaRenderResult::NoChange;
         }
         const Observation& live = *liveWifiNetworkDetail();
         const WifiNetworkSignalStats& signal = *liveWifiNetworkSignal();
@@ -21802,7 +21843,7 @@ bool renderSelectionDelta() {
             wifiNetworkDetailSignal = signal;
             wifiNetworkRenderedDetail = live;
         }
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21810,10 +21851,10 @@ bool renderSelectionDelta() {
         renderedUi.wifiProductView ==
             static_cast<std::uint8_t>(WifiProductView::DeviceDetail)) {
         if (renderedUi.wifiDeviceRevision == wifiDeviceCatalog.revision()) {
-            return false;
+            return UiDeltaRenderResult::NoChange;
         }
         renderWifiDeviceDetailLiveData(false);
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21848,12 +21889,14 @@ bool renderSelectionDelta() {
                     renderWifiDeviceRow(index, currentFirst);
                 }
             }
-            return true;
+            return UiDeltaRenderResult::Rendered;
         }
-        if (renderedUi.wifiDeviceSelection == current) return false;
+        if (renderedUi.wifiDeviceSelection == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
         renderWifiDeviceRow(renderedUi.wifiDeviceSelection, currentFirst);
         renderWifiDeviceRow(current, currentFirst);
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21861,11 +21904,15 @@ bool renderSelectionDelta() {
         renderedUi.wifiProductView ==
             static_cast<std::uint8_t>(WifiProductView::Channels)) {
         const auto stats = wifiFrameCapture.channelMonitorStats();
-        if (renderedUi.wifiChannelActive != stats.active) return false;
+        if (renderedUi.wifiChannelActive != stats.active) {
+            return UiDeltaRenderResult::RequiresFull;
+        }
         const auto snapshot = wifiFrameCapture.channelLoadSnapshot();
-        if (renderedUi.wifiChannelRevision == snapshot.revision) return false;
+        if (renderedUi.wifiChannelRevision == snapshot.revision) {
+            return UiDeltaRenderResult::NoChange;
+        }
         renderWifiChannelsData(false);
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21873,11 +21920,13 @@ bool renderSelectionDelta() {
         renderedUi.rfSpectrumView ==
             static_cast<std::uint8_t>(RfSpectrumView::SourceMenu)) {
         const std::uint8_t current = rfSpectrumSelection;
-        if (renderedUi.rfSpectrumSelection == current) return false;
+        if (renderedUi.rfSpectrumSelection == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
         renderRfSpectrumSourceRow(renderedUi.rfSpectrumSelection);
         renderRfSpectrumSourceRow(current);
         renderNavigationFooter();
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21885,11 +21934,13 @@ bool renderSelectionDelta() {
         renderedUi.rfSpectrumView ==
             static_cast<std::uint8_t>(RfSpectrumView::Nrf24Menu)) {
         const std::uint8_t current = nrf24ModeSelection;
-        if (renderedUi.nrf24ModeSelection == current) return false;
+        if (renderedUi.nrf24ModeSelection == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
         renderNrf24ModeRow(renderedUi.nrf24ModeSelection, false);
         renderNrf24ModeRow(current, true);
         renderNavigationFooter();
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21897,11 +21948,13 @@ bool renderSelectionDelta() {
         renderedUi.rfSpectrumView ==
             static_cast<std::uint8_t>(RfSpectrumView::SubGhzMenu)) {
         const std::uint8_t current = subGhzModeSelection;
-        if (renderedUi.subGhzModeSelection == current) return false;
+        if (renderedUi.subGhzModeSelection == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
         renderSubGhzModeRow(renderedUi.subGhzModeSelection, false);
         renderSubGhzModeRow(current, true);
         renderNavigationFooter();
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21909,10 +21962,12 @@ bool renderSelectionDelta() {
         renderedUi.rfSpectrumView == static_cast<std::uint8_t>(
             RfSpectrumView::SubGhzCaptureModeMenu)) {
         const std::uint8_t current = subGhzCaptureModeSelection;
-        if (renderedUi.subGhzCaptureModeSelection == current) return false;
+        if (renderedUi.subGhzCaptureModeSelection == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
         renderSubGhzCaptureModeMenu(false);
         renderNavigationFooter();
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21921,11 +21976,13 @@ bool renderSelectionDelta() {
         renderedUi.rfSpectrumView ==
             static_cast<std::uint8_t>(rfSpectrumView)) {
         const std::uint8_t current = ccBandSelectionIndex();
-        if (renderedUi.rfCcBandSelection == current) return false;
+        if (renderedUi.rfCcBandSelection == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
         renderRfCcBandRow(renderedUi.rfCcBandSelection);
         renderRfCcBandRow(current);
         renderNavigationFooter();
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21936,7 +21993,9 @@ bool renderSelectionDelta() {
             static_cast<std::uint8_t>(surveySourceController.view()) &&
         renderedUi.surveySourceMask == surveySourceController.selectedMask()) {
         const std::uint8_t current = surveySourceController.selection();
-        if (renderedUi.surveySetupSelection == current) return false;
+        if (renderedUi.surveySetupSelection == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
         if (surveySourceController.view() == SurveySetupView::Sources) {
             renderSurveySourceRow(renderedUi.surveySetupSelection);
             renderSurveySourceRow(current);
@@ -21945,7 +22004,7 @@ bool renderSelectionDelta() {
             renderSurveyPlanRow(current);
         }
         renderNavigationFooter();
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21957,11 +22016,13 @@ bool renderSelectionDelta() {
         renderedUi.surveySize == surveySession.size()) {
         const std::uint8_t current =
             static_cast<std::uint8_t>(surveyController.draftFilter());
-        if (renderedUi.surveyDraftFilter == current) return false;
+        if (renderedUi.surveyDraftFilter == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
         renderSurveyFilterOption(renderedUi.surveyDraftFilter);
         renderSurveyFilterOption(current);
         renderNavigationFooter();
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 2 &&
@@ -21986,10 +22047,12 @@ bool renderSelectionDelta() {
             for (std::size_t index = first; index < end; ++index) {
                 renderSurveyListRow(index, first);
             }
-            return true;
+            return UiDeltaRenderResult::Rendered;
         }
         if (renderedUi.surveySelection == current &&
-            renderedUi.surveyFilterFocused == currentFilterFocused) return false;
+            renderedUi.surveyFilterFocused == currentFilterFocused) {
+            return UiDeltaRenderResult::NoChange;
+        }
         if (renderedUi.surveyFilterFocused != currentFilterFocused) {
             renderSurveyFilterBar();
             if (!renderedUi.surveyFilterFocused) {
@@ -22000,7 +22063,7 @@ bool renderSelectionDelta() {
                 renderSurveyListRow(current, surveyFirstVisible(current));
             }
             renderNavigationFooter();
-            return true;
+            return UiDeltaRenderResult::Rendered;
         }
         const std::size_t oldFirst =
             surveyFirstVisible(renderedUi.surveySelection);
@@ -22019,7 +22082,7 @@ bool renderSelectionDelta() {
                 renderSurveyListRow(index, currentFirst);
             }
         }
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 3 &&
@@ -22028,10 +22091,12 @@ bool renderSelectionDelta() {
             static_cast<std::uint8_t>(LibraryView::SessionList) &&
         renderedUi.librarySize == libraryController.size()) {
         const std::size_t current = libraryController.selection();
-        if (renderedUi.librarySelection == current) return false;
+        if (renderedUi.librarySelection == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
         renderLibraryListRow(renderedUi.librarySelection);
         renderLibraryListRow(current);
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
@@ -22044,7 +22109,9 @@ bool renderSelectionDelta() {
         const TargetsController& controller =
             targetsProductRuntime->controller;
         const std::size_t current = controller.navigationSelection();
-        if (renderedUi.targetsSelection == current) return false;
+        if (renderedUi.targetsSelection == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
         const std::size_t oldFirst =
             targetsFirstVisible(renderedUi.targetsSelection);
         const std::size_t currentFirst = targetsFirstVisible(current);
@@ -22054,7 +22121,7 @@ bool renderSelectionDelta() {
                 Layout::FooterDividerY - Layout::ContentTop,
                 Palette::Canvas);
             renderTargetsPage(false);
-            return true;
+            return UiDeltaRenderResult::Rendered;
         }
         if (controller.view() == TargetsView::Compare) {
             renderTargetComparisonRow(renderedUi.targetsSelection,
@@ -22064,7 +22131,7 @@ bool renderSelectionDelta() {
             renderTargetListRow(renderedUi.targetsSelection, currentFirst);
             renderTargetListRow(current, currentFirst);
         }
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
 
     if (uiController.page() == 5) {
@@ -22072,7 +22139,7 @@ bool renderSelectionDelta() {
                 static_cast<std::uint8_t>(languageController.active()) ||
             renderedUi.settingsTheme != static_cast<std::uint8_t>(
                 interfaceSettingsController.theme())) {
-            return false;
+            return UiDeltaRenderResult::RequiresFull;
         }
         const std::uint8_t current = interfaceSettingsController.selection();
         if (renderedUi.settingsSelection != current) {
@@ -22081,26 +22148,26 @@ bool renderSelectionDelta() {
             const std::uint8_t currentFirst = settingsFirstVisible(current);
             if (oldFirst != currentFirst) {
                 renderSettingsPage(false);
-                return true;
+                return UiDeltaRenderResult::Rendered;
             }
             renderSettingsRow(renderedUi.settingsSelection, currentFirst);
             renderSettingsRow(current, currentFirst);
-            return true;
+            return UiDeltaRenderResult::Rendered;
         }
         if (renderedUi.settingsBrightnessIndex !=
             interfaceSettingsController.brightnessIndex()) {
             renderSettingsRow(static_cast<std::uint8_t>(
                 InterfaceSetting::Brightness), settingsFirstVisible(current));
-            return true;
+            return UiDeltaRenderResult::Rendered;
         }
         if (renderedUi.settingsAntennaLedBrightnessIndex !=
             antennaStatusController.brightnessIndex()) {
             renderSettingsRow(static_cast<std::uint8_t>(
                 InterfaceSetting::AntennaLeds),
                 settingsFirstVisible(current));
-            return true;
+            return UiDeltaRenderResult::Rendered;
         }
-        return false;
+        return UiDeltaRenderResult::NoChange;
     }
 
     if (uiController.page() == 6 &&
@@ -22108,12 +22175,14 @@ bool renderSelectionDelta() {
         renderedUi.selfTestView ==
             static_cast<std::uint8_t>(SelfTestView::ModeMenu)) {
         const std::uint8_t current = selfTestController.selection();
-        if (renderedUi.selfTestSelection == current) return false;
+        if (renderedUi.selfTestSelection == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
         renderSelfTestModeRow(renderedUi.selfTestSelection);
         renderSelfTestModeRow(current);
-        return true;
+        return UiDeltaRenderResult::Rendered;
     }
-    return false;
+    return UiDeltaRenderResult::RequiresFull;
 }
 
 void renderInteractiveScreen(bool clearContent) {
@@ -22124,8 +22193,12 @@ void renderInteractiveScreen(bool clearContent) {
         deviceLockProtectedPage(uiController.page()) &&
         !deviceLockOperationAllowed(
             leshy1::services::security::DeviceLockOperation::ProtectedUi);
-    const bool incremental = !safetySupervisor.latched() &&
-        !protectedUiBlocked && !clearContent && renderSelectionDelta();
+    UiDeltaRenderResult deltaResult = UiDeltaRenderResult::RequiresFull;
+    if (!safetySupervisor.latched() && !protectedUiBlocked && !clearContent) {
+        deltaResult = renderSelectionDelta();
+    }
+    const bool incremental =
+        deltaResult != UiDeltaRenderResult::RequiresFull;
     if (!incremental) {
         clearContent = true;
         if (safetySupervisor.latched()) {
@@ -22175,6 +22248,15 @@ void renderInteractiveScreen(bool clearContent) {
     renderedUi = captureUiRenderSnapshot();
     const std::uint64_t finishedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
+    lastUiDeltaRenderResult = incremental
+        ? deltaResult : UiDeltaRenderResult::RequiresFull;
+    if (!incremental) {
+        ++uiFullRepaints;
+    } else if (deltaResult == UiDeltaRenderResult::Rendered) {
+        ++uiDeltaRepaints;
+    } else {
+        ++uiNoChangeRepaintsSuppressed;
+    }
     lastUiRenderWasIncremental = incremental;
     lastUiRenderUs = finishedUs >= startedUs ? finishedUs - startedUs : 0;
 }
@@ -22632,7 +22714,6 @@ bool startSubGhzRawCapture(
     rfCcBandSelection = band;
     rfSpectrumKind = RfSpectrumKind::Cc1101;
     rfSpectrumView = RfSpectrumView::SubGhzCaptureLive;
-    nextSubGhzCaptureUiRefreshUs = startedUs;
     lastRuntimeEvent = started ? "subghz_raw_waiting"
                                : "subghz_raw_start_failed";
     return true;
@@ -22648,7 +22729,6 @@ bool stopSubGhzRawCapture(bool returnToCaptureBands) {
         subGhzRawCapture.cancel(nowUs == 0U ? 1U : nowUs);
     }
     const bool cleanup = boardCc1101Spectrum.end();
-    nextSubGhzCaptureUiRefreshUs = 0;
     rfSpectrumView = returnToCaptureBands
         ? RfSpectrumView::SubGhzCaptureBandMenu : RfSpectrumView::None;
     lastRuntimeEvent = cleanup ? "subghz_raw_stopped"
@@ -22693,7 +22773,6 @@ bool loadSubGhzRawStoreTestFixture() {
     subGhzCapturePersistState = CapturePersistState::Result;
     subGhzCapturePersistStatus = "volatile_test_fixture";
     subGhzCapturePersistGeneration = 0;
-    nextSubGhzCaptureUiRefreshUs = 0;
     lastRuntimeEvent = valid ? "subghz_store_test_fixture_ready"
                              : "subghz_store_test_fixture_failed";
     if (valid) renderInteractiveScreen(true);
@@ -22797,13 +22876,12 @@ void serviceSubGhzRawCapture() {
                               ? "subghz_raw_signal_too_long"
                               : "subghz_raw_terminal";
     }
-    // Display transfers are deliberately suspended once the first edge starts
-    // the capture.  A full TFT refresh is long enough to create false pulse
-    // widths; measurement integrity takes precedence until the terminal gap.
-    if (terminal ||
-        (finalState == SubGhzRawCaptureState::Waiting &&
-         sampleUs >= nextSubGhzCaptureUiRefreshUs)) {
-        nextSubGhzCaptureUiRefreshUs = sampleUs + 200000ULL;
+    // Waiting has no changing user-visible field. Repainting it every RSSI
+    // sample used to clear the complete TFT five times per second and was both
+    // visible as flicker and wasteful on the shared radio/display path. OOK
+    // pulse edges and FSK transport are time-critical, so keep measurement
+    // entirely display-free until the one terminal state transition.
+    if (terminal) {
         renderInteractiveScreen(true);
     }
 }
@@ -24542,7 +24620,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   "\"revision\":%lu,\"safety_state\":\"%s\","
                   "\"safety_reason\":\"%s\",\"safety_latched\":%s,"
                   "\"safety_clear_pending\":%s,\"render_mode\":\"%s\","
-                  "\"render_us\":%llu}",
+                  "\"render_us\":%llu,\"render_outcome\":\"%s\","
+                  "\"ui_full_repaints\":%lu,\"ui_delta_repaints\":%lu,"
+                  "\"ui_no_change_suppressed\":%lu}",
                   leshy1::ui::uiActionName(action), changed ? "true" : "false",
                   safetySupervisor.latched()
                       ? "safe_mode"
@@ -24577,7 +24657,11 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   safetySupervisor.latched() ? "true" : "false",
                   safetySupervisor.clearPending() ? "true" : "false",
                   lastUiRenderWasIncremental ? "incremental" : "full",
-                  static_cast<unsigned long long>(lastUiRenderUs));
+                  static_cast<unsigned long long>(lastUiRenderUs),
+                  uiDeltaRenderResultName(lastUiDeltaRenderResult),
+                  static_cast<unsigned long>(uiFullRepaints),
+                  static_cast<unsigned long>(uiDeltaRepaints),
+                  static_cast<unsigned long>(uiNoChangeRepaintsSuppressed));
     const std::size_t length = std::strlen(line);
     if (length > 0 && length < sizeof(line)) {
         const SurveyPipelineProgress pipelineProgress = surveyPipeline.progress();
@@ -30471,7 +30555,6 @@ void calibrateTouch(Stream& reply) {
 }
 
 void captureDisplay(Stream& reply) {
-    static std::uint16_t pixels[kScreenWidth * kCaptureRows] = {};
     char line[256] = {};
     const std::uint32_t byteCount =
         static_cast<std::uint32_t>(kScreenWidth * kScreenHeight * 2);
@@ -30485,8 +30568,11 @@ void captureDisplay(Stream& reply) {
     reply.println(line);
     reply.flush();
     for (std::int32_t y = 0; y < kScreenHeight; y += kCaptureRows) {
-        display.readRect(0, y, kScreenWidth, kCaptureRows, pixels);
-        reply.write(reinterpret_cast<const std::uint8_t*>(pixels), sizeof(pixels));
+        display.readRect(0, y, kScreenWidth, kCaptureRows,
+                         uiCapturePixels.data());
+        reply.write(reinterpret_cast<const std::uint8_t*>(
+                        uiCapturePixels.data()),
+                    uiCapturePixels.size() * sizeof(uiCapturePixels[0]));
         delay(0);
     }
     reply.print('\n');
@@ -30499,19 +30585,99 @@ void captureDisplay(Stream& reply) {
     reply.flush();
 }
 
-struct ScreenshotBufferSource final {
-    const std::uint8_t* bytes = nullptr;
-    std::size_t size = 0U;
+bool screenshotStorageProgress();
+
+struct ScreenshotDisplaySource final {
+    std::size_t cachedOffset = leshy1::storage::kScreenshotPixelBytes;
+    std::size_t cachedSize = 0U;
+    const char* failure = "none";
+
+    void reset() {
+        cachedOffset = leshy1::storage::kScreenshotPixelBytes;
+        cachedSize = 0U;
+        failure = "none";
+    }
 };
 
-bool copyScreenshotBuffer(std::size_t offset, std::uint8_t* output,
-                          std::size_t size, void* rawContext) {
-    const auto* context = static_cast<const ScreenshotBufferSource*>(rawContext);
-    if (context == nullptr || context->bytes == nullptr || output == nullptr ||
-        offset > context->size || size > context->size - offset) {
+bool loadScreenshotDisplayBand(ScreenshotDisplaySource* context,
+                               std::size_t absoluteOffset) {
+    if (context == nullptr ||
+        absoluteOffset >= leshy1::storage::kScreenshotPixelBytes) {
         return false;
     }
-    std::memcpy(output, context->bytes + offset, size);
+    constexpr std::size_t kRowBytes =
+        leshy1::storage::kScreenshotWidth * sizeof(std::uint16_t);
+    constexpr std::size_t kBandBytes = kRowBytes * kCaptureRows;
+    const std::size_t bandOffset =
+        (absoluteOffset / kBandBytes) * kBandBytes;
+    const std::size_t firstRow = bandOffset / kRowBytes;
+    const std::size_t rowsRemaining =
+        leshy1::storage::kScreenshotHeight - firstRow;
+    const std::size_t rows = rowsRemaining < kCaptureRows
+        ? rowsRemaining : kCaptureRows;
+    display.readRect(0, static_cast<std::int32_t>(firstRow),
+                     leshy1::storage::kScreenshotWidth,
+                     static_cast<std::int32_t>(rows),
+                     uiCapturePixels.data());
+    if (!screenshotStorageProgress()) {
+        context->failure = "safety_latched";
+        return false;
+    }
+    context->cachedOffset = bandOffset;
+    context->cachedSize = rows * kRowBytes;
+    return true;
+}
+
+bool copyScreenshotDisplay(std::size_t offset, std::uint8_t* output,
+                           std::size_t size, void* rawContext) {
+    auto* context = static_cast<ScreenshotDisplaySource*>(rawContext);
+    if (context == nullptr || output == nullptr ||
+        offset > leshy1::storage::kScreenshotPixelBytes ||
+        size > leshy1::storage::kScreenshotPixelBytes - offset) {
+        return false;
+    }
+    std::size_t copied = 0U;
+    while (copied < size) {
+        const std::size_t absolute = offset + copied;
+        if (absolute < context->cachedOffset ||
+            absolute >= context->cachedOffset + context->cachedSize) {
+            if (!loadScreenshotDisplayBand(context, absolute)) return false;
+        }
+        const std::size_t bandOffset = absolute - context->cachedOffset;
+        const std::size_t available = context->cachedSize - bandOffset;
+        const std::size_t remaining = size - copied;
+        const std::size_t chunk = available < remaining
+            ? available : remaining;
+        std::memcpy(output + copied,
+                    reinterpret_cast<const std::uint8_t*>(
+                        uiCapturePixels.data()) + bandOffset,
+                    chunk);
+        copied += chunk;
+    }
+    return true;
+}
+
+bool screenshotDisplayCrc32c(ScreenshotDisplaySource* context,
+                             std::uint32_t* output) {
+    if (context == nullptr || output == nullptr) return false;
+    context->reset();
+    std::uint32_t crc = 0xffffffffU;
+    for (std::size_t offset = 0U;
+         offset < leshy1::storage::kScreenshotPixelBytes;) {
+        if (!loadScreenshotDisplayBand(context, offset)) return false;
+        const auto* bytes = reinterpret_cast<const std::uint8_t*>(
+            uiCapturePixels.data());
+        for (std::size_t index = 0U; index < context->cachedSize; ++index) {
+            crc ^= bytes[index];
+            for (std::uint8_t bit = 0U; bit < 8U; ++bit) {
+                const std::uint32_t mask = 0U - (crc & 1U);
+                crc = (crc >> 1U) ^ (0x82f63b78U & mask);
+            }
+        }
+        offset += context->cachedSize;
+    }
+    *output = ~crc;
+    context->reset();
     return true;
 }
 
@@ -30587,27 +30753,10 @@ bool captureAndPersistScreenshot() {
         return true;
     }
 
-    auto* pixels = static_cast<std::uint8_t*>(heap_caps_malloc(
-        leshy1::storage::kScreenshotPixelBytes,
-        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    bool valid = pixels != nullptr;
-    const char* failure = valid ? "none" : "psram_unavailable";
-    if (valid) {
-        constexpr std::int32_t kRowsPerRead = 4;
-        for (std::int32_t y = 0; y < Layout::ScreenHeight;
-             y += kRowsPerRead) {
-            const std::size_t offset = static_cast<std::size_t>(y) *
-                Layout::ScreenWidth * sizeof(std::uint16_t);
-            display.readRect(
-                0, y, Layout::ScreenWidth, kRowsPerRead,
-                reinterpret_cast<std::uint16_t*>(pixels + offset));
-            if (!screenshotStorageProgress()) {
-                valid = false;
-                failure = "safety_latched";
-                break;
-            }
-        }
-    }
+    ScreenshotDisplaySource source{};
+    std::uint32_t pixelCrc32c = 0U;
+    bool valid = screenshotDisplayCrc32c(&source, &pixelCrc32c);
+    const char* failure = valid ? "none" : source.failure;
 
     char expectedFingerprint[33] = {};
     char observedFingerprint[33] = {};
@@ -30619,8 +30768,6 @@ bool captureAndPersistScreenshot() {
         sdSessionStoreIoWorkspace, screenshotStorageProgress,
         &protectedDataCipher, &deviceLock);
     bool ioOpened = false;
-    ScreenshotBufferSource source{pixels,
-                                  leshy1::storage::kScreenshotPixelBytes};
     leshy1::storage::ScreenshotStoreResult committed{};
     leshy1::storage::ScreenshotStoreResult reopened{};
     leshy1::storage::ScreenshotMetadata metadata{};
@@ -30698,8 +30845,7 @@ bool captureAndPersistScreenshot() {
         metadata.width = leshy1::storage::kScreenshotWidth;
         metadata.height = leshy1::storage::kScreenshotHeight;
         metadata.pixelBytes = leshy1::storage::kScreenshotPixelBytes;
-        metadata.pixelCrc32c = leshy1::storage::crc32c(
-            pixels, leshy1::storage::kScreenshotPixelBytes);
+        metadata.pixelCrc32c = pixelCrc32c;
         metadata.capturedUs = static_cast<std::uint64_t>(esp_timer_get_time());
         if (metadata.capturedUs == 0U) metadata.capturedUs = 1U;
         metadata.uiRevision = uiController.revision();
@@ -30713,13 +30859,16 @@ bool captureAndPersistScreenshot() {
                         description->app_elf_sha256,
                         metadata.appElfSha256.size());
         }
+        source.reset();
         committed = leshy1::storage::commitNextScreenshot(
-            io, screenshotStoreWorkspace, metadata, copyScreenshotBuffer,
+            io, screenshotStoreWorkspace, metadata, copyScreenshotDisplay,
             &source);
         valid = committed.valid();
         if (!valid) {
-            failure = leshy1::storage::screenshotStoreStatusName(
-                committed.status);
+            failure = std::strcmp(source.failure, "none") != 0
+                ? source.failure
+                : leshy1::storage::screenshotStoreStatusName(
+                    committed.status);
         }
     }
     if (valid) {
@@ -30734,10 +30883,8 @@ bool captureAndPersistScreenshot() {
     if (filesystem.mounted()) filesystem.end();
     const bool filesystemCleanup = !filesystemAttempted ||
         filesystem.cleanupComplete();
-    if (pixels != nullptr) {
-        std::memset(pixels, 0, leshy1::storage::kScreenshotPixelBytes);
-        heap_caps_free(pixels);
-    }
+    std::memset(uiCapturePixels.data(), 0,
+                uiCapturePixels.size() * sizeof(uiCapturePixels[0]));
     if (acquiredForScreenshot != 0U) {
         resourceBroker.release(owner, acquiredForScreenshot);
     }

@@ -40,6 +40,8 @@ def main() -> int:
         active = function_body(source, "void renderActiveSpectrumData()")
         nrf_service = function_body(source, "void serviceNrf24Spectrum()")
         cc_service = function_body(source, "void serviceCc1101Spectrum()")
+        subghz_capture_service = function_body(
+            source, "void serviceSubGhzRawCapture()")
         nrf_start = function_body(source, "bool startNrf24Receiver(bool finder)")
         cc_start = function_body(source, "bool startCc1101Spectrum(")
         signal_card = function_body(source, "void renderRadioSignalCard(")
@@ -47,7 +49,11 @@ def main() -> int:
         ble_radar = function_body(source, "void renderBleDeviceRadar(")
         wifi_device = function_body(
             source, "void renderWifiDeviceDetailLiveData(bool force)")
-        selection_delta = function_body(source, "bool renderSelectionDelta()")
+        selection_delta = function_body(
+            source, "UiDeltaRenderResult renderSelectionDelta()")
+        interactive = function_body(
+            source, "void renderInteractiveScreen(bool clearContent)")
+        header = function_body(source, "void renderHeader(const char* title")
     except ValueError as error:
         failures.append(str(error))
     else:
@@ -79,6 +85,14 @@ def main() -> int:
                 failures.append(f"{label} live service is not column-incremental")
             if "renderSpectrumBars(true);" in body:
                 failures.append(f"{label} live service forces a graph blank/redraw")
+        if "finalState == SubGhzRawCaptureState::Waiting" in \
+                subghz_capture_service:
+            failures.append(
+                "unchanged Sub-GHz waiting screen is still repainted on cadence")
+        if "if (terminal)" not in subghz_capture_service or \
+                "renderInteractiveScreen(true);" not in subghz_capture_service:
+            failures.append(
+                "Sub-GHz capture must repaint exactly at its terminal transition")
         reset = "spectrumRenderedIntensity.fill(kSpectrumRenderedIntensityInvalid);"
         if reset not in nrf_start:
             failures.append("nRF24 spectrum render cache is not reset at start")
@@ -99,12 +113,36 @@ def main() -> int:
         ):
             if marker not in selection_delta:
                 failures.append(f"live text/radar delta marker missing: {marker}")
+        for marker in (
+            "UiDeltaRenderResult::RequiresFull",
+            "UiDeltaRenderResult::NoChange",
+            "UiDeltaRenderResult::Rendered",
+        ):
+            if marker not in selection_delta:
+                failures.append(f"tri-state repaint result missing: {marker}")
+        for marker in (
+            "deltaResult = renderSelectionDelta();",
+            "deltaResult != UiDeltaRenderResult::RequiresFull",
+            "++uiNoChangeRepaintsSuppressed;",
+        ):
+            if marker not in interactive:
+                failures.append(
+                    f"generic no-change suppression missing: {marker}")
+        if "&& renderSelectionDelta()" in interactive:
+            failures.append(
+                "boolean delta fallback can still turn a no-op into a full repaint")
+        header_guard = header.find("if (!clearContent) return;")
+        header_clear = header.find("display.fillRect(header.x")
+        if not (0 <= header_guard < header_clear):
+            failures.append(
+                "in-place render can still clear and repaint static header chrome")
 
     if failures:
         print("\n".join(f"FAIL: {failure}" for failure in failures))
         return 1
-    print("PASS live renderer: static chrome/text retained; signal fields, "
-          "spectrum columns and one waterfall row update incrementally")
+    print("PASS live renderer: static chrome/text retained; no-change ticks "
+          "are suppressed; signal fields, spectrum columns and one waterfall "
+          "row update incrementally")
     return 0
 
 
