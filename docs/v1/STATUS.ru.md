@@ -26,8 +26,11 @@
   capabilities. Явным product decision приняты все, кроме `CF-005 Peer Link`:
   восемь теперь имеют ID `CAP-048…CAP-055`, `PR-020…PR-027`, `WF-06…WF-08`,
   владельца S7 и risks R-020…R-023. Peer Link явно остаётся после 1.0; disruptive,
-  social-engineering и unrelated-hardware функции — non-goals. Принятая граница
-  1.x теперь содержит **55 capabilities**. Exact dev.242 физически принимает полный
+  social-engineering и unrelated-hardware функции — non-goals. Текущая граница
+  1.x остаётся замороженной на **55 capabilities**. После новых релизов конкурентов
+  1 сентября открыт повторный аудит официальных источников: безопасные outcomes,
+  для которых наше покрытие уже или отсутствует, не меняют знаменатель без явного
+  решения владельца, поэтому строгий актуальный паритет пока не заявляется. Exact dev.242 физически принимает полный
   receive-only workflow CAP-048 «Защита эфира», включая golden и deterministic
   capacity-loss lifecycles, стабильную TFT navigation evidence и чистое освобождение
   radio ownership и heap. Exact dev.246 теперь физически принимает mechanics

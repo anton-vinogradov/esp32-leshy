@@ -2,7 +2,8 @@
 
 Market snapshot: **15 August 2026**.
 
-Feature-level parity audit: **27 August 2026**.
+Feature-level parity audit: **27 August 2026**; official-source re-audit opened
+**1 September 2026**.
 
 This is a product-direction document, not a firmware leaderboard. Projects are
 compared by how well they support an end-to-end workflow:
@@ -112,6 +113,13 @@ accepts eight of the nine audited families as `CAP-048…CAP-055`; each now has 
 `J/PR/CAP/risk/stage` traceability and an S7 owner. `CF-005 Peer Link` remains an
 explicit post-1.0 item rather than a hidden requirement.
 
+The 1 September re-audit supersedes the earlier claim that this catalog already
+covers every useful competitor family. Current official releases document safe,
+relevant outcomes that are either narrower or absent in the frozen catalog. Until
+the re-audit is complete and the owner decides each candidate, **55 remains the
+fixed current denominator, not a parity claim**. Candidate additions and deliberate
+exclusions are tracked separately instead of silently expanding an existing row.
+
 | Feature family found in official competitor docs | Current Leshy coverage | Audit result |
 |---|---|---|
 | Board probe, capability-aware UI, settings, power, diagnostics, install/update/recovery | CAP-001…008, CAP-045…047 | explicit and stronger as one lifecycle |
@@ -161,9 +169,10 @@ explicit post-1.0 item rather than a hidden requirement.
 - **Explicitly after 1.0:** `CF-005 Peer Link`.
 - **Intentionally not copied:** broad disruption, social-engineering credential
   capture, generic LAN attack tooling, and functions requiring unrelated hardware.
-- **Scope claim:** the project now has a traced 55-capability 1.x baseline covering
-  every accepted useful competitor family; that is not a claim that all 55 are
-  implemented or verified yet.
+- **Scope claim:** the project has a traced, currently frozen 55-capability 1.x
+  baseline. The 1 September re-audit is open, so this is not yet a claim of strict
+  parity with every current useful competitor outcome and is not a claim that all
+  55 are implemented or verified.
 
 ## What 1.x must match
 

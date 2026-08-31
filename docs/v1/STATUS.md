@@ -26,8 +26,11 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   The explicit product decision accepts all except `CF-005 Peer Link`: eight are now
   `CAP-048…CAP-055`, `PR-020…PR-027`, `WF-06…WF-08`, with S7 ownership and risks
   R-020…R-023. Peer Link remains explicitly after 1.0; disruptive,
-  social-engineering and unrelated-hardware features remain non-goals. The accepted
-  1.x boundary is now **55 capabilities**. Exact dev.242 physically accepts the
+  social-engineering and unrelated-hardware features remain non-goals. The current
+  1.x boundary remains frozen at **55 capabilities**. A new official-source audit
+  opened on 1 September after competitor releases exposed safe outcomes that may
+  be narrower or absent here; they remain outside the denominator until explicit
+  owner decisions, so strict current parity is not claimed. Exact dev.242 physically accepts the
   complete receive-only CAP-048 Airspace Guard workflow, including golden and
   deterministic capacity-loss lifecycles, stable TFT evidence navigation and clean
   release of both radio ownership and heap. Exact dev.246 now physically accepts the
