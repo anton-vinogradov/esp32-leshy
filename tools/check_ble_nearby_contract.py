@@ -69,7 +69,8 @@ def main() -> int:
     for token in (
         "const bool bleSelected =",
         "sourceMask(RadioKind::Ble)",
-        "bleSelected && !prepareBleProductSurveyMemory()",
+        "bleSelected && !prepareBleProductSurveyMemory(",
+        "recordBleProductMemoryAdmissionFailure(",
         'productSurveyRuntime.status = "ble_memory_unavailable";',
         'productSurveyRuntime.timelineStatus = "memory_unavailable";',
     ):
@@ -166,7 +167,8 @@ def main() -> int:
         "kBleProductSurveyObservationCapacity = 32",
         "kBleProductMinimumFreeHeapBeforeBegin = 73000U",
         "kBleProductMinimumLargestHeapBeforeBegin = 28000U",
-        "prepareBleProductSurveyMemory()",
+        "prepareBleProductSurveyMemory(",
+        "recordBleProductMemoryAdmissionFailure(",
         "restoreBleProductSurveyMemory()",
         "const bool keepBleQueueCompact = returnFromBle && returnHome;",
         "!bleSelected && !restoreBleProductSurveyMemory()",

@@ -425,6 +425,7 @@ using leshy1::platform::arduino::BoardBleGattHilFault;
 using leshy1::platform::arduino::boardBleGattHilFaultName;
 using leshy1::platform::arduino::BoardBlePassiveScanResult;
 using leshy1::platform::arduino::BoardBleBeginDiagnostic;
+using leshy1::platform::arduino::BoardBleBeginStage;
 using leshy1::platform::arduino::boardBleBeginStageName;
 using leshy1::platform::arduino::boardBleScanStatusName;
 using leshy1::platform::arduino::BleRecordDisposition;
@@ -3449,10 +3450,13 @@ void restartAtLittleFsSessionStoreBoundary(
 
 constexpr std::int32_t kScreenWidth = Layout::ScreenWidth;
 constexpr std::int32_t kScreenHeight = Layout::ScreenHeight;
-constexpr std::int32_t kCaptureRows = 4;
-// One shared four-row readback window serves both serial diagnostics and the
-// protected product Screenshot path.  The portable board-01 baseline has no
-// usable PSRAM, so a full 153,600-byte framebuffer must never be required.
+constexpr std::int32_t kCaptureRows = 1;
+// One shared scanline readback window serves both serial diagnostics and the
+// protected product Screenshot path. Pixel coverage stays exact while the
+// permanently-resident internal-RAM footprint is kept small enough to leave a
+// contiguous block for a later NimBLE re-entry. The portable board-01
+// baseline has no usable PSRAM, so a full 153,600-byte framebuffer must never
+// be required.
 std::array<std::uint16_t, kScreenWidth * kCaptureRows> uiCapturePixels{};
 
 bool appendGoldenObservations(SurveySession& session) {
@@ -5581,6 +5585,16 @@ bool prepareBleProductSurveyMemory(
         std::uint32_t* largestHeapOut = nullptr) {
     if (!resizeProductSurveyObservationQueue(
             kBleProductSurveyObservationCapacity)) {
+        if (freeHeapOut != nullptr) {
+            *freeHeapOut = static_cast<std::uint32_t>(
+                heap_caps_get_free_size(
+                    MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+        }
+        if (largestHeapOut != nullptr) {
+            *largestHeapOut = static_cast<std::uint32_t>(
+                heap_caps_get_largest_free_block(
+                    MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+        }
         return false;
     }
     bleProductSurveyMemoryCompact = true;
@@ -5597,6 +5611,19 @@ bool prepareBleProductSurveyMemory(
         return false;
     }
     return true;
+}
+
+void recordBleProductMemoryAdmissionFailure(std::uint32_t freeHeap,
+                                            std::uint32_t largestHeap) {
+    productSurveyRuntime.bleBegin = {};
+    productSurveyRuntime.bleBegin.stage =
+        BoardBleBeginStage::ControllerInit;
+    productSurveyRuntime.bleBegin.error = ESP_ERR_NO_MEM;
+    productSurveyRuntime.bleBegin.heapFreeBefore = freeHeap;
+    productSurveyRuntime.bleBegin.heapLargestBefore = largestHeap;
+    productSurveyRuntime.bleBegin.heapFreeAfter = freeHeap;
+    productSurveyRuntime.bleBegin.heapLargestAfter = largestHeap;
+    productSurveyRuntime.bleBegin.cleanupComplete = true;
 }
 
 bool restoreBleProductSurveyMemory() {
@@ -5800,7 +5827,12 @@ bool startProductSurvey() {
     // after a complete Wi-Fi teardown. Reserve it before the worker owns the
     // session so mixed Field Visits have the same fail-closed admission as the
     // BLE-only product and can never reach NimBLE's allocation assertion.
-    if (bleSelected && !prepareBleProductSurveyMemory()) {
+    std::uint32_t bleAdmissionFreeHeap = 0U;
+    std::uint32_t bleAdmissionLargestHeap = 0U;
+    if (bleSelected && !prepareBleProductSurveyMemory(
+            &bleAdmissionFreeHeap, &bleAdmissionLargestHeap)) {
+        recordBleProductMemoryAdmissionFailure(
+            bleAdmissionFreeHeap, bleAdmissionLargestHeap);
         productSurveyRuntime.status = "ble_memory_unavailable";
         productSurveyRuntime.timelineStatus = "memory_unavailable";
         productSurveyRuntime.cleanupComplete = true;
@@ -27595,9 +27627,14 @@ bool startBleDevicesProduct() {
         lastRuntimeEvent = productSurveyRuntime.status;
         return false;
     }
-    if (!prepareBleProductSurveyMemory()) {
+    std::uint32_t bleAdmissionFreeHeap = 0U;
+    std::uint32_t bleAdmissionLargestHeap = 0U;
+    if (!prepareBleProductSurveyMemory(
+            &bleAdmissionFreeHeap, &bleAdmissionLargestHeap)) {
         productSurveyRuntime = {};
         productSurveyRuntime.selected = true;
+        recordBleProductMemoryAdmissionFailure(
+            bleAdmissionFreeHeap, bleAdmissionLargestHeap);
         productSurveyRuntime.status = "ble_memory_unavailable";
         lastRuntimeEvent = productSurveyRuntime.status;
         return false;
