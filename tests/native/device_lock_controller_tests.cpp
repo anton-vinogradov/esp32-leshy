@@ -32,7 +32,8 @@ DeviceLockAudit audit(DeviceLockState state,
     DeviceLockAudit value{};
     value.state = state;
     value.lastFailure = failure;
-    value.protectedAccessAllowed = state == DeviceLockState::Unlocked;
+    value.protectedAccessAllowed = state == DeviceLockState::Unlocked ||
+        state == DeviceLockState::Disabled;
     return value;
 }
 
@@ -117,12 +118,39 @@ void testUnlockCancelRetryAndImmediateLockIntent() {
     CHECK(controller.outcome() == DeviceLockUiOutcome::Locked);
 }
 
+void testDisableRequiresSeparateSelectionAndConfirmation() {
+    DeviceLockController controller;
+    controller.enter(audit(DeviceLockState::Unlocked));
+    CHECK(controller.actionSelection() == 0U);
+    CHECK(!controller.previousAction());
+    CHECK(controller.nextAction());
+    CHECK(controller.actionSelection() == 1U);
+    CHECK(!controller.nextAction());
+    CHECK(controller.activate() ==
+          DeviceLockActivation::DisableConfirmationOpened);
+    CHECK(controller.view() == DeviceLockView::ConfirmDisable);
+    CHECK(controller.cancel());
+    CHECK(controller.view() == DeviceLockView::Status);
+
+    CHECK(controller.actionSelection() == 1U);
+    CHECK(controller.activate() ==
+          DeviceLockActivation::DisableConfirmationOpened);
+    CHECK(controller.activate() == DeviceLockActivation::DisableRequested);
+    controller.noteDisabled(audit(DeviceLockState::Disabled), true);
+    CHECK(controller.view() == DeviceLockView::Status);
+    CHECK(controller.outcome() == DeviceLockUiOutcome::Disabled);
+
+    CHECK(controller.activate() == DeviceLockActivation::EditorOpened);
+    CHECK(controller.intent() == DeviceLockIntent::Configure);
+}
+
 }  // namespace
 
 int main() {
     testConfigureRequiresStrongMatchingConfirmationAndClearsSubmission();
     testWeakAndMismatchedPinNeverProduceSubmission();
     testUnlockCancelRetryAndImmediateLockIntent();
+    testDisableRequiresSeparateSelectionAndConfirmation();
     if (failures != 0) return EXIT_FAILURE;
     std::cout << "Device Lock UI controller tests passed\n";
     return EXIT_SUCCESS;

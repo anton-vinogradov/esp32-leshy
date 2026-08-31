@@ -100,6 +100,10 @@ public:
                          services::security::kDeviceLockDataKeyBytes>& key)
         override;
     bool clearBootstrapDataKey() override;
+    bool disableCredential(
+        const std::array<std::uint8_t,
+                         services::security::kDeviceLockDataKeyBytes>& dataKey)
+        override;
     bool clearCredentialAndLatch() override;
 
     // HIL may exercise the exact production codec and NVS transaction logic

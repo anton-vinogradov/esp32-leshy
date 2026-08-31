@@ -25,6 +25,7 @@ std::uint64_t saturatingAdd(std::uint64_t left, std::uint64_t right) {
 const char* deviceLockStateName(DeviceLockState state) {
     switch (state) {
         case DeviceLockState::Unconfigured: return "unconfigured";
+        case DeviceLockState::Disabled: return "disabled";
         case DeviceLockState::Locked: return "locked";
         case DeviceLockState::RetryDelay: return "retry_delay";
         case DeviceLockState::RecoveryOnly: return "recovery_only";
@@ -61,6 +62,7 @@ const char* deviceLockOperationName(DeviceLockOperation operation) {
         case DeviceLockOperation::Status: return "status";
         case DeviceLockOperation::Configure: return "configure";
         case DeviceLockOperation::Unlock: return "unlock";
+        case DeviceLockOperation::Disable: return "disable";
         case DeviceLockOperation::Lock: return "lock";
         case DeviceLockOperation::ProtectedUi: return "protected_ui";
         case DeviceLockOperation::ProtectedEvidence:
@@ -179,6 +181,8 @@ bool DeviceLock::operationAlwaysAvailable(DeviceLockOperation operation) {
         case DeviceLockOperation::UpdateRecovery:
         case DeviceLockOperation::FactoryReset:
             return true;
+        case DeviceLockOperation::Disable:
+            return false;
         default:
             return false;
     }
@@ -242,6 +246,16 @@ bool DeviceLock::restore(std::uint64_t nowUs) {
         lastFailure_ = DeviceLockFailure::None;
         return true;
     }
+    if (status == DeviceLockLoadStatus::Disabled) {
+        if (!provisionBootstrapDataKey(false)) {
+            state_ = DeviceLockState::Fault;
+            lastFailure_ = DeviceLockFailure::StoreFailure;
+            return false;
+        }
+        state_ = DeviceLockState::Disabled;
+        lastFailure_ = DeviceLockFailure::None;
+        return true;
+    }
     if (status != DeviceLockLoadStatus::Loaded || !loaded.valid()) {
         loaded.clear();
         state_ = DeviceLockState::Fault;
@@ -273,7 +287,7 @@ bool DeviceLock::restore(std::uint64_t nowUs) {
     return true;
 }
 
-bool DeviceLock::provisionBootstrapDataKey() {
+bool DeviceLock::provisionBootstrapDataKey(bool allowCreate) {
     std::array<std::uint8_t, kDeviceLockDataKeyBytes> candidate{};
     const DeviceLockBootstrapStatus status =
         store_.loadBootstrapDataKey(&candidate);
@@ -282,7 +296,7 @@ bool DeviceLock::provisionBootstrapDataKey() {
             secureClear(candidate.data(), candidate.size());
             return false;
         }
-    } else if (status == DeviceLockBootstrapStatus::Missing) {
+    } else if (status == DeviceLockBootstrapStatus::Missing && allowCreate) {
         if (!crypto_.fillRandom(candidate.data(), candidate.size()) ||
             !anyNonzero(candidate.data(), candidate.size()) ||
             !store_.saveBootstrapDataKey(candidate)) {
@@ -313,7 +327,8 @@ bool DeviceLock::deriveCredentialKeys(
 
 bool DeviceLock::configure(const char* pin, std::size_t pinLength,
                            std::uint64_t nowUs) {
-    if (state_ != DeviceLockState::Unconfigured) {
+    if (state_ != DeviceLockState::Unconfigured &&
+        state_ != DeviceLockState::Disabled) {
         lastFailure_ = DeviceLockFailure::AlreadyConfigured;
         return false;
     }
@@ -470,6 +485,30 @@ bool DeviceLock::unlock(const char* pin, std::size_t pinLength,
     return true;
 }
 
+bool DeviceLock::disable(bool confirmed) {
+    if (!confirmed) {
+        lastFailure_ = DeviceLockFailure::ConfirmationRequired;
+        return false;
+    }
+    if (state_ != DeviceLockState::Unlocked || !dataKeyAvailable_) {
+        lastFailure_ = DeviceLockFailure::NotConfigured;
+        return false;
+    }
+    if (!store_.disableCredential(dataKey_)) {
+        clearUnlockSession();
+        state_ = DeviceLockState::Fault;
+        lastFailure_ = DeviceLockFailure::StoreFailure;
+        return false;
+    }
+    credential_.clear();
+    state_ = DeviceLockState::Disabled;
+    retryUntilUs_ = 0;
+    unlockedAtUs_ = 0;
+    lastActivityUs_ = 0;
+    lastFailure_ = DeviceLockFailure::None;
+    return true;
+}
+
 bool DeviceLock::completeBlockingOperation(std::uint64_t startedUs,
                                            std::uint64_t finishedUs) {
     if (finishedUs < startedUs) {
@@ -488,6 +527,9 @@ bool DeviceLock::completeBlockingOperation(std::uint64_t startedUs,
 }
 
 void DeviceLock::lock() {
+    // Disabled mode has no volatile unlock session to revoke; its durable
+    // bootstrap key intentionally remains available until PIN enrollment.
+    if (state_ == DeviceLockState::Disabled) return;
     clearUnlockSession();
     if (credential_.valid()) {
         if (credential_.failedAttempts >= kDeviceLockMaximumFailures) {
@@ -497,7 +539,8 @@ void DeviceLock::lock() {
             state_ = DeviceLockState::Locked;
             retryUntilUs_ = 0;
         }
-    } else if (state_ != DeviceLockState::Unconfigured) {
+    } else if (state_ != DeviceLockState::Unconfigured &&
+               state_ != DeviceLockState::Disabled) {
         state_ = DeviceLockState::Fault;
     }
 }
@@ -544,7 +587,8 @@ DeviceLockAccess DeviceLock::access(DeviceLockOperation operation,
     service(nowUs);
     if (operationAlwaysAvailable(operation)) return DeviceLockAccess::Allowed;
     if (operation == DeviceLockOperation::Configure) {
-        return state_ == DeviceLockState::Unconfigured
+        return state_ == DeviceLockState::Unconfigured ||
+                       state_ == DeviceLockState::Disabled
             ? DeviceLockAccess::Allowed : DeviceLockAccess::Locked;
     }
     if (operation == DeviceLockOperation::Unlock) {
@@ -557,12 +601,34 @@ DeviceLockAccess DeviceLock::access(DeviceLockOperation operation,
             case DeviceLockState::Fault: return DeviceLockAccess::Faulted;
             case DeviceLockState::Unconfigured:
                 return DeviceLockAccess::SetupRequired;
+            case DeviceLockState::Disabled:
+                return DeviceLockAccess::SetupRequired;
             case DeviceLockState::Unlocked: return DeviceLockAccess::Allowed;
         }
+    }
+    if (operation == DeviceLockOperation::Disable) {
+        if (state_ == DeviceLockState::Unlocked) {
+            return DeviceLockAccess::Allowed;
+        }
+        if (state_ == DeviceLockState::Fault) {
+            return DeviceLockAccess::Faulted;
+        }
+        if (state_ == DeviceLockState::RetryDelay) {
+            return DeviceLockAccess::RetryDelayed;
+        }
+        if (state_ == DeviceLockState::RecoveryOnly) {
+            return DeviceLockAccess::RecoveryRequired;
+        }
+        return state_ == DeviceLockState::Disabled ||
+                       state_ == DeviceLockState::Unconfigured
+            ? DeviceLockAccess::SetupRequired
+            : DeviceLockAccess::Locked;
     }
     switch (state_) {
         case DeviceLockState::Unconfigured:
             return DeviceLockAccess::SetupRequired;
+        case DeviceLockState::Disabled:
+            return DeviceLockAccess::Allowed;
         case DeviceLockState::Locked:
             return DeviceLockAccess::Locked;
         case DeviceLockState::RetryDelay:
@@ -617,7 +683,8 @@ DeviceLockAudit DeviceLock::audit(std::uint64_t nowUs) const {
     result.lastFailure = lastFailure_;
     result.failedAttempts = credential_.failedAttempts;
     result.credentialGeneration = credential_.generation;
-    result.protectedAccessAllowed = state_ == DeviceLockState::Unlocked;
+    result.protectedAccessAllowed = state_ == DeviceLockState::Unlocked ||
+        state_ == DeviceLockState::Disabled;
     result.dataKeyAvailable = dataKeyAvailable_;
     if (state_ == DeviceLockState::RetryDelay && nowUs < retryUntilUs_) {
         result.retryRemainingUs = retryUntilUs_ - nowUs;
@@ -629,6 +696,7 @@ bool DeviceLock::copyDataKey(
     std::array<std::uint8_t, kDeviceLockDataKeyBytes>* output) const {
     if (output == nullptr || !dataKeyAvailable_ ||
         (state_ != DeviceLockState::Unconfigured &&
+         state_ != DeviceLockState::Disabled &&
          state_ != DeviceLockState::Unlocked)) {
         if (output != nullptr) output->fill(0);
         return false;

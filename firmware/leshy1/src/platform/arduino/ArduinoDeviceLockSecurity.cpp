@@ -23,8 +23,10 @@ constexpr const char* kProductNamespace = "leshy1-lock";
 constexpr const char* kHilFixtureNamespace = "leshy1-lock-hil";
 constexpr const char* kCredentialKey = "credential.v2";
 constexpr const char* kProvisionedLatchKey = "enrolled.v1";
+constexpr const char* kDisabledLatchKey = "disabled.v1";
 constexpr const char* kBootstrapDataKey = "data-key.v1";
 constexpr std::uint32_t kProvisionedLatch = 0x4c4f434bU;
+constexpr std::uint32_t kDisabledLatch = 0x4f50454eU;
 constexpr std::uint32_t kDeviceLockKdfYieldInterval = 256U;
 constexpr char kVerifierDomain[] = "leshy1/device-lock/verifier/v2";
 constexpr char kWrappingDomain[] = "leshy1/device-lock/wrapping-key/v2";
@@ -99,6 +101,9 @@ bool NvsDeviceLockStore::hilFixtureStatePresent() const {
     std::uint32_t latch = 0;
     const esp_err_t latchStatus =
         nvs_get_u32(storage.get(), kProvisionedLatchKey, &latch);
+    std::uint32_t disabledLatch = 0;
+    const esp_err_t disabledStatus =
+        nvs_get_u32(storage.get(), kDisabledLatchKey, &disabledLatch);
     std::size_t stored = 0;
     const esp_err_t recordStatus =
         nvs_get_blob(storage.get(), kCredentialKey, nullptr, &stored);
@@ -112,9 +117,13 @@ bool NvsDeviceLockStore::hilFixtureStatePresent() const {
         recordStatus == ESP_ERR_NVS_NOT_FOUND;
     const bool bootstrapKnown = bootstrapStatus == ESP_OK ||
         bootstrapStatus == ESP_ERR_NVS_NOT_FOUND;
-    if (!latchKnown || !recordKnown || !bootstrapKnown) return true;
+    const bool disabledKnown = disabledStatus == ESP_OK ||
+        disabledStatus == ESP_ERR_NVS_NOT_FOUND;
+    if (!latchKnown || !disabledKnown || !recordKnown || !bootstrapKnown) {
+        return true;
+    }
     return latchStatus == ESP_OK || recordStatus == ESP_OK ||
-        bootstrapStatus == ESP_OK;
+        bootstrapStatus == ESP_OK || disabledStatus == ESP_OK;
 }
 
 bool MbedTlsDeviceLockCrypto::fillRandom(std::uint8_t* output,
@@ -379,6 +388,14 @@ DeviceLockLoadStatus NvsDeviceLockStore::load(
     if (latchStatus != ESP_OK && latchStatus != ESP_ERR_NVS_NOT_FOUND) {
         return DeviceLockLoadStatus::Error;
     }
+    std::uint32_t disabledLatch = 0;
+    const esp_err_t disabledStatus =
+        nvs_get_u32(storage.get(), kDisabledLatchKey, &disabledLatch);
+    const bool disabledPresent = disabledStatus == ESP_OK;
+    if (disabledStatus != ESP_OK &&
+        disabledStatus != ESP_ERR_NVS_NOT_FOUND) {
+        return DeviceLockLoadStatus::Error;
+    }
 
     std::size_t stored = 0;
     const esp_err_t lengthStatus =
@@ -390,6 +407,14 @@ DeviceLockLoadStatus NvsDeviceLockStore::load(
     services::security::DeviceLockRecord record{};
     if (latchPresent && latch != kProvisionedLatch) {
         return DeviceLockLoadStatus::Corrupt;
+    }
+    if (disabledPresent && disabledLatch != kDisabledLatch) {
+        return DeviceLockLoadStatus::Corrupt;
+    }
+    if (disabledPresent) {
+        return !latchPresent && !recordPresent
+            ? DeviceLockLoadStatus::Disabled
+            : DeviceLockLoadStatus::Corrupt;
     }
     if (!recordPresent) {
         return latchPresent ? DeviceLockLoadStatus::MissingExpected
@@ -429,6 +454,7 @@ bool NvsDeviceLockStore::save(
         nvs_commit(storage.get()) != ESP_OK ||
         nvs_set_u32(storage.get(), kProvisionedLatchKey,
                     kProvisionedLatch) != ESP_OK ||
+        !eraseKeyIfPresent(storage.get(), kDisabledLatchKey) ||
         nvs_commit(storage.get()) != ESP_OK) {
         return false;
     }
@@ -522,6 +548,36 @@ bool NvsDeviceLockStore::clearBootstrapDataKey() {
         services::security::DeviceLockBootstrapStatus::Missing;
 }
 
+bool NvsDeviceLockStore::disableCredential(
+    const std::array<std::uint8_t,
+                     services::security::kDeviceLockDataKeyBytes>& dataKey) {
+    if (!anyNonzero(dataKey.data(), dataKey.size())) return false;
+    ScopedNvsHandle storage;
+    esp_err_t openStatus = ESP_FAIL;
+    const char* name = hilFixtureNamespaceActive_
+        ? kHilFixtureNamespace : kProductNamespace;
+    if (!storage.open(name, NVS_READWRITE, &openStatus) ||
+        nvs_set_u32(storage.get(), kDisabledLatchKey, kDisabledLatch) !=
+            ESP_OK ||
+        nvs_set_blob(storage.get(), kBootstrapDataKey, dataKey.data(),
+                     dataKey.size()) != ESP_OK ||
+        !eraseKeyIfPresent(storage.get(), kCredentialKey) ||
+        !eraseKeyIfPresent(storage.get(), kProvisionedLatchKey) ||
+        nvs_commit(storage.get()) != ESP_OK) {
+        return false;
+    }
+    DeviceLockCredential discarded{};
+    std::array<std::uint8_t, services::security::kDeviceLockDataKeyBytes>
+        verified{};
+    const bool exact = load(&discarded) == DeviceLockLoadStatus::Disabled &&
+        loadBootstrapDataKey(&verified) ==
+            services::security::DeviceLockBootstrapStatus::Loaded &&
+        verified == dataKey;
+    discarded.clear();
+    secureClear(verified.data(), verified.size());
+    return exact;
+}
+
 bool NvsDeviceLockStore::clearCredentialAndLatch() {
     ScopedNvsHandle storage;
     esp_err_t openStatus = ESP_FAIL;
@@ -533,6 +589,8 @@ bool NvsDeviceLockStore::clearCredentialAndLatch() {
     if (!eraseKeyIfPresent(storage.get(), kCredentialKey) ||
         nvs_commit(storage.get()) != ESP_OK ||
         !eraseKeyIfPresent(storage.get(), kBootstrapDataKey) ||
+        nvs_commit(storage.get()) != ESP_OK ||
+        !eraseKeyIfPresent(storage.get(), kDisabledLatchKey) ||
         nvs_commit(storage.get()) != ESP_OK ||
         !eraseKeyIfPresent(storage.get(), kProvisionedLatchKey) ||
         nvs_commit(storage.get()) != ESP_OK) {

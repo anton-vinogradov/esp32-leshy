@@ -157,6 +157,17 @@ public:
         return true;
     }
 
+    bool disableCredential(
+        const std::array<std::uint8_t, kDeviceLockDataKeyBytes>& key) override {
+        ++disables;
+        if (failDisable) return false;
+        credential.clear();
+        loadStatus = DeviceLockLoadStatus::Disabled;
+        bootstrapKey = key;
+        bootstrapStatus = DeviceLockBootstrapStatus::Loaded;
+        return true;
+    }
+
     bool clearCredentialAndLatch() override {
         ++clears;
         if (failClear) return false;
@@ -174,10 +185,12 @@ public:
     std::array<std::uint8_t, kDeviceLockDataKeyBytes> bootstrapKey{};
     bool failSave = false;
     bool failClear = false;
+    bool failDisable = false;
     unsigned loads = 0;
     unsigned saves = 0;
     unsigned clears = 0;
     unsigned bootstrapLoads = 0;
+    unsigned disables = 0;
     unsigned bootstrapSaves = 0;
     unsigned bootstrapClears = 0;
 };
@@ -245,10 +258,11 @@ void testPinPolicyAndSetupRequiredDefault() {
 }
 
 void testOperationNamesAreStableAndComplete() {
-    constexpr std::array<DeviceLockOperation, 16> operations{{
+    constexpr std::array<DeviceLockOperation, 17> operations{{
         DeviceLockOperation::Status,
         DeviceLockOperation::Configure,
         DeviceLockOperation::Unlock,
+        DeviceLockOperation::Disable,
         DeviceLockOperation::Lock,
         DeviceLockOperation::ProtectedUi,
         DeviceLockOperation::ProtectedEvidence,
@@ -441,6 +455,59 @@ void testBlockingVerifierTimeCannotConsumeRetryOrUnlockIntervals() {
     CHECK(lock.state() == DeviceLockState::Locked);
 }
 
+void testDisablePreservesDataKeyAndAllowsReenrollment() {
+    MemoryStore store;
+    FakeCrypto crypto;
+    DeviceLock lock(store, crypto);
+    configure(lock);
+    std::array<std::uint8_t, kDeviceLockDataKeyBytes> protectedKey{};
+    CHECK(lock.copyDataKey(&protectedKey));
+
+    CHECK(!lock.disable(false));
+    CHECK(lock.state() == DeviceLockState::Unlocked);
+    CHECK(store.disables == 0U);
+    CHECK(lock.lastFailure() == DeviceLockFailure::ConfirmationRequired);
+
+    CHECK(lock.disable(true));
+    CHECK(store.disables == 1U);
+    CHECK(lock.state() == DeviceLockState::Disabled);
+    CHECK(store.loadStatus == DeviceLockLoadStatus::Disabled);
+    CHECK(store.bootstrapStatus == DeviceLockBootstrapStatus::Loaded);
+    CHECK(store.bootstrapKey == protectedKey);
+    CHECK(lock.access(DeviceLockOperation::ProtectedEvidence, 200U) ==
+          DeviceLockAccess::Allowed);
+    CHECK(lock.access(DeviceLockOperation::Disable, 200U) ==
+          DeviceLockAccess::SetupRequired);
+
+    DeviceLock rebooted(store, crypto);
+    CHECK(rebooted.restore(300U));
+    CHECK(rebooted.state() == DeviceLockState::Disabled);
+    std::array<std::uint8_t, kDeviceLockDataKeyBytes> restoredKey{};
+    CHECK(rebooted.copyDataKey(&restoredKey));
+    CHECK(restoredKey == protectedKey);
+    rebooted.prepareSystemBoundary();
+    CHECK(rebooted.state() == DeviceLockState::Disabled);
+    CHECK(rebooted.configure("814209", 6U, 400U));
+    CHECK(rebooted.state() == DeviceLockState::Unlocked);
+    CHECK(store.bootstrapStatus == DeviceLockBootstrapStatus::Missing);
+
+    DeviceLock failing(store, crypto);
+    CHECK(failing.restore(500U));
+    CHECK(failing.unlock("814209", 6U, 500U));
+    store.failDisable = true;
+    CHECK(!failing.disable(true));
+    CHECK(failing.state() == DeviceLockState::Fault);
+    CHECK(failing.lastFailure() == DeviceLockFailure::StoreFailure);
+
+    MemoryStore incomplete;
+    incomplete.loadStatus = DeviceLockLoadStatus::Disabled;
+    incomplete.bootstrapStatus = DeviceLockBootstrapStatus::Missing;
+    DeviceLock interrupted(incomplete, crypto);
+    CHECK(!interrupted.restore(600U));
+    CHECK(interrupted.state() == DeviceLockState::Fault);
+    CHECK(!interrupted.copyDataKey(&restoredKey));
+}
+
 void testDestructiveRecoveryOrderingAndFailures() {
     MemoryStore store;
     FakeCrypto crypto;
@@ -543,6 +610,7 @@ int main() {
     testSuccessfulUnlockClearsPersistentFailuresOnlyAfterSave();
     testTimeoutClockRollbackAndSystemBoundaryRevoke();
     testBlockingVerifierTimeCannotConsumeRetryOrUnlockIntervals();
+    testDisablePreservesDataKeyAndAllowsReenrollment();
     testDestructiveRecoveryOrderingAndFailures();
     testCorruptOrMissingExpectedCredentialFailsClosed();
     testCredentialRecordIsVersionedExactAndCorruptionDetecting();

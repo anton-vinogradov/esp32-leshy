@@ -12,6 +12,7 @@ enum class DeviceLockView : std::uint8_t {
     Status,
     EnterPin,
     ConfirmPin,
+    ConfirmDisable,
     Working,
 };
 
@@ -29,11 +30,14 @@ enum class DeviceLockUiOutcome : std::uint8_t {
     PinMismatch,
     WeakPin,
     Failed,
+    Disabled,
 };
 
 enum class DeviceLockActivation : std::uint8_t {
     None,
     EditorOpened,
+    DisableConfirmationOpened,
+    DisableRequested,
     LockRequested,
 };
 
@@ -53,17 +57,22 @@ class DeviceLockController final {
 public:
     static constexpr std::size_t kProductPinDigits =
         services::security::kDeviceLockMinimumPinDigits;
+    static constexpr std::uint8_t kUnlockedActionCount = 2U;
 
     void enter(const services::security::DeviceLockAudit& audit);
     DeviceLockActivation activate();
     bool previousDigit();
     bool nextDigit();
+    bool previousAction();
+    bool nextAction();
     bool advance();
     bool cancel();
     bool takeSubmission(DeviceLockSubmission* output);
     void complete(const services::security::DeviceLockAudit& audit,
                   bool success);
     void noteLocked(const services::security::DeviceLockAudit& audit);
+    void noteDisabled(const services::security::DeviceLockAudit& audit,
+                      bool success);
 
     DeviceLockView view() const { return view_; }
     DeviceLockIntent intent() const { return intent_; }
@@ -74,6 +83,7 @@ public:
         return static_cast<std::uint8_t>(pin_[cursor_] - '0');
     }
     bool submissionReady() const { return submissionReady_; }
+    std::uint8_t actionSelection() const { return actionSelection_; }
 
     // Rendering never receives PIN bytes. It can draw one masked cell per
     // position and expose only the currently edited digit.
@@ -96,6 +106,7 @@ private:
     DeviceLockSubmission submission_{};
     std::size_t cursor_ = 0;
     bool submissionReady_ = false;
+    std::uint8_t actionSelection_ = 0;
 };
 
 }  // namespace leshy1::apps::device

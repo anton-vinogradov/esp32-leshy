@@ -74,6 +74,7 @@ def main() -> int:
         ("FactoryReset,", "factory-reset bypass"),
         ("eraseProtectedData()", "destructive recovery eraser"),
         ("clearCredentialAndLatch()", "credential/latch cleanup"),
+        ("disableCredential(", "non-destructive PIN disable store transition"),
     ):
         require(core_h, marker, label, failures)
 
@@ -91,6 +92,10 @@ def main() -> int:
         ("store_.clearCredentialAndLatch()", "clear credential second"),
         ("prepareSystemBoundary", "system boundary revocation"),
         ("DeviceLockFailure::ClockRollback", "clock rollback revocation"),
+        ("store_.disableCredential(dataKey_)",
+         "PIN disable preserves the current protected-data key"),
+        ("state_ = DeviceLockState::Disabled",
+         "explicit PIN-disabled access state"),
     ):
         require(core, marker, label, failures)
 
@@ -126,6 +131,9 @@ def main() -> int:
         ("credential.v2", "versioned NVS credential"),
         ("enrolled.v1", "separate provisioned latch"),
         ("data-key.v1", "bootstrap data key"),
+        ("disabled.v1", "durable PIN-disabled latch"),
+        ("NvsDeviceLockStore::disableCredential(",
+         "atomic PIN disable transaction"),
         ("nvs_set_blob(storage.get(), kCredentialKey", "credential write"),
         ("nvs_set_u32(storage.get(), kProvisionedLatchKey", "latch write"),
         ("eraseKeyIfPresent(storage.get(), kCredentialKey)",
@@ -164,7 +172,7 @@ def main() -> int:
     ):
         require(protected_envelope + product_io, marker, label, failures)
 
-    if entry.count("&protectedDataCipher, &deviceLock") != 5:
+    if entry.count("&protectedDataCipher, &deviceLock") != 7:
         failures.append(
             "every product SD adapter must share the protected cipher/key gate")
 
@@ -195,6 +203,19 @@ def main() -> int:
     if erase_record < 0 or erase_latch < 0 or erase_record >= erase_latch:
         failures.append("credential/latch erase order is not fail closed")
 
+    disable = platform.find("NvsDeviceLockStore::disableCredential(")
+    disable_latch = platform.find(
+        "nvs_set_u32(storage.get(), kDisabledLatchKey", disable)
+    disable_key = platform.find(
+        "nvs_set_blob(storage.get(), kBootstrapDataKey", disable)
+    disable_record = platform.find(
+        "eraseKeyIfPresent(storage.get(), kCredentialKey)", disable)
+    disable_enrolled = platform.find(
+        "eraseKeyIfPresent(storage.get(), kProvisionedLatchKey)", disable)
+    if not (0 <= disable < disable_latch < disable_key < disable_record <
+            disable_enrolled):
+        failures.append("PIN disable transaction is not ordered fail closed")
+
     for marker, label in (
         ("testPinPolicyAndSetupRequiredDefault", "default access matrix"),
         ("testWrongPinPersistsBackoffAcrossResetAndEndsRecoveryOnly",
@@ -211,6 +232,8 @@ def main() -> int:
          "corrupt/missing fail-closed test"),
         ("testCredentialRecordIsVersionedExactAndCorruptionDetecting",
          "record corruption test"),
+        ("testDisablePreservesDataKeyAndAllowsReenrollment",
+         "non-destructive PIN disable and cold restore test"),
     ):
         require(tests, marker, label, failures)
 
@@ -224,6 +247,7 @@ def main() -> int:
         ("std::memcmp(firstPin_.data(), pin_.data()",
          "setup confirmation"),
         ("submission_.clear();", "single-use product submission"),
+        ("ConfirmDisable", "separate PIN disable confirmation"),
     ):
         require(controller_h + controller, marker, label, failures)
 
@@ -239,6 +263,9 @@ def main() -> int:
         ("renderInteractiveScreen(!lastUiActionUsedIncrementalRender)",
          "touch incremental repaint"),
         ("deviceLock.recordActivity(nowUs)", "unlock activity timeout"),
+        ("DeviceLockDisableAction", "visible PIN disable action"),
+        ("device_lock_disable_confirmation",
+         "explicit product PIN disable confirmation"),
         ("DeviceLockWorkerMode::KdfBenchmark", "non-persistent KDF HIL"),
         ("device-lock.kdf-benchmark confirm-no-persist",
          "explicit KDF HIL command"),

@@ -36,13 +36,18 @@ void DeviceLockController::enter(
     view_ = DeviceLockView::Status;
     intent_ = DeviceLockIntent::None;
     outcome_ = DeviceLockUiOutcome::None;
+    actionSelection_ = 0;
 }
 
 DeviceLockActivation DeviceLockController::activate() {
+    if (view_ == DeviceLockView::ConfirmDisable) {
+        return DeviceLockActivation::DisableRequested;
+    }
     if (view_ != DeviceLockView::Status) return DeviceLockActivation::None;
     resetEditor();
     outcome_ = DeviceLockUiOutcome::None;
-    if (audit_.state == services::security::DeviceLockState::Unconfigured) {
+    if (audit_.state == services::security::DeviceLockState::Unconfigured ||
+        audit_.state == services::security::DeviceLockState::Disabled) {
         intent_ = DeviceLockIntent::Configure;
         view_ = DeviceLockView::EnterPin;
         return DeviceLockActivation::EditorOpened;
@@ -53,9 +58,33 @@ DeviceLockActivation DeviceLockController::activate() {
         return DeviceLockActivation::EditorOpened;
     }
     if (audit_.state == services::security::DeviceLockState::Unlocked) {
-        return DeviceLockActivation::LockRequested;
+        if (actionSelection_ == 0U) {
+            return DeviceLockActivation::LockRequested;
+        }
+        view_ = DeviceLockView::ConfirmDisable;
+        return DeviceLockActivation::DisableConfirmationOpened;
     }
     return DeviceLockActivation::None;
+}
+
+bool DeviceLockController::previousAction() {
+    if (view_ != DeviceLockView::Status ||
+        audit_.state != services::security::DeviceLockState::Unlocked ||
+        actionSelection_ == 0U) {
+        return false;
+    }
+    --actionSelection_;
+    return true;
+}
+
+bool DeviceLockController::nextAction() {
+    if (view_ != DeviceLockView::Status ||
+        audit_.state != services::security::DeviceLockState::Unlocked ||
+        actionSelection_ + 1U >= kUnlockedActionCount) {
+        return false;
+    }
+    ++actionSelection_;
+    return true;
 }
 
 bool DeviceLockController::previousDigit() {
@@ -174,6 +203,17 @@ void DeviceLockController::noteLocked(
     intent_ = DeviceLockIntent::None;
     outcome_ = DeviceLockUiOutcome::Locked;
     view_ = DeviceLockView::Status;
+}
+
+void DeviceLockController::noteDisabled(
+    const services::security::DeviceLockAudit& audit, bool success) {
+    resetEditor();
+    audit_ = audit;
+    intent_ = DeviceLockIntent::None;
+    outcome_ = success ? DeviceLockUiOutcome::Disabled
+                       : DeviceLockUiOutcome::Failed;
+    view_ = DeviceLockView::Status;
+    actionSelection_ = 0;
 }
 
 }  // namespace leshy1::apps::device

@@ -23,6 +23,7 @@ constexpr std::uint64_t kDeviceLockMaximumLifetimeUs =
 
 enum class DeviceLockState : std::uint8_t {
     Unconfigured,
+    Disabled,
     Locked,
     RetryDelay,
     RecoveryOnly,
@@ -69,6 +70,7 @@ struct DeviceLockCredential final {
 
 enum class DeviceLockLoadStatus : std::uint8_t {
     MissingVirgin,
+    Disabled,
     MissingExpected,
     Loaded,
     Corrupt,
@@ -92,6 +94,11 @@ public:
     virtual bool saveBootstrapDataKey(
         const std::array<std::uint8_t, kDeviceLockDataKeyBytes>& key) = 0;
     virtual bool clearBootstrapDataKey() = 0;
+    // Disable is a non-destructive security transition: publish the current
+    // data key as the local bootstrap key and remove the PIN credential in one
+    // durable store transaction. Protected objects remain byte-identical.
+    virtual bool disableCredential(
+        const std::array<std::uint8_t, kDeviceLockDataKeyBytes>& dataKey) = 0;
     // Factory reset must remove the credential first and its provisioned latch
     // last. A power loss between those steps therefore restores fail closed as
     // MissingExpected rather than silently returning to a virgin device.
@@ -137,6 +144,7 @@ enum class DeviceLockOperation : std::uint8_t {
     Status,
     Configure,
     Unlock,
+    Disable,
     Lock,
     ProtectedUi,
     ProtectedEvidence,
@@ -184,6 +192,7 @@ public:
                    std::uint64_t nowUs);
     bool unlock(const char* pin, std::size_t pinLength,
                 std::uint64_t nowUs);
+    bool disable(bool confirmed);
     // configure()/unlock() timestamp their state before the synchronous
     // verifier runs. A production caller that executes a blocking verifier
     // must immediately shift retry/session deadlines to the actual completion
@@ -224,7 +233,7 @@ private:
         const char* pin, std::size_t pinLength,
         std::array<std::uint8_t, kDeviceLockVerifierBytes>* verifier,
         std::array<std::uint8_t, kDeviceLockWrappingKeyBytes>* wrappingKey);
-    bool provisionBootstrapDataKey();
+    bool provisionBootstrapDataKey(bool allowCreate = true);
     void enterLockedForCredential(std::uint64_t nowUs);
     void clearUnlockSession();
     static bool constantTimeEqual(

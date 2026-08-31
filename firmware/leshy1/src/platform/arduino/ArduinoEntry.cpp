@@ -13514,9 +13514,15 @@ NavigationFooter navigationFooterForCurrentState() {
                      ? UiTextId::NavConfirm : UiTextId::NavNext},
             };
         }
+        if (view == DeviceLockView::ConfirmDisable) {
+            return {{NavigationKey::Left, UiTextId::NavCancel}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavConfirm}};
+        }
         const auto state = deviceLockController.audit().state;
         if (state ==
-            leshy1::services::security::DeviceLockState::Unconfigured) {
+                leshy1::services::security::DeviceLockState::Unconfigured ||
+            state ==
+                leshy1::services::security::DeviceLockState::Disabled) {
             return {back, {},
                     {NavigationKey::RightAndSelect, UiTextId::NavSetup}};
         }
@@ -13525,8 +13531,7 @@ NavigationFooter navigationFooterForCurrentState() {
                     {NavigationKey::RightAndSelect, UiTextId::NavUnlock}};
         }
         if (state == leshy1::services::security::DeviceLockState::Unlocked) {
-            return {back, {},
-                    {NavigationKey::RightAndSelect, UiTextId::NavLock}};
+            return {back, choose, enter};
         }
         return {back, {}, {}};
     }
@@ -14319,6 +14324,8 @@ UiTextId deviceLockMenuNote() {
     switch (deviceLock.state()) {
         case leshy1::services::security::DeviceLockState::Unconfigured:
             return UiTextId::DeviceLockMenuOff;
+        case leshy1::services::security::DeviceLockState::Disabled:
+            return UiTextId::DeviceLockMenuOff;
         case leshy1::services::security::DeviceLockState::Unlocked:
             return UiTextId::DeviceLockMenuOpen;
         case leshy1::services::security::DeviceLockState::Locked:
@@ -14373,6 +14380,8 @@ UiTextId deviceLockStateText(
     switch (state) {
         case leshy1::services::security::DeviceLockState::Unconfigured:
             return UiTextId::DeviceLockUnconfigured;
+        case leshy1::services::security::DeviceLockState::Disabled:
+            return UiTextId::DeviceLockDisabled;
         case leshy1::services::security::DeviceLockState::Locked:
             return UiTextId::DeviceLockLocked;
         case leshy1::services::security::DeviceLockState::RetryDelay:
@@ -14391,6 +14400,7 @@ Tone deviceLockStateTone(
     leshy1::services::security::DeviceLockState state) {
     switch (state) {
         case leshy1::services::security::DeviceLockState::Unconfigured:
+        case leshy1::services::security::DeviceLockState::Disabled:
         case leshy1::services::security::DeviceLockState::Locked:
             return Tone::Warning;
         case leshy1::services::security::DeviceLockState::Unlocked:
@@ -14418,6 +14428,8 @@ UiTextId deviceLockOutcomeText(DeviceLockUiOutcome outcome) {
             return UiTextId::DeviceLockWeak;
         case DeviceLockUiOutcome::Failed:
             return UiTextId::DeviceLockFailed;
+        case DeviceLockUiOutcome::Disabled:
+            return UiTextId::DeviceLockDisabledOutcome;
         case DeviceLockUiOutcome::None:
             break;
     }
@@ -14429,6 +14441,7 @@ Tone deviceLockOutcomeTone(DeviceLockUiOutcome outcome) {
         case DeviceLockUiOutcome::Configured:
         case DeviceLockUiOutcome::Unlocked:
         case DeviceLockUiOutcome::Locked:
+        case DeviceLockUiOutcome::Disabled:
             return Tone::Positive;
         case DeviceLockUiOutcome::PinMismatch:
         case DeviceLockUiOutcome::WeakPin:
@@ -14445,6 +14458,32 @@ void renderDeviceLockAction(UiTextId label) {
     const Rect bounds = Components::homeRow(3);
     renderMenuRow(bounds, tr(label), tr(UiTextId::DeviceLockSetupNote),
                   true, true, Tone::Positive);
+}
+
+void renderDeviceLockUnlockedActions() {
+    renderMenuRow(Components::homeRow(2),
+                  tr(UiTextId::DeviceLockLockAction),
+                  tr(UiTextId::DeviceLockSetupNote),
+                  deviceLockController.actionSelection() == 0U, true,
+                  Tone::Positive);
+    renderMenuRow(Components::homeRow(3),
+                  tr(UiTextId::DeviceLockDisableAction),
+                  tr(UiTextId::DeviceLockDisableNote),
+                  deviceLockController.actionSelection() == 1U, true,
+                  Tone::Danger);
+}
+
+void renderDeviceLockDisableConfirmation() {
+    renderMetric(0, tr(UiTextId::DeviceLockDisableTitle), Tone::Danger);
+    renderMetric(1, tr(UiTextId::DeviceLockDisableWarning), Tone::Warning);
+    renderMenuRow(Components::homeRow(2),
+                  tr(UiTextId::DeviceLockDisableConfirmAction),
+                  tr(UiTextId::DeviceLockSetupNote), true, true,
+                  Tone::Danger);
+    renderMenuRow(Components::homeRow(3),
+                  tr(UiTextId::DeviceLockCancelAction),
+                  tr(UiTextId::DeviceLockTouchNote), false, true,
+                  Tone::Muted);
 }
 
 void renderDeviceLockPinCells() {
@@ -14526,6 +14565,10 @@ void renderDeviceLockPage(bool clearContent) {
         renderDeviceLockPinEditor();
         return;
     }
+    if (view == DeviceLockView::ConfirmDisable) {
+        renderDeviceLockDisableConfirmation();
+        return;
+    }
     if (view == DeviceLockView::Working) {
         renderMetric(
             0,
@@ -14553,6 +14596,9 @@ void renderDeviceLockPage(bool clearContent) {
                leshy1::services::security::DeviceLockState::Unlocked) {
         renderMetric(1, tr(UiTextId::DeviceLockAutoNote), Tone::Muted);
     } else if (audit.state ==
+               leshy1::services::security::DeviceLockState::Disabled) {
+        renderMetric(1, tr(UiTextId::DeviceLockDisabledNote), Tone::Warning);
+    } else if (audit.state ==
                    leshy1::services::security::DeviceLockState::RecoveryOnly ||
                audit.state ==
                    leshy1::services::security::DeviceLockState::Fault) {
@@ -14573,14 +14619,16 @@ void renderDeviceLockPage(bool clearContent) {
     }
 
     if (audit.state ==
-        leshy1::services::security::DeviceLockState::Unconfigured) {
+            leshy1::services::security::DeviceLockState::Unconfigured ||
+        audit.state ==
+            leshy1::services::security::DeviceLockState::Disabled) {
         renderDeviceLockAction(UiTextId::DeviceLockSetupAction);
     } else if (audit.state ==
                leshy1::services::security::DeviceLockState::Locked) {
         renderDeviceLockAction(UiTextId::DeviceLockUnlockAction);
     } else if (audit.state ==
                leshy1::services::security::DeviceLockState::Unlocked) {
-        renderDeviceLockAction(UiTextId::DeviceLockLockAction);
+        renderDeviceLockUnlockedActions();
     }
 }
 
@@ -14812,7 +14860,7 @@ void emitDeviceLockState(Stream& reply) {
 void emitDeviceLockAdmissionMatrix(Stream& reply) {
     using leshy1::services::security::DeviceLockAccess;
     using leshy1::services::security::DeviceLockOperation;
-    constexpr std::array<DeviceLockOperation, 16> operations{{
+    constexpr std::array<DeviceLockOperation, 17> operations{{
         DeviceLockOperation::Status,
         DeviceLockOperation::Configure,
         DeviceLockOperation::Unlock,
@@ -14829,6 +14877,7 @@ void emitDeviceLockAdmissionMatrix(Stream& reply) {
         DeviceLockOperation::Cleanup,
         DeviceLockOperation::UpdateRecovery,
         DeviceLockOperation::FactoryReset,
+        DeviceLockOperation::Disable,
     }};
     std::array<DeviceLockAccess, operations.size()> access{};
     for (std::size_t index = 0; index < operations.size(); ++index) {
@@ -21357,6 +21406,7 @@ struct UiRenderSnapshot final {
     std::uint8_t deviceLockView = 0;
     std::uint8_t deviceLockCursor = 0;
     std::uint8_t deviceLockDigit = 0;
+    std::uint8_t deviceLockActionSelection = 0;
     std::uint8_t serialConsoleView = 0;
     std::uint8_t serialConsoleSelection = 0;
     std::uint8_t serialConsoleBaudIndex = 0;
@@ -21445,6 +21495,7 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         static_cast<std::uint8_t>(deviceLockController.view()),
         static_cast<std::uint8_t>(deviceLockController.cursor()),
         deviceLockController.digit(),
+        deviceLockController.actionSelection(),
         static_cast<std::uint8_t>(serialConsoleUiView),
         serialConsoleUiSelection,
         serialConsoleBaudIndex,
@@ -21589,6 +21640,21 @@ UiDeltaRenderResult renderSelectionDelta() {
             renderDeviceLockPinAdvanceAction();
             renderNavigationFooter();
         }
+        return UiDeltaRenderResult::Rendered;
+    }
+
+    if (uiController.page() == kDeviceLockPage &&
+        deviceLockController.view() == DeviceLockView::Status &&
+        renderedUi.deviceLockView ==
+            static_cast<std::uint8_t>(DeviceLockView::Status) &&
+        deviceLockController.audit().state ==
+            leshy1::services::security::DeviceLockState::Unlocked) {
+        if (renderedUi.deviceLockActionSelection ==
+            deviceLockController.actionSelection()) {
+            return UiDeltaRenderResult::NoChange;
+        }
+        renderDeviceLockUnlockedActions();
+        renderNavigationFooter();
         return UiDeltaRenderResult::Rendered;
     }
 
@@ -27853,10 +27919,16 @@ bool selectionCanRepaintInPlace(UiAction action) {
     }
     if (uiController.page() == kDeviceLockPage) {
         const DeviceLockView view = deviceLockController.view();
-        return (view == DeviceLockView::EnterPin ||
-                view == DeviceLockView::ConfirmPin) &&
-            (action == UiAction::Up || action == UiAction::Down ||
-             action == UiAction::Select || action == UiAction::Right);
+        const bool pinEditor = view == DeviceLockView::EnterPin ||
+            view == DeviceLockView::ConfirmPin;
+        const bool unlockedActions = view == DeviceLockView::Status &&
+            deviceLockController.audit().state ==
+                leshy1::services::security::DeviceLockState::Unlocked;
+        return (pinEditor &&
+                (action == UiAction::Up || action == UiAction::Down ||
+                 action == UiAction::Select || action == UiAction::Right)) ||
+            (unlockedActions &&
+             (action == UiAction::Up || action == UiAction::Down));
     }
     if (uiController.page() == kSerialConsolePage) {
         return action == UiAction::Up || action == UiAction::Down ||
@@ -29624,6 +29696,36 @@ bool applyUiAction(UiAction action, bool render = true) {
             } else {
                 handled = false;
             }
+        } else if (view == DeviceLockView::ConfirmDisable &&
+                   (action == UiAction::Select ||
+                    action == UiAction::Right)) {
+            const DeviceLockActivation activation =
+                deviceLockController.activate();
+            if (activation == DeviceLockActivation::DisableRequested) {
+                const bool disabled = deviceLock.disable(true);
+                const std::uint64_t nowUs =
+                    static_cast<std::uint64_t>(esp_timer_get_time());
+                deviceLockController.noteDisabled(
+                    deviceLock.audit(nowUs), disabled);
+                changed = true;
+                lastRuntimeEvent = disabled
+                    ? "device_lock_disabled"
+                    : "device_lock_disable_failed";
+            } else {
+                lastRuntimeEvent = "device_lock_disable_unavailable";
+            }
+        } else if (view == DeviceLockView::Status &&
+                   action == UiAction::Up) {
+            changed = deviceLockController.previousAction();
+            lastRuntimeEvent = changed
+                ? "device_lock_action_selected"
+                : "device_lock_action_boundary";
+        } else if (view == DeviceLockView::Status &&
+                   action == UiAction::Down) {
+            changed = deviceLockController.nextAction();
+            lastRuntimeEvent = changed
+                ? "device_lock_action_selected"
+                : "device_lock_action_boundary";
         } else if (view == DeviceLockView::Status &&
                    (action == UiAction::Select ||
                     action == UiAction::Right)) {
@@ -29632,6 +29734,10 @@ bool applyUiAction(UiAction action, bool render = true) {
             if (activation == DeviceLockActivation::EditorOpened) {
                 changed = true;
                 lastRuntimeEvent = "device_lock_editor_opened";
+            } else if (activation ==
+                       DeviceLockActivation::DisableConfirmationOpened) {
+                changed = true;
+                lastRuntimeEvent = "device_lock_disable_confirmation";
             } else if (activation ==
                        DeviceLockActivation::LockRequested) {
                 deviceLock.lock();
@@ -30406,11 +30512,31 @@ bool dispatchTouchPoint(TouchPoint point, bool synthetic = false) {
     }
     if (uiController.page() == kDeviceLockPage) {
         UiAction action = UiAction::Unknown;
+        int deviceLockTouchAction = -1;
         const DeviceLockView view = deviceLockController.view();
-        if (view == DeviceLockView::Status &&
+        const bool unlockedActions = view == DeviceLockView::Status &&
+            deviceLockController.audit().state ==
+                leshy1::services::security::DeviceLockState::Unlocked;
+        if (unlockedActions && leshy1::ui::visual::containsPoint(
+                Components::homeRow(2), point.x, point.y)) {
+            deviceLockTouchAction = 0;
+            action = UiAction::Select;
+        } else if (unlockedActions && leshy1::ui::visual::containsPoint(
+                       Components::homeRow(3), point.x, point.y)) {
+            deviceLockTouchAction = 1;
+            action = UiAction::Select;
+        } else if (view == DeviceLockView::Status &&
             leshy1::ui::visual::containsPoint(
                 Components::homeRow(3), point.x, point.y)) {
             action = UiAction::Select;
+        } else if (view == DeviceLockView::ConfirmDisable &&
+                   leshy1::ui::visual::containsPoint(
+                       Components::homeRow(2), point.x, point.y)) {
+            action = UiAction::Select;
+        } else if (view == DeviceLockView::ConfirmDisable &&
+                   leshy1::ui::visual::containsPoint(
+                       Components::homeRow(3), point.x, point.y)) {
+            action = UiAction::Back;
         } else if ((view == DeviceLockView::EnterPin ||
                     view == DeviceLockView::ConfirmPin) &&
                    point.x >= 15U && point.x < 225U &&
@@ -30435,7 +30561,15 @@ bool dispatchTouchPoint(TouchPoint point, bool synthetic = false) {
             return false;
         }
         ++touchHandledPresses;
-        const bool changed = applyUiAction(action, false);
+        bool changed = false;
+        if (deviceLockTouchAction >= 0 &&
+            deviceLockController.actionSelection() !=
+                static_cast<std::uint8_t>(deviceLockTouchAction)) {
+            changed = applyUiAction(deviceLockTouchAction == 0
+                                        ? UiAction::Up : UiAction::Down,
+                                    false) || changed;
+        }
+        changed = applyUiAction(action, false) || changed;
         lastTouchChanged = changed;
         if (changed) {
             renderInteractiveScreen(!lastUiActionUsedIncrementalRender);
