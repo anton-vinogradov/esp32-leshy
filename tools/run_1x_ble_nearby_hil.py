@@ -35,6 +35,7 @@ from run_1x_product_survey_hil import (
     valid_cid,
     wait_ui_state,
 )
+from temporary_device_lock_hil import TemporaryProtectedUiAdmissionHil
 
 
 RUN_SCHEMA = "leshy.ble_nearby_hil.run.v2"
@@ -225,6 +226,8 @@ def main() -> int:
     detail_stability_oracle: dict[str, Any] = {}
     detail_stability_window: dict[str, Any] = {}
     entry_stability: dict[str, Any] = {}
+    device_lock_fixture: dict[str, Any] = {}
+    protected_ui: TemporaryProtectedUiAdmissionHil | None = None
 
     try:
         if args.flash:
@@ -245,6 +248,13 @@ def main() -> int:
                 cleanup_before = best_effort_cleanup(device)
                 if not cleanup_before.get("complete"):
                     raise RuntimeError("initial Home/zero-lease cleanup failed")
+                # A virgin or locked product namespace must not make this
+                # passive radio delta bounce silently back to Home.  Admit
+                # only ProtectedUi in an isolated RAM-only HIL session: no
+                # credential, data key, product namespace or radio is changed.
+                protected_ui = TemporaryProtectedUiAdmissionHil(
+                    device, app_identity)
+                protected_ui.start()
                 query(device, b"ui.language ru", "leshy.ui.v1", "state")
 
                 home_ble(device)
@@ -569,6 +579,14 @@ def main() -> int:
             except Exception as error:
                 failures.append(f"workflow: {type(error).__name__}: {error}")
             finally:
+                if protected_ui is not None:
+                    try:
+                        protected_ui.close()
+                        device_lock_fixture = protected_ui.evidence()
+                    except Exception as error:
+                        failures.append(
+                            "device_lock_fixture: "
+                            f"{type(error).__name__}: {error}")
                 cleanup_after = best_effort_cleanup(device)
                 if not cleanup_after.get("complete"):
                     failures.append("cleanup_after: Home/zero lease unproven")
@@ -611,6 +629,7 @@ def main() -> int:
         "detail_stability_oracle": detail_stability_oracle,
         "detail_stability_window": detail_stability_window,
         "entry_stability": entry_stability,
+        "device_lock_fixture": device_lock_fixture,
         "list_pixel_changes": list_pixel_changes,
         "detail_pixel_changes": detail_pixel_changes,
         "screens": screens,
