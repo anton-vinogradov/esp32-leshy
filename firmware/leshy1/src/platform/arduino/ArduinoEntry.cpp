@@ -9243,7 +9243,8 @@ bool startTargetRadar() {
         targetsProductRuntime->controller.selectedAction() !=
             TargetActionItem::Radar ||
         targetRadarTaskHandle != nullptr || targetRadarTracker != nullptr ||
-        !productSurveyWorkerReady || productSurveyWorkerTaskHandle == nullptr ||
+        (!productSurveyWorkerReady &&
+         !webCompanionSurveyWorkerSuspended) ||
         productSurveyControl() != ProductSurveyWorkerControl::Idle ||
         airspaceGuardBleControl() != AirspaceGuardBleWorkerControl::Idle ||
         safetySupervisor.latched()) {
@@ -9287,6 +9288,20 @@ bool startTargetRadar() {
         resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
         delete tracker;
         lastRuntimeEvent = "target_radar_suspend_failed";
+        return true;
+    }
+    // A completed Wi-Fi Radar visit may deliberately leave the Survey worker
+    // unloaded while the large Targets graph is open.  Recreate it only after
+    // that graph has been released; this preserves repeat Radar without asking
+    // the fragmented post-Wi-Fi heap to hold both large lifecycles at once.
+    if (!restoreProductSurveyWorkerAfterWebCompanion() ||
+        !productSurveyWorkerReady || productSurveyWorkerTaskHandle == nullptr) {
+        targetRadarRestoreInProgress = true;
+        restoreTargetsAfterRadar();
+        targetRadarRestoreInProgress = false;
+        resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
+        delete tracker;
+        lastRuntimeEvent = "target_radar_worker_unavailable";
         return true;
     }
     const TargetRadarSnapshot prepared = tracker->snapshot();
@@ -9373,8 +9388,9 @@ bool serviceTargetRadar() {
     // A passive Wi-Fi lifecycle returns all of its bytes but leaves the heap
     // split into blocks too small for the three fixed-capacity Target state
     // objects.  The sleeping Survey worker and queues are lifecycle-exclusive
-    // with this restore. Temporarily release them, construct Targets in the
-    // coalesced space, then recreate the worker before exposing Actions.
+    // with the open Targets graph. Keep them unloaded until the user starts a
+    // new Radar visit or leaves Targets; either boundary first frees the graph
+    // and can recreate the worker in contiguous space.
     const bool workerSuspended = !wifiRestore ||
         suspendProductSurveyWorkerForWebCompanion();
     targetRadarRestoreHeapFree = static_cast<std::uint32_t>(
@@ -9385,11 +9401,9 @@ bool serviceTargetRadar() {
     targetRadarRestoreInProgress = wifiRestore && workerSuspended;
     const bool restored = workerSuspended && restoreTargetsAfterRadar();
     targetRadarRestoreInProgress = false;
-    const bool workerRestored = !wifiRestore ||
-        restoreProductSurveyWorkerAfterWebCompanion();
-    targetsProductStatus = restored && memoryRestored && workerRestored
+    targetsProductStatus = restored && memoryRestored
         ? "ready" : "radar_restore_failed";
-    lastRuntimeEvent = restored && memoryRestored && workerRestored
+    lastRuntimeEvent = restored && memoryRestored
         ? "target_radar_stopped" : "target_radar_restore_failed";
     return true;
 }
