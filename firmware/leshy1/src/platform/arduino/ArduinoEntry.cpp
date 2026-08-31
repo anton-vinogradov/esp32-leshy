@@ -3116,9 +3116,10 @@ std::uint32_t uiNoChangeRepaintsSuppressed = 0U;
 struct SdPhysicalEvidenceWorkspace final {
     // UI state is intentionally a single reusable static workspace.  The
     // network/device passports and mount diagnostics pushed the bounded schema
-    // past 7 KiB; retaining 7.5 KiB here avoids both truncation and the
-    // historical loop-task stack panic without allocating per command.
-    char line[7680] = {};
+    // past 7 KiB; a running exact-CID passive workflow also adds its bounded
+    // identity and live counters. Retaining 8 KiB here avoids both truncation
+    // and the historical loop-task stack panic without allocating per command.
+    char line[8192] = {};
     char summaryA[512] = {};
     char summaryB[512] = {};
     char summaryC[512] = {};
