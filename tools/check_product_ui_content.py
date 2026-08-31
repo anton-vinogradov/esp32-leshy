@@ -36,6 +36,7 @@ REQUIRED_OUTCOME_IDS = {
     "LibraryInfraredCapture",
     "AutomationLibraryNoMediaHint",
     "AutomationLibraryEmptyHint",
+    "AutomationLibraryFolderMissingHint",
     "AutomationLibraryReadOnly",
     "TargetsNoSessions",
     "TargetsNoSessionsHint",
@@ -145,6 +146,21 @@ def main() -> int:
     if "UiTextId::AutomationLibraryPath" in renderer:
         failures.append(
             "internal automation storage path rendered on the product screen"
+        )
+
+    automation_empty_state = re.search(
+        r"BoardAutomationPackageStatus::DirectoryUnavailable.*?"
+        r"UiTextId::AutomationLibraryEmpty.*?"
+        r"UiTextId::AutomationLibraryFolderMissingHint.*?return;.*?"
+        r"automationCatalogStatus != BoardAutomationPackageStatus::Ready.*?"
+        r"UiTextId::AutomationLibraryNoMedia",
+        renderer,
+        re.DOTALL,
+    )
+    if automation_empty_state is None:
+        failures.append(
+            "Automation must distinguish a missing optional folder from an "
+            "unavailable SD card"
         )
 
     targets_empty_state = re.search(

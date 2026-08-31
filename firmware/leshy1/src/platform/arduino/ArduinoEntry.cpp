@@ -1112,6 +1112,11 @@ TFT_eSprite liveTextRowSprite(&display);
 // 513 bytes and lets a later BLE advertisement replace one complete field
 // without clearing either the whole card or the neighbouring row first.
 TFT_eSprite liveMetaTextRowSprite(&display);
+// BLE list RSSI changes are frequent but affect only the second text line and
+// (occasionally) the four-level signal glyph. Keep a separate 1-bpp
+// compositor for that bounded region so a new advertisement never erases and
+// redraws the complete menu row.
+TFT_eSprite bleDeviceNoteSprite(&display);
 BoardTouchInput boardTouchInput;
 bool touchCalibrationRequiredAtBoot = false;
 bool touchCalibrationSucceededAtBoot = false;
@@ -2089,12 +2094,18 @@ struct BleDeviceRowVisual final {
     bool tracker = false;
     std::int16_t rssiDbm = 0;
     std::array<char, 22> label{};
-    std::array<char, 64> note{};
+    std::array<char, 48> descriptor{};
 
     bool operator==(const BleDeviceRowVisual& other) const {
         return present == other.present && selected == other.selected &&
             tracker == other.tracker && rssiDbm == other.rssiDbm &&
-            label == other.label && note == other.note;
+            label == other.label && descriptor == other.descriptor;
+    }
+
+    bool staticFieldsEqual(const BleDeviceRowVisual& other) const {
+        return present == other.present && selected == other.selected &&
+            tracker == other.tracker && label == other.label &&
+            descriptor == other.descriptor;
     }
 };
 
@@ -2131,6 +2142,9 @@ constexpr std::uint64_t kBleDeviceUiRefreshPeriodUs = 250000ULL;
 std::uint64_t nextBleDeviceUiRefreshUs = 0U;
 bool bleDeviceUiRefreshPending = false;
 std::uint32_t bleDeviceListRowRepaints = 0U;
+std::uint32_t bleDeviceListRowFullRepaints = 0U;
+std::uint32_t bleDeviceListSignalDeltaRepaints = 0U;
+std::uint32_t bleDeviceListAtomicNotePushes = 0U;
 std::uint32_t bleDeviceListContentClears = 0U;
 std::uint32_t bleDeviceDetailContentClears = 0U;
 std::uint32_t bleDeviceRadarFullRepaints = 0U;
@@ -3044,7 +3058,11 @@ bool infraredCaptureStoreDeadlineInjectionOnce = false;
 bool infraredCaptureStoreDeadlineCancelRequested = false;
 bool targetsStoreDeadlineCancelRequested = false;
 
-void renderInteractiveScreen(bool clearContent = true);
+// Every caller must choose explicitly between a scene transition (`true`) and
+// a dirty-region update (`false`). There is deliberately no default: an
+// omitted argument used to turn harmless live-data notifications into bright
+// full-screen repaints.
+void renderInteractiveScreen(bool clearContent);
 void renderTargetRadarLive(const TargetRadarSnapshot& snapshot, bool force);
 TargetRadarWorkerControl targetRadarControl();
 void runTargetRadarWorker();
@@ -6821,7 +6839,7 @@ void serviceWifiFrameCapturePersist() {
     lastRuntimeEvent = admitted ? "capture_store_saved"
                                 : "capture_store_failed";
     if (uiController.page() == 4) {
-        renderInteractiveScreen();
+        renderInteractiveScreen(true);
     }
 }
 
@@ -7188,7 +7206,7 @@ void serviceSubGhzRawCapturePersist() {
     lastRuntimeEvent = admitted ? "subghz_raw_saved"
                                 : "subghz_raw_store_failed";
     if (rfSpectrumView == RfSpectrumView::SubGhzCaptureLive) {
-        renderInteractiveScreen();
+        renderInteractiveScreen(true);
     }
 }
 
@@ -7269,7 +7287,7 @@ void serviceInfraredRawCapturePersist() {
     lastRuntimeEvent = admitted ? "infrared_raw_saved"
                                 : "infrared_raw_store_failed";
     if (uiController.page() == 4 && captureView == CaptureView::Infrared) {
-        renderInteractiveScreen();
+        renderInteractiveScreen(true);
     }
 }
 
@@ -7319,7 +7337,7 @@ void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
         productSurveyRuntime.status = "ble_memory_restore_failed";
         lastRuntimeEvent = productSurveyRuntime.status;
     }
-    renderInteractiveScreen();
+    renderInteractiveScreen(true);
 }
 
 void serviceProductSurveyWorker() {
@@ -10720,7 +10738,7 @@ void serviceTargetsMutationWorker() {
     targetsMutationExpectedRevision = 0;
     targetsMutationCompanion = false;
     targetsMutationCompanionWeb = false;
-    if (uiController.page() == 7) renderInteractiveScreen();
+    if (uiController.page() == 7) renderInteractiveScreen(true);
 }
 
 bool IRAM_ATTR recordProductBootRecoveryTimeout() {
@@ -11287,7 +11305,7 @@ void admitPersistentLibraryCapability(const char* evidence) {
                        evidence, "validated_session_open"});
     }
     appCatalog.rebuild(inventory, targetsMergeFixtureContinuityValid());
-    renderInteractiveScreen();
+    renderInteractiveScreen(true);
 }
 
 void emitProductEnrollment(Stream& reply, const char* expectedFingerprint) {
@@ -14028,6 +14046,19 @@ void renderAutomationLibraryPage(bool clearContent) {
         renderMetric(0, tr(UiTextId::AutomationLibraryLoading),
                      Tone::Neutral);
         renderMetric(2, tr(UiTextId::AutomationLibraryReadOnly),
+                     Tone::Positive);
+        return;
+    }
+    if (automationCatalogStatus ==
+        BoardAutomationPackageStatus::DirectoryUnavailable) {
+        // The medium mounted read-only; only the optional Automation folder
+        // is absent. Do not turn that normal first-use state into the false
+        // and alarming claim that the complete SD card is unavailable.
+        renderMetric(0, tr(UiTextId::AutomationLibraryEmpty), Tone::Muted);
+        renderMetric(2,
+                     tr(UiTextId::AutomationLibraryFolderMissingHint),
+                     Tone::Neutral);
+        renderMetric(5, tr(UiTextId::AutomationLibraryReadOnly),
                      Tone::Positive);
         return;
     }
@@ -16848,10 +16879,59 @@ BleDeviceRowVisual composeBleDeviceRowVisual(
             ? vendor
             : tr(bleAdvertisementModeText(device->bleAdvertisement));
     }
-    std::snprintf(visual.note.data(), visual.note.size(),
-                  tr(UiTextId::BleDeviceRowFormat), descriptor,
-                  static_cast<int>(device->rssiDbm));
+    std::snprintf(visual.descriptor.data(), visual.descriptor.size(), "%s",
+                  descriptor);
     return visual;
+}
+
+constexpr std::int16_t kBleDeviceNoteRightInset = 34;
+constexpr std::int16_t kBleDeviceNoteWidth =
+    Layout::ContentWidth - kInteractiveRowTextInset -
+    kBleDeviceNoteRightInset;
+
+void renderBleDeviceRowNote(const BleDeviceRowVisual& visual,
+                            const Rect& bounds,
+                            std::uint16_t background) {
+    char note[64] = {};
+    std::snprintf(note, sizeof(note), tr(UiTextId::BleDeviceRowFormat),
+                  visual.descriptor.data(), static_cast<int>(visual.rssiDbm));
+    const std::uint16_t tone = visual.tracker ? Palette::Warning
+                                              : Palette::Positive;
+    const std::int16_t labelTop = menuRowTextTop(bounds);
+    const std::int16_t textTop = labelTop + kRobotoCondensedBodyAscent +
+                                 kRobotoCondensedBodyDescent + 1;
+    constexpr std::int16_t kSpriteTextTop = 2;
+    if (!bleDeviceNoteSprite.created()) {
+        bleDeviceNoteSprite.setColorDepth(1);
+        if (bleDeviceNoteSprite.createSprite(
+                kBleDeviceNoteWidth, kLiveMetaTextRowHeight) != nullptr) {
+            bleDeviceNoteSprite.setTextWrap(false, false);
+        }
+    }
+    if (bleDeviceNoteSprite.created()) {
+        bleDeviceNoteSprite.fillSprite(0U);
+        bleDeviceNoteSprite.setBitmapColor(tone, background);
+        bleDeviceNoteSprite.setTextColor(1U, 0U);
+        bleDeviceNoteSprite.setFreeFont(&RobotoCondensedMeta);
+        bleDeviceNoteSprite.setCursor(
+            0, kSpriteTextTop + kRobotoCondensedMetaAscent);
+        bleDeviceNoteSprite.print(note);
+        bleDeviceNoteSprite.pushSprite(
+            bounds.x + kInteractiveRowTextInset,
+            textTop - kSpriteTextTop);
+        ++bleDeviceListAtomicNotePushes;
+        return;
+    }
+
+    ++liveTextRowAllocationFailures;
+    ++liveTextRowDirectFallbacks;
+    display.fillRect(bounds.x + kInteractiveRowTextInset,
+                     textTop - kSpriteTextTop, kBleDeviceNoteWidth,
+                     kLiveMetaTextRowHeight, background);
+    display.setTextColor(tone, background);
+    setUiCursor(UiTextRole::Meta,
+                bounds.x + kInteractiveRowTextInset, textTop);
+    display.print(note);
 }
 
 bool renderBleDeviceRow(std::size_t index, std::size_t firstVisible,
@@ -16880,6 +16960,22 @@ bool renderBleDeviceRow(std::size_t index, std::size_t firstVisible,
         bleDeviceRenderedRowValid[slot] = true;
         return true;
     }
+    const bool canRenderSignalDelta = !force &&
+        bleDeviceRenderedRowValid[slot] &&
+        bleDeviceRenderedRows[slot].staticFieldsEqual(visual);
+    if (canRenderSignalDelta) {
+        ++bleDeviceListSignalDeltaRepaints;
+        const std::uint16_t background = visual.selected
+            ? Palette::SurfaceFocus : Palette::Surface;
+        renderBleDeviceRowNote(visual, bounds, background);
+        if (wifiSignalLevel(bleDeviceRenderedRows[slot].rssiDbm) !=
+            wifiSignalLevel(visual.rssiDbm)) {
+            renderWifiSignalBars(bounds, visual.rssiDbm, background);
+        }
+        bleDeviceRenderedRows[slot] = visual;
+        return true;
+    }
+    ++bleDeviceListRowFullRepaints;
     const std::uint16_t background = visual.selected
         ? Palette::SurfaceFocus : Palette::Surface;
     display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
@@ -16892,14 +16988,7 @@ bool renderBleDeviceRow(std::size_t index, std::size_t firstVisible,
     setUiCursor(UiTextRole::Body,
                 bounds.x + kInteractiveRowTextInset, labelTop);
     display.print(visual.label.data());
-    display.setTextColor(visual.tracker ? Palette::Warning
-                                        : Palette::Positive,
-        background);
-    setUiCursor(UiTextRole::Meta,
-                bounds.x + kInteractiveRowTextInset,
-                labelTop + kRobotoCondensedBodyAscent +
-                    kRobotoCondensedBodyDescent + 1);
-    display.print(visual.note.data());
+    renderBleDeviceRowNote(visual, bounds, background);
     renderWifiSignalBars(bounds, visual.rssiDbm, background);
     bleDeviceRenderedRows[slot] = visual;
     bleDeviceRenderedRowValid[slot] = true;
@@ -27140,6 +27229,9 @@ bool startBleDevicesProduct() {
     bleDeviceUiRefreshPending = false;
     resetBleDeviceListRenderCache();
     bleDeviceListRowRepaints = 0U;
+    bleDeviceListRowFullRepaints = 0U;
+    bleDeviceListSignalDeltaRepaints = 0U;
+    bleDeviceListAtomicNotePushes = 0U;
     bleDeviceListContentClears = 0U;
     bleDeviceDetailContentClears = 0U;
     bleDeviceRadarFullRepaints = 0U;
@@ -34279,7 +34371,7 @@ void emitProductStoreBootstrap(Stream& reply,
                            "validated_session_open"});
         }
         appCatalog.rebuild(inventory, targetsMergeFixtureContinuityValid());
-        renderInteractiveScreen();
+        renderInteractiveScreen(true);
     }
 
     std::snprintf(
@@ -34771,7 +34863,7 @@ void emitPhysicalSdSessionStore(Stream& reply, const char* expectedFingerprint,
                 libraryDemoReady && persistentCapabilityReady;
             if (persistentLibraryAdmitted) {
                 appCatalog.rebuild(inventory, targetsMergeFixtureContinuityValid());
-                renderInteractiveScreen();
+                renderInteractiveScreen(true);
             }
         }
         if (!persistentLibraryAdmitted) {
@@ -38232,7 +38324,11 @@ void emitBleDeviceDetailState(Stream& reply) {
         "\"rssi_dbm\":%d,\"signal_samples\":%u,"
         "\"minimum_rssi_dbm\":%d,\"maximum_rssi_dbm\":%d,"
         "\"rssi_trend_db\":%d,\"catalog_revision\":%lu,"
-        "\"list_row_repaints\":%lu,\"list_content_clears\":%lu,"
+        "\"list_row_repaints\":%lu,"
+        "\"list_row_full_repaints\":%lu,"
+        "\"list_signal_delta_repaints\":%lu,"
+        "\"list_atomic_note_pushes\":%lu,"
+        "\"list_content_clears\":%lu,"
         "\"detail_content_clears\":%lu,"
         "\"radar_full_repaints\":%lu,\"radar_delta_repaints\":%lu,"
         "\"detail_refreshes\":%lu,\"detail_refreshes_deferred\":%lu,"
@@ -38274,6 +38370,9 @@ void emitBleDeviceDetailState(Stream& reply) {
         static_cast<int>(signal.rssiTrendDb),
         static_cast<unsigned long>(bleDeviceCatalog.revision()),
         static_cast<unsigned long>(bleDeviceListRowRepaints),
+        static_cast<unsigned long>(bleDeviceListRowFullRepaints),
+        static_cast<unsigned long>(bleDeviceListSignalDeltaRepaints),
+        static_cast<unsigned long>(bleDeviceListAtomicNotePushes),
         static_cast<unsigned long>(bleDeviceListContentClears),
         static_cast<unsigned long>(bleDeviceDetailContentClears),
         static_cast<unsigned long>(bleDeviceRadarFullRepaints),
@@ -39641,7 +39740,7 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
             const bool changed = languageController.active() != requested;
             languageController.restore(requested);
             lastRuntimeEvent = "language_persisted";
-            renderInteractiveScreen();
+            renderInteractiveScreen(true);
             emitUiState(reply, UiAction::Unknown, changed);
         }
     } else if (std::strncmp(command, "ui.key ", 7) == 0) {
@@ -40309,7 +40408,7 @@ void setup() {
 
     appCatalog.rebuild(inventory, targetsMergeFixtureContinuityValid());
     feedRuntimeSafetyWatchdog();
-    renderInteractiveScreen();
+    renderInteractiveScreen(true);
     bootMetrics.interactiveReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
     feedRuntimeSafetyWatchdog();
 
@@ -40463,10 +40562,10 @@ void loop() {
         serviceSpectrumWaterfallCadence();
     }
     if (serviceWebCompanion() && uiController.page() == 7) {
-        renderInteractiveScreen();
+        renderInteractiveScreen(false);
     }
     if (serviceTargetRadar() && uiController.page() == 7U) {
-        renderInteractiveScreen();
+        renderInteractiveScreen(false);
     }
     serviceAntennaStatusLeds();
     const auto rawCaptureState = subGhzRawCapture.stats().state;

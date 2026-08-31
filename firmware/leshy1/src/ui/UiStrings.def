@@ -42,6 +42,7 @@ LESHY_UI_TEXT(AutomationLibraryNoMedia, Body, 212, "SD CARD UNAVAILABLE", u8"SD-
 LESHY_UI_TEXT(AutomationLibraryNoMediaHint, Meta, 212, "INSERT OR CHECK SD CARD", u8"ВСТАВЬТЕ ИЛИ ПРОВЕРЬТЕ SD")
 LESHY_UI_TEXT(AutomationLibraryEmpty, Body, 212, "NO .LHAU PACKAGES", u8"НЕТ ПАКЕТОВ .LHAU")
 LESHY_UI_TEXT(AutomationLibraryEmptyHint, Meta, 212, "ADD .LHAU PACKAGES TO SD", u8"ДОБАВЬТЕ .LHAU НА SD-КАРТУ")
+LESHY_UI_TEXT(AutomationLibraryFolderMissingHint, Meta, 212, "AUTOMATION FOLDER NOT CREATED", u8"ПАПКА АВТОМАТИЗАЦИИ НЕ СОЗДАНА")
 LESHY_UI_TEXT(AutomationLibraryPath, Meta, 212, "/leshy/automation/v1", u8"/leshy/automation/v1")
 LESHY_UI_TEXT(AutomationLibraryReadOnly, Meta, 212, "INSPECTION ONLY · NO RUN", u8"ПРОВЕРКА · БЕЗ ЗАПУСКА")
 LESHY_UI_TEXT(AutomationLibraryOmittedFormat, Meta, 212, "%lu MORE FILES NOT SHOWN", u8"ЕЩЕ ФАЙЛОВ: %lu")

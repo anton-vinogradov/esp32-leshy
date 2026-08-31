@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -47,12 +48,13 @@ def main() -> int:
         signal_card = function_body(source, "void renderRadioSignalCard(")
         wifi_radar = function_body(source, "void renderWifiNetworkRadar(")
         ble_radar = function_body(source, "void renderBleDeviceRadar(")
+        ble_list_row = function_body(source, "bool renderBleDeviceRow(")
         wifi_device = function_body(
             source, "void renderWifiDeviceDetailLiveData(bool force)")
         selection_delta = function_body(
             source, "UiDeltaRenderResult renderSelectionDelta()")
         interactive = function_body(
-            source, "void renderInteractiveScreen(bool clearContent)")
+            source, "void renderInteractiveScreen(bool clearContent) {")
         header = function_body(source, "void renderHeader(const char* title")
     except ValueError as error:
         failures.append(str(error))
@@ -131,6 +133,25 @@ def main() -> int:
         if "&& renderSelectionDelta()" in interactive:
             failures.append(
                 "boolean delta fallback can still turn a no-op into a full repaint")
+        if "void renderInteractiveScreen(bool clearContent =" in source:
+            failures.append(
+                "full-scene repaint still has a dangerous default argument")
+        if re.search(r"\brenderInteractiveScreen\(\s*\);", source):
+            failures.append(
+                "render caller did not explicitly choose full or dirty-only scope")
+        for marker in (
+            "staticFieldsEqual(visual)",
+            "renderBleDeviceRowNote(visual, bounds, background);",
+            "++bleDeviceListSignalDeltaRepaints;",
+        ):
+            if marker not in ble_list_row:
+                failures.append(
+                    f"BLE list signal-only dirty repaint missing: {marker}")
+        if "fillRoundRect" in ble_list_row[
+                ble_list_row.find("if (canRenderSignalDelta)"):
+                ble_list_row.find("++bleDeviceListRowFullRepaints")]:
+            failures.append(
+                "BLE signal delta still erases the complete menu row")
         header_guard = header.find("if (!clearContent) return;")
         header_clear = header.find("display.fillRect(header.x")
         if not (0 <= header_guard < header_clear):
