@@ -299,6 +299,9 @@ def main() -> int:
                     lifecycles.append(run_selected_radar(
                         device, frames, radio, trace, screens))
                     wanted.remove(radio)
+                    # Radar restores the exact Actions view. Return through
+                    # Detail to List before selecting the next stable row.
+                    trace.append(action(device, "back"))
                     trace.append(action(device, "back"))
                 else:
                     trace.append(action(device, "back"))
