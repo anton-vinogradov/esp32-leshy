@@ -3117,8 +3117,9 @@ struct SdPhysicalEvidenceWorkspace final {
     // UI state reuses this static workspace instead of the loop-task stack.
     // Its compact header is assembled in summaryA/summaryB and the larger
     // diagnostic suffix in line, then all three are emitted as one JSON line.
-    // Keeping the suffix at 7.5 KiB preserves NimBLE's no-PSRAM heap reserve.
-    char line[7680] = {};
+    // The suffix is split once more across summaryC/sectorA so the retained
+    // schema does not consume the internal-RAM reserve needed by NimBLE.
+    char line[6464] = {};
     char summaryA[512] = {};
     char summaryB[512] = {};
     char summaryC[512] = {};
@@ -25089,9 +25090,14 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
     auto& line = diagnosticJson;
     auto& headerA = sdPhysicalEvidence.summaryA;
     auto& headerB = sdPhysicalEvidence.summaryB;
+    auto& footerA = sdPhysicalEvidence.summaryC;
+    auto* footerB = reinterpret_cast<char*>(
+        sdPhysicalEvidence.sectorA.data());
     line[0] = '\0';
     headerA[0] = '\0';
     headerB[0] = '\0';
+    footerA[0] = '\0';
+    footerB[0] = '\0';
     const ProductSurveyMountTotals productSurveyMountTotals =
         productSurveyMountTotalsSnapshot();
     const ProductSurveyPreparationSnapshot preparation =
@@ -25360,32 +25366,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"wifi_channel_completed_dwells\":%lu,"
                       "\"wifi_channel_completed_sweeps\":%lu,"
                       "\"wifi_channel_measured_mask\":%u,"
-                      "\"wifi_channel_best_primary\":%u,"
-                      "\"library_simulated\":%s,\"library_view\":\"%s\","
-                      "\"library_entries\":%u,\"library_generation\":%lu,"
-                      "\"library_persistent\":%s,"
-                      "\"library_selected_kind\":\"%s\","
-                      "\"capture_source_selection\":%u,"
-                      "\"screenshot_armed\":%s,"
-                      "\"screenshot_status\":\"%s\","
-                      "\"screenshot_available\":%s,"
-                      "\"screenshot_generation\":%lu,"
-                      "\"screenshot_crc32c\":%lu,"
-                      "\"self_test_view\":\"%s\","
-                      "\"self_test_visual_state\":\"%s\","
-                      "\"self_test_mode\":\"%s\","
-                      "\"self_test_status\":\"%s\","
-                      "\"self_test_checks\":%u,\"self_test_passed\":%u,"
-                      "\"self_test_failed\":%u,\"self_test_blocked\":%u,"
-                      "\"self_test_not_applicable\":%u,"
-                      "\"self_test_read_only\":%s,"
-                      "\"self_test_active_step\":\"%s\","
-                      "\"self_test_active_cc_bins\":%u,"
-                      "\"self_test_artifact_step\":\"%s\","
-                      "\"self_test_artifact_recovery_complete\":%s,"
-                      "\"self_test_artifact_library_complete\":%s,"
-                      "\"self_test_artifact_capture_complete\":%s,"
-                      "\"self_test_artifact_pcap_frames\":%u}",
+                      "\"wifi_channel_best_primary\":%u",
                       lastRuntimeEvent, appRuntime.activeApp(),
                       static_cast<unsigned long>(appRuntime.activeResources()),
                       surveyWorkflow.simulated() ? "true" : "false",
@@ -25688,65 +25669,87 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           wifiChannelSnapshot.completedSweeps),
                       static_cast<unsigned>(wifiChannelSnapshot.measuredMask),
                       static_cast<unsigned>(
-                          wifiFrameCapture.bestPrimaryChannel()),
-                      selectedLibrary != nullptr && selectedLibrary->simulated
-                          ? "true" : "false",
-                      libraryController.view() == LibraryView::ExportReady
-                          ? "export_ready"
-                          : (libraryController.view() == LibraryView::SessionDetail
-                                 ? "detail"
-                                 : "list"),
-                      static_cast<unsigned>(libraryController.size()),
-                      static_cast<unsigned long>(selectedLibrary == nullptr
-                                                     ? 0
-                                                     : selectedLibrary->generation),
-                      selectedLibrary != nullptr && selectedLibrary->persistent
-                          ? "true" : "false",
-                      selectedLibrary == nullptr
-                          ? "none"
-                          : selectedLibrary->kind ==
-                                  LibraryEntryKind::Screenshot
-                                ? "screenshot" : "session",
-                      static_cast<unsigned>(captureSourceSelection),
-                      screenshotArmed ? "true" : "false",
-                      screenshotStatus,
-                      latestScreenshotAvailable ? "true" : "false",
-                      static_cast<unsigned long>(
-                          latestScreenshotAvailable
-                              ? latestScreenshotMetadata.generation : 0U),
-                      static_cast<unsigned long>(
-                          latestScreenshotAvailable
-                              ? latestScreenshotMetadata.pixelCrc32c : 0U),
-                      leshy1::apps::self_test::selfTestViewName(
-                          selfTestController.view()),
-                      selfTestController.view() == SelfTestView::VisualCheck
-                          ? leshy1::apps::self_test::selfTestVisualStateName(
-                                selfTestController.visualState())
-                          : "none",
-                      leshy1::apps::self_test::selfTestModeName(
-                          visibleSelfTestMode),
-                      leshy1::apps::self_test::selfTestResultStatusName(
-                          selfTestReport.status),
-                      static_cast<unsigned>(selfTestReport.checkCount),
-                      static_cast<unsigned>(selfTestReport.passed),
-                      static_cast<unsigned>(selfTestReport.failed),
-                      static_cast<unsigned>(selfTestReport.blocked),
-                      static_cast<unsigned>(selfTestReport.notApplicable),
-                      selfTestReport.readOnly ? "true" : "false",
-                      fullGuidedRfStepName(fullGuidedRfState.step),
-                      static_cast<unsigned>(fullGuidedRfState.cc1101Bins),
-                      fullGuidedArtifactStepName(
-                          fullGuidedArtifactState.step),
-                      fullGuidedArtifactState.recoveryComplete
-                          ? "true" : "false",
-                      fullGuidedArtifactState.libraryComplete
-                          ? "true" : "false",
-                      fullGuidedArtifactState.captureComplete
-                          ? "true" : "false",
-                      static_cast<unsigned>(
-                          fullGuidedArtifactState.pcapFrames));
+                          wifiFrameCapture.bestPrimaryChannel()));
+        const int footerALength = std::snprintf(
+            footerA, sizeof(footerA),
+            ",\"library_simulated\":%s,\"library_view\":\"%s\","
+            "\"library_entries\":%u,\"library_generation\":%lu,"
+            "\"library_persistent\":%s,"
+            "\"library_selected_kind\":\"%s\","
+            "\"capture_source_selection\":%u,"
+            "\"screenshot_armed\":%s,"
+            "\"screenshot_status\":\"%s\","
+            "\"screenshot_available\":%s,"
+            "\"screenshot_generation\":%lu,"
+            "\"screenshot_crc32c\":%lu,"
+            "\"self_test_view\":\"%s\","
+            "\"self_test_visual_state\":\"%s\","
+            "\"self_test_mode\":\"%s\"",
+            selectedLibrary != nullptr && selectedLibrary->simulated
+                ? "true" : "false",
+            libraryController.view() == LibraryView::ExportReady
+                ? "export_ready"
+                : (libraryController.view() == LibraryView::SessionDetail
+                       ? "detail" : "list"),
+            static_cast<unsigned>(libraryController.size()),
+            static_cast<unsigned long>(selectedLibrary == nullptr
+                                           ? 0
+                                           : selectedLibrary->generation),
+            selectedLibrary != nullptr && selectedLibrary->persistent
+                ? "true" : "false",
+            selectedLibrary == nullptr
+                ? "none"
+                : selectedLibrary->kind == LibraryEntryKind::Screenshot
+                      ? "screenshot" : "session",
+            static_cast<unsigned>(captureSourceSelection),
+            screenshotArmed ? "true" : "false", screenshotStatus,
+            latestScreenshotAvailable ? "true" : "false",
+            static_cast<unsigned long>(latestScreenshotAvailable
+                ? latestScreenshotMetadata.generation : 0U),
+            static_cast<unsigned long>(latestScreenshotAvailable
+                ? latestScreenshotMetadata.pixelCrc32c : 0U),
+            leshy1::apps::self_test::selfTestViewName(
+                selfTestController.view()),
+            selfTestController.view() == SelfTestView::VisualCheck
+                ? leshy1::apps::self_test::selfTestVisualStateName(
+                      selfTestController.visualState())
+                : "none",
+            leshy1::apps::self_test::selfTestModeName(visibleSelfTestMode));
+        const int footerBLength = std::snprintf(
+            footerB, sdPhysicalEvidence.sectorA.size(),
+            ",\"self_test_status\":\"%s\","
+            "\"self_test_checks\":%u,\"self_test_passed\":%u,"
+            "\"self_test_failed\":%u,\"self_test_blocked\":%u,"
+            "\"self_test_not_applicable\":%u,"
+            "\"self_test_read_only\":%s,"
+            "\"self_test_active_step\":\"%s\","
+            "\"self_test_active_cc_bins\":%u,"
+            "\"self_test_artifact_step\":\"%s\","
+            "\"self_test_artifact_recovery_complete\":%s,"
+            "\"self_test_artifact_library_complete\":%s,"
+            "\"self_test_artifact_capture_complete\":%s,"
+            "\"self_test_artifact_pcap_frames\":%u}",
+            leshy1::apps::self_test::selfTestResultStatusName(
+                selfTestReport.status),
+            static_cast<unsigned>(selfTestReport.checkCount),
+            static_cast<unsigned>(selfTestReport.passed),
+            static_cast<unsigned>(selfTestReport.failed),
+            static_cast<unsigned>(selfTestReport.blocked),
+            static_cast<unsigned>(selfTestReport.notApplicable),
+            selfTestReport.readOnly ? "true" : "false",
+            fullGuidedRfStepName(fullGuidedRfState.step),
+            static_cast<unsigned>(fullGuidedRfState.cc1101Bins),
+            fullGuidedArtifactStepName(fullGuidedArtifactState.step),
+            fullGuidedArtifactState.recoveryComplete ? "true" : "false",
+            fullGuidedArtifactState.libraryComplete ? "true" : "false",
+            fullGuidedArtifactState.captureComplete ? "true" : "false",
+            static_cast<unsigned>(fullGuidedArtifactState.pcapFrames));
         if (detailLength < 0 ||
-            static_cast<std::size_t>(detailLength) >= sizeof(line)) {
+            static_cast<std::size_t>(detailLength) >= sizeof(line) ||
+            footerALength < 0 || footerBLength < 0 ||
+            static_cast<std::size_t>(footerALength) >= sizeof(footerA) ||
+            static_cast<std::size_t>(footerBLength) >=
+                sdPhysicalEvidence.sectorA.size()) {
             stateValid = false;
         }
     }
@@ -25760,7 +25763,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
     }
     reply.print(headerA);
     reply.print(headerB);
-    reply.println(line);
+    reply.print(line);
+    reply.print(footerA);
+    reply.println(footerB);
 }
 
 void emitTargetsState(Stream& reply) {
