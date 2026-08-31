@@ -1758,6 +1758,15 @@ padded images app/factory с уменьшением OTA headroom на 336 B. Del
 стабильных dwell samples Lab, 1 160 danger pixels, 565 независимых focus pixels,
 zero input errors/drops и complete cleanup. Cadence двигается до 8/15.
 
+Bound cross-radio review `RB-M226`: exact physical `1.0.0-dev.328` переиспользуется
+с zero дополнительного роста firmware и zero дополнительных прошивок. Независимые
+focused lifecycle Wi-Fi/BLE сохраняют total/free heap byte-invariant после warmup,
+storage generation/observations 8/54 с zero physical writes и заканчиваются
+Home/none/lease 0. Их live cards меняют 93/74 pixels при zero изменениях
+identity/static/chrome. Accepted Targets dev.327 композируется только после
+machine-check exact ancestry и bounded трёхфайлового Home-only source delta. Cadence
+двигается до 9/15; periodic full matrix остаётся anchored на dev.302.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

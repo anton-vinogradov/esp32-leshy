@@ -16,16 +16,16 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
-- **Verified checkpoint:** `E-BUILD-213`/`E-AUTO-188`/`E-HIL-221`/`E-UX-072`/`RB-M224` accept Targets Radar/localize on exact physical `1.0.0-dev.327`: four complete BLE×2/Wi-Fi×2 lifecycles preserve target identity, advance live signal history, keep heap invariant, perform zero writes/drops/TX and finish Home/none/lease 0. `E-BUILD-214`/`E-AUTO-189`/`E-HIL-222`/`E-UX-073`/`RB-M225` then accept the user-first Home hierarchy on exact physical `1.0.0-dev.328`: task names are explicit, Device remains last, and direct Lab access is red with a separate yellow focus state. Eight stable Lab dwell samples, exact-CID cleanup, zero input errors/drops and final Home/none/lease 0 pass. Exact dev.302 remains the periodic full anchor.
-- **Next gate:** perform the coherent Wi-Fi/BLE/Targets interaction review that closes `FF-1`, then advance to the queued device screenshot slice `FF-2`. Calibrated distance is not claimed. Automation/HID stays parked at the accepted safe dev.308 public-trust checkpoint with execution disconnected; positive Serial Console traffic still waits for an explicitly reviewed no-RF `mux56-3v3` fixture, while optional GPS, physical HTTP parity and the deferred S5 RF carrier gate remain externally blocked.
+- **Verified checkpoint:** `E-AUTO-190`/`E-HIL-223`/`E-UX-074`/`RB-M226` close `FF-1` through a machine-checked compositional review. Exact physical `1.0.0-dev.328` observes two Wi-Fi and 32 BLE devices strongest-first; both selected identities remain stable while signal samples advance, with zero identity/static/chrome repaint, heap drift, writes, input drops or leaked leases. The accepted dev.327 Targets Radar ancestor adds four BLE×2/Wi-Fi×2 target lifecycles with zero probe/TX, while the dev.328 Home provides task-first entry and controlled red Lab access. Exact dev.302 remains the periodic full anchor.
+- **Next gate:** `FF-2` is active: deliver on-device screenshot → Library → export with build/state/time provenance. Calibrated distance is not claimed. Automation/HID stays parked at the accepted safe dev.308 public-trust checkpoint with execution disconnected; positive Serial Console traffic still waits for an explicitly reviewed no-RF `mux56-3v3` fixture, while optional GPS, physical HTTP parity and the deferred S5 RF carrier gate remain externally blocked.
 
 ### Functional-first delivery queue
 
 | Priority | User-visible slice | State |
 |---|---|---|
 | FF-0 | Physical review build: traverse every available passive top-level workflow, retain stable screens/navigation and record only user-visible findings | ✅ complete |
-| FF-1 | Wi-Fi/BLE and Targets Radar accepted; close the coherent cross-radio interaction review for `FUNC-17` | 🟡 active |
-| FF-2 | Deliver `FUNC-43` on-device screenshot → Library → export with build/state/time provenance | ⬜ queued |
+| FF-1 | Wi-Fi/BLE and Targets Radar plus the coherent cross-radio interaction review for `FUNC-17` | ✅ complete |
+| FF-2 | Deliver `FUNC-43` on-device screenshot → Library → export with build/state/time provenance | 🟡 active |
 | FF-3 | Deliver the receive-only first slice of `FUNC-37` Protocol Workbench over immutable Captures | ⬜ queued |
 | FF-4 | Finish `FUNC-38` local USB/Web browse, search, compare and export without making network access a device dependency | ⬜ queued |
 | FF-5 | Deliver `FUNC-34` IR replay from one selected immutable Capture with preview, confirmation and proven Stop/timeout | ⬜ queued |
@@ -64,7 +64,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | CC1101: RX-only Sub-GHz spectrum/activity, one-pixel waterfalls and frequency/RSSI finder for 315/433/868/915 MHz | S4 + S5.4 | 🔴 blocked |
 | GPS adds fix, satellites, time and track to a Session only for an explicit compatible assembly | S4 + S5 | ⬜ later |
 | Shared timeline exposes sources, duty cycle, temporary unavailability, degradation and dropped events | S4 + S6.6 | ✅ complete |
-| Network/device Radar/localize: RSSI history, trend/range and honest proximity limits | S4 + S6 | 🟡 in progress |
+| Network/device Radar/localize: RSSI history, trend/range and honest proximity limits | S4 + S6 | ✅ complete |
 | Wi-Fi channel/packet monitor: current/mean load for 1–13, explainable free channel and bounded PCAP with drop counters | S4 | ✅ complete |
 | Visible power/charge/reset reason, low-voltage safe write and verifiable sleep/resume | S5 | 🔴 blocked |
 | SD, USB and local-companion import/export uses versioned schemas and a fail-closed parser | S5 + S6 | 🟡 in progress |

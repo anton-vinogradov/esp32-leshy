@@ -16,16 +16,16 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
-- **Проверенный checkpoint:** `E-BUILD-213`/`E-AUTO-188`/`E-HIL-221`/`E-UX-072`/`RB-M224` принимают Targets Radar/localize на exact physical `1.0.0-dev.327`: четыре полных lifecycle BLE×2/Wi-Fi×2 сохраняют identity цели, обновляют live history сигнала, оставляют heap invariant, выполняют zero writes/drops/TX и заканчиваются Home/none/lease 0. `E-BUILD-214`/`E-AUTO-189`/`E-HIL-222`/`E-UX-073`/`RB-M225` затем принимают user-first иерархию Home на exact physical `1.0.0-dev.328`: названия задач явные, «Устройство» остаётся последним, а прямой вход в «Лабораторию» выделен красным отдельно от жёлтого focus. Проходят восемь стабильных dwell samples Lab, exact-CID cleanup, zero input errors/drops и final Home/none/lease 0. Exact dev.302 остаётся periodic full anchor.
-- **Следующий gate:** провести согласованный interaction review Wi-Fi/BLE/Targets, закрывающий `FF-1`, затем перейти к queued slice screenshot устройства `FF-2`. Calibrated distance не заявляется. Automation/HID остаётся заморожен на принятом безопасном public-trust checkpoint dev.308 при отключённом execution; positive Serial Console traffic всё ещё ждёт explicitly reviewed no-RF fixture `mux56-3v3`, а optional GPS, physical HTTP parity и deferred S5 RF carrier gate остаются externally blocked.
+- **Проверенный checkpoint:** `E-AUTO-190`/`E-HIL-223`/`E-UX-074`/`RB-M226` закрывают `FF-1` машинно проверенным композиционным review. Exact physical `1.0.0-dev.328` видит две Wi-Fi и 32 BLE цели с сортировкой по убыванию сигнала; обе выбранные identity стабильны при росте signal samples, без перерисовки identity/static/chrome, drift heap, записей, input drops или leaked leases. Принятый ancestor Targets Radar dev.327 добавляет четыре lifecycle BLE×2/Wi-Fi×2 с zero probe/TX, а Home dev.328 — task-first вход и controlled красную «Лабораторию». Exact dev.302 остаётся periodic full anchor.
+- **Следующий gate:** активен `FF-2`: реализовать screenshot устройства → Library → export с provenance build/state/time. Calibrated distance не заявляется. Automation/HID остаётся заморожен на принятом безопасном public-trust checkpoint dev.308 при отключённом execution; positive Serial Console traffic всё ещё ждёт explicitly reviewed no-RF fixture `mux56-3v3`, а optional GPS, physical HTTP parity и deferred S5 RF carrier gate остаются externally blocked.
 
 ### Functional-first очередь поставки
 
 | Приоритет | Пользовательский срез | Состояние |
 |---|---|---|
 | FF-0 | Физическая ревью-сборка: пройти все доступные passive top-level workflows, сохранить stable screens/navigation и записать только пользовательские findings | ✅ готово |
-| FF-1 | Radar Wi-Fi/BLE и Targets принят; закрыть согласованный cross-radio interaction review `FUNC-17` | 🟡 в работе |
-| FF-2 | Поставить `FUNC-43` screenshot устройства → Library → export с provenance build/state/time | ⬜ в очереди |
+| FF-1 | Radar Wi-Fi/BLE и Targets плюс согласованный cross-radio interaction review `FUNC-17` | ✅ готово |
+| FF-2 | Поставить `FUNC-43` screenshot устройства → Library → export с provenance build/state/time | 🟡 в работе |
 | FF-3 | Поставить первый receive-only срез `FUNC-37` Protocol Workbench над immutable Captures | ⬜ в очереди |
 | FF-4 | Завершить `FUNC-38` local USB/Web browse, search, compare и export, не делая сеть зависимостью устройства | ⬜ в очереди |
 | FF-5 | Поставить `FUNC-34` IR replay из одного выбранного immutable Capture с preview, confirmation и доказанным Stop/timeout | ⬜ в очереди |
@@ -64,7 +64,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | CC1101: RX-only Sub-GHz spectrum/activity, однопиксельные waterfalls и поиск частоты/RSSI 315/433/868/915 МГц | S4 + S5.4 | 🔴 заблокировано |
 | GPS добавляет fix, satellites, time и track к Session только для explicit compatible assembly | S4 + S5 | ⬜ дальше |
 | Общая timeline показывает источники, duty cycle, временную недоступность, degradation и dropped events | S4 + S6.6 | ✅ готово |
-| Radar/localize для сети или устройства: RSSI history, trend/range и честные пределы оценки близости | S4 + S6 | 🟡 в работе |
+| Radar/localize для сети или устройства: RSSI history, trend/range и честные пределы оценки близости | S4 + S6 | ✅ готово |
 | Wi-Fi channel/packet monitor: текущая/средняя загрузка 1–13, объяснимый свободный канал и bounded PCAP с drop counters | S4 | ✅ готово |
 | Видимые питание/заряд/reset reason, low-voltage safe-write и проверяемые sleep/resume | S5 | 🔴 заблокировано |
 | Import/export через SD, USB и local companion использует versioned schemas и fail-closed parser | S5 + S6 | 🟡 в работе |

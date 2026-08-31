@@ -1,0 +1,107 @@
+{
+  "automation": {
+    "additional_flash_count": 0,
+    "ble_checker_output": "{\"detail_static_changed_pixels\": 0, \"final_lease_mask\": 0, \"list_chrome_changed_pixels\": 0, \"radar_changed_pixels\": 74, \"status\": \"pass\", \"unique_devices\": 32, \"version\": \"1.0.0-dev.328\"}",
+    "ble_checker_sha256": "d3cc22308c7145212f81aba69ebb71a554f39e0c6cf2cf603b325ca2d164e1e7",
+    "ble_manifest_sha256": "0cc17ef1c012cde50c9a36603178d0165efaaee1830c9318bfc8c3bdad8c0538",
+    "ble_run_sha256": "e65a91a9f9d6099e31250f9927531b0b5bfffa41be666297395e69bce6684a53",
+    "ble_runner_sha256": "403dc5315eaa1b21b699c93f1d66c7f063d006f67bd1645288b7991d15b45b13",
+    "composition_inputs": 4,
+    "home_evidence_sha256": "a692636ff2cf67ce28af99e069d3403232ad8254247c5132dd39392b3c2dca0e",
+    "manual_button_presses": 0,
+    "target_evidence_sha256": "352c6c7d5c08a24e17e8bf300fecd7c7be373a9bbb9da02e2ae6f07815cc87f5",
+    "wifi_checker_output": "{\"channel_hops\": 35, \"chrome_changed_pixels\": 0, \"final_lease_mask\": 0, \"identity_changed_pixels\": 0, \"live_detail_changed_pixels\": 93, \"oui_records\": 39984, \"status\": \"pass\", \"unique_devices\": 2, \"version\": \"1.0.0-dev.328\"}",
+    "wifi_checker_sha256": "c4c54ef073d4add68c64911a432f90d04dc71864b58907b8f826117ff23be363",
+    "wifi_manifest_sha256": "7e498d13b4bcb28e09ee7f92f21d4a7b371f8a4c2ecc7cf1c8fc5560005797de",
+    "wifi_run_sha256": "a6ac93528d87de97064783eb2a7d783555ea23369e7e813c3cf044ef6e8d98ca",
+    "wifi_runner_sha256": "3453d191e47cb40de0652bdfd4cbfca0016f9af8b9059dc401a0a3ae1142c56b"
+  },
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "e0d2d5acf53fa65f804e7866cab7f6fb20e52abd27a0f9864c21b04ce60a8306",
+    "firmware_sha256": "a069ce661f56add492ece0d9f33df0343cfe7da20092048f9b315582e1a268c0",
+    "firmware_source_commit": "8b8ff984c8c881d13ca95abbbbb43f634747ffec",
+    "target_source_commit": "b8b0daed3ef30854b8b8e607609774f71a24384b",
+    "target_source_is_ancestor": true,
+    "target_to_current_firmware_files": [
+      "firmware/leshy1/src/domain/apps/AppCatalog.cpp",
+      "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp",
+      "firmware/leshy1/src/ui/UiStrings.def"
+    ],
+    "version": "1.0.0-dev.328"
+  },
+  "cid": "FE343253440000002000000055019CB7",
+  "evidence_ids": [
+    "E-AUTO-190",
+    "E-HIL-223",
+    "E-UX-074",
+    "RB-M226"
+  ],
+  "privacy": {
+    "ambient_identifiers_retained": false,
+    "frames_retained": false,
+    "note": "Only aggregate counts, invariant results and input hashes are committed.",
+    "raw_runs_retained": false
+  },
+  "schema": "leshy.cross_radio_review.acceptance.v1",
+  "scope": {
+    "accepts": [
+      "coherent task-first entry to passive Wi-Fi and BLE discovery",
+      "identity-stable live Wi-Fi and BLE device cards with Radar",
+      "retained Targets reopening both passive radio sources",
+      "FF-1 cross-radio interaction review"
+    ],
+    "does_not_accept": [
+      "calibrated distance or direction finding",
+      "RF transmit or active probing",
+      "periodic full HIL matrix",
+      "device screenshot capture and export"
+    ],
+    "focused_cadence": "9/15",
+    "next": "FF-2 on-device screenshot to Library to export",
+    "review_kind": "compositional focused deltas"
+  },
+  "status": "pass",
+  "verified": {
+    "active_probe_commands": 0,
+    "ble_chrome_pixels": 0,
+    "ble_identity_stable": true,
+    "ble_radar_pixels": 74,
+    "ble_signal_samples": [
+      6,
+      7
+    ],
+    "ble_static_pixels": 0,
+    "ble_strongest_first": true,
+    "ble_unique_devices": 32,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "generation_and_observations_unchanged": true,
+    "heap_stable_after_warmup": true,
+    "home_task_first": true,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "lab_direct_controlled_entry": true,
+    "physical_storage_writes": 0,
+    "radio_tx_commands": 0,
+    "targets_identity_stable": true,
+    "targets_live_region_only": true,
+    "targets_radios": [
+      "ble",
+      "ble",
+      "wifi",
+      "wifi"
+    ],
+    "wifi_chrome_pixels": 0,
+    "wifi_identity_pixels": 0,
+    "wifi_identity_stable": true,
+    "wifi_live_pixels": 93,
+    "wifi_signal_samples": [
+      2,
+      6
+    ],
+    "wifi_strongest_first": true,
+    "wifi_unique_devices": 2
+  }
+}

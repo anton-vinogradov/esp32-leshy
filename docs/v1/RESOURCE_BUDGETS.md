@@ -1770,6 +1770,15 @@ only task-first strings, one optional label tone and its HIL observability. Eigh
 stable Lab dwell samples, 1,160 danger pixels, 565 independent focus pixels, zero
 input errors/drops and complete cleanup pass. Cadence advances to 8/15.
 
+Cross-radio review bound `RB-M226`: exact physical `1.0.0-dev.328` is reused with
+zero additional firmware growth and zero additional flashes. Independent Wi-Fi/BLE
+focused lifecycles keep total/free heap byte-invariant after warmup, preserve storage
+generation/observations 8/54 with zero physical writes and finish Home/none/lease 0.
+Their live cards change 93/74 pixels while identity/static/chrome change by zero.
+Accepted Targets dev.327 is composed only after machine-checking ancestry and the
+bounded three-file Home-only source delta. Cadence advances to 9/15; periodic full
+matrix remains anchored at dev.302.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
