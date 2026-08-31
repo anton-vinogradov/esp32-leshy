@@ -767,9 +767,6 @@ enum class TargetRadarWorkerControl : std::uint8_t {
 };
 
 TargetRadar* targetRadarTracker = nullptr;
-TargetCatalog* targetRadarCatalog = nullptr;
-CorrelationDecisionLog* targetRadarDecisions = nullptr;
-TargetMergeHistory* targetRadarMerges = nullptr;
 TargetId targetRadarSelectedTargetId{};
 TaskHandle_t targetRadarTaskHandle = nullptr;
 portMUX_TYPE targetRadarMux = portMUX_INITIALIZER_UNLOCKED;
@@ -8941,13 +8938,7 @@ bool restoreTargetsAfterWebCompanion() {
     return rebuilt;
 }
 
-bool targetRadarTargetsSuspended() {
-    return targetRadarCatalog != nullptr &&
-        targetRadarDecisions != nullptr && targetRadarMerges != nullptr;
-}
-
 bool suspendTargetsForRadar() {
-    if (targetRadarTargetsSuspended()) return true;
     if (targetsProductRuntime == nullptr ||
         std::strcmp(targetsProductStatus, "ready") != 0) {
         return false;
@@ -8957,13 +8948,11 @@ bool suspendTargetsForRadar() {
         ? TargetId{} : selected->id;
     targetRadarHeapFreeBeforeSuspend = static_cast<std::uint32_t>(
         heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-    // Radar has already copied the selected target into its bounded tracker.
-    // Retain only durable catalog state and release the comparison snapshot as
-    // well as every UI/editor workspace before NimBLE admission.
-    if (!targetsProductRuntime->detachState(
-            &targetRadarCatalog, &targetRadarDecisions, &targetRadarMerges)) {
-        return false;
-    }
+    // Radar has already copied the selected target into its bounded tracker,
+    // and every mutation reachable before Actions is durably committed. Free
+    // the complete foreground graph: the ESP32-S3 NimBLE controller needs the
+    // same internal-RAM reserve as a normal BLE product start. The exact
+    // read-only state is reconstructed from the bound SD after Radar stops.
     delete targetsProductRuntime;
     targetsProductRuntime = nullptr;
     targetsProductStatus = "radar_suspended";
@@ -8973,15 +8962,32 @@ bool suspendTargetsForRadar() {
 }
 
 bool restoreTargetsAfterRadar() {
-    if (!targetRadarTargetsSuspended()) return true;
-    const bool rebuilt = rebuildTargetsProductFromCatalog(
-        targetRadarCatalog, targetRadarDecisions, targetRadarMerges,
-        targetRadarSelectedTargetId, true, true);
-    if (!rebuilt) {
+    const AppMenuItem* targetsItem = nullptr;
+    for (std::size_t index = 0; index < appCatalog.size(); ++index) {
+        const AppMenuItem* candidate = appCatalog.get(index);
+        if (candidate != nullptr && candidate->id != nullptr &&
+            std::strcmp(candidate->id, "targets") == 0) {
+            targetsItem = candidate;
+            break;
+        }
+    }
+    const bool loaded = targetsItem != nullptr &&
+        loadTargetsProduct(*targetsItem) && targetsProductRuntime != nullptr &&
+        std::strcmp(targetsProductStatus, "ready") == 0;
+    if (loaded &&
+        leshy1::domain::targets::targetIdValid(targetRadarSelectedTargetId) &&
+        targetsProductRuntime->controller.selectTarget(
+            targetRadarSelectedTargetId)) {
+        targetsProductRuntime->controller.openSelected();
+        targetsProductRuntime->controller.openSelected();
+    }
+    if (!loaded || targetsProductRuntime == nullptr ||
+        targetsProductRuntime->controller.view() != TargetsView::Actions) {
         targetsProductStatus = "radar_restore_failed";
         lastRuntimeEvent = targetsProductStatus;
+        return false;
     }
-    return rebuilt;
+    return true;
 }
 
 TargetRadarSnapshot targetRadarSnapshot() {
@@ -9211,8 +9217,8 @@ bool startTargetRadar() {
     if (listenBle && !prepareBleProductSurveyMemory(
             &targetRadarHeapFreeBeforeBegin,
             &targetRadarHeapLargestBeforeBegin)) {
-        restoreTargetsAfterRadar();
         resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
+        restoreTargetsAfterRadar();
         delete tracker;
         lastRuntimeEvent = "target_radar_ble_memory_unavailable";
         return true;

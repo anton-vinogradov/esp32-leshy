@@ -116,16 +116,17 @@ def main() -> int:
             "xTaskNotifyGive(productSurveyWorkerTaskHandle);" in entry and
             '"leshy-target-radar"' not in entry and
             "suspendTargetsForRadar()" in entry and
-            "targetsProductRuntime->detachState(" in entry and
+            "The exact\n    // read-only state is reconstructed from the bound SD" in
+                entry and
             "restoreTargetsAfterRadar()" in entry and
             "prepareBleProductSurveyMemory()" in entry and
             "kMinimumInternalFreeHeapBeforeBegin" in ble_scanner_header and
             "kMinimumInternalLargestHeapBeforeBegin" in ble_scanner_header and
             "MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT" in ble_scanner and
             "ESP_ERR_NO_MEM" in ble_scanner,
-            "BLE Radar must retain only durable Target state, reuse the "
-            "boot-time Survey worker and reject NimBLE admission before its "
-            "fatal private low-memory assertion")
+            "BLE Radar must release and read-only reconstruct the complete "
+            "Target graph, reuse the boot-time Survey worker and reject "
+            "NimBLE admission before its fatal private low-memory assertion")
     load_start = entry.index("bool loadTargetsProduct")
     load_end = entry.index("bool rebuildTargetsProductFromCatalog")
     load_product = entry[load_start:load_end]
