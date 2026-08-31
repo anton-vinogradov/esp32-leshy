@@ -163,6 +163,7 @@ def main() -> int:
         "ble_device_catalog_revision",
         "bleDeviceCatalog.indexOfIdentity(bleSelectionAnchor)",
         "bleDeviceNavigationOrder.lock(bleDeviceCatalog)",
+        "Publish the first completed passive scan as a stable",
         "bleDeviceVisibleSize()",
         "bleDeviceAt(bleDeviceSelection)",
         "renderRadioSignalCard(",

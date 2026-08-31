@@ -7579,6 +7579,19 @@ void serviceProductSurveyWorker() {
             xSemaphoreGive(productSurveyScanStartGate);
         } else if (event.kind == ProductSurveyWorkerEventKind::Scan) {
             if (closeProductSurveyScanWindow(event)) {
+                if (event.source == RadioKind::Ble &&
+                    event.sourceScanCycles >= 1U &&
+                    (bleProductView == BleProductView::Devices ||
+                     bleProductView == BleProductView::DeviceDetail) &&
+                    !bleDeviceNavigationOrder.locked() &&
+                    bleDeviceCatalog.size() != 0U) {
+                    // Publish the first completed passive scan as a stable
+                    // strongest-first snapshot. This is the non-blocking 1.x
+                    // equivalent of the 0.x completed-scan list: later RSSI
+                    // samples update the same identities in place instead of
+                    // reshuffling four visible rows without user input.
+                    bleDeviceNavigationOrder.lock(bleDeviceCatalog);
+                }
                 productSurveyRuntime.status =
                     event.report.unavailableSourceMask == 0
                         ? "running" : "running_degraded";
