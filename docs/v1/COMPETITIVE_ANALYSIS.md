@@ -2,7 +2,7 @@
 
 Market snapshot: **15 August 2026**.
 
-Feature-level parity audit: **27 August 2026**; official-source re-audit opened
+Feature-level parity audit: **27 August 2026**; official-source re-audit completed
 **1 September 2026**.
 
 This is a product-direction document, not a firmware leaderboard. Projects are
@@ -116,7 +116,7 @@ explicit post-1.0 item rather than a hidden requirement.
 The 1 September re-audit supersedes the earlier claim that this catalog already
 covers every useful competitor family. Current official releases document safe,
 relevant outcomes that are either narrower or absent in the frozen catalog. Until
-the re-audit is complete and the owner decides each candidate, **55 remains the
+the owner decides each candidate, **55 remains the
 fixed current denominator, not a parity claim**. Candidate additions and deliberate
 exclusions are tracked separately instead of silently expanding an existing row.
 
@@ -170,9 +170,82 @@ exclusions are tracked separately instead of silently expanding an existing row.
 - **Intentionally not copied:** broad disruption, social-engineering credential
   capture, generic LAN attack tooling, and functions requiring unrelated hardware.
 - **Scope claim:** the project has a traced, currently frozen 55-capability 1.x
-  baseline. The 1 September re-audit is open, so this is not yet a claim of strict
+  baseline. The 1 September re-audit is complete but its decisions are open, so
+  this is not yet a claim of strict
   parity with every current useful competitor outcome and is not a claim that all
   55 are implemented or verified.
+
+### 1 September 2026 re-audit ledger
+
+Seven separate official-source reviews checked every project named by this
+document. Counts are not treated as one leaderboard because the projects group
+features differently; the useful result is the normalized outcome ledger below.
+
+| Project snapshot | Result against the frozen 55 |
+|---|---|
+| [ESP32-DIV `main`, release 1.7.0 / flasher 1.7.2](https://github.com/cifertech/ESP32-DIV) | 21 documented README outcomes covered, 11 narrower and 17 deliberately excluded; ESB capture/defensive MouseJack and Sub-GHz jamming detection are the largest safe gaps |
+| [GhostESP Revival 2.1.1](https://github.com/GhostESP-Revival/GhostESP) | core workflow covered, but live Wireshark, defensive/compliance depth, concrete decoder inventory, NFC dictionary work and accessibility are narrower or absent |
+| [Bruce 1.16.1](https://github.com/BruceDevices/firmware/releases/tag/1.16.1) | Leshy is stronger in evidence and safety, but PN532 emulation, safe BLE assessment, user app organization, offline owned-handshake verification and explicit USB MSC need decisions |
+| [ESP32 Marauder 1.15.1](https://github.com/justcallmekoko/ESP32Marauder/releases/tag/v1.15.1) | the 55-job product scope is broader; SAE capture, detector/Fox Hunt profiles and field POI are useful acceptance refinements |
+| [Flipper Zero stable 1.4.3 / current official dev](https://github.com/flipperdevices/flipperzero-firmware) | 43 of 55 planned Leshy outcomes are equal or broader and 12 are narrower, mainly mature IR/Sub-GHz/NFC, companion and extension UX |
+| [NEMO 3.2.2](https://github.com/n0xa/m5stick-nemo/releases/tag/v3.2.2) | 52 of 55 are equal or broader; physical USB BadUSB inspection, a ready TV profile pack and broader locale packaging are narrower |
+| [CapibaraZero 0.5.2](https://github.com/CapibaraZero/fw/releases/tag/0.5.2) | archived/deprecated and officially migrated to Bruce; no unique parity requirement remains, so it stays a historical sustainability reference |
+
+#### Safe/relevant outcomes awaiting disposition
+
+`Refine` means the user job is already one of the 55 and its acceptance can be
+made concrete without disguising another job. `Decision` means the outcome is
+materially separable and must not be hidden inside an existing row. `Post-1.0`
+keeps it visible without silently expanding the release boundary.
+
+| ID | Normalized competitor outcome | Current coverage | Classification |
+|---|---|---|---|
+| RA-01 | Named Airspace profiles, passive WPA3/PMF/SAE compliance, configurable explained sensitivity and Wi-Fi/BLE/nRF/Sub-GHz jamming warnings | FUNC-44/48/49 | `Refine`; detector inventory and evidence semantics belong in existing acceptance |
+| RA-02 | nRF24 ESB packet capture/decode and defensive MouseJack scan | FUNC-12/23/37 only provide spectrum/generic Capture foundations | `Decision`; a real packet workflow is not the same as a spectrum screen |
+| RA-03 | Flipper-compatible `.sub` plus a declared minimum Sub-GHz decoder inventory | FUNC-30/37/40 | `Refine`; portability and the shipped inventory must become measurable |
+| RA-04 | PN532 NDEF/ISO14443-4 emulation, explicit erase and bounded dictionary recovery for an owned tag | FUNC-31/36/40 cover read and verified restore | `Decision`; emulation and key recovery add distinct active/security semantics |
+| RA-05 | Live USB Wireshark/extcap for Wi-Fi and BLE plus read-only screen mirroring | FUNC-26/38/51 export files and share Actions but do not promise live streams or pixels | `Decision`; valuable for analysis, support and HIL |
+| RA-06 | Font scale, high contrast, reduced motion, input-repeat control and outdoor/epilepsy-safe presentation | FUNC-04/05 | `Refine`; complete the existing accessibility promise |
+| RA-07 | Lock overlay that allows an already-started safe Capture to continue while protecting controls/data | FUNC-52 | `Refine`; define lifecycle, Stop and privacy semantics |
+| RA-08 | Ready signed IR remote/TV profile pack, multi-button remote UX and favorites | FUNC-29/34/40 | `Refine`; deliver a useful corpus, not only package architecture |
+| RA-09 | Library trash/undo, optional BLE/mobile sync/share, USB Mass Storage and public app catalog | FUNC-25/27/38/41 cover local typed data and extension contracts | split: trash/undo `Refine`; mobile/MSC/catalog `Post-1.0 decision` |
+| RA-10 | Favorite/hide/show applications, startup job, shortcuts and a privacy/dummy presentation | FUNC-02/05 | `Decision`; product organization rather than radio capability |
+| RA-11 | Signed offline firmware update from SD in addition to browser/OTA/recovery | FUNC-07 | `Refine`; another verified transport for the same update job |
+| RA-12 | Per-satellite GPS diagnostics and field POI/notes during Survey | FUNC-14/50 | `Refine`; concrete field acceptance |
+| RA-13 | Privacy MAC randomization for Leshy's own STA/AP without cloning another identity | FUNC-46 does not promise it | `Decision`; privacy benefit with provenance implications |
+| RA-14 | Offline wordlist verification of the owner's own captured Wi-Fi authentication evidence | FUNC-49 ends at classification/export | `Decision`; useful offline analysis but close to credential-recovery policy |
+| RA-15 | Individually admitted iBeacon, MouseJack fixture injection and targeted handshake-assist recipes | FUNC-55 requires named recipes but names none | `Decision per recipe`; no generic approval |
+| RA-16 | Physical USB-host BadUSB enumeration and optional keyboard-host/relay | FUNC-54 inspects packages, not a connected USB device | `Decision + hardware qualification`; VBUS/OTG/cleanup must pass first |
+| RA-17 | External-module protocol with discovery, heartbeat, checksum, RPC and negotiated transport | no base outcome | `Post-1.0`; useful for Leshy2/expansion modules |
+| RA-18 | Joined-LAN inventory, U2F and other safe non-radio utilities | intentionally outside the radio job | `Decision`; separate product breadth, not parity-by-default |
+| RA-19 | Visible regulatory domain and channels 1–14 only when legal and supported | FUNC-05/42/55 are region-aware but the user contract is incomplete | `Refine`; never expose channel 14 as a universal default |
+
+#### Normalized deliberate-exclusion ledger
+
+These are features competitors actually ship, not hidden missing work. They stay
+outside the 55 unless the owner explicitly reverses the product policy.
+
+| Excluded family | Examples in competitor firmware | Reason and accepted tradeoff |
+|---|---|---|
+| Broad RF disruption | Wi-Fi deauth/disassociation/CSA/SAE floods, BLE/nRF/Sub-GHz/RFID jamming | removes one-button DoS breadth; preserves physical containment, predictable cleanup and a defensible product purpose |
+| Flood, spam and crash modes | beacon/probe/auth floods, Sour Apple, Apple/Android/Windows pairing spam, BLE crash chains | loses prank/stress-demo count; avoids indiscriminate impact without durable evidence |
+| Credential harvesting and social engineering | Evil Portal/Karma portal, fake login, keystroke/password viewer, Responder/LLMNR interception | loses turnkey phishing labs; Leshy never becomes a covert secret collector |
+| Identity impersonation | AP/STA clone, Karma response, AirTag/drone spoof, Find My sound trigger | loses several proprietary-flow tests; preserves provenance and avoids polluting identity ecosystems |
+| Unbounded brute force or key recovery | De Bruijn/fixed-code brute force, unrestricted MIFARE nested/hardnested/dictionaries | loses attack breadth; bounded owned-evidence analysis remains a separate explicit decision (RA-04/RA-14) |
+| Active LAN interference | DHCP starvation, ARP poison/NetCut/MITM and station disruption | Marauder/Bruce remain broader network attack tools; Leshy stays an evidence-backed radio instrument |
+| Unrestricted execution and raw hardware bypass | unsigned BadUSB, raw Wi-Fi TX/GPIO/bus hooks, unrestricted JS/native apps, shell/file manager | smaller third-party ecosystem at first; ResourceBroker, scoped storage, signatures and Safety Supervisor remain enforceable |
+| Arbitrary active replay/credential creation | unscoped Sub-GHz remote generation, arbitrary NFC UID/Magic card cloning, LF RFID/iButton credential generation | less universal cloning; every supported active path starts from owned immutable evidence and remains bounded/stoppable |
+| Payment-data extraction | EMV PAN/expiry readers | excludes a privacy-sensitive niche with weak relevance to the product job |
+| IR camera interference | continuous IR Dazzler/night-vision interference | loses one striking demo; avoids deliberate sensor disruption and sustained thermal load |
+| Cloud-first publication and executable marketplace | automatic WiGLE/WDGWars upload, public unreviewed app/script store | costs one-click sharing/discovery; keeps 1.0 offline-first and supply-chain controlled; reviewed optional clients may follow later |
+| Generic LAN client/toolbox | port/service scanners, SSH/Telnet, VPN, DNS sinkhole, SMB/SNMP utilities | narrower as a pocket computer; clearer navigation, test matrix and product identity |
+| Games, pets, clocks, QR/media/printer utilities | Doom/Ghostchi/Brucegotchi, clocks, music, QR toys, printer/Chromecast tools | less novelty; preserves flash/RAM/menu space for the primary jobs |
+| Early broad board matrix | dozens of ESP32 targets | smaller audience initially; deeper ESP32-DIV probe, HIL and conflict safety |
+
+Hardware-only differences such as 125 kHz RFID, iButton, ST25R-specific modes,
+5 GHz, 802.15.4, Ethernet, camera, microphone/audio, haptics, FM and LoRa are not
+called policy rejections. They remain unavailable until an explicitly supported
+assembly exists.
 
 ## What 1.x must match
 

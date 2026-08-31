@@ -14,7 +14,7 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 >
 > User functionality: **26/55 done** · 11 active · 6 blocked · 12 planned.
 
-This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts. The checklist is complete for the currently frozen 55-capability 1.x baseline. A 1 September competitor re-audit is open; candidate additions and deliberate exclusions remain outside this fixed denominator until an explicit product decision in the [feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
+This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts. The checklist is complete for the currently frozen 55-capability 1.x baseline. The 1 September competitor re-audit is complete; candidate additions and deliberate exclusions remain outside this fixed denominator until an explicit product decision in the [feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.

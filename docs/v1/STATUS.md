@@ -28,7 +28,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   R-020…R-023. Peer Link remains explicitly after 1.0; disruptive,
   social-engineering and unrelated-hardware features remain non-goals. The current
   1.x boundary remains frozen at **55 capabilities**. A new official-source audit
-  opened on 1 September after competitor releases exposed safe outcomes that may
+  completed on 1 September after competitor releases exposed safe outcomes that may
   be narrower or absent here; they remain outside the denominator until explicit
   owner decisions, so strict current parity is not claimed. Exact dev.242 physically accepts the
   complete receive-only CAP-048 Airspace Guard workflow, including golden and

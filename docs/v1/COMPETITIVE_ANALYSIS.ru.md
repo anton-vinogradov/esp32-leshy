@@ -3,7 +3,7 @@
 Срез рынка: **15 августа 2026 года**.
 
 Пофункциональный аудит паритета: **27 августа 2026 года**; повторный аудит по
-официальным источникам открыт **1 сентября 2026 года**.
+официальным источникам завершён **1 сентября 2026 года**.
 
 Этот документ задаёт направление продукта, а не рейтинг прошивок. Мы сравниваем
 решения по тому, насколько хорошо они помогают пройти полный рабочий сценарий:
@@ -151,9 +151,8 @@ toggle.
 
 Повторный аудит от 1 сентября отменяет прежнее утверждение, что этот каталог уже
 покрывает каждое полезное семейство конкурентов. В актуальных официальных релизах
-есть безопасные и релевантные outcomes, для которых замороженный каталог уже
-конкурента или не содержит покрытия. Пока аудит не завершён и владелец явно не
-решит судьбу каждого
+есть безопасные и релевантные outcomes, для которых замороженный каталог уже,
+чем у конкурента, или не содержит покрытия. Пока владелец явно не решит судьбу каждого
 кандидата, **55 остаётся фиксированным текущим знаменателем, а не заявлением о
 паритете**. Кандидаты и принципиальные исключения учитываются отдельно, без
 скрытого расширения существующих строк.
@@ -208,9 +207,82 @@ toggle.
 - **Сознательно не копируются:** broad disruption, social-engineering credential
   capture, generic LAN attack tooling и функции для отсутствующего железа.
 - **Scope claim:** проект имеет трассируемый, пока замороженный baseline 1.x из 55
-  capabilities. Повторный аудит от 1 сентября открыт, поэтому это пока не
+  capabilities. Повторный аудит от 1 сентября завершён, но решения по его
+  кандидатам открыты, поэтому это пока не
   утверждение о строгом паритете со всеми актуальными полезными outcomes
   конкурентов и не утверждение, что все 55 уже реализованы или проверены.
+
+### Реестр повторного аудита от 1 сентября 2026 года
+
+Семь отдельных review по официальным источникам проверили каждый проект из этого
+документа. Их числа нельзя складывать как рейтинг: проекты по-разному группируют
+функции. Нормализованный реестр outcomes ниже — полезный результат сравнения.
+
+| Срез проекта | Результат относительно замороженных 55 |
+|---|---|
+| [ESP32-DIV `main`, release 1.7.0 / flasher 1.7.2](https://github.com/cifertech/ESP32-DIV) | 21 outcome из текущего README покрыт, для 11 наше обещание уже, 17 сознательно исключены; крупнейшие безопасные пробелы — ESB capture/defensive MouseJack и Sub-GHz jamming detection |
+| [GhostESP Revival 2.1.1](https://github.com/GhostESP-Revival/GhostESP) | core workflow покрыт, но live Wireshark, глубина defensive/compliance, конкретный decoder inventory, NFC dictionary workflow и accessibility уже или отсутствуют |
+| [Bruce 1.16.1](https://github.com/BruceDevices/firmware/releases/tag/1.16.1) | Leshy сильнее в evidence/safety, но нужны решения по PN532 emulation, safe BLE assessment, организации apps, offline verification собственного handshake и явному USB MSC |
+| [ESP32 Marauder 1.15.1](https://github.com/justcallmekoko/ESP32Marauder/releases/tag/v1.15.1) | продуктовый scope 55 шире; SAE capture, detector/Fox Hunt profiles и field POI полезно уточнить в acceptance |
+| [Flipper Zero stable 1.4.3 / current official dev](https://github.com/flipperdevices/flipperzero-firmware) | 43 из 55 запланированных outcomes Leshy равны или шире, 12 уже — в основном зрелые IR/Sub-GHz/NFC, companion и extension UX |
+| [NEMO 3.2.2](https://github.com/n0xa/m5stick-nemo/releases/tag/v3.2.2) | 52 из 55 равны или шире; physical USB BadUSB inspection, готовый TV profile pack и более широкая упаковка локалей уже |
+| [CapibaraZero 0.5.2](https://github.com/CapibaraZero/fw/releases/tag/0.5.2) | архивирован/deprecated и официально мигрировал в Bruce; уникального parity requirement не осталось, поэтому это historical sustainability reference |
+
+#### Безопасные и релевантные outcomes, ожидающие решения
+
+`Refine` означает, что пользовательская задача уже входит в 55 и её acceptance
+можно сделать конкретнее без маскировки другой задачи. `Decision` означает
+самостоятельный outcome, который нельзя прятать внутри существующей строки.
+`Post-1.0` сохраняет видимость без скрытого расширения release boundary.
+
+| ID | Нормализованный outcome конкурентов | Текущее покрытие | Класс |
+|---|---|---|---|
+| RA-01 | Именованные Airspace profiles, passive WPA3/PMF/SAE compliance, понятная sensitivity и Wi-Fi/BLE/nRF/Sub-GHz jamming warnings | FUNC-44/48/49 | `Refine`; inventory detectors и evidence semantics входят в текущую acceptance |
+| RA-02 | nRF24 ESB packet capture/decode и defensive MouseJack scan | FUNC-12/23/37 дают лишь spectrum и общий фундамент Capture | `Decision`; packet workflow не равен экрану spectrum |
+| RA-03 | Flipper-compatible `.sub` и объявленный minimum Sub-GHz decoder inventory | FUNC-30/37/40 | `Refine`; portability и поставляемый inventory должны стать измеримыми |
+| RA-04 | PN532 NDEF/ISO14443-4 emulation, явный erase и bounded dictionary recovery своей метки | FUNC-31/36/40 покрывают read и verified restore | `Decision`; emulation и key recovery добавляют отдельную active/security семантику |
+| RA-05 | Live USB Wireshark/extcap для Wi-Fi/BLE и read-only screen mirroring | FUNC-26/38/51 экспортируют файлы и общие Actions, но не обещают live stream/pixels | `Decision`; полезно для анализа, поддержки и HIL |
+| RA-06 | Масштаб шрифта, high contrast, reduced motion, скорость repeat и outdoor/epilepsy-safe presentation | FUNC-04/05 | `Refine`; завершает уже принятую accessibility-задачу |
+| RA-07 | Lock overlay, под которым уже запущенный безопасный Capture продолжает работать, а controls/data защищены | FUNC-52 | `Refine`; нужно определить lifecycle, Stop и privacy semantics |
+| RA-08 | Готовый signed IR remote/TV profile pack, multi-button remote UX и favorites | FUNC-29/34/40 | `Refine`; пользователю нужен полезный corpus, а не только package architecture |
+| RA-09 | Library trash/undo, optional BLE/mobile sync/share, USB Mass Storage и public app catalog | FUNC-25/27/38/41 покрывают local typed data и extension contracts | trash/undo — `Refine`; mobile/MSC/catalog — `Post-1.0 decision` |
+| RA-10 | Favorite/hide/show apps, startup job, shortcuts и privacy/dummy presentation | FUNC-02/05 | `Decision`; организация продукта, а не radio capability |
+| RA-11 | Signed offline update с SD вдобавок к browser/OTA/recovery | FUNC-07 | `Refine`; ещё один verified transport той же update-задачи |
+| RA-12 | Per-satellite GPS diagnostics и field POI/notes во время Survey | FUNC-14/50 | `Refine`; конкретная полевая acceptance |
+| RA-13 | Privacy MAC randomization собственного STA/AP Leshy без клонирования чужой identity | FUNC-46 этого не обещает | `Decision`; privacy benefit с последствиями для provenance |
+| RA-14 | Offline wordlist verification собственного Wi-Fi authentication Capture | FUNC-49 заканчивается на classification/export | `Decision`; полезный offline analysis рядом с policy credential recovery |
+| RA-15 | Отдельно принятые iBeacon, MouseJack fixture injection и targeted handshake-assist recipes | FUNC-55 требует именованных recipes, но не называет их | `Decision по каждому recipe`; общего разрешения нет |
+| RA-16 | Physical USB-host BadUSB enumeration и optional keyboard-host/relay | FUNC-54 инспектирует packages, а не подключённый USB device | `Decision + hardware qualification`; сначала VBUS/OTG/cleanup |
+| RA-17 | Протокол внешних модулей с discovery, heartbeat, checksum, RPC и negotiated transport | base outcome отсутствует | `Post-1.0`; полезно для Leshy2/expansion modules |
+| RA-18 | Joined-LAN inventory, U2F и другие безопасные non-radio utilities | сознательно вне radio job | `Decision`; отдельная ширина продукта, а не parity по умолчанию |
+| RA-19 | Видимый regulatory domain и каналы 1–14 только когда это законно и поддержано | FUNC-05/42/55 region-aware, но user contract неполон | `Refine`; channel 14 никогда не universal default |
+
+#### Нормализованный реестр принципиальных исключений
+
+Это реальные функции конкурентов, а не скрытая незавершённая работа. Они остаются
+вне 55, пока владелец явно не изменит product policy.
+
+| Исключённое семейство | Примеры у конкурентов | Причина и принятый tradeoff |
+|---|---|---|
+| Массовое нарушение радио | Wi-Fi deauth/disassociation/CSA/SAE floods, BLE/nRF/Sub-GHz/RFID jamming | меньше one-button DoS; сохраняются физическая ограничиваемость, предсказуемый cleanup и защищаемое назначение продукта |
+| Flood, spam и crash modes | beacon/probe/auth floods, Sour Apple, Apple/Android/Windows pairing spam, BLE crash chains | меньше prank/stress-demo; нет неизбирательного воздействия без durable evidence |
+| Credential harvesting и social engineering | Evil Portal/Karma portal, fake login, keystroke/password viewer, Responder/LLMNR interception | нет turnkey phishing lab; Leshy не становится скрытым сборщиком secrets |
+| Identity impersonation | AP/STA clone, Karma response, AirTag/drone spoof, Find My sound trigger | меньше тестов proprietary flows; сохраняется provenance и не загрязняются identity ecosystems |
+| Unbounded brute force/key recovery | De Bruijn/fixed-code brute force, unrestricted MIFARE nested/hardnested/dictionaries | меньше attack breadth; bounded analysis собственного evidence остаётся отдельным явным решением RA-04/RA-14 |
+| Active LAN interference | DHCP starvation, ARP poison/NetCut/MITM и disruption stations | Marauder/Bruce шире как network attack tools; Leshy остаётся evidence-backed radio instrument |
+| Unrestricted execution/raw hardware bypass | unsigned BadUSB, raw Wi-Fi TX/GPIO/bus hooks, unrestricted JS/native apps, shell/file manager | меньше сторонняя экосистема на старте; ResourceBroker, scoped storage, signatures и Safety Supervisor остаются enforceable |
+| Arbitrary active replay/credential creation | unscoped Sub-GHz remote generation, arbitrary NFC UID/Magic card clone, LF RFID/iButton credentials | меньше universal cloning; поддержанный active path начинается с своего immutable evidence и остаётся bounded/stoppable |
+| Извлечение платёжных данных | EMV PAN/expiry readers | исключается privacy-sensitive ниша со слабой связью с основной задачей |
+| Помеха ИК-камерам | continuous IR Dazzler/night-vision interference | меньше один эффектный demo; нет намеренного sensor disruption и sustained thermal load |
+| Cloud-first публикация и executable marketplace | automatic WiGLE/WDGWars upload, public unreviewed app/script store | меньше one-click sharing/discovery; 1.0 остаётся offline-first и supply-chain controlled, reviewed optional clients возможны позже |
+| Generic LAN client/toolbox | port/service scanners, SSH/Telnet, VPN, DNS sinkhole, SMB/SNMP utilities | уже как pocket computer; яснее navigation, test matrix и identity продукта |
+| Games/pets/clocks/QR/media/printer utilities | Doom/Ghostchi/Brucegotchi, clocks, music, QR toys, printer/Chromecast tools | меньше novelty; flash/RAM/menu остаются основным jobs |
+| Ранняя широкая board matrix | десятки ESP32 targets | меньше аудитория на старте; глубже ESP32-DIV probe, HIL и conflict safety |
+
+Чисто аппаратные различия — 125 kHz RFID, iButton, ST25R-specific modes, 5 GHz,
+802.15.4, Ethernet, camera, microphone/audio, haptics, FM и LoRa — не считаются
+policy rejection. Они остаются unavailable, пока не появится явно поддержанная
+assembly.
 
 Матрица не утверждает отсутствия конкретной функции. Она показывает, что является
 документированной продуктовой опорой каждого проекта.

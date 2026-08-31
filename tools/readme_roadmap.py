@@ -62,8 +62,8 @@ CONFIGS = (
         source_note=(
             "This front-page snapshot is generated from the authoritative 1.x "
             "documentation; CI rejects it if it drifts. The checklist is complete "
-            "for the currently frozen 55-capability 1.x baseline. A 1 September "
-            "competitor re-audit is open; candidate additions and deliberate "
+            "for the currently frozen 55-capability 1.x baseline. The 1 September "
+            "competitor re-audit is complete; candidate additions and deliberate "
             "exclusions remain outside this fixed denominator until an explicit "
             "product decision in the "
             "[feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit)."
@@ -108,7 +108,7 @@ CONFIGS = (
             "Этот срез главной страницы генерируется из документации-точки-истины "
             "1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline "
             "из 55 capabilities, знаменатель зафиксирован. Повторный аудит "
-            "конкурентов от 1 сентября открыт; кандидаты и принципиальные "
+            "конкурентов от 1 сентября завершён; кандидаты и принципиальные "
             "исключения не входят в эти 55 до явного product decision в "
             "[пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета)."
         ),
