@@ -311,6 +311,7 @@ using leshy1::domain::targets::CorrelationDecisionLog;
 using leshy1::domain::targets::CorrelationProposal;
 using leshy1::domain::targets::CorrelationDecision;
 using leshy1::domain::targets::TargetId;
+using leshy1::domain::targets::TargetIdentity;
 using leshy1::domain::targets::TargetMergeHistory;
 using leshy1::domain::targets::TargetMergeId;
 using leshy1::domain::targets::TargetMergeRecord;
@@ -770,6 +771,10 @@ enum class TargetRadarWorkerControl : std::uint8_t {
 
 TargetRadar* targetRadarTracker = nullptr;
 TargetId targetRadarSelectedTargetId{};
+std::array<TargetIdentity, TargetRecord::kIdentityCapacity>
+    targetRadarSelectedIdentities{};
+std::uint8_t targetRadarSelectedIdentityCount = 0U;
+const char* targetRadarRestoreMatch = "none";
 TaskHandle_t targetRadarTaskHandle = nullptr;
 portMUX_TYPE targetRadarMux = portMUX_INITIALIZER_UNLOCKED;
 TargetRadarWorkerControl targetRadarWorkerControl =
@@ -8951,6 +8956,16 @@ bool suspendTargetsForRadar() {
     const auto* selected = targetsProductRuntime->controller.selectedTarget();
     targetRadarSelectedTargetId = selected == nullptr
         ? TargetId{} : selected->id;
+    targetRadarSelectedIdentities.fill({});
+    targetRadarSelectedIdentityCount = selected == nullptr
+        ? 0U : selected->identityCount;
+    if (selected != nullptr) {
+        for (std::size_t index = 0;
+             index < targetRadarSelectedIdentityCount; ++index) {
+            targetRadarSelectedIdentities[index] = selected->identities[index];
+        }
+    }
+    targetRadarRestoreMatch = "none";
     targetRadarHeapFreeBeforeSuspend = static_cast<std::uint32_t>(
         heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     // Radar has already copied the selected target into its bounded tracker,
@@ -8979,14 +8994,43 @@ bool restoreTargetsAfterRadar() {
     const bool loaded = targetsItem != nullptr &&
         loadTargetsProduct(*targetsItem) && targetsProductRuntime != nullptr &&
         std::strcmp(targetsProductStatus, "ready") == 0;
+    bool selected = false;
     if (loaded &&
         leshy1::domain::targets::targetIdValid(targetRadarSelectedTargetId) &&
         targetsProductRuntime->controller.selectTarget(
             targetRadarSelectedTargetId)) {
+        selected = true;
+        targetRadarRestoreMatch = "target_id";
+    }
+    // Session-only Targets receive a fresh local object ID whenever the
+    // read-only catalog is reconstructed.  Their radio identity remains the
+    // stable user-facing object, so fall back to it instead of stranding the
+    // user on a failed/empty page after a perfectly healthy Radar visit.
+    if (loaded && !selected) {
+        TargetsController& controller = targetsProductRuntime->controller;
+        for (std::size_t rowIndex = 0;
+             rowIndex < controller.entryCount() && !selected; ++rowIndex) {
+            const TargetListRow* row = controller.row(rowIndex);
+            if (row == nullptr) continue;
+            for (std::size_t identityIndex = 0;
+                 identityIndex < targetRadarSelectedIdentityCount;
+                 ++identityIndex) {
+                if (!leshy1::domain::targets::targetIdentityEqual(
+                        row->identity,
+                        targetRadarSelectedIdentities[identityIndex])) {
+                    continue;
+                }
+                selected = controller.selectTarget(row->targetId);
+                if (selected) targetRadarRestoreMatch = "radio_identity";
+                break;
+            }
+        }
+    }
+    if (selected) {
         targetsProductRuntime->controller.openSelected();
         targetsProductRuntime->controller.openSelected();
     }
-    if (!loaded || targetsProductRuntime == nullptr ||
+    if (!loaded || !selected || targetsProductRuntime == nullptr ||
         targetsProductRuntime->controller.view() != TargetsView::Actions) {
         targetsProductStatus = "radar_restore_failed";
         lastRuntimeEvent = targetsProductStatus;
@@ -25663,6 +25707,7 @@ void emitTargetRadarState(Stream& reply) {
         "\"heap_free_after_suspend\":%lu,"
         "\"heap_free_before_begin\":%lu,"
         "\"heap_largest_before_begin\":%lu,"
+        "\"restore_match\":\"%s\","
         "\"blocked_write_attempts\":%lu,\"physical_write_calls\":0,"
         "\"lease_mask\":%lu,\"heap_free\":%lu,"
         "\"identity_disclosed\":false}",
@@ -25717,6 +25762,7 @@ void emitTargetRadarState(Stream& reply) {
         static_cast<unsigned long>(targetRadarHeapFreeAfterSuspend),
         static_cast<unsigned long>(targetRadarHeapFreeBeforeBegin),
         static_cast<unsigned long>(targetRadarHeapLargestBeforeBegin),
+        targetRadarRestoreMatch,
         static_cast<unsigned long>(targetsBlockedWriteAttempts),
         static_cast<unsigned long>(appRuntime.activeResources()),
         static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)));

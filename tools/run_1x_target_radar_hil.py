@@ -164,7 +164,11 @@ def run_selected_radar(device: PassiveSerial, frames: Path, radio: str,
             selected_target_present=True, blocked_write_attempts=0)
     graph = str(detail.get("selected_graph_fingerprint", ""))
     target_id = str(detail.get("selected_target_id", ""))
-    if len(graph) != 16 or len(target_id) != 32:
+    identity_hex = str(detail.get("selected_observation_identity_hex", ""))
+    identity_radio = int(detail.get("selected_observation_radio", 0))
+    if len(graph) != 16 or len(target_id) != 32 or \
+            len(identity_hex) != 12 or \
+            RADIO_NAMES.get(identity_radio) != radio:
         raise RuntimeError(f"{radio} target identity is incomplete: {detail!r}")
     heap_before = int(query(
         device, b"metrics", "leshy.boot.v1", "ready")["heap_free"])
@@ -253,7 +257,8 @@ def run_selected_radar(device: PassiveSerial, frames: Path, radio: str,
     restored = wait_record(
         device, b"targets.state", TARGETS_SCHEMA,
         lambda value: value.get("view") == "actions" and
-            value.get("selected_graph_fingerprint") == graph,
+            value.get("selected_observation_identity_hex") == identity_hex and
+            int(value.get("selected_observation_radio", 0)) == identity_radio,
         15.0, f"{radio} target was not restored after Radar")
     require(restored, f"{radio} restored", status="ready",
             workspace_allocated=True, page_open=True, view="actions",
@@ -264,6 +269,11 @@ def run_selected_radar(device: PassiveSerial, frames: Path, radio: str,
             worker_finished=False, cleanup_complete=True, passive_only=True,
             blocked_write_attempts=0, physical_write_calls=0,
             identity_disclosed=False, lease_mask=13)
+    if radar_after.get("restore_match") not in {
+            "target_id", "radio_identity"}:
+        raise RuntimeError(
+            f"{radio} Radar did not report an exact restore match: "
+            f"{radar_after!r}")
     heap_after = int(query(
         device, b"metrics", "leshy.boot.v1", "ready")["heap_free"])
     if heap_after + heap_tolerance < heap_before:
@@ -273,6 +283,14 @@ def run_selected_radar(device: PassiveSerial, frames: Path, radio: str,
         "radio": radio,
         "selected_target_id": target_id,
         "selected_graph_fingerprint": graph,
+        "selected_identity_hex": identity_hex,
+        "selected_identity_radio": identity_radio,
+        "restored_target_id": restored.get("selected_target_id"),
+        "restored_graph_fingerprint":
+            restored.get("selected_graph_fingerprint"),
+        "restore_match": radar_after.get("restore_match"),
+        "target_id_stable":
+            restored.get("selected_target_id") == target_id,
         "source_lifecycle_proven": True,
         "live_match": live_match,
         "physical_live_match": physical_live_match,
