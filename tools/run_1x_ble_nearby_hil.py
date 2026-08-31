@@ -276,7 +276,13 @@ def main() -> int:
                     "survey_product_active_source_mask": 2,
                     "survey_ble_scan_status": "valid",
                     "survey_ble_scan_dropped": 0,
-                    "survey_product_store_open_attempted": True,
+                    # Nearby is a volatile read-only task.  Exact-CID
+                    # admission may be checked, but the browser must not open
+                    # a writable backend or mount storage merely to list air.
+                    "survey_product_store_open_attempted": False,
+                    "survey_product_backend_open": False,
+                    "survey_product_storage_mounted": False,
+                    "survey_product_store_bytes_written": 0,
                 }, "ble_nearby_live")
                 if not bounded_pipeline_accounting_valid(live_first):
                     raise RuntimeError(

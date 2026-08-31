@@ -205,6 +205,7 @@ def main() -> int:
     list_pixel_changes: dict[str, int] = {}
     detail_pixel_changes: dict[str, int] = {}
     detail_visual_input_changed = False
+    detail_attempts: list[dict[str, Any]] = []
 
     try:
         if args.flash:
@@ -273,64 +274,116 @@ def main() -> int:
                     raise RuntimeError(
                         f"live device redraw escaped data rows: {list_pixel_changes}")
 
-                detail_first = action(device, "right")
-                trace.append(detail_first)
-                require_exact(detail_first, {
-                    "wifi_product_view": "device_detail",
-                    "runtime_owner": "wifi", "lease_mask": 15,
-                    "wifi_device_monitor_active": True,
-                    "wifi_device_channel_locked": True,
-                    "wifi_device_oui_database_available": True,
-                    "wifi_device_oui_records": 39984,
-                    "wifi_device_navigation_locked": True,
-                }, "wifi_device_live_detail")
-                screens["wifi_device_detail_first"] = capture(
-                    device, frames, "wifi-device-live-detail-first")
-                detail_oracle_first = query_device_detail(device)
-                require_exact(detail_oracle_first, {
-                    "active": True,
-                    "passive": True,
-                    "active_probe_allowed": False,
-                    "channel_locked": True,
-                    "detail_content_clears": 1,
-                    "radar_full_repaints": 1,
-                    "atomic_text_row_allocation_failures": 0,
-                    "direct_text_row_fallbacks": 0,
-                }, "wifi_device_detail_oracle_first")
-                detail_accepted = int(
-                    detail_first.get("wifi_device_clients_accepted", 0))
-                detail_revision = int(
-                    detail_first.get("wifi_device_catalog_revision", 0))
-                detail_last_seen = int(
-                    detail_first.get("wifi_device_detail_last_seen_us", 0))
-                detail_hops = int(
-                    detail_first.get("wifi_device_channel_hops", 0))
-                detail_second = wait_ui_state(
-                    device,
-                    lambda state: (
-                        state.get("wifi_product_view") == "device_detail" and
-                        state.get("wifi_device_channel_locked") is True and
-                        int(state.get("wifi_device_clients_accepted", 0)) >
-                            detail_accepted and
-                        int(state.get("wifi_device_catalog_revision", 0)) >
-                            detail_revision and
-                        int(state.get("wifi_device_detail_last_seen_us", 0)) >
-                            detail_last_seen
-                    ), 90.0, "integrated device radar saw no live client")
-                trace.append(detail_second)
-                detail_oracle_second = wait_device_detail(
-                    device,
-                    lambda state: (
-                        state.get("active") is True and
-                        state.get("identity_hash") ==
-                            detail_oracle_first.get("identity_hash") and
-                        int(state.get("signal_samples", 0)) >
-                            int(detail_oracle_first.get("signal_samples", 0)) and
-                        int(state.get("radar_delta_repaints", 0)) >
-                            int(detail_oracle_first.get(
-                                "radar_delta_repaints", 0))
-                    ), 90.0,
-                    "integrated device radar produced no bounded delta")
+                # Passive client identities can legitimately disappear after
+                # one frame.  Do not spend the whole gate waiting on whichever
+                # ephemeral identity happened to sort first: try up to three
+                # already-visible rows within the same 90-second total budget.
+                visible_candidates = max(
+                    1, int(live_second.get("wifi_device_visible_size", 0)))
+                candidate_attempts = min(3, visible_candidates)
+                for candidate_index in range(candidate_attempts):
+                    if candidate_index > 0:
+                        selected = action(device, "down")
+                        trace.append(selected)
+                        require_exact(selected, {
+                            "wifi_product_view": "devices",
+                            "wifi_device_monitor_active": True,
+                            "wifi_device_channel_locked": False,
+                        }, f"wifi_device_candidate_{candidate_index}")
+                    detail_first = action(device, "right")
+                    trace.append(detail_first)
+                    require_exact(detail_first, {
+                        "wifi_product_view": "device_detail",
+                        "runtime_owner": "wifi", "lease_mask": 15,
+                        "wifi_device_monitor_active": True,
+                        "wifi_device_channel_locked": True,
+                        "wifi_device_oui_database_available": True,
+                        "wifi_device_oui_records": 39984,
+                        "wifi_device_navigation_locked": True,
+                    }, "wifi_device_live_detail")
+                    screens["wifi_device_detail_first"] = capture(
+                        device, frames, "wifi-device-live-detail-first")
+                    detail_oracle_first = query_device_detail(device)
+                    require_exact(detail_oracle_first, {
+                        "active": True,
+                        "passive": True,
+                        "active_probe_allowed": False,
+                        "channel_locked": True,
+                        "detail_content_clears": 1,
+                        "radar_full_repaints": 1,
+                        "atomic_text_row_allocation_failures": 0,
+                        "direct_text_row_fallbacks": 0,
+                    }, "wifi_device_detail_oracle_first")
+                    detail_accepted = int(
+                        detail_first.get("wifi_device_clients_accepted", 0))
+                    detail_revision = int(
+                        detail_first.get("wifi_device_catalog_revision", 0))
+                    detail_last_seen = int(
+                        detail_first.get("wifi_device_detail_last_seen_us", 0))
+                    detail_hops = int(
+                        detail_first.get("wifi_device_channel_hops", 0))
+                    try:
+                        detail_second = wait_ui_state(
+                            device,
+                            lambda state: (
+                                state.get("wifi_product_view") ==
+                                    "device_detail" and
+                                state.get("wifi_device_channel_locked") is True and
+                                int(state.get(
+                                    "wifi_device_clients_accepted", 0)) >
+                                    detail_accepted and
+                                int(state.get(
+                                    "wifi_device_catalog_revision", 0)) >
+                                    detail_revision and
+                                int(state.get(
+                                    "wifi_device_detail_last_seen_us", 0)) >
+                                    detail_last_seen
+                            ), 30.0,
+                            "selected passive client produced no repeat frame")
+                    except TimeoutError:
+                        detail_attempts.append({
+                            "candidate_index": candidate_index,
+                            "identity_hash": detail_oracle_first.get(
+                                "identity_hash"),
+                            "outcome": "no_repeat_frame",
+                            "timeout_seconds": 30,
+                        })
+                        back = action(device, "left")
+                        trace.append(back)
+                        require_exact(back, {
+                            "wifi_product_view": "devices",
+                            "wifi_device_channel_locked": False,
+                            "wifi_device_monitor_active": True,
+                        }, "wifi_device_candidate_back")
+                        detail_second = {}
+                        continue
+                    trace.append(detail_second)
+                    detail_oracle_second = wait_device_detail(
+                        device,
+                        lambda state: (
+                            state.get("active") is True and
+                            state.get("identity_hash") ==
+                                detail_oracle_first.get("identity_hash") and
+                            int(state.get("signal_samples", 0)) >
+                                int(detail_oracle_first.get(
+                                    "signal_samples", 0)) and
+                            int(state.get("radar_delta_repaints", 0)) >
+                                int(detail_oracle_first.get(
+                                    "radar_delta_repaints", 0))
+                        ), 5.0,
+                        "integrated device radar produced no bounded delta")
+                    detail_attempts.append({
+                        "candidate_index": candidate_index,
+                        "identity_hash": detail_oracle_first.get(
+                            "identity_hash"),
+                        "outcome": "live_delta",
+                        "timeout_seconds": 30,
+                    })
+                    break
+                if not detail_second:
+                    raise TimeoutError(
+                        "no visible passive Wi-Fi client repeated within the "
+                        f"bounded candidate matrix: {detail_attempts!r}")
                 if (detail_oracle_second.get("detail_content_clears") !=
                         detail_oracle_first.get("detail_content_clears") or
                         detail_oracle_second.get("radar_full_repaints") !=
@@ -491,6 +544,7 @@ def main() -> int:
         "list_pixel_changes": list_pixel_changes,
         "detail_pixel_changes": detail_pixel_changes,
         "detail_visual_input_changed": detail_visual_input_changed,
+        "detail_attempts": detail_attempts,
         "screens": screens,
         "trace": trace,
         "cleanup_before": cleanup_before,
