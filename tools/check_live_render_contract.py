@@ -56,6 +56,10 @@ def main() -> int:
         interactive = function_body(
             source, "void renderInteractiveScreen(bool clearContent) {")
         header = function_body(source, "void renderHeader(const char* title")
+        protocol_selection = function_body(
+            source, "void renderProtocolWorkbenchSelection()")
+        protocol_page = function_body(
+            source, "void renderProtocolWorkbenchPage(bool clearContent)")
     except ValueError as error:
         failures.append(str(error))
     else:
@@ -152,6 +156,22 @@ def main() -> int:
                 ble_list_row.find("++bleDeviceListRowFullRepaints")]:
             failures.append(
                 "BLE signal delta still erases the complete menu row")
+        if "renderProtocolWorkbenchSelection();" not in selection_delta:
+            failures.append(
+                "Protocol Workbench selection is not dirty-region rendered")
+        if "renderProtocolWorkbenchWaveform();" in protocol_selection:
+            failures.append(
+                "Protocol Workbench pulse movement redraws the waveform")
+        for marker in (
+            "kProtocolWorkbenchCursorY",
+            "pushLiveMetaTextRow(",
+        ):
+            if marker not in protocol_selection:
+                failures.append(
+                    f"Protocol Workbench dirty marker missing: {marker}")
+        if "renderProtocolWorkbenchWaveform();" not in protocol_page:
+            failures.append(
+                "Protocol Workbench full scene does not draw its waveform")
         header_guard = header.find("if (!clearContent) return;")
         header_clear = header.find("display.fillRect(header.x")
         if not (0 <= header_guard < header_clear):
@@ -162,8 +182,8 @@ def main() -> int:
         print("\n".join(f"FAIL: {failure}" for failure in failures))
         return 1
     print("PASS live renderer: static chrome/text retained; no-change ticks "
-          "are suppressed; signal fields, spectrum columns and one waterfall "
-          "row update incrementally")
+          "are suppressed; signal fields, spectrum columns, one waterfall "
+          "row and Protocol Workbench cursor update incrementally")
     return 0
 
 

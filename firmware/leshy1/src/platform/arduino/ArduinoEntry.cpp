@@ -35,6 +35,7 @@
 
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
+#include "apps/protocol/ProtocolWorkbench.h"
 #include "apps/automation/AutomationInspectorController.h"
 #include "apps/guard/AirspaceGuardController.h"
 #include "apps/auth/WifiAuthenticationCaptureController.h"
@@ -189,6 +190,9 @@ using leshy1::apps::library::LibraryEntryKind;
 using leshy1::apps::library::LibraryView;
 using leshy1::apps::library::SessionCatalog;
 using leshy1::apps::library::SessionIntegrity;
+using leshy1::apps::protocol::ProtocolWorkbenchAnalysis;
+using leshy1::apps::protocol::ProtocolWorkbenchStatus;
+using leshy1::apps::protocol::ProtocolWorkbenchWorkspace;
 using leshy1::apps::automation::AutomationInspectorController;
 using leshy1::apps::automation::AutomationInspectorModel;
 using leshy1::apps::automation::AutomationInspectorSourceStatus;
@@ -584,6 +588,11 @@ SurveySession librarySession;
 // permanently reserving another 10 KiB on N16 boards without PSRAM.
 SurveySession& littleFsResetSession = surveySession;
 LibraryController libraryController;
+std::uint8_t libraryDetailActionSelection = 0U;
+leshy1::storage::PersistedInfraredRawCaptureView protocolWorkbenchSource;
+ProtocolWorkbenchWorkspace protocolWorkbenchWorkspace;
+ProtocolWorkbenchAnalysis protocolWorkbenchAnalysis;
+std::size_t protocolWorkbenchPulseSelection = 0U;
 leshy1::storage::ScreenshotStoreWorkspace screenshotStoreWorkspace;
 leshy1::storage::ScreenshotMetadata latestScreenshotMetadata;
 bool latestScreenshotAvailable = false;
@@ -1133,6 +1142,7 @@ constexpr std::uint8_t kDeviceLockPage = 12;
 constexpr std::uint8_t kSerialConsolePage = 13;
 constexpr std::uint8_t kAutomationInspectorPage = 14;
 constexpr std::uint8_t kAutomationTrustPage = 15;
+constexpr std::uint8_t kProtocolWorkbenchPage = 16;
 constexpr std::uint16_t kAutomationActionApiVersion = 1U;
 constexpr std::uint8_t kDeviceItemCount = 8;
 std::uint8_t deviceSelection = 0;
@@ -1315,7 +1325,7 @@ bool deviceLockOperationAllowed(
 bool deviceLockProtectedPage(std::uint8_t page) {
     return page == 2U || page == 3U || page == 4U || page == 5U ||
         page == 7U || page == 8U || page == kAutomationInspectorPage ||
-        page == kAutomationTrustPage;
+        page == kAutomationTrustPage || page == kProtocolWorkbenchPage;
 }
 
 void noteDeviceLockAdmissionBlocked() {
@@ -3063,6 +3073,7 @@ bool targetsStoreDeadlineCancelRequested = false;
 // omitted argument used to turn harmless live-data notifications into bright
 // full-screen repaints.
 void renderInteractiveScreen(bool clearContent);
+std::uint8_t libraryDetailActionCount();
 void renderTargetRadarLive(const TargetRadarSnapshot& snapshot, bool force);
 TargetRadarWorkerControl targetRadarControl();
 void runTargetRadarWorker();
@@ -13314,11 +13325,19 @@ NavigationFooter navigationFooterForCurrentState() {
             return {{NavigationKey::Left, UiTextId::NavDetails}, {}, {}};
         }
         if (libraryController.view() == LibraryView::SessionDetail) {
-            return {{NavigationKey::Left, UiTextId::NavList}, {},
-                    {NavigationKey::RightAndSelect, UiTextId::NavExport}};
+            const bool multiple = libraryDetailActionCount() > 1U;
+            return {{NavigationKey::Left, UiTextId::NavList},
+                    multiple ? choose : NavigationCell{},
+                    {NavigationKey::RightAndSelect,
+                     multiple && libraryDetailActionSelection == 0U
+                         ? UiTextId::NavAnalyze : UiTextId::NavExport}};
         }
         return {back, choose,
                 {NavigationKey::RightAndSelect, UiTextId::NavDetails}};
+    }
+    if (uiController.page() == kProtocolWorkbenchPage) {
+        return {{NavigationKey::Left, UiTextId::NavBack},
+                {NavigationKey::UpDown, UiTextId::NavPulse}, {}};
     }
 
     if (uiController.page() == 4) {
@@ -20087,6 +20106,36 @@ void libraryObservationCounts(const LibraryEntry& entry,
     }
 }
 
+bool selectedLibraryHasInfraredCapture() {
+    const LibraryEntry* selected = libraryController.selected();
+    return selected != nullptr && selected->session != nullptr &&
+        selected->session->captureMetadata().infraredRawCaptured;
+}
+
+std::uint8_t libraryDetailActionCount() {
+    return selectedLibraryHasInfraredCapture() ? 2U : 1U;
+}
+
+void renderLibraryDetailAction() {
+    const bool analyze = selectedLibraryHasInfraredCapture() &&
+        libraryDetailActionSelection == 0U;
+    const char* label = tr(analyze ? UiTextId::LibraryActionAnalyze
+                                   : UiTextId::LibraryActionExport);
+    const Rect bounds = Components::metricRow(4U);
+    if (beginLiveTextRow(UiTextRole::Body, Palette::Focus,
+                         Palette::Canvas)) {
+        setLiveTextRowCursor(UiTextRole::Body, 2, 0);
+        liveTextRowSprite.print(label);
+        pushLiveTextRow(bounds.x, bounds.y - 2);
+        return;
+    }
+    display.fillRect(bounds.x, bounds.y - 2, bounds.width,
+                     kLiveTextRowHeight, Palette::Canvas);
+    display.setTextColor(Palette::Focus, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, bounds.x + 2, bounds.y - 2);
+    display.print(label);
+}
+
 void renderLibraryListRow(std::size_t index) {
     const LibraryEntry* entry = libraryController.get(index);
     if (entry == nullptr ||
@@ -20228,6 +20277,7 @@ void renderLibraryPage(bool clearContent) {
                                  RecoveredFallback
                          ? Tone::Warning
                          : persistent ? Tone::Positive : Tone::Warning);
+        renderLibraryDetailAction();
         return;
     }
 
@@ -20240,6 +20290,209 @@ void renderLibraryPage(bool clearContent) {
     for (std::size_t index = 0; index < libraryController.size(); ++index) {
         renderLibraryListRow(index);
     }
+}
+
+bool openSelectedProtocolWorkbench() {
+    const LibraryEntry* selected = libraryController.selected();
+    if (selected == nullptr || selected->session == nullptr ||
+        !selected->session->captureMetadata().infraredRawCaptured) {
+        return false;
+    }
+    protocolWorkbenchPulseSelection = 0U;
+    if (selected->generation != sessionStoreWorkspace().generation) {
+        protocolWorkbenchAnalysis = {};
+        protocolWorkbenchAnalysis.status =
+            ProtocolWorkbenchStatus::InvalidArgument;
+        return uiController.openChild(kProtocolWorkbenchPage);
+    }
+    protocolWorkbenchSource.reset();
+    const auto opened = leshy1::storage::openPersistedInfraredRawCapture(
+        *selected->session, sessionStoreWorkspace().segment.data(),
+        sessionStoreWorkspace().segmentSize, &protocolWorkbenchSource);
+    if (opened != leshy1::storage::SessionCodecStatus::Valid) {
+        protocolWorkbenchAnalysis = {};
+        protocolWorkbenchAnalysis.status =
+            ProtocolWorkbenchStatus::SourceReadFailed;
+        return uiController.openChild(kProtocolWorkbenchPage);
+    }
+    const auto analyzed = leshy1::apps::protocol::analyzeInfraredCapture(
+        protocolWorkbenchSource, protocolWorkbenchWorkspace,
+        &protocolWorkbenchAnalysis);
+    if (analyzed != ProtocolWorkbenchStatus::Valid) {
+        return uiController.openChild(kProtocolWorkbenchPage);
+    }
+    return uiController.openChild(kProtocolWorkbenchPage);
+}
+
+constexpr Rect kProtocolWorkbenchGraph = {
+    Layout::Edge, 78, Layout::ContentWidth, 102};
+constexpr std::int16_t kProtocolWorkbenchCursorY = 184;
+constexpr std::int16_t kProtocolWorkbenchPulseLineY = 204;
+
+std::uint64_t protocolWorkbenchPulseStartUs(std::size_t selectedIndex) {
+    std::uint64_t elapsed = 0U;
+    for (std::size_t index = 0U;
+         index < selectedIndex &&
+         index < protocolWorkbenchSource.pulseCount(); ++index) {
+        leshy1::domain::captures::InfraredRawPulseView pulse;
+        if (!protocolWorkbenchSource.pulseView(index, &pulse)) return 0U;
+        elapsed += pulse.durationUs;
+    }
+    return elapsed;
+}
+
+std::int16_t protocolWorkbenchCursorX(std::size_t selectedIndex) {
+    if (!protocolWorkbenchAnalysis.valid() ||
+        protocolWorkbenchAnalysis.totalDurationUs == 0U) {
+        return kProtocolWorkbenchGraph.x;
+    }
+    const std::uint64_t elapsed =
+        protocolWorkbenchPulseStartUs(selectedIndex);
+    const std::uint64_t scaled = elapsed *
+        static_cast<std::uint64_t>(kProtocolWorkbenchGraph.width - 1);
+    return static_cast<std::int16_t>(
+        kProtocolWorkbenchGraph.x +
+        scaled / protocolWorkbenchAnalysis.totalDurationUs);
+}
+
+void renderProtocolWorkbenchSelection() {
+    display.fillRect(kProtocolWorkbenchGraph.x,
+                     kProtocolWorkbenchCursorY,
+                     kProtocolWorkbenchGraph.width, 12,
+                     Palette::Canvas);
+    if (!protocolWorkbenchAnalysis.valid() ||
+        protocolWorkbenchPulseSelection >=
+            protocolWorkbenchSource.pulseCount()) {
+        return;
+    }
+    const std::int16_t cursorX =
+        protocolWorkbenchCursorX(protocolWorkbenchPulseSelection);
+    display.fillTriangle(cursorX, kProtocolWorkbenchCursorY,
+                         cursorX - 4, kProtocolWorkbenchCursorY + 7,
+                         cursorX + 4, kProtocolWorkbenchCursorY + 7,
+                         Palette::Focus);
+
+    leshy1::domain::captures::InfraredRawPulseView pulse;
+    if (!protocolWorkbenchSource.pulseView(
+            protocolWorkbenchPulseSelection, &pulse)) {
+        return;
+    }
+    const LibraryEntry* selected = libraryController.selected();
+    const bool startLevel = selected != nullptr &&
+        selected->session != nullptr &&
+        selected->session->captureMetadata().infraredStartLevel;
+    const bool electricalLevel =
+        (protocolWorkbenchPulseSelection % 2U == 0U)
+            ? startLevel : !startLevel;
+    // The stock demodulating receiver is active-low: present the useful
+    // logical mark/space envelope instead of exposing its pin polarity.
+    const bool mark = !electricalLevel;
+    char line[96] = {};
+    std::snprintf(
+        line, sizeof(line), tr(UiTextId::ProtocolWorkbenchPulseFormat),
+        static_cast<unsigned>(protocolWorkbenchPulseSelection + 1U),
+        static_cast<unsigned>(protocolWorkbenchSource.pulseCount()),
+        tr(mark ? UiTextId::ProtocolWorkbenchMark
+                : UiTextId::ProtocolWorkbenchSpace),
+        static_cast<unsigned>(pulse.durationUs),
+        static_cast<unsigned>(
+            leshy1::apps::protocol::protocolNormalizedUnits(
+                protocolWorkbenchAnalysis, pulse.durationUs)));
+    pushLiveMetaTextRow(line, Palette::Focus,
+                        kProtocolWorkbenchPulseLineY);
+}
+
+void renderProtocolWorkbenchWaveform() {
+    display.fillRect(kProtocolWorkbenchGraph.x, kProtocolWorkbenchGraph.y,
+                     kProtocolWorkbenchGraph.width,
+                     kProtocolWorkbenchGraph.height, Palette::Surface);
+    display.drawRect(kProtocolWorkbenchGraph.x, kProtocolWorkbenchGraph.y,
+                     kProtocolWorkbenchGraph.width,
+                     kProtocolWorkbenchGraph.height, Palette::Divider);
+    if (!protocolWorkbenchAnalysis.valid() ||
+        protocolWorkbenchAnalysis.totalDurationUs == 0U) {
+        return;
+    }
+    const LibraryEntry* selected = libraryController.selected();
+    const bool electricalStartLevel = selected != nullptr &&
+        selected->session != nullptr &&
+        selected->session->captureMetadata().infraredStartLevel;
+    bool level = !electricalStartLevel;
+    const std::int16_t highY = kProtocolWorkbenchGraph.y + 20;
+    const std::int16_t lowY = kProtocolWorkbenchGraph.y +
+        kProtocolWorkbenchGraph.height - 20;
+    std::uint64_t elapsed = 0U;
+    std::int16_t previousX = kProtocolWorkbenchGraph.x + 1;
+    std::int16_t previousY = level ? highY : lowY;
+    for (std::size_t index = 0U;
+         index < protocolWorkbenchSource.pulseCount(); ++index) {
+        leshy1::domain::captures::InfraredRawPulseView pulse;
+        if (!protocolWorkbenchSource.pulseView(index, &pulse)) break;
+        elapsed += pulse.durationUs;
+        const std::uint64_t scaled = elapsed *
+            static_cast<std::uint64_t>(kProtocolWorkbenchGraph.width - 3);
+        std::int16_t nextX = static_cast<std::int16_t>(
+            kProtocolWorkbenchGraph.x + 1 +
+            scaled / protocolWorkbenchAnalysis.totalDurationUs);
+        if (nextX <= previousX) nextX = previousX + 1;
+        const std::int16_t right = kProtocolWorkbenchGraph.x +
+            kProtocolWorkbenchGraph.width - 2;
+        if (nextX > right) nextX = right;
+        display.drawFastHLine(previousX, previousY,
+                              nextX - previousX + 1,
+                              Palette::Positive);
+        level = !level;
+        const std::int16_t nextY = level ? highY : lowY;
+        display.drawFastVLine(nextX, std::min(previousY, nextY),
+                              std::abs(nextY - previousY) + 1,
+                              Palette::Positive);
+        previousX = nextX;
+        previousY = nextY;
+        if (previousX >= right) break;
+    }
+}
+
+void renderProtocolWorkbenchPage(bool clearContent) {
+    renderHeader(tr(UiTextId::ProtocolWorkbenchTitle), clearContent);
+    if (!protocolWorkbenchAnalysis.valid()) {
+        renderMetric(0, tr(UiTextId::ProtocolWorkbenchUnavailable),
+                     Tone::Warning);
+        return;
+    }
+    const LibraryEntry* selected = libraryController.selected();
+    const auto protocol = selected != nullptr && selected->session != nullptr
+        ? selected->session->captureMetadata().infraredDecode.protocol
+        : leshy1::domain::captures::InfraredProtocol::Unknown;
+    char line[96] = {};
+    std::snprintf(
+        line, sizeof(line), tr(UiTextId::ProtocolWorkbenchSummaryFormat),
+        leshy1::domain::captures::infraredProtocolName(protocol),
+        static_cast<unsigned>(protocolWorkbenchAnalysis.pulseCount),
+        static_cast<unsigned>(protocolWorkbenchAnalysis.baseUnitUs));
+    pushLiveMetaTextRow(line, Palette::TextSecondary, 34);
+    pushLiveMetaTextRow(tr(UiTextId::ProtocolWorkbenchReadOnly),
+                        Palette::Positive, 53);
+    renderProtocolWorkbenchWaveform();
+    renderProtocolWorkbenchSelection();
+    const auto band = [&](std::size_t index) {
+        return index < protocolWorkbenchAnalysis.bandCount
+            ? protocolWorkbenchAnalysis.bands[index].centerUs : 0U;
+    };
+    std::snprintf(
+        line, sizeof(line), tr(UiTextId::ProtocolWorkbenchBandsFormat),
+        static_cast<unsigned>(band(0U)),
+        static_cast<unsigned>(band(1U)),
+        static_cast<unsigned>(band(2U)),
+        static_cast<unsigned>(band(3U)));
+    pushLiveMetaTextRow(line, Palette::TextSecondary, 229);
+    const std::uint64_t fingerprint =
+        protocolWorkbenchAnalysis.sourceFingerprint;
+    std::snprintf(
+        line, sizeof(line),
+        tr(UiTextId::ProtocolWorkbenchFingerprintFormat),
+        static_cast<unsigned long>(fingerprint >> 32U),
+        static_cast<unsigned long>(fingerprint & 0xFFFFFFFFULL));
+    pushLiveMetaTextRow(line, Palette::TextMuted, 252);
 }
 
 constexpr std::size_t kVisibleTargetRows = 4;
@@ -21476,6 +21729,8 @@ struct UiRenderSnapshot final {
     std::uint8_t libraryView = 0;
     std::size_t librarySelection = 0;
     std::size_t librarySize = 0;
+    std::uint8_t libraryDetailActionSelection = 0U;
+    std::size_t protocolWorkbenchPulseSelection = 0U;
     std::uint8_t automationCatalogStatus = 0;
     std::size_t automationSelection = 0;
     std::size_t automationSize = 0;
@@ -21560,6 +21815,8 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         static_cast<std::uint8_t>(libraryController.view()),
         libraryController.selection(),
         libraryController.size(),
+        libraryDetailActionSelection,
+        protocolWorkbenchPulseSelection,
         static_cast<std::uint8_t>(automationCatalogStatus),
         automationPackageCatalog.selection(),
         automationPackageCatalog.size(),
@@ -22254,6 +22511,28 @@ UiDeltaRenderResult renderSelectionDelta() {
         return UiDeltaRenderResult::Rendered;
     }
 
+    if (uiController.page() == 3 &&
+        libraryController.view() == LibraryView::SessionDetail &&
+        renderedUi.libraryView ==
+            static_cast<std::uint8_t>(LibraryView::SessionDetail)) {
+        if (renderedUi.libraryDetailActionSelection ==
+            libraryDetailActionSelection) {
+            return UiDeltaRenderResult::NoChange;
+        }
+        renderLibraryDetailAction();
+        renderNavigationFooter();
+        return UiDeltaRenderResult::Rendered;
+    }
+
+    if (uiController.page() == kProtocolWorkbenchPage) {
+        if (renderedUi.protocolWorkbenchPulseSelection ==
+            protocolWorkbenchPulseSelection) {
+            return UiDeltaRenderResult::NoChange;
+        }
+        renderProtocolWorkbenchSelection();
+        return UiDeltaRenderResult::Rendered;
+    }
+
     if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
         (targetsProductRuntime->controller.view() == TargetsView::List ||
          targetsProductRuntime->controller.view() == TargetsView::Compare) &&
@@ -22382,6 +22661,8 @@ void renderInteractiveScreen(bool clearContent) {
             renderAutomationInspectorPage(clearContent);
         } else if (uiController.page() == kAutomationTrustPage) {
             renderAutomationTrustPage(clearContent);
+        } else if (uiController.page() == kProtocolWorkbenchPage) {
+            renderProtocolWorkbenchPage(clearContent);
         } else if (uiController.page() == kDevicePage) {
             renderDevicePage(clearContent);
         } else if (uiController.page() == kPowerPage) {
@@ -28058,8 +28339,11 @@ bool selectionCanRepaintInPlace(UiAction action) {
                  surveyController.view() == SurveyView::Filter));
     }
     if (uiController.page() == 3) {
-        return libraryController.view() == LibraryView::SessionList;
+        return libraryController.view() == LibraryView::SessionList ||
+            (libraryController.view() == LibraryView::SessionDetail &&
+             libraryDetailActionCount() > 1U);
     }
+    if (uiController.page() == kProtocolWorkbenchPage) return true;
     if (uiController.page() == 7) {
         return targetsProductRuntime != nullptr &&
             (targetsProductRuntime->controller.view() == TargetsView::List ||
@@ -29119,6 +29403,39 @@ bool applyUiAction(UiAction action, bool render = true) {
             return finish(changed);
         }
     }
+    if (!wasRoot && uiController.page() == kProtocolWorkbenchPage) {
+        bool handled = false;
+        bool changed = false;
+        if (action == UiAction::Back || action == UiAction::Left) {
+            handled = true;
+            changed = uiController.apply(
+                action, static_cast<std::uint8_t>(appCatalog.size()),
+                true, kProtocolWorkbenchPage);
+            lastRuntimeEvent = changed ? "protocol_workbench_library"
+                                       : "protocol_workbench_back_rejected";
+        } else if (action == UiAction::Up &&
+                   protocolWorkbenchPulseSelection > 0U) {
+            handled = true;
+            --protocolWorkbenchPulseSelection;
+            changed = true;
+            lastRuntimeEvent = "protocol_workbench_previous_pulse";
+        } else if (action == UiAction::Down &&
+                   protocolWorkbenchPulseSelection + 1U <
+                       protocolWorkbenchSource.pulseCount()) {
+            handled = true;
+            ++protocolWorkbenchPulseSelection;
+            changed = true;
+            lastRuntimeEvent = "protocol_workbench_next_pulse";
+        } else if (action == UiAction::Up || action == UiAction::Down) {
+            handled = true;
+        }
+        if (handled) {
+            if (action != UiAction::Back && action != UiAction::Left) {
+                uiController.recordHandledAction(action);
+            }
+            return finish(changed);
+        }
+    }
     if (!wasRoot && uiController.page() == 3) {
         bool handled = false;
         bool changed = false;
@@ -29130,17 +29447,42 @@ bool applyUiAction(UiAction action, bool render = true) {
             (action == UiAction::Back || action == UiAction::Left)) {
             handled = true;
             changed = libraryController.back();
+            libraryDetailActionSelection = 0U;
+        } else if (libraryController.view() == LibraryView::SessionDetail &&
+                   action == UiAction::Up &&
+                   libraryDetailActionSelection > 0U) {
+            handled = true;
+            --libraryDetailActionSelection;
+            changed = true;
+        } else if (libraryController.view() == LibraryView::SessionDetail &&
+                   action == UiAction::Down &&
+                   libraryDetailActionSelection + 1U <
+                       libraryDetailActionCount()) {
+            handled = true;
+            ++libraryDetailActionSelection;
+            changed = true;
+        } else if (libraryController.view() == LibraryView::SessionDetail &&
+                   (action == UiAction::Up || action == UiAction::Down)) {
+            handled = true;
         } else if (libraryController.view() == LibraryView::SessionDetail &&
                    (action == UiAction::Select ||
                     action == UiAction::Right)) {
             handled = true;
-            changed = deviceLockOperationAllowed(
-                          leshy1::services::security::
-                              DeviceLockOperation::Export) &&
-                libraryController.requestExport();
-            if (!changed && deviceLockLastAdmissionAccess !=
-                    leshy1::services::security::DeviceLockAccess::Allowed) {
-                noteDeviceLockAdmissionBlocked();
+            if (selectedLibraryHasInfraredCapture() &&
+                libraryDetailActionSelection == 0U) {
+                changed = openSelectedProtocolWorkbench();
+                lastRuntimeEvent = changed
+                    ? "protocol_workbench_opened"
+                    : "protocol_workbench_open_failed";
+            } else {
+                changed = deviceLockOperationAllowed(
+                              leshy1::services::security::
+                                  DeviceLockOperation::Export) &&
+                    libraryController.requestExport();
+                if (!changed && deviceLockLastAdmissionAccess !=
+                        leshy1::services::security::DeviceLockAccess::Allowed) {
+                    noteDeviceLockAdmissionBlocked();
+                }
             }
         } else if (libraryController.view() == LibraryView::SessionList) {
             if (action == UiAction::Up) {
@@ -29152,6 +29494,7 @@ bool applyUiAction(UiAction action, bool render = true) {
             } else if (action == UiAction::Select || action == UiAction::Right) {
                 handled = true;
                 changed = libraryController.openSelected();
+                if (changed) libraryDetailActionSelection = 0U;
             }
         }
         if (handled) {

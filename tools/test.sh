@@ -22,17 +22,20 @@ if [[ $# -gt 0 ]]; then
         if [[ "$2" == "target-radar" ]]; then
             exec "$(cd "$(dirname "$0")" && pwd)/test-target-radar.sh"
         fi
+        if [[ "$2" == "protocol-workbench" ]]; then
+            exec "$(cd "$(dirname "$0")" && pwd)/test-protocol-workbench.sh"
+        fi
         if [[ "$2" == "screenshot-store" ]]; then
             exec "$(cd "$(dirname "$0")" && pwd)/test-screenshot-store.sh"
         fi
         if [[ "$2" == "clean-target" ]]; then
             only_clean_target=true
         else
-            echo "usage: $0 [--only automation-hid|clean-target|device-lock|screenshot-store|serial-console|target-radar]" >&2
+            echo "usage: $0 [--only automation-hid|clean-target|device-lock|protocol-workbench|screenshot-store|serial-console|target-radar]" >&2
             exit 2
         fi
     else
-        echo "usage: $0 [--only automation-hid|clean-target|device-lock|screenshot-store|serial-console|target-radar]" >&2
+        echo "usage: $0 [--only automation-hid|clean-target|device-lock|protocol-workbench|screenshot-store|serial-console|target-radar]" >&2
         exit 2
     fi
 fi
@@ -158,6 +161,7 @@ run_opaque_evidence_check() {
 "$test_tmp/clean_target_tests"
 
 "$repo_dir/tools/test-screenshot-store.sh"
+"$repo_dir/tools/test-protocol-workbench.sh"
 
 if [[ "$only_clean_target" == "true" ]]; then
     exit 0
