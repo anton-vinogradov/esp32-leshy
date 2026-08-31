@@ -156,7 +156,8 @@ def open_targets(device: PassiveSerial,
 
 def run_selected_radar(device: PassiveSerial, frames: Path, radio: str,
                        trace: list[dict[str, Any]],
-                       screens: dict[str, Any]) -> dict[str, Any]:
+                       screens: dict[str, Any], *, case_name: str | None = None,
+                       heap_tolerance: int = 512) -> dict[str, Any]:
     detail = query(device, b"targets.state", TARGETS_SCHEMA, "state")
     require(detail, f"{radio} detail", view="detail",
             selected_target_present=True, blocked_write_attempts=0)
@@ -181,7 +182,8 @@ def run_selected_radar(device: PassiveSerial, frames: Path, radio: str,
             cleanup_complete=True, passive_only=True,
             blocked_write_attempts=0, physical_write_calls=0,
             identity_disclosed=False, lease_mask=15)
-    first_name = f"target-radar-{radio}-" + (
+    name = case_name or radio
+    first_name = f"target-radar-{name}-" + (
         "first" if live_match else "waiting")
     screens[first_name] = capture(device, frames, first_name)
     second: dict[str, Any] | None = None
@@ -204,7 +206,7 @@ def run_selected_radar(device: PassiveSerial, frames: Path, radio: str,
                 int(second["content_clears"]) != \
                     int(first["content_clears"]):
             raise RuntimeError(f"{radio} live update performed a full repaint")
-        second_name = f"target-radar-{radio}-second"
+        second_name = f"target-radar-{name}-second"
         screens[second_name] = capture(device, frames, second_name)
         pixels = pixel_regions(frames, first_name, second_name)
         if pixels["identity_changed_pixels"] != 0 or \
@@ -231,7 +233,7 @@ def run_selected_radar(device: PassiveSerial, frames: Path, radio: str,
             identity_disclosed=False, lease_mask=13)
     heap_after = int(query(
         device, b"metrics", "leshy.boot.v1", "ready")["heap_free"])
-    if heap_after + 512 < heap_before:
+    if heap_after + heap_tolerance < heap_before:
         raise RuntimeError(
             f"{radio} Radar leaked heap: {heap_before}->{heap_after}")
     return {
@@ -246,6 +248,7 @@ def run_selected_radar(device: PassiveSerial, frames: Path, radio: str,
         "restored": restored,
         "heap_free_before": heap_before,
         "heap_free_after": heap_after,
+        "heap_tolerance": heap_tolerance,
         "pixel_changes": pixels,
     }
 
@@ -347,8 +350,30 @@ def main() -> int:
                 radio = RADIO_NAMES.get(
                     int(detail.get("selected_observation_radio", 0)))
                 if radio in wanted:
-                    lifecycles.append(run_selected_radar(
-                        device, frames, radio, trace, screens))
+                    lifecycle = run_selected_radar(
+                        device, frames, radio, trace, screens,
+                        heap_tolerance=2048 if radio == "ble" else 512)
+                    lifecycles.append(lifecycle)
+                    if radio == "ble":
+                        # NimBLE/ESP-IDF may retain a small first-use cache even
+                        # after the controller lifecycle is fully torn down.
+                        # A second Radar run on the exact same target must prove
+                        # that this is bounded warm-up rather than a repeatable
+                        # leak. No second flash is needed.
+                        detail_again = action(device, "back")
+                        trace.append(detail_again)
+                        require(detail_again, "ble warm detail", page="targets",
+                                runtime_owner="targets", lease_mask=13)
+                        repeat = run_selected_radar(
+                            device, frames, radio, trace, screens,
+                            case_name="ble-repeat", heap_tolerance=512)
+                        lifecycles.append(repeat)
+                        if repeat["heap_free_after"] + 512 < \
+                                lifecycle["heap_free_after"]:
+                            raise RuntimeError(
+                                "BLE Radar heap declined across clean repeats: "
+                                f"{lifecycle['heap_free_after']}->"
+                                f"{repeat['heap_free_after']}")
                     wanted.remove(radio)
                     # Radar restores the exact Actions view. Return through
                     # Detail to List before selecting the next stable row.
