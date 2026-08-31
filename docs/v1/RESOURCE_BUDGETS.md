@@ -1868,6 +1868,24 @@ language, content, component, clean-target and production-build checks pass.
 Board-01 is disconnected, so physical heap/TFT acceptance remains dev.331 and
 cadence stays 10/15.
 
+Bluetooth scan-window list-cadence bound `RB-M232`: exact host/build
+`1.0.0-dev.335` at firmware source
+`4e6869df6714b49cef3c1d2d7bd4f9662697c589` uses 236,208 B static RAM,
+3,600,588 B linked flash and 3,601,088/3,666,624 B app/factory images, leaving
+593,216 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`9634622588596290e90e8fc40eebed5733b5aa49a24b8819e3c3ec80582f035c`/
+`ffdf6f6fb97fe5b7226e91ee8135eddc5cbf08b917793a2f1e7fc19091fc5734`/
+`23019ab94cfbb22d0bbc50f6870b66b702862d8573d29163f1320298540293b8`/
+`2e7a756c34414132227aab9683e272755bc906535a8d55424a2b0a9a2d392804`.
+Against dev.334 static RAM is unchanged, linked flash grows 44 B, both
+app/factory images grow 48 B and OTA headroom falls 48 B. No buffer or heap
+allocation is added: one list-period constant and the existing deadline/pending
+state make catalog-only list publication follow the current two-second passive
+scan-window cadence. Detail/radar remains at 250 ms, while navigation and source
+state remain immediate. Focused BLE/live-render guards, runner policy, Python,
+language, docs and production-build checks pass. Board-01 is disconnected, so
+physical heap/TFT acceptance remains dev.331 and cadence stays 10/15.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

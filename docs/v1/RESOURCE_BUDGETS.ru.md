@@ -1856,6 +1856,24 @@ focused checks renderer, language, content, component, clean-target и productio
 build. Board-01 отключена, поэтому physical heap/TFT acceptance остаётся dev.331,
 cadence — 10/15.
 
+Bound cadence списка Bluetooth по scan window `RB-M232`: exact host/build
+`1.0.0-dev.335` на firmware source
+`4e6869df6714b49cef3c1d2d7bd4f9662697c589` используют 236 208 B static RAM,
+3 600 588 B linked flash и app/factory images 3 601 088/3 666 624 B, оставляя
+593 216 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`9634622588596290e90e8fc40eebed5733b5aa49a24b8819e3c3ec80582f035c`/
+`ffdf6f6fb97fe5b7226e91ee8135eddc5cbf08b917793a2f1e7fc19091fc5734`/
+`23019ab94cfbb22d0bbc50f6870b66b702862d8573d29163f1320298540293b8`/
+`2e7a756c34414132227aab9683e272755bc906535a8d55424a2b0a9a2d392804`.
+Относительно dev.334 static RAM не меняется, linked flash растёт на 44 B, оба
+app/factory image — на 48 B, а OTA headroom уменьшается на 48 B. Buffer или heap
+allocation не добавляются: отдельная константа периода списка и существующее
+deadline/pending state синхронизируют catalog-only публикацию списка с текущим
+двухсекундным cadence passive scan window. Detail/radar остаётся на 250 ms,
+navigation и source state — немедленными. Проходят focused guards BLE/live-render,
+policy runner, Python, language, docs и production build. Board-01 отключена,
+поэтому physical heap/TFT acceptance остаётся dev.331, cadence — 10/15.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

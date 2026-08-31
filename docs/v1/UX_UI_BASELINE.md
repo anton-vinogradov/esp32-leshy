@@ -477,3 +477,12 @@ list-only model churn is coalesced to 250 ms while Up/Down and state transitions
 immediate. Pending list and detail updates have an independent deadline service: the
 newest model is eventually painted even if no later advertisement wakes the survey
 worker. The physical gate must still verify the final pixels and cadence on board-01.
+
+Exact host/build `1.0.0-dev.335` incorporates the useful 0.x list-update behavior
+without restoring its blocking scanner. In 0.x a four-second scan produced one new
+generation and every complete row was composed in a reusable sprite before one TFT
+push. In 1.x catalog-only list changes therefore publish once per current two-second
+passive scan-window cadence, while detail/radar stays at 250 ms. Up/Down, source-state
+changes and identity locking remain immediate; final-pixel equality still suppresses
+unchanged rows. Physical acceptance remains open until this cadence and the absence
+of intermediate clears are observed on board-01.

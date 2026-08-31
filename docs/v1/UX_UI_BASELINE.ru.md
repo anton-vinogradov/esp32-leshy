@@ -486,3 +486,12 @@ Exact host/build `1.0.0-dev.334` закрывает оставшийся source-
 deadline service: новейшая model обязательно рисуется, даже если survey worker не
 разбудит следующий advertisement. Physical gate всё ещё обязан проверить final
 pixels и cadence на board-01.
+
+Exact host/build `1.0.0-dev.335` переносит полезное поведение обновления списка 0.x,
+не возвращая blocking scanner. В 0.x scan 4 s создавал одну новую generation, а
+каждая полная row собиралась в reusable sprite до одного push TFT. Поэтому в 1.x
+catalog-only changes списка публикуются один раз за cadence текущего двухсекундного
+passive scan window, а detail/radar остаётся на 250 ms. Up/Down, изменения source
+state и identity locking остаются немедленными; equality final pixels по-прежнему
+подавляет неизменившиеся rows. Physical acceptance остаётся открытым, пока этот
+cadence и отсутствие промежуточных clears не проверены на board-01.
