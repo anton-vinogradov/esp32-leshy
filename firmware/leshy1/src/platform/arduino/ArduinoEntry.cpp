@@ -775,6 +775,11 @@ std::array<TargetIdentity, TargetRecord::kIdentityCapacity>
     targetRadarSelectedIdentities{};
 std::uint8_t targetRadarSelectedIdentityCount = 0U;
 const char* targetRadarRestoreMatch = "none";
+const char* targetRadarRestoreStage = "not_attempted";
+const char* targetRadarRestoreProductStatus = "not_loaded";
+bool targetRadarRestoreWorkspaceAllocated = false;
+std::uint32_t targetRadarRestoreHeapFree = 0U;
+std::uint32_t targetRadarRestoreHeapLargest = 0U;
 TaskHandle_t targetRadarTaskHandle = nullptr;
 portMUX_TYPE targetRadarMux = portMUX_INITIALIZER_UNLOCKED;
 TargetRadarWorkerControl targetRadarWorkerControl =
@@ -8966,6 +8971,9 @@ bool suspendTargetsForRadar() {
         }
     }
     targetRadarRestoreMatch = "none";
+    targetRadarRestoreStage = "suspended";
+    targetRadarRestoreProductStatus = "radar_suspended";
+    targetRadarRestoreWorkspaceAllocated = false;
     targetRadarHeapFreeBeforeSuspend = static_cast<std::uint32_t>(
         heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     // Radar has already copied the selected target into its bounded tracker,
@@ -8982,6 +8990,7 @@ bool suspendTargetsForRadar() {
 }
 
 bool restoreTargetsAfterRadar() {
+    targetRadarRestoreStage = "loading";
     const AppMenuItem* targetsItem = nullptr;
     for (std::size_t index = 0; index < appCatalog.size(); ++index) {
         const AppMenuItem* candidate = appCatalog.get(index);
@@ -8994,6 +9003,9 @@ bool restoreTargetsAfterRadar() {
     const bool loaded = targetsItem != nullptr &&
         loadTargetsProduct(*targetsItem) && targetsProductRuntime != nullptr &&
         std::strcmp(targetsProductStatus, "ready") == 0;
+    targetRadarRestoreProductStatus = targetsProductStatus;
+    targetRadarRestoreWorkspaceAllocated = targetsProductRuntime != nullptr;
+    if (!loaded) targetRadarRestoreStage = "load_failed";
     bool selected = false;
     if (loaded &&
         leshy1::domain::targets::targetIdValid(targetRadarSelectedTargetId) &&
@@ -9007,6 +9019,7 @@ bool restoreTargetsAfterRadar() {
     // stable user-facing object, so fall back to it instead of stranding the
     // user on a failed/empty page after a perfectly healthy Radar visit.
     if (loaded && !selected) {
+        targetRadarRestoreStage = "matching_identity";
         TargetsController& controller = targetsProductRuntime->controller;
         for (std::size_t rowIndex = 0;
              rowIndex < controller.entryCount() && !selected; ++rowIndex) {
@@ -9027,6 +9040,7 @@ bool restoreTargetsAfterRadar() {
         }
     }
     if (selected) {
+        targetRadarRestoreStage = "opening_actions";
         targetsProductRuntime->controller.openSelected();
         targetsProductRuntime->controller.openSelected();
     }
@@ -9034,8 +9048,11 @@ bool restoreTargetsAfterRadar() {
         targetsProductRuntime->controller.view() != TargetsView::Actions) {
         targetsProductStatus = "radar_restore_failed";
         lastRuntimeEvent = targetsProductStatus;
+        if (loaded && !selected) targetRadarRestoreStage = "target_missing";
+        else if (loaded) targetRadarRestoreStage = "actions_failed";
         return false;
     }
+    targetRadarRestoreStage = "ready";
     return true;
 }
 
@@ -9350,6 +9367,11 @@ bool serviceTargetRadar() {
     // the allocator one deterministic coalescing boundary before reopening
     // the exact read-only product view.
     if (targetRadarWifiScans != 0U) vTaskDelay(1U);
+    targetRadarRestoreHeapFree = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    targetRadarRestoreHeapLargest = static_cast<std::uint32_t>(
+        heap_caps_get_largest_free_block(
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     const bool restored = restoreTargetsAfterRadar();
     targetsProductStatus = restored && memoryRestored
         ? "ready" : "radar_restore_failed";
@@ -25684,7 +25706,7 @@ void emitTargetRadarState(Stream& reply) {
         snapshot.identityCount;
     const TargetRadarSignal* radarSignal = matched
         ? &snapshot.signals[snapshot.matchedIdentityIndex] : nullptr;
-    char line[1536] = {};
+    char line[1792] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.targets.radar.v1\",\"kind\":\"state\","
@@ -25715,6 +25737,11 @@ void emitTargetRadarState(Stream& reply) {
         "\"heap_free_before_begin\":%lu,"
         "\"heap_largest_before_begin\":%lu,"
         "\"restore_match\":\"%s\","
+        "\"restore_stage\":\"%s\","
+        "\"restore_product_status\":\"%s\","
+        "\"restore_workspace_allocated\":%s,"
+        "\"restore_heap_free\":%lu,"
+        "\"restore_heap_largest\":%lu,"
         "\"blocked_write_attempts\":%lu,\"physical_write_calls\":0,"
         "\"lease_mask\":%lu,\"heap_free\":%lu,"
         "\"identity_disclosed\":false}",
@@ -25770,6 +25797,11 @@ void emitTargetRadarState(Stream& reply) {
         static_cast<unsigned long>(targetRadarHeapFreeBeforeBegin),
         static_cast<unsigned long>(targetRadarHeapLargestBeforeBegin),
         targetRadarRestoreMatch,
+        targetRadarRestoreStage,
+        targetRadarRestoreProductStatus,
+        targetRadarRestoreWorkspaceAllocated ? "true" : "false",
+        static_cast<unsigned long>(targetRadarRestoreHeapFree),
+        static_cast<unsigned long>(targetRadarRestoreHeapLargest),
         static_cast<unsigned long>(targetsBlockedWriteAttempts),
         static_cast<unsigned long>(appRuntime.activeResources()),
         static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)));

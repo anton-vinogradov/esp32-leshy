@@ -254,12 +254,20 @@ def run_selected_radar(device: PassiveSerial, frames: Path, radio: str,
 
     stopping = action(device, "back")
     trace.append(stopping)
-    restored = wait_record(
-        device, b"targets.state", TARGETS_SCHEMA,
-        lambda value: value.get("view") == "actions" and
-            value.get("selected_observation_identity_hex") == identity_hex and
-            int(value.get("selected_observation_radio", 0)) == identity_radio,
-        15.0, f"{radio} target was not restored after Radar")
+    try:
+        restored = wait_record(
+            device, b"targets.state", TARGETS_SCHEMA,
+            lambda value: value.get("view") == "actions" and
+                value.get("selected_observation_identity_hex") ==
+                    identity_hex and
+                int(value.get("selected_observation_radio", 0)) ==
+                    identity_radio,
+            15.0, f"{radio} target was not restored after Radar")
+    except Exception as error:
+        radar_failure = query(
+            device, b"targets.radar", RADAR_SCHEMA, "state")
+        raise RuntimeError(
+            f"{error}; radar restore diagnostics={radar_failure!r}") from error
     require(restored, f"{radio} restored", status="ready",
             workspace_allocated=True, page_open=True, view="actions",
             action_selection=0, blocked_write_attempts=0, lease_mask=13)
