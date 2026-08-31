@@ -2149,6 +2149,11 @@ BleDeviceListRenderState bleDeviceListRenderState =
     BleDeviceListRenderState::Unknown;
 BleDeviceRadarVisual bleDeviceRenderedRadar{};
 constexpr std::uint64_t kBleDeviceUiRefreshPeriodUs = 250000ULL;
+// The 0.x list only published a completed four-second scan snapshot. Keep the
+// 1.x streaming scanner for watchdog/accounting, but expose its rows at the
+// current two-second passive scan-window cadence. Navigation and source-state
+// transitions remain immediate; only scanner-driven model churn is batched.
+constexpr std::uint64_t kBleDeviceListUiRefreshPeriodUs = 2000000ULL;
 std::uint64_t nextBleDeviceUiRefreshUs = 0U;
 bool bleDeviceUiRefreshPending = false;
 std::uint64_t nextBleDeviceListUiRefreshUs = 0U;
@@ -22137,7 +22142,7 @@ UiDeltaRenderResult renderSelectionDelta() {
                 static_cast<std::uint64_t>(esp_timer_get_time());
             if (nowUs == 0U) nowUs = 1U;
             nextBleDeviceListUiRefreshUs =
-                nowUs + kBleDeviceUiRefreshPeriodUs;
+                nowUs + kBleDeviceListUiRefreshPeriodUs;
             bleDeviceListUiRefreshPending = false;
             ++bleDeviceListRefreshes;
             return rowsPainted || stateChanged
@@ -22162,7 +22167,7 @@ UiDeltaRenderResult renderSelectionDelta() {
             return UiDeltaRenderResult::NoChange;
         }
         nextBleDeviceListUiRefreshUs =
-            nowUs + kBleDeviceUiRefreshPeriodUs;
+            nowUs + kBleDeviceListUiRefreshPeriodUs;
         bleDeviceListUiRefreshPending = false;
         ++bleDeviceListRefreshes;
         const bool painted = renderBleDevicesData(false);
@@ -27565,7 +27570,11 @@ bool startBleDevicesProduct() {
     bleDeviceRenderedRadar = {};
     nextBleDeviceUiRefreshUs = 0U;
     bleDeviceUiRefreshPending = false;
-    nextBleDeviceListUiRefreshUs = 0U;
+    std::uint64_t listStartedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (listStartedUs == 0U) listStartedUs = 1U;
+    nextBleDeviceListUiRefreshUs =
+        listStartedUs + kBleDeviceListUiRefreshPeriodUs;
     bleDeviceListUiRefreshPending = false;
     resetBleDeviceListRenderCache();
     bleDeviceListRowRepaints = 0U;
@@ -38783,7 +38792,7 @@ void emitBleDeviceDetailState(Stream& reply) {
         static_cast<unsigned long>(bleDeviceListContentClears),
         static_cast<unsigned long>(bleDeviceListRefreshes),
         static_cast<unsigned long>(bleDeviceListRefreshesDeferred),
-        static_cast<unsigned long long>(kBleDeviceUiRefreshPeriodUs),
+        static_cast<unsigned long long>(kBleDeviceListUiRefreshPeriodUs),
         bleDeviceListUiRefreshPending ? "true" : "false",
         static_cast<unsigned long>(bleDeviceDetailContentClears),
         static_cast<unsigned long>(bleDeviceRadarFullRepaints),

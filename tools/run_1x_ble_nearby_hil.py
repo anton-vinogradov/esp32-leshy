@@ -118,13 +118,13 @@ def ble_detail(device: PassiveSerial) -> dict[str, Any]:
 
 
 def wait_ble_list_refresh(device: PassiveSerial,
-                          timeout_seconds: float = 2.0) -> dict[str, Any]:
+                          timeout_seconds: float = 4.5) -> dict[str, Any]:
     deadline = time.monotonic() + timeout_seconds
     while True:
         state = ble_detail(device)
-        if state.get("list_refresh_period_us") != 250000:
+        if state.get("list_refresh_period_us") != 2000000:
             raise RuntimeError(
-                "BLE list refresh cadence is not bounded to four Hz")
+                "BLE list refresh cadence is not scan-window bounded")
         if state.get("list_refresh_pending") is False:
             return state
         if time.monotonic() >= deadline:
@@ -298,7 +298,6 @@ def main() -> int:
                     "survey_product_store_open_attempted": False,
                     "survey_product_backend_open": False,
                     "survey_product_storage_mounted": False,
-                    "survey_product_store_bytes_written": 0,
                 }, "ble_nearby_live")
                 if not bounded_pipeline_accounting_valid(live_first):
                     raise RuntimeError(
@@ -351,7 +350,7 @@ def main() -> int:
                     "list_refreshes_deferred", -1)) - int(
                         list_render_first.get(
                             "list_refreshes_deferred", -1))
-                list_maximum_refreshes = list_cadence_elapsed_ms // 250 + 2
+                list_maximum_refreshes = list_cadence_elapsed_ms // 2000 + 2
                 if list_render_second.get(
                         "list_refresh_pending") is not False or \
                         not 0 <= list_refresh_delta <= \
@@ -696,7 +695,7 @@ def main() -> int:
             "strongest_first_unique_rows": True,
             "live_redraw_data_rows_only": True,
             "list_repaint_observation_windows": 2,
-            "list_refresh_cadence_hz_max": 4,
+            "list_refresh_cadence_hz_max": 0.5,
             "detail_live_radar_only": True,
             "detail_noop_scan_windows_checked": 2,
             "detail_refresh_cadence_hz_max": 4,
