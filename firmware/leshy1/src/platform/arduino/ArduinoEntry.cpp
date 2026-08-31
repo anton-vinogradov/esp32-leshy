@@ -767,6 +767,10 @@ enum class TargetRadarWorkerControl : std::uint8_t {
 };
 
 TargetRadar* targetRadarTracker = nullptr;
+TargetCatalog* targetRadarCatalog = nullptr;
+CorrelationDecisionLog* targetRadarDecisions = nullptr;
+TargetMergeHistory* targetRadarMerges = nullptr;
+TargetId targetRadarSelectedTargetId{};
 TaskHandle_t targetRadarTaskHandle = nullptr;
 portMUX_TYPE targetRadarMux = portMUX_INITIALIZER_UNLOCKED;
 TargetRadarWorkerControl targetRadarWorkerControl =
@@ -784,6 +788,10 @@ std::uint32_t targetRadarDeltaRepaints = 0U;
 std::uint32_t targetRadarContentClears = 0U;
 std::uint32_t targetRadarRenderedRevision = 0U;
 std::uint64_t targetRadarNextUiRefreshUs = 0U;
+std::uint32_t targetRadarHeapFreeBeforeSuspend = 0U;
+std::uint32_t targetRadarHeapFreeAfterSuspend = 0U;
+std::uint32_t targetRadarHeapFreeBeforeBegin = 0U;
+std::uint32_t targetRadarHeapLargestBeforeBegin = 0U;
 
 void clearWebCompanionEntropy(std::array<std::uint8_t, 16>& entropy) {
     volatile std::uint8_t* cursor = entropy.data();
@@ -5463,7 +5471,9 @@ bool resizeProductSurveyObservationQueue(UBaseType_t capacity) {
 
 bool restoreBleProductSurveyMemory();
 
-bool prepareBleProductSurveyMemory() {
+bool prepareBleProductSurveyMemory(
+        std::uint32_t* freeHeapOut = nullptr,
+        std::uint32_t* largestHeapOut = nullptr) {
     if (!resizeProductSurveyObservationQueue(
             kBleProductSurveyObservationCapacity)) {
         return false;
@@ -5474,6 +5484,8 @@ bool prepareBleProductSurveyMemory() {
     const std::uint32_t largestHeap = static_cast<std::uint32_t>(
         heap_caps_get_largest_free_block(
             MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    if (freeHeapOut != nullptr) *freeHeapOut = freeHeap;
+    if (largestHeapOut != nullptr) *largestHeapOut = largestHeap;
     if (freeHeap < kBleProductMinimumFreeHeapBeforeBegin ||
         largestHeap < kBleProductMinimumLargestHeapBeforeBegin) {
         (void)restoreBleProductSurveyMemory();
@@ -8929,6 +8941,49 @@ bool restoreTargetsAfterWebCompanion() {
     return rebuilt;
 }
 
+bool targetRadarTargetsSuspended() {
+    return targetRadarCatalog != nullptr &&
+        targetRadarDecisions != nullptr && targetRadarMerges != nullptr;
+}
+
+bool suspendTargetsForRadar() {
+    if (targetRadarTargetsSuspended()) return true;
+    if (targetsProductRuntime == nullptr ||
+        std::strcmp(targetsProductStatus, "ready") != 0) {
+        return false;
+    }
+    const auto* selected = targetsProductRuntime->controller.selectedTarget();
+    targetRadarSelectedTargetId = selected == nullptr
+        ? TargetId{} : selected->id;
+    targetRadarHeapFreeBeforeSuspend = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    // Radar has already copied the selected target into its bounded tracker.
+    // Retain only durable catalog state and release the comparison snapshot as
+    // well as every UI/editor workspace before NimBLE admission.
+    if (!targetsProductRuntime->detachState(
+            &targetRadarCatalog, &targetRadarDecisions, &targetRadarMerges)) {
+        return false;
+    }
+    delete targetsProductRuntime;
+    targetsProductRuntime = nullptr;
+    targetsProductStatus = "radar_suspended";
+    targetRadarHeapFreeAfterSuspend = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    return true;
+}
+
+bool restoreTargetsAfterRadar() {
+    if (!targetRadarTargetsSuspended()) return true;
+    const bool rebuilt = rebuildTargetsProductFromCatalog(
+        targetRadarCatalog, targetRadarDecisions, targetRadarMerges,
+        targetRadarSelectedTargetId, true, true);
+    if (!rebuilt) {
+        targetsProductStatus = "radar_restore_failed";
+        lastRuntimeEvent = targetsProductStatus;
+    }
+    return rebuilt;
+}
+
 TargetRadarSnapshot targetRadarSnapshot() {
     portENTER_CRITICAL(&targetRadarMux);
     const TargetRadarSnapshot snapshot = targetRadarTracker == nullptr
@@ -9143,7 +9198,9 @@ bool startTargetRadar() {
         lastRuntimeEvent = "target_radar_resource_busy";
         return true;
     }
-    if (!suspendTargetsForWebCompanion()) {
+    targetRadarHeapFreeBeforeBegin = 0U;
+    targetRadarHeapLargestBeforeBegin = 0U;
+    if (!suspendTargetsForRadar()) {
         resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
         delete tracker;
         lastRuntimeEvent = "target_radar_suspend_failed";
@@ -9151,8 +9208,10 @@ bool startTargetRadar() {
     }
     const TargetRadarSnapshot prepared = tracker->snapshot();
     const bool listenBle = targetRadarHasRadio(prepared, RadioKind::Ble);
-    if (listenBle && !prepareBleProductSurveyMemory()) {
-        restoreTargetsAfterWebCompanion();
+    if (listenBle && !prepareBleProductSurveyMemory(
+            &targetRadarHeapFreeBeforeBegin,
+            &targetRadarHeapLargestBeforeBegin)) {
+        restoreTargetsAfterRadar();
         resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
         delete tracker;
         lastRuntimeEvent = "target_radar_ble_memory_unavailable";
@@ -9211,7 +9270,7 @@ bool serviceTargetRadar() {
     // detached, returning to the exact memory topology that existed before
     // Radar admission.
     const bool memoryRestored = restoreBleProductSurveyMemory();
-    const bool restored = restoreTargetsAfterWebCompanion();
+    const bool restored = restoreTargetsAfterRadar();
     portENTER_CRITICAL(&targetRadarMux);
     TargetRadar* tracker = targetRadarTracker;
     targetRadarTracker = nullptr;
@@ -25564,6 +25623,10 @@ void emitTargetRadarState(Stream& reply) {
         "\"cycles\":%lu,\"wifi_scans\":%lu,\"ble_scans\":%lu,"
         "\"full_repaints\":%lu,\"delta_repaints\":%lu,"
         "\"content_clears\":%lu,\"rendered_revision\":%lu,"
+        "\"heap_free_before_suspend\":%lu,"
+        "\"heap_free_after_suspend\":%lu,"
+        "\"heap_free_before_begin\":%lu,"
+        "\"heap_largest_before_begin\":%lu,"
         "\"blocked_write_attempts\":%lu,\"physical_write_calls\":0,"
         "\"lease_mask\":%lu,\"heap_free\":%lu,"
         "\"identity_disclosed\":false}",
@@ -25602,6 +25665,10 @@ void emitTargetRadarState(Stream& reply) {
         static_cast<unsigned long>(targetRadarDeltaRepaints),
         static_cast<unsigned long>(targetRadarContentClears),
         static_cast<unsigned long>(targetRadarRenderedRevision),
+        static_cast<unsigned long>(targetRadarHeapFreeBeforeSuspend),
+        static_cast<unsigned long>(targetRadarHeapFreeAfterSuspend),
+        static_cast<unsigned long>(targetRadarHeapFreeBeforeBegin),
+        static_cast<unsigned long>(targetRadarHeapLargestBeforeBegin),
         static_cast<unsigned long>(targetsBlockedWriteAttempts),
         static_cast<unsigned long>(appRuntime.activeResources()),
         static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)));
