@@ -17,7 +17,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
 - **Verified checkpoint:** `E-AUTO-190`/`E-HIL-223`/`E-UX-074`/`RB-M226` close `FF-1` through a machine-checked compositional review. Exact physical `1.0.0-dev.328` observes two Wi-Fi and 32 BLE devices strongest-first; both selected identities remain stable while signal samples advance, with zero identity/static/chrome repaint, heap drift, writes, input drops or leaked leases. The accepted dev.327 Targets Radar ancestor adds four BLE×2/Wi-Fi×2 target lifecycles with zero probe/TX, while the dev.328 Home provides task-first entry and controlled red Lab access. Exact dev.302 remains the periodic full anchor.
-- **Next gate:** `FF-2` is active: deliver on-device screenshot → Library → export with build/state/time provenance. Calibrated distance is not claimed. Automation/HID stays parked at the accepted safe dev.308 public-trust checkpoint with execution disconnected; positive Serial Console traffic still waits for an explicitly reviewed no-RF `mux56-3v3` fixture, while optional GPS, physical HTTP parity and the deferred S5 RF carrier gate remain externally blocked.
+- **Next gate:** `FF-2` is active and implemented at host/build checkpoint `1.0.0-dev.329`: Capture can arm a screenshot at the beginning of the user workflow, physical Select or the touch `SHOT` target saves the exact TFT frame into the protected Library, USB export streams the selected generation, and cold boot performs read-only recovery. Physical acceptance is waiting only for the owner to configure and unlock the real Device Lock on board-01; the exact candidate then has to pass byte-identical capture/export and same-generation cold recovery. Calibrated distance is not claimed. Automation/HID stays parked at the accepted safe dev.308 public-trust checkpoint with execution disconnected; positive Serial Console traffic still waits for an explicitly reviewed no-RF `mux56-3v3` fixture, while optional GPS, physical HTTP parity and the deferred S5 RF carrier gate remain externally blocked.
 
 ### Functional-first delivery queue
 
@@ -71,7 +71,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | IR receive/decode preserves original and derived data, cold-reopens in Library and exports CSV | S5.2 | ✅ complete |
 | Sub-GHz RAW/OOK/FSK Capture preserves pulses, radio parameters and derived decodes | S5.4 | 🔴 blocked |
 | PN532 reads tag/NDEF facts and a versioned dump only for an explicit non-conflicting assembly | S5 | 🔴 blocked |
-| User saves a real-TFT screenshot with build/state/time provenance and opens it in Library/export | S5 | ⬜ later |
+| User saves a real-TFT screenshot with build/state/time provenance and opens it in Library/export | S5 | 🟡 in progress |
 | One feedback service owns antenna LEDs and buzzer: default 2/255, quiet mode, bounded tones and non-color-only cues | S5 + S6 | ✅ complete |
 | Local logs, crash journal and exportable diagnostic bundle without a cloud dependency | S6 + S8 | 🟡 in progress |
 | A Target preserves stable identities, Observation history and links to immutable source evidence | S6.1 + S6.4 | ✅ complete |

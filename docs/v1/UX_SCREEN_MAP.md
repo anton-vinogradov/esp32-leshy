@@ -3,8 +3,10 @@
 *Read in: **English** · [Русский](UX_SCREEN_MAP.ru.md)*
 
 Status: **implemented task-first 1.x map**. Exact physical `1.0.0-dev.328` accepts
-the Home hierarchy and direct controlled Lab entry on the real TFT; this map binds
-task structure, color semantics and Back/Stop behavior.
+the Home hierarchy and direct controlled Lab entry on the real TFT. Host/build
+`1.0.0-dev.329` additionally implements the early Screenshot→protected Library→USB
+path; its physical gate is waiting for owner Device Lock setup. This map binds task
+structure, color semantics and Back/Stop behavior.
 
 ## Global shell
 
@@ -38,6 +40,14 @@ that merely opening the entry transmits. The current entry is a read-only Inspec
 Any future active action keeps its own preview, explicit confirmation, interlock,
 deadline and permanent Stop. Selection remains the common yellow geometric focus,
 so warning severity and navigation state are never encoded by the same color.
+
+Screenshot is deliberately available before a user enters a deep feature: selecting
+`Screenshot` under Capture arms one global shot and returns to Home. The user opens
+the desired screen and saves its exact current pixels with physical Select or the
+touch `SHOT` target in the header. `SAVED`/`FAIL` is transient feedback, not another
+modal page. A saved item appears as `Screenshot` in Library with its generation,
+integrity and build/UI/time provenance; export is selected from that same item. This
+keeps Home task-focused instead of adding a permanent screenshot-only root row.
 
 Every screen retains a context title, the truthful active receive/transmit antenna
 summary, visible button roles, and a Back path. Storage state is shown only when it
@@ -88,6 +98,7 @@ UX-S01 Home
 │     └─ UX-S10 Radar / Localize
 ├─ Capture
 │  ├─ UX-S11 Capture Source: Wi-Fi packets / Sub-GHz / IR / NFC / Screenshot
+│  │  └─ Screenshot: arm → Home → desired screen → Select/SHOT → protected Library
 │  ├─ UX-S12 Capture Setup: source, bounds, destination
 │  ├─ UX-S13 Capture Running: progress, drops, explicit Stop
 │  ├─ UX-S14 Capture Result: raw metadata / derived decode / Save / Export / Lab

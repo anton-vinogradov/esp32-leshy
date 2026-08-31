@@ -1767,6 +1767,25 @@ identity/static/chrome. Accepted Targets dev.327 композируется то
 machine-check exact ancestry и bounded трёхфайлового Home-only source delta. Cadence
 двигается до 9/15; periodic full matrix остаётся anchored на dev.302.
 
+Bound защищённого screenshot `RB-M227`: host/build `1.0.0-dev.329` на firmware
+source `54d787ab982fc85948321f7642d3d3b658682ddd` использует 234 768 B static RAM,
+3 592 880 B linked flash и app/factory images 3 593 040/3 658 576 B, оставляя
+601 264 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`0a950489a5e88d41ee7c25445891f5a29243f5f0062741d166b00408819c469c`/
+`7237ed5800c5f9d78cc58acfd7439fbb44844efc94882f9fa23d717de25e8274`/
+`cf6a4c3555839dd575a6a86c77a7a412960a6507cf8e0ac2190f6f47fe65862b`/
+`633255c9ef5eb4a932043980ab9f71b0f51f9bea5d30761d304d01dd0a67e34e`.
+Относительно dev.328 это +704 B static RAM, +14 788 B linked flash, +14 448 B в
+обоих app/factory images и на 14 448 B меньше OTA headroom. Delta оплачивает generic
+ScreenshotStore с двумя heads, bounded encrypted stream adapters, Screenshot entry
+Библиотеки, exact framebuffer capture/export и boot recovery. Frame 153 600 B никогда
+не находится в static RAM: product capture использует PSRAM и chunks по четыре строки,
+а encrypted filesystem IO — независимые bounded workspaces plaintext/ciphertext по
+256 B с последующей очисткой. Native atomic fallback и policy tests проходят. Physical
+run exact candidate остановился на намеренно внешнем precondition owner Device Lock до
+любой protected write, поэтому cadence остаётся 9/15, runtime heap и physical
+persistence пока не заявляются.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

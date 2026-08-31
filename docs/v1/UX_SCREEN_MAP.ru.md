@@ -3,8 +3,10 @@
 *Read in: [English](UX_SCREEN_MAP.md) · **Русский***
 
 Статус: **реализованная task-first карта 1.x**. Exact physical `1.0.0-dev.328`
-принимает иерархию Home и прямой controlled-вход в «Лабораторию» на реальном TFT;
-карта задаёт структуру задач, семантику цветов и поведение Back/Stop.
+принимает иерархию Home и прямой controlled-вход в «Лабораторию» на реальном TFT.
+Host/build `1.0.0-dev.329` дополнительно реализует ранний путь Screenshot→защищённая
+Библиотека→USB; physical gate ждёт настройки owner Device Lock. Карта задаёт
+структуру задач, семантику цветов и поведение Back/Stop.
 
 ## Глобальная оболочка
 
@@ -39,6 +41,14 @@ Inspector. Любое будущее active action сохраняет собст
 confirmation, interlock, deadline и постоянный Stop. Selection остаётся общим
 жёлтым геометрическим focus, поэтому уровень предупреждения и состояние навигации
 никогда не кодируются одним цветом.
+
+Screenshot намеренно доступен до входа пользователя в глубокую функцию: выбор
+`Снимок` внутри «Захвата» включает один global shot и возвращает Home. Пользователь
+открывает нужный экран и сохраняет его exact текущие pixels физическим Select или
+touch target `СНИМОК` в header. `ГОТОВО`/`ОШИБКА` — временная обратная связь, а не
+ещё одна modal page. Сохранённый item появляется как `Снимок` в Библиотеке с generation,
+integrity и provenance build/UI/time; export выбирается из этого же item. Поэтому
+Home остаётся task-focused без отдельной постоянной screenshot-only строки.
 
 На каждом экране остаются видимыми: название контекста, честная сводка активных
 приёмных/передающих антенн, назначение доступных кнопок и путь Back. Состояние
@@ -90,6 +100,7 @@ UX-S01 Home
 │     └─ UX-S10 Radar / Localize
 ├─ Захват
 │  ├─ UX-S11 Capture Source: Wi-Fi packets / Sub-GHz / IR / NFC / Screenshot
+│  │  └─ Screenshot: включить → Home → нужный экран → Select/СНИМОК → защищённая Библиотека
 │  ├─ UX-S12 Capture Setup: source, bounds, destination
 │  ├─ UX-S13 Capture Running: progress, drops, explicit Stop
 │  ├─ UX-S14 Capture Result: raw metadata / derived decode / Save / Export / Lab

@@ -17,7 +17,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
 - **Проверенный checkpoint:** `E-AUTO-190`/`E-HIL-223`/`E-UX-074`/`RB-M226` закрывают `FF-1` машинно проверенным композиционным review. Exact physical `1.0.0-dev.328` видит две Wi-Fi и 32 BLE цели с сортировкой по убыванию сигнала; обе выбранные identity стабильны при росте signal samples, без перерисовки identity/static/chrome, drift heap, записей, input drops или leaked leases. Принятый ancestor Targets Radar dev.327 добавляет четыре lifecycle BLE×2/Wi-Fi×2 с zero probe/TX, а Home dev.328 — task-first вход и controlled красную «Лабораторию». Exact dev.302 остаётся periodic full anchor.
-- **Следующий gate:** активен `FF-2`: реализовать screenshot устройства → Library → export с provenance build/state/time. Calibrated distance не заявляется. Automation/HID остаётся заморожен на принятом безопасном public-trust checkpoint dev.308 при отключённом execution; positive Serial Console traffic всё ещё ждёт explicitly reviewed no-RF fixture `mux56-3v3`, а optional GPS, physical HTTP parity и deferred S5 RF carrier gate остаются externally blocked.
+- **Следующий gate:** `FF-2` активен и реализован на host/build checkpoint `1.0.0-dev.329`: «Захват» может включить screenshot в начале пользовательского workflow, физический Select или touch target `СНИМОК` сохраняет exact TFT frame в защищённую Библиотеку, USB export потоково отдаёт выбранное поколение, а cold boot выполняет read-only recovery. Для физической приёмки осталось только владельцу настроить и разблокировать настоящий Device Lock на board-01; затем exact candidate должен пройти byte-identical capture/export и cold recovery того же generation. Calibrated distance не заявляется. Automation/HID остаётся заморожен на принятом безопасном public-trust checkpoint dev.308 при отключённом execution; positive Serial Console traffic всё ещё ждёт explicitly reviewed no-RF fixture `mux56-3v3`, а optional GPS, physical HTTP parity и deferred S5 RF carrier gate остаются externally blocked.
 
 ### Functional-first очередь поставки
 
@@ -71,7 +71,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | ИК receive/decode сохраняет оригинал и производные данные, cold-reopen-ит их в Библиотеке и экспортирует CSV | S5.2 | ✅ готово |
 | Sub-GHz RAW/OOK/FSK Capture сохраняет pulses, radio parameters и производные decode | S5.4 | 🔴 заблокировано |
 | PN532 читает tag/NDEF info и versioned dump только при explicit non-conflicting assembly | S5 | 🔴 заблокировано |
-| Пользователь сохраняет screenshot реального TFT с build/state/time provenance и открывает его в Library/export | S5 | ⬜ дальше |
+| Пользователь сохраняет screenshot реального TFT с build/state/time provenance и открывает его в Library/export | S5 | 🟡 в работе |
 | Единый feedback service владеет status LED антенн и buzzer: default 2/255, quiet mode, bounded tones и доступные без цвета cues | S5 + S6 | ✅ готово |
 | Локальные логи, crash journal и экспортируемый diagnostic bundle без облака | S6 + S8 | 🟡 в работе |
 | Цель хранит стабильные identities, историю Observation и ссылки на immutable source evidence | S6.1 + S6.4 | ✅ готово |
