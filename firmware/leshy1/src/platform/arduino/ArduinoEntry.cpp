@@ -2103,20 +2103,34 @@ struct BleDeviceRowVisual final {
     bool present = false;
     bool selected = false;
     bool tracker = false;
+    bool labelResolved = false;
     std::int16_t rssiDbm = 0;
+    std::array<std::uint8_t, Observation::kIdentityCapacity> identity{};
+    std::uint8_t identityLength = 0U;
     std::array<char, 22> label{};
     std::array<char, 48> descriptor{};
 
     bool operator==(const BleDeviceRowVisual& other) const {
         return present == other.present && selected == other.selected &&
-            tracker == other.tracker && rssiDbm == other.rssiDbm &&
-            label == other.label && descriptor == other.descriptor;
+            tracker == other.tracker && labelResolved == other.labelResolved &&
+            rssiDbm == other.rssiDbm && identity == other.identity &&
+            identityLength == other.identityLength && label == other.label &&
+            descriptor == other.descriptor;
     }
 
     bool staticFieldsEqual(const BleDeviceRowVisual& other) const {
         return present == other.present && selected == other.selected &&
-            tracker == other.tracker && label == other.label &&
+            tracker == other.tracker && labelResolved == other.labelResolved &&
+            identity == other.identity &&
+            identityLength == other.identityLength && label == other.label &&
             descriptor == other.descriptor;
+    }
+
+    bool sameIdentity(const BleDeviceRowVisual& other) const {
+        return present && other.present &&
+            identityLength != 0U && identityLength == other.identityLength &&
+            std::memcmp(identity.data(), other.identity.data(),
+                        identityLength) == 0;
     }
 };
 
@@ -2166,11 +2180,13 @@ std::uint32_t bleDeviceListAtomicNotePushes = 0U;
 std::uint32_t bleDeviceListContentClears = 0U;
 std::uint32_t bleDeviceListRefreshes = 0U;
 std::uint32_t bleDeviceListRefreshesDeferred = 0U;
+std::uint32_t bleDeviceListStaticChurnSuppressed = 0U;
 std::uint32_t bleDeviceDetailContentClears = 0U;
 std::uint32_t bleDeviceRadarFullRepaints = 0U;
 std::uint32_t bleDeviceRadarDeltaRepaints = 0U;
 std::uint32_t bleDeviceDetailRefreshes = 0U;
 std::uint32_t bleDeviceDetailRefreshesDeferred = 0U;
+std::uint32_t bleDeviceDetailStaticChurnSuppressed = 0U;
 std::uint32_t liveTextRowPushes = 0U;
 std::uint32_t liveTextRowAllocationFailures = 0U;
 std::uint32_t liveTextRowDirectFallbacks = 0U;
@@ -16951,7 +16967,10 @@ BleDeviceRowVisual composeBleDeviceRowVisual(
     visual.selected = bleDeviceSelection == index;
     visual.tracker = leshy1::apps::ble::classifyBleTracker(*device) !=
         BleTrackerKind::None;
+    visual.labelResolved = device->labelLength != 0U;
     visual.rssiDbm = device->rssiDbm;
+    visual.identity = device->identity;
+    visual.identityLength = device->identityLength;
     compactBlePrimary(*device, visual.label.data(), visual.label.size());
     char vendor[BleCompanyDatabase::kNameSize + 1U] = {};
     const char* descriptor =
@@ -17026,8 +17045,30 @@ bool renderBleDeviceRow(std::size_t index, std::size_t firstVisible,
         return false;
     }
     const std::size_t slot = index - firstVisible;
-    const BleDeviceRowVisual visual =
+    BleDeviceRowVisual visual =
         composeBleDeviceRowVisual(index, firstVisible);
+    if (!force && bleDeviceRenderedRowValid[slot] &&
+        bleDeviceRenderedRows[slot].sameIdentity(visual)) {
+        const BleDeviceRowVisual& stable = bleDeviceRenderedRows[slot];
+        // One BLE address commonly alternates several advertisement packet
+        // shapes. Their company/service descriptors are useful to the detail
+        // view, but publishing every alternation in the list erases and
+        // redraws a complete row. Match the stable 0.x snapshot semantics:
+        // keep the first visible static presentation and update only
+        // selection/RSSI. A name learned from later packets is retained in
+        // the catalog and appears on deliberate re-entry, without making
+        // packet cadence visible as TFT flicker.
+        if (stable.tracker != visual.tracker ||
+            stable.labelResolved != visual.labelResolved ||
+            stable.label != visual.label ||
+            stable.descriptor != visual.descriptor) {
+            ++bleDeviceListStaticChurnSuppressed;
+        }
+        visual.tracker = stable.tracker;
+        visual.labelResolved = stable.labelResolved;
+        visual.label = stable.label;
+        visual.descriptor = stable.descriptor;
+    }
     if (!force && bleDeviceRenderedRowValid[slot] &&
         bleDeviceRenderedRows[slot] == visual) {
         return false;
@@ -22153,15 +22194,16 @@ UiDeltaRenderResult renderSelectionDelta() {
         const BleDeviceSignalStats& signal = *liveBleDeviceSignal();
         if (bleDeviceDetailStaticFieldsDiffer(
                 bleDeviceRenderedDetail, live)) {
-            // Advertising devices may alternate packet shapes under one
-            // address. Replace complete user-visible rows atomically instead
-            // of clearing and redrawing the complete card.
-            renderBleDeviceStaticFields(live, true);
+            // Keep the opened card as the user's stable snapshot. Alternating
+            // advertisements continue to enrich the catalog, but only the
+            // radar is live while this card is open. Re-entering the card
+            // publishes the newest complete facts in one deliberate scene
+            // transition, matching the proven 0.x detail behavior.
+            ++bleDeviceDetailStaticChurnSuppressed;
         }
         renderBleDeviceRadar(live, signal, false);
         bleDeviceDetail = live;
         bleDeviceDetailSignal = signal;
-        bleDeviceRenderedDetail = live;
         return UiDeltaRenderResult::Rendered;
     }
 
@@ -27665,11 +27707,13 @@ bool startBleDevicesProduct() {
     bleDeviceListContentClears = 0U;
     bleDeviceListRefreshes = 0U;
     bleDeviceListRefreshesDeferred = 0U;
+    bleDeviceListStaticChurnSuppressed = 0U;
     bleDeviceDetailContentClears = 0U;
     bleDeviceRadarFullRepaints = 0U;
     bleDeviceRadarDeltaRepaints = 0U;
     bleDeviceDetailRefreshes = 0U;
     bleDeviceDetailRefreshesDeferred = 0U;
+    bleDeviceDetailStaticChurnSuppressed = 0U;
     liveTextRowPushes = 0U;
     liveTextRowAllocationFailures = 0U;
     liveTextRowDirectFallbacks = 0U;
@@ -38824,11 +38868,13 @@ void emitBleDeviceDetailState(Stream& reply) {
         "\"list_atomic_note_pushes\":%lu,"
         "\"list_content_clears\":%lu,"
         "\"list_refreshes\":%lu,\"list_refreshes_deferred\":%lu,"
+        "\"list_static_churn_suppressed\":%lu,"
         "\"list_refresh_period_us\":%llu,"
         "\"list_refresh_pending\":%s,"
         "\"detail_content_clears\":%lu,"
         "\"radar_full_repaints\":%lu,\"radar_delta_repaints\":%lu,"
         "\"detail_refreshes\":%lu,\"detail_refreshes_deferred\":%lu,"
+        "\"detail_static_churn_suppressed\":%lu,"
         "\"detail_refresh_period_us\":%llu,"
         "\"detail_refresh_pending\":%s,"
         "\"atomic_text_row_pushes\":%lu,"
@@ -38873,6 +38919,7 @@ void emitBleDeviceDetailState(Stream& reply) {
         static_cast<unsigned long>(bleDeviceListContentClears),
         static_cast<unsigned long>(bleDeviceListRefreshes),
         static_cast<unsigned long>(bleDeviceListRefreshesDeferred),
+        static_cast<unsigned long>(bleDeviceListStaticChurnSuppressed),
         static_cast<unsigned long long>(kBleDeviceListUiRefreshPeriodUs),
         bleDeviceListUiRefreshPending ? "true" : "false",
         static_cast<unsigned long>(bleDeviceDetailContentClears),
@@ -38880,6 +38927,7 @@ void emitBleDeviceDetailState(Stream& reply) {
         static_cast<unsigned long>(bleDeviceRadarDeltaRepaints),
         static_cast<unsigned long>(bleDeviceDetailRefreshes),
         static_cast<unsigned long>(bleDeviceDetailRefreshesDeferred),
+        static_cast<unsigned long>(bleDeviceDetailStaticChurnSuppressed),
         static_cast<unsigned long long>(kBleDeviceUiRefreshPeriodUs),
         bleDeviceUiRefreshPending ? "true" : "false",
         static_cast<unsigned long>(liveTextRowPushes),

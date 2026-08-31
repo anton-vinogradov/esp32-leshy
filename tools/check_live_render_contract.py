@@ -149,6 +149,8 @@ def main() -> int:
             "staticFieldsEqual(visual)",
             "renderBleDeviceRowNote(visual, bounds, background);",
             "++bleDeviceListSignalDeltaRepaints;",
+            "bleDeviceRenderedRows[slot].sameIdentity(visual)",
+            "++bleDeviceListStaticChurnSuppressed;",
         ):
             if marker not in ble_list_row:
                 failures.append(
@@ -158,6 +160,16 @@ def main() -> int:
                 ble_list_row.find("++bleDeviceListRowFullRepaints")]:
             failures.append(
                 "BLE signal delta still erases the complete menu row")
+        if "renderBleDeviceStaticFields(live, true);" in selection_delta:
+            failures.append(
+                "BLE detail still republishes alternating static facts")
+        for marker in (
+            "++bleDeviceDetailStaticChurnSuppressed;",
+            "renderBleDeviceRadar(live, signal, false);",
+        ):
+            if marker not in selection_delta:
+                failures.append(
+                    f"BLE detail stable-snapshot marker missing: {marker}")
         for marker in (
             "bleDeviceListUiRefreshPending = true;",
             "++bleDeviceListRefreshesDeferred;",

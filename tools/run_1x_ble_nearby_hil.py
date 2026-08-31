@@ -372,6 +372,17 @@ def main() -> int:
                 row_repaint_delta = int(list_render_second.get(
                     "list_row_repaints", -1)) - int(list_render_first.get(
                         "list_row_repaints", -1))
+                full_row_repaint_delta = int(list_render_second.get(
+                    "list_row_full_repaints", -1)) - int(
+                        list_render_first.get("list_row_full_repaints", -1))
+                static_churn_suppressed_delta = int(list_render_second.get(
+                    "list_static_churn_suppressed", -1)) - int(
+                        list_render_first.get(
+                            "list_static_churn_suppressed", -1))
+                list_cadence_window["full_row_repaints"] = \
+                    full_row_repaint_delta
+                list_cadence_window["static_churn_suppressed"] = \
+                    static_churn_suppressed_delta
                 content_changed = list_pixel_changes[
                     "content_changed_pixels"]
                 bounded_rows = (content_changed == 0 and
@@ -380,11 +391,15 @@ def main() -> int:
                      1 <= row_repaint_delta <= 8)
                 if list_pixel_changes["chrome_changed_pixels"] != 0 or \
                         not bounded_rows or \
+                        full_row_repaint_delta != 0 or \
+                        static_churn_suppressed_delta < 0 or \
                         list_render_second.get("list_content_clears") != \
                         list_render_first.get("list_content_clears"):
                     raise RuntimeError(
                         "BLE live list used an unbounded repaint: "
                         f"rows={row_repaint_delta}, "
+                        f"full_rows={full_row_repaint_delta}, "
+                        f"static_suppressed={static_churn_suppressed_delta}, "
                         f"first={list_render_first!r}, "
                         f"second={list_render_second!r}")
 

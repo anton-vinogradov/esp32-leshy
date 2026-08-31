@@ -171,12 +171,18 @@ def main() -> int:
     list_window = run.get("list_cadence_window", {})
     row_repaint_delta = list_render_second.get("list_row_repaints", -1) - \
         list_render_first.get("list_row_repaints", -1)
+    full_row_repaint_delta = list_render_second.get(
+        "list_row_full_repaints", -1) - list_render_first.get(
+            "list_row_full_repaints", -1)
     content_changed = list_changes.get("content_changed_pixels", -1)
     bounded_rows = (content_changed == 0 and row_repaint_delta == 0) or \
         (content_changed > 0 and 1 <= row_repaint_delta <= 8)
     require(failures,
             list_changes.get("chrome_changed_pixels") == 0 and
             bounded_rows and
+            full_row_repaint_delta == 0 and
+            list_window.get("full_row_repaints") == 0 and
+            list_window.get("static_churn_suppressed", -1) >= 0 and
             list_render_second.get("list_content_clears") ==
                 list_render_first.get("list_content_clears"),
             "BLE list final pixels/counters show a full or unbounded repaint")
