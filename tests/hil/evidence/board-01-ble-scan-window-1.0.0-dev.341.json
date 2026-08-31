@@ -1,0 +1,55 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "c750f436deb09f86f60ba2924c8e3017d9303c893a69cb9f3c728424c10e762a",
+    "factory_sha256": "c2e17162f9bd2829957a923400398ff08f9f36196f6c401e5cfa3d5d9ee80498",
+    "firmware_sha256": "c249837fee92c7b362a041aa067f09c8377a21d568d194e7fba5abb9af39459e",
+    "linked_flash_bytes": 3600028,
+    "map_sha256": "fbc50d6c876c1be239440f6b175bc94f66894b03a390e2b2eceed7f9c389acf6",
+    "source_commit": "1eb29a75e5764adaf217d4fa3a74e7210a292f01",
+    "static_ram_bytes": 233552,
+    "version": "1.0.0-dev.341"
+  },
+  "evidence": {
+    "artifact_index_sha256": "2b4fe63ff12921a77d194e4ea0cf1df58760775736128345daf56471c51f50d1",
+    "run_id": "e7f44f0626456875e2ec3189f125987c",
+    "run_sha256": "e5349a91447bd509024cd246df217348b0fa9d87d7672c93b620c0c88b319c1e"
+  },
+  "evidence_ids": [
+    "E-BUILD-221",
+    "E-AUTO-197",
+    "E-HIL-225"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "schema": "leshy.ble_scan_window_hil.acceptance.v1",
+  "status": "diagnostic_machine_pass_visual_rejected",
+  "verified": {
+    "active_scan": false,
+    "detail_chrome_changed_pixels": 0,
+    "detail_content_clears": 0,
+    "detail_deferred": 31,
+    "detail_full_repaints": 0,
+    "detail_radar_changed_pixels": 359,
+    "detail_refreshes": 13,
+    "detail_scan_cycles": 2,
+    "detail_static_changed_pixels": 0,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "human_visual_acceptance": false,
+    "list_full_row_repaints": 0,
+    "list_signal_delta_repaints": 1,
+    "list_window_content_clears": 0,
+    "list_window_deferred": 10,
+    "list_window_elapsed_ms": 2576,
+    "list_window_refreshes": 1,
+    "manual_button_presses": 0,
+    "passive_only": true,
+    "physical_storage_writes": 0,
+    "reentry_heap_free": 74388,
+    "reentry_heap_largest": 29684,
+    "two_complete_ble_lifecycles": true,
+    "warm_heap_free_first": 74388,
+    "warm_heap_free_second": 74388
+  }
+}

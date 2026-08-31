@@ -486,3 +486,19 @@ passive scan-window cadence, while detail/radar stays at 250 ms. Up/Down, source
 changes and identity locking remain immediate; final-pixel equality still suppresses
 unchanged rows. Physical acceptance remains open until this cadence and the absence
 of intermediate clears are observed on board-01.
+
+Exact physical `1.0.0-dev.341` passed that first machine oracle, but the owner still
+observed flicker. The result is retained as diagnostic evidence, not UX acceptance:
+the sampled regions did not expose that one identity could alternate advertisement
+metadata or that the strongest-first catalog could reorder rows before navigation
+was locked. `E-UX-077` therefore remains open and cadence stays 10/15.
+
+Exact physical candidate `1.0.0-dev.343` closes both blind spots in the
+implementation. Once the first complete scan is available, the visible list locks
+identity order for the lifetime of the page and accepts only RSSI deltas for those
+identities; the selected-device card freezes all static presentation and updates
+only Radar until exit. Its strengthened two-lifecycle HIL observes zero full-row
+repaints in the 2,639 ms live list window, zero card static/chrome changes over two
+scan cycles, invariant 74,348 B warm heap and final Home/none/lease 0. This is a
+machine-verified candidate, not a claim that the visible flicker is closed: direct
+owner observation is still the acceptance gate.

@@ -1,0 +1,55 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "abe53484218146b6cd9f4aa9329202cd418313b842490889d6ec254ef116a2d6",
+    "factory_sha256": "b8097fda6cea90a910456c91332dd2f8cefcbf39f3337e96cfb90793264c80cd",
+    "firmware_sha256": "ecc5d198cce1a2ccf5a2898f8f0b1f1976ab523791f79ba573fad7a4f97a1f97",
+    "linked_flash_bytes": 3600812,
+    "map_sha256": "5c31aa7f7b1569f6168d9d3ae69531629ad99f5fc87d8892cf3089f9c51666bd",
+    "source_commit": "a6617692d32913b281e23950831fdee53894b0e3",
+    "static_ram_bytes": 233592,
+    "version": "1.0.0-dev.343"
+  },
+  "evidence": {
+    "artifact_index_sha256": "8c183203d29383c70de920efa1476528cc421df7c97e021a2bc55f4e817311f4",
+    "run_id": "9fcc960169df7f05bd73014ff3f40b39",
+    "run_sha256": "ddf664e16e59fed4aa6e3f21abb1273ca6a8a5c264212e90ff19090ba7e577cf"
+  },
+  "evidence_ids": [
+    "E-BUILD-222",
+    "E-AUTO-198",
+    "E-HIL-226"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "schema": "leshy.ble_scan_window_hil.acceptance.v1",
+  "status": "pass_bluetooth_scan_window_and_reentry",
+  "verified": {
+    "active_scan": false,
+    "detail_chrome_changed_pixels": 0,
+    "detail_content_clears": 0,
+    "detail_deferred": 30,
+    "detail_full_repaints": 0,
+    "detail_radar_changed_pixels": 124,
+    "detail_refreshes": 13,
+    "detail_scan_cycles": 2,
+    "detail_static_changed_pixels": 0,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "human_visual_acceptance": false,
+    "list_full_row_repaints": 0,
+    "list_signal_delta_repaints": 1,
+    "list_window_content_clears": 0,
+    "list_window_deferred": 5,
+    "list_window_elapsed_ms": 2639,
+    "list_window_refreshes": 1,
+    "manual_button_presses": 0,
+    "passive_only": true,
+    "physical_storage_writes": 0,
+    "reentry_heap_free": 74348,
+    "reentry_heap_largest": 29684,
+    "two_complete_ble_lifecycles": true,
+    "warm_heap_free_first": 74348,
+    "warm_heap_free_second": 74348
+  }
+}

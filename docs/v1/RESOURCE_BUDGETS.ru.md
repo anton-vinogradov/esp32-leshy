@@ -1874,6 +1874,37 @@ navigation и source state — немедленными. Проходят focuse
 policy runner, Python, language, docs и production build. Board-01 отключена,
 поэтому physical heap/TFT acceptance остаётся dev.331, cadence — 10/15.
 
+Physical bound scan-window/re-entry Bluetooth `RB-M233`: exact
+`1.0.0-dev.341` на firmware source
+`1eb29a75e5764adaf217d4fa3a74e7210a292f01` использует 233 552 B static RAM,
+3 600 028 B linked flash и app/factory images 3 600 528/3 666 064 B, оставляя
+594 276 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`c249837fee92c7b362a041aa067f09c8377a21d568d194e7fba5abb9af39459e`/
+`c2e17162f9bd2829957a923400398ff08f9f36196f6c401e5cfa3d5d9ee80498`/
+`c750f436deb09f86f60ba2924c8e3017d9303c893a69cb9f3c728424c10e762a`/
+`fbc50d6c876c1be239440f6b175bc94f66894b03a390e2b2eceed7f9c389acf6`.
+Exact однострочный RGB565 readback сохраняет coverage 240×320 и уменьшает
+постоянную internal RAM на 1 440 B. Physical HIL доказывает 74 388 B free heap
+после каждого BLE lifecycle и admission второго controller при 74 388 B free с
+largest block 29 684 B, выше floors 73 000/28 000 B. Два lifecycle выполняют zero
+storage writes, RF TX и final resource leases. Поскольку владелец всё ещё наблюдал
+flicker, это diagnostic resource/re-entry bound: он не принимает UX и не двигает
+focused cadence выше 10/15.
+
+Candidate bound stable snapshot Bluetooth `RB-M234`: exact `1.0.0-dev.343` на
+firmware source `a6617692d32913b281e23950831fdee53894b0e3` использует 233 592 B
+static RAM, 3 600 812 B linked flash и app image 3 601 312 B, оставляя 592 992 B
+в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`ecc5d198cce1a2ccf5a2898f8f0b1f1976ab523791f79ba573fad7a4f97a1f97`/
+`b8097fda6cea90a910456c91332dd2f8cefcbf39f3337e96cfb90793264c80cd`/
+`abe53484218146b6cd9f4aa9329202cd418313b842490889d6ec254ef116a2d6`/
+`5c31aa7f7b1569f6168d9d3ae69531629ad99f5fc87d8892cf3089f9c51666bd`.
+Stable presentation rows/card добавляет 40 B static RAM и 784 B linked flash к
+dev.341. Exact HIL двух lifecycle сохраняет 74 348 B warm free heap, начинает
+re-entry при 74 348 B free и largest block 29 684 B, выполняет zero storage
+writes/RF TX/final leases и не наблюдает live full-row repaint. Resource и
+implementation bound принимаются; visual acceptance и продвижение cadence pending.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

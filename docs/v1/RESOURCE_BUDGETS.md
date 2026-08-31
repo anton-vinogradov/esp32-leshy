@@ -1886,6 +1886,37 @@ state remain immediate. Focused BLE/live-render guards, runner policy, Python,
 language, docs and production-build checks pass. Board-01 is disconnected, so
 physical heap/TFT acceptance remains dev.331 and cadence stays 10/15.
 
+Bluetooth physical scan-window/re-entry bound `RB-M233`: exact
+`1.0.0-dev.341` at firmware source
+`1eb29a75e5764adaf217d4fa3a74e7210a292f01` uses 233,552 B static RAM,
+3,600,028 B linked flash and 3,600,528/3,666,064 B app/factory images, leaving
+594,276 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`c249837fee92c7b362a041aa067f09c8377a21d568d194e7fba5abb9af39459e`/
+`c2e17162f9bd2829957a923400398ff08f9f36196f6c401e5cfa3d5d9ee80498`/
+`c750f436deb09f86f60ba2924c8e3017d9303c893a69cb9f3c728424c10e762a`/
+`fbc50d6c876c1be239440f6b175bc94f66894b03a390e2b2eceed7f9c389acf6`.
+The exact one-scanline RGB565 readback retains 240×320 coverage while reducing
+permanent internal RAM by 1,440 B. Physical HIL proves that both BLE lifecycle
+endpoints retain 74,388 B free heap and that the second controller admission sees
+74,388 B free with a 29,684 B largest block, above the 73,000/28,000 B floors.
+The two-lifecycle run performs zero storage writes, RF TX or final resource leases.
+Because the owner still observed flicker, this remains a diagnostic resource and
+re-entry bound; it does not accept UX or advance focused cadence beyond 10/15.
+
+Bluetooth stable-snapshot candidate bound `RB-M234`: exact `1.0.0-dev.343` at
+firmware source `a6617692d32913b281e23950831fdee53894b0e3` uses 233,592 B static
+RAM, 3,600,812 B linked flash and a 3,601,312 B app image, leaving 592,992 B in
+the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`ecc5d198cce1a2ccf5a2898f8f0b1f1976ab523791f79ba573fad7a4f97a1f97`/
+`b8097fda6cea90a910456c91332dd2f8cefcbf39f3337e96cfb90793264c80cd`/
+`abe53484218146b6cd9f4aa9329202cd418313b842490889d6ec254ef116a2d6`/
+`5c31aa7f7b1569f6168d9d3ae69531629ad99f5fc87d8892cf3089f9c51666bd`.
+The stable row/card presentation adds 40 B static RAM and 784 B linked flash over
+dev.341. Exact two-lifecycle HIL retains 74,348 B warm free heap, starts re-entry
+with 74,348 B free and a 29,684 B largest block, performs zero storage writes/RF
+TX/final leases, and observes no live full-row repaint. The resource/implementation
+bound is accepted; visual acceptance and cadence advancement remain pending.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

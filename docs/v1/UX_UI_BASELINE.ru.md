@@ -495,3 +495,18 @@ passive scan window, а detail/radar остаётся на 250 ms. Up/Down, из
 state и identity locking остаются немедленными; equality final pixels по-прежнему
 подавляет неизменившиеся rows. Physical acceptance остаётся открытым, пока этот
 cadence и отсутствие промежуточных clears не проверены на board-01.
+
+Exact physical `1.0.0-dev.341` прошёл первый machine oracle, но владелец всё ещё
+наблюдал flicker. Результат сохраняется как diagnostic evidence, а не UX acceptance:
+sampled regions не показывали, что одна identity может чередовать metadata
+advertisement, а strongest-first catalog — переставлять rows до navigation lock.
+Поэтому `E-UX-077` остаётся open, cadence — 10/15.
+
+Exact physical candidate `1.0.0-dev.343` закрывает оба blind spot в implementation.
+После первого complete scan видимый список lock-ит порядок identities до выхода со
+страницы и принимает для них только RSSI deltas; карточка выбранного устройства
+фиксирует всю static presentation и до выхода обновляет только Radar. Усиленный HIL
+двух lifecycle наблюдает zero full-row repaint за live-окно списка 2 639 ms, zero
+changes static/chrome карточки за два scan cycle, invariant warm heap 74 348 B и final
+Home/none/lease 0. Это machine-verified candidate, а не заявление о закрытом visible
+flicker: прямое наблюдение владельца остаётся acceptance gate.
