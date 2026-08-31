@@ -470,3 +470,10 @@ the platform portion of WF-02 use the same Actions through buttons and diagnosti
 automation; no state depends on the 0.x UI. Exact candidate 0.58 completes 29 steps,
 nine zero-mismatch TFT comparisons, Quick 8/8, and zero final leases in `DEMO-S2`
 (`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`). UX-08 repeats at every later Stage Demo.
+
+Exact host/build `1.0.0-dev.334` closes the remaining source-side cadence hole in
+that rule. BLE catalog updates can arrive faster than the display should change, so
+list-only model churn is coalesced to 250 ms while Up/Down and state transitions stay
+immediate. Pending list and detail updates have an independent deadline service: the
+newest model is eventually painted even if no later advertisement wakes the survey
+worker. The physical gate must still verify the final pixels and cadence on board-01.

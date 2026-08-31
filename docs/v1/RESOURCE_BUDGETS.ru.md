@@ -1837,6 +1837,25 @@ TX, replay или output API не добавляются. Waveform рисует�
 production build. Board-01 отключена, поэтому physical heap/TFT acceptance остаётся
 dev.331, cadence — 10/15.
 
+Bound cadence repaint Bluetooth `RB-M231`: exact host/build
+`1.0.0-dev.334` на firmware source
+`97fcc0d5a1b70daefe1e4a0197cb5ea90e27f3bd` используют 236 208 B static RAM,
+3 600 544 B linked flash и app/factory images 3 601 040/3 666 576 B, оставляя
+593 264 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`d28e1f88a6f49d245db7022d9d9f624b1c510f542b0c4d50dcebb206c7d057d5`/
+`719f20fe561972b8e7dd27f0cdceaf13af3048bca8245c0a1336d8bbfbac386f`/
+`612d54478ec453d63057795fc87ab5d27f28b8e120af1fdf8c25eaacabf09d41`/
+`e2a5271fd5b0f282e4b655ac14819ccdb75f8b3e878e9e233edba82f8c436f39`.
+Относительно dev.333 это +24 B static RAM, +572 B linked flash, +560 B в обоих
+app/factory images и на 560 B меньше OTA headroom. Fixed state состоит из двух
+deadlines, двух pending flags и двух telemetry counters; heap allocation или frame
+buffer не добавляются. Catalog-only churn списка ограничен одним visual pass за
+250 ms, navigation/state changes остаются немедленными. Deadline service flush-ит
+новейшую pending model списка или detail без следующего radio event. Проходят
+focused checks renderer, language, content, component, clean-target и production
+build. Board-01 отключена, поэтому physical heap/TFT acceptance остаётся dev.331,
+cadence — 10/15.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

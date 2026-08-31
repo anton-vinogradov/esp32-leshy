@@ -478,3 +478,11 @@ platform-путь WF-02 проходят через те же Actions кнопк
 zero-mismatch TFT comparisons, Quick 8/8 и zero final leases в `DEMO-S2`
 (`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`). UX-08 повторяется на каждом следующем
 Stage Demo.
+
+Exact host/build `1.0.0-dev.334` закрывает оставшийся source-side cadence gap этого
+правила. Updates BLE catalog могут приходить быстрее допустимого изменения дисплея,
+поэтому list-only churn model объединяется до 250 ms, а Up/Down и переходы state
+остаются немедленными. Pending updates списка и detail обслуживает независимый
+deadline service: новейшая model обязательно рисуется, даже если survey worker не
+разбудит следующий advertisement. Physical gate всё ещё обязан проверить final
+pixels и cadence на board-01.

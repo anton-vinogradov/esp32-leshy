@@ -1849,6 +1849,25 @@ Protocol, clean-target, repaint, language, content, component and production-bui
 checks pass. Board-01 is disconnected, so physical heap/TFT acceptance remains
 dev.331 and cadence stays 10/15.
 
+Bluetooth repaint-cadence bound `RB-M231`: exact host/build
+`1.0.0-dev.334` at firmware source
+`97fcc0d5a1b70daefe1e4a0197cb5ea90e27f3bd` uses 236,208 B static RAM,
+3,600,544 B linked flash and 3,601,040/3,666,576 B app/factory images, leaving
+593,264 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`d28e1f88a6f49d245db7022d9d9f624b1c510f542b0c4d50dcebb206c7d057d5`/
+`719f20fe561972b8e7dd27f0cdceaf13af3048bca8245c0a1336d8bbfbac386f`/
+`612d54478ec453d63057795fc87ab5d27f28b8e120af1fdf8c25eaacabf09d41`/
+`e2a5271fd5b0f282e4b655ac14819ccdb75f8b3e878e9e233edba82f8c436f39`.
+Against dev.333 this is +24 B static RAM, +572 B linked flash, +560 B in both
+app/factory images and 560 B less OTA headroom. The fixed state is two deadlines,
+two pending flags and two telemetry counters; it adds no heap allocation or frame
+buffer. Catalog-only list churn is bounded to one visual pass per 250 ms, while
+navigation/state changes remain immediate. A deadline service flushes the newest
+pending list or detail model without a later radio event. Focused renderer,
+language, content, component, clean-target and production-build checks pass.
+Board-01 is disconnected, so physical heap/TFT acceptance remains dev.331 and
+cadence stays 10/15.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
