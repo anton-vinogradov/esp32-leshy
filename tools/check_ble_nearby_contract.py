@@ -83,13 +83,15 @@ def main() -> int:
     release_end = entry.find("void serviceProductSurveyWorker()", release_begin)
     terminal_release = entry[release_begin:release_end]
     if (
-        "!appRuntime.running() && bleProductSurveyMemoryCompact &&"
+        "const bool keepBleQueueCompact = returnFromBle && returnHome;"
+            not in terminal_release
+        or "!appRuntime.running() && !keepBleQueueCompact &&"
             not in terminal_release
         or "!restoreBleProductSurveyMemory()" not in terminal_release
     ):
         raise SystemExit(
-            "BLE Survey memory may be expanded before the foreground app "
-            "releases its workspace"
+            "BLE Survey terminal lifecycle does not preserve the compact "
+            "queue across BLE re-entry"
         )
     wifi_menu_begin = entry.find(
         "} else if (wifiProductView == WifiProductView::Menu) {"
@@ -166,6 +168,8 @@ def main() -> int:
         "kBleProductMinimumLargestHeapBeforeBegin = 28000U",
         "prepareBleProductSurveyMemory()",
         "restoreBleProductSurveyMemory()",
+        "const bool keepBleQueueCompact = returnFromBle && returnHome;",
+        "!bleSelected && !restoreBleProductSurveyMemory()",
         "resizeProductSurveyObservationQueue(",
         "const bool retainBleController =",
         "source == RadioKind::Ble && bleScan.valid()",

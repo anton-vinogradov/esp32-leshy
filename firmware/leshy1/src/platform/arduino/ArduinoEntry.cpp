@@ -5783,6 +5783,19 @@ bool startProductSurvey() {
     const bool bleSelected =
         (productSurveyRuntime.selectedSourceMask &
          leshy1::services::survey::sourceMask(RadioKind::Ble)) != 0;
+    // A BLE-only visit leaves the ingress queue compact after terminal
+    // cleanup.  Re-expanding it on Home and deleting/recreating it again on
+    // the next BLE entry fragments the only contiguous block large enough for
+    // the ESP32-S3 controller bootstrap.  Restore the ordinary 64-record
+    // queue only for a plan that does not need BLE; mixed plans deliberately
+    // keep the same bounded BLE admission footprint.
+    if (!bleSelected && !restoreBleProductSurveyMemory()) {
+        productSurveyRuntime.status = "observation_memory_unavailable";
+        productSurveyRuntime.timelineStatus = "memory_unavailable";
+        productSurveyRuntime.cleanupComplete = true;
+        lastRuntimeEvent = productSurveyRuntime.status;
+        return false;
+    }
     // NimBLE needs a contiguous internal-RAM reserve even when it starts only
     // after a complete Wi-Fi teardown. Reserve it before the worker owns the
     // session so mixed Field Visits have the same fail-closed admission as the
@@ -7358,10 +7371,13 @@ void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
         appRuntime.stop();
     }
     setProductSurveyControl(ProductSurveyWorkerControl::Idle);
-    // Mixed Field Visits compact the observation queue too. Restore the
-    // ordinary Survey capacity only after every radio/store owner is terminal,
-    // independently of which product page will remain visible.
-    if (!appRuntime.running() && bleProductSurveyMemoryCompact &&
+    // Keep a completed BLE device visit on the already-proven compact queue.
+    // This avoids a 64 -> 32 queue churn on every re-entry, which preserved
+    // total heap but fragmented the controller's required contiguous block.
+    // Non-BLE products restore their ordinary capacity in startProductSurvey.
+    const bool keepBleQueueCompact = returnFromBle && returnHome;
+    if (!appRuntime.running() && !keepBleQueueCompact &&
+        bleProductSurveyMemoryCompact &&
         !restoreBleProductSurveyMemory()) {
         productSurveyRuntime.status = "ble_memory_restore_failed";
         lastRuntimeEvent = productSurveyRuntime.status;
