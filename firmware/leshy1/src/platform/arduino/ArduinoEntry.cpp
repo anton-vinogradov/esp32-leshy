@@ -760,6 +760,7 @@ TargetId webCompanionSelectedTargetId{};
 std::uint32_t webCompanionHeapBeforeSuspend = 0;
 std::uint32_t webCompanionHeapAfterSuspend = 0;
 bool webCompanionSurveyWorkerSuspended = false;
+bool targetRadarRestoreInProgress = false;
 std::uint32_t webCompanionHeapBeforeWorkerSuspend = 0;
 std::uint32_t webCompanionHeapAfterWorkerSuspend = 0;
 
@@ -8006,7 +8007,8 @@ void releaseTargetsProduct() {
     usbCompanionMutation = {};
     delete targetsProductRuntime;
     targetsProductRuntime = nullptr;
-    if (!restoreProductSurveyWorkerAfterWebCompanion()) {
+    if (!targetRadarRestoreInProgress &&
+        !restoreProductSurveyWorkerAfterWebCompanion()) {
         lastRuntimeEvent = "companion_web_survey_worker_restore_failed";
     }
     targetsHeapFreeAfter = static_cast<std::uint32_t>(
@@ -9366,16 +9368,28 @@ bool serviceTargetRadar() {
     // longer owns any state needed for restore, so release it first and give
     // the allocator one deterministic coalescing boundary before reopening
     // the exact read-only product view.
-    if (targetRadarWifiScans != 0U) vTaskDelay(1U);
+    const bool wifiRestore = targetRadarWifiScans != 0U;
+    if (wifiRestore) vTaskDelay(1U);
+    // A passive Wi-Fi lifecycle returns all of its bytes but leaves the heap
+    // split into blocks too small for the three fixed-capacity Target state
+    // objects.  The sleeping Survey worker and queues are lifecycle-exclusive
+    // with this restore. Temporarily release them, construct Targets in the
+    // coalesced space, then recreate the worker before exposing Actions.
+    const bool workerSuspended = !wifiRestore ||
+        suspendProductSurveyWorkerForWebCompanion();
     targetRadarRestoreHeapFree = static_cast<std::uint32_t>(
         heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     targetRadarRestoreHeapLargest = static_cast<std::uint32_t>(
         heap_caps_get_largest_free_block(
             MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-    const bool restored = restoreTargetsAfterRadar();
-    targetsProductStatus = restored && memoryRestored
+    targetRadarRestoreInProgress = wifiRestore && workerSuspended;
+    const bool restored = workerSuspended && restoreTargetsAfterRadar();
+    targetRadarRestoreInProgress = false;
+    const bool workerRestored = !wifiRestore ||
+        restoreProductSurveyWorkerAfterWebCompanion();
+    targetsProductStatus = restored && memoryRestored && workerRestored
         ? "ready" : "radar_restore_failed";
-    lastRuntimeEvent = restored && memoryRestored
+    lastRuntimeEvent = restored && memoryRestored && workerRestored
         ? "target_radar_stopped" : "target_radar_restore_failed";
     return true;
 }
