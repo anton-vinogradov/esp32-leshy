@@ -24865,7 +24865,10 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       static_cast<unsigned long>(
                           productSurveyRuntime.bleBegin.heapLargestAfter),
                       productSurveyRuntime.cleanupComplete ? "true" : "false",
-                      productSurveyRuntime.workerReady ? "true" : "false",
+                      // This field describes the persistent device worker,
+                      // not whether the currently idle Survey runtime has
+                      // copied that readiness into an active operation.
+                      productSurveyWorkerReady ? "true" : "false",
                       productSurveyRuntime.sourceActive ? "true" : "false",
                       productSurveyRuntime.sourceStartAttempted ? "true" : "false",
                       productSurveyRuntime.sourceFailureInjected ? "true" : "false",
