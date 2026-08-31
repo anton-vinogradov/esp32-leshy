@@ -417,6 +417,8 @@ using leshy1::platform::arduino::BoardBleGattHilFault;
 using leshy1::platform::arduino::boardBleGattHilFaultName;
 using leshy1::platform::arduino::BoardBlePassiveScanResult;
 using leshy1::platform::arduino::BoardBleBeginDiagnostic;
+using leshy1::platform::arduino::boardBleBeginStageName;
+using leshy1::platform::arduino::boardBleScanStatusName;
 using leshy1::platform::arduino::BleRecordDisposition;
 using leshy1::platform::arduino::BoardSdSpiTransport;
 using leshy1::platform::arduino::BoardWifiPassiveScanner;
@@ -789,6 +791,9 @@ std::uint32_t targetRadarHeapFreeBeforeSuspend = 0U;
 std::uint32_t targetRadarHeapFreeAfterSuspend = 0U;
 std::uint32_t targetRadarHeapFreeBeforeBegin = 0U;
 std::uint32_t targetRadarHeapLargestBeforeBegin = 0U;
+BoardBleBeginDiagnostic targetRadarBleBeginDiagnostic{};
+BoardBlePassiveScanResult targetRadarBleScanResult{};
+bool targetRadarBleCleanupComplete = true;
 
 void clearWebCompanionEntropy(std::array<std::uint8_t, 16>& entropy) {
     volatile std::uint8_t* cursor = entropy.data();
@@ -9102,11 +9107,17 @@ void runTargetRadarWorker() {
             targetRadarControl() == TargetRadarWorkerControl::Running) {
             BoardBlePassiveScanner scanner;
             const bool begun = scanner.begin();
+            const BoardBleBeginDiagnostic beginDiagnostic =
+                scanner.beginDiagnostic();
             BoardBlePassiveScanResult scan{};
             if (begun) {
                 auto plan = leshy1::drivers::ble::defaultPassivePlan();
                 plan.deduplicateAddresses = false;
-                plan.durationMs = 1200U;
+                // The NimBLE adapter accepts whole-second windows only.
+                // One second keeps Back responsive and is the shortest valid
+                // physical window; 1200 ms was rejected as InvalidPlan before
+                // a single advertisement could be observed.
+                plan.durationMs = 1000U;
                 plan.maximumRecords = 128U;
                 scan = scanner.scan(plan, retainTargetRadarBleRecord,
                                     nullptr);
@@ -9117,6 +9128,9 @@ void runTargetRadarWorker() {
                 (begun && scan.valid() && cleanup);
             portENTER_CRITICAL(&targetRadarMux);
             ++targetRadarBleScans;
+            targetRadarBleBeginDiagnostic = beginDiagnostic;
+            targetRadarBleScanResult = scan;
+            targetRadarBleCleanupComplete = cleanup;
             portEXIT_CRITICAL(&targetRadarMux);
         }
         anySourceHealthy = anySourceHealthy || cycleSourceHealthy;
@@ -9232,6 +9246,9 @@ bool startTargetRadar() {
     targetRadarCycles = 0U;
     targetRadarWifiScans = 0U;
     targetRadarBleScans = 0U;
+    targetRadarBleBeginDiagnostic = {};
+    targetRadarBleScanResult = {};
+    targetRadarBleCleanupComplete = true;
     targetRadarRenderedRevision = 0U;
     targetRadarNextUiRefreshUs = 0U;
     targetRadarOverlay = true;
@@ -25591,6 +25608,9 @@ void emitTargetRadarState(Stream& reply) {
     std::uint32_t cycles = 0U;
     std::uint32_t wifiScans = 0U;
     std::uint32_t bleScans = 0U;
+    BoardBleBeginDiagnostic bleBegin{};
+    BoardBlePassiveScanResult bleScan{};
+    bool bleCleanup = true;
     TaskHandle_t task = nullptr;
     portENTER_CRITICAL(&targetRadarMux);
     control = targetRadarWorkerControl;
@@ -25600,6 +25620,9 @@ void emitTargetRadarState(Stream& reply) {
     cycles = targetRadarCycles;
     wifiScans = targetRadarWifiScans;
     bleScans = targetRadarBleScans;
+    bleBegin = targetRadarBleBeginDiagnostic;
+    bleScan = targetRadarBleScanResult;
+    bleCleanup = targetRadarBleCleanupComplete;
     task = targetRadarTaskHandle;
     portEXIT_CRITICAL(&targetRadarMux);
     const char* controlName = control == TargetRadarWorkerControl::Running
@@ -25627,6 +25650,13 @@ void emitTargetRadarState(Stream& reply) {
         "\"maximum_rssi_dbm\":%d,\"trend_db\":%d,"
         "\"channel\":%u,\"signal_samples\":%lu,"
         "\"cycles\":%lu,\"wifi_scans\":%lu,\"ble_scans\":%lu,"
+        "\"ble_begin_stage\":\"%s\",\"ble_begin_error\":%d,"
+        "\"ble_scan_status\":\"%s\",\"ble_scan_attempts\":%u,"
+        "\"ble_scan_transient_retries\":%u,"
+        "\"ble_records_observed\":%u,\"ble_records_reported\":%u,"
+        "\"ble_records_read\":%u,\"ble_records_accepted\":%u,"
+        "\"ble_records_rejected\":%u,\"ble_records_dropped\":%u,"
+        "\"ble_queue_high_water\":%u,\"ble_cleanup_complete\":%s,"
         "\"full_repaints\":%lu,\"delta_repaints\":%lu,"
         "\"content_clears\":%lu,\"rendered_revision\":%lu,"
         "\"heap_free_before_suspend\":%lu,"
@@ -25667,6 +25697,18 @@ void emitTargetRadarState(Stream& reply) {
         static_cast<unsigned long>(cycles),
         static_cast<unsigned long>(wifiScans),
         static_cast<unsigned long>(bleScans),
+        boardBleBeginStageName(bleBegin.stage), bleBegin.error,
+        boardBleScanStatusName(bleScan.status),
+        static_cast<unsigned>(bleScan.attempts),
+        static_cast<unsigned>(bleScan.transientRetries),
+        static_cast<unsigned>(bleScan.recordsObserved),
+        static_cast<unsigned>(bleScan.recordsReported),
+        static_cast<unsigned>(bleScan.recordsRead),
+        static_cast<unsigned>(bleScan.accepted),
+        static_cast<unsigned>(bleScan.rejected),
+        static_cast<unsigned>(bleScan.dropped),
+        static_cast<unsigned>(bleScan.queueHighWater),
+        bleCleanup ? "true" : "false",
         static_cast<unsigned long>(targetRadarFullRepaints),
         static_cast<unsigned long>(targetRadarDeltaRepaints),
         static_cast<unsigned long>(targetRadarContentClears),

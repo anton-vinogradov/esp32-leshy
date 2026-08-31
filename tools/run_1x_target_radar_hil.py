@@ -52,6 +52,61 @@ def wait_record(device: PassiveSerial, command: bytes, schema: str,
     raise TimeoutError(f"{description}: last state {last!r}")
 
 
+def wait_live_or_healthy(device: PassiveSerial, radio: str,
+                         timeout: float) -> tuple[dict[str, Any], bool]:
+    """Prefer an exact live match, but retain a proven healthy no-match.
+
+    A persisted target can legitimately be out of range during a release run.
+    That must not be confused with a failed receiver lifecycle: the physical
+    scanner still has to complete two valid passive cycles with clean teardown
+    telemetry. At least one selected radio is required to produce a live match
+    later in the run so atomic on-device delta rendering remains HIL-proven.
+    """
+    deadline = time.monotonic() + timeout
+    last: dict[str, Any] = {}
+    healthy: dict[str, Any] = {}
+    scan_key = "ble_scans" if radio == "ble" else "wifi_scans"
+    while time.monotonic() < deadline:
+        last = query(device, b"targets.radar", RADAR_SCHEMA, "state")
+        active = (
+            last.get("overlay_open") is True and
+            last.get("worker_control") == "running" and
+            last.get("passive_only") is True and
+            last.get("cleanup_complete") is True
+        )
+        source_healthy = active and int(last.get("cycles", 0)) >= 1
+        if radio == "ble":
+            source_healthy = (
+                source_healthy and
+                last.get("ble_begin_stage") in {"ready", "reused_ready"} and
+                int(last.get("ble_begin_error", -1)) == 0 and
+                last.get("ble_scan_status") == "valid" and
+                int(last.get("ble_scan_attempts", 0)) >= 1 and
+                int(last.get("ble_records_dropped", -1)) == 0 and
+                last.get("ble_cleanup_complete") is True
+            )
+        if source_healthy:
+            healthy = last
+        matched = (
+            active and last.get("signal_radio") == radio and
+            int(last.get("samples", 0)) >= 1 and
+            int(last.get("rendered_revision", 0)) ==
+                int(last.get("revision", -1))
+        )
+        if matched:
+            return last, True
+        if healthy and int(last.get(scan_key, 0)) >= 2:
+            return healthy, False
+        if last.get("worker_control") == "idle":
+            raise RuntimeError(
+                f"{radio} Radar source stopped before a healthy cycle: {last!r}")
+        time.sleep(0.05)
+    if healthy:
+        return healthy, False
+    raise TimeoutError(
+        f"{radio} Radar did not complete a healthy passive cycle: {last!r}")
+
+
 def pixel_regions(frames: Path, before: str, after: str) -> dict[str, int]:
     first = (frames / f"{before}.rgb565").read_bytes()
     second = (frames / f"{after}.rgb565").read_bytes()
@@ -121,48 +176,42 @@ def run_selected_radar(device: PassiveSerial, frames: Path, radio: str,
     trace.append(started)
     require(started, f"{radio} radar open", page="targets",
             runtime_owner="targets", lease_mask=15)
-    first = wait_record(
-        device, b"targets.radar", RADAR_SCHEMA,
-        lambda value: (
-            value.get("overlay_open") is True and
-            value.get("worker_control") == "running" and
-            value.get("passive_only") is True and
-            value.get("signal_radio") == radio and
-            int(value.get("samples", 0)) >= 1 and
-            int(value.get("rendered_revision", 0)) ==
-                int(value.get("revision", -1))
-        ),
-        25.0, f"{radio} target did not produce a passive match")
+    first, live_match = wait_live_or_healthy(device, radio, 25.0)
     require(first, f"{radio} first radar", task_active=True,
             cleanup_complete=True, passive_only=True,
             blocked_write_attempts=0, physical_write_calls=0,
             identity_disclosed=False, lease_mask=15)
-    first_name = f"target-radar-{radio}-first"
+    first_name = f"target-radar-{radio}-" + (
+        "first" if live_match else "waiting")
     screens[first_name] = capture(device, frames, first_name)
-
-    second = wait_record(
-        device, b"targets.radar", RADAR_SCHEMA,
-        lambda value: (
-            value.get("overlay_open") is True and
-            value.get("worker_control") == "running" and
-            value.get("signal_radio") == radio and
-            int(value.get("samples", 0)) > int(first["samples"]) and
-            int(value.get("rendered_revision", 0)) ==
-                int(value.get("revision", -1)) and
-            int(value.get("delta_repaints", 0)) >
-                int(first["delta_repaints"])
-        ),
-        25.0, f"{radio} target radar did not update atomically")
-    if int(second["full_repaints"]) != int(first["full_repaints"]) or \
-            int(second["content_clears"]) != int(first["content_clears"]):
-        raise RuntimeError(f"{radio} live update performed a full repaint")
-    second_name = f"target-radar-{radio}-second"
-    screens[second_name] = capture(device, frames, second_name)
-    pixels = pixel_regions(frames, first_name, second_name)
-    if pixels["identity_changed_pixels"] != 0 or \
-            pixels["chrome_changed_pixels"] != 0 or \
-            pixels["live_changed_pixels"] == 0:
-        raise RuntimeError(f"{radio} redraw escaped live region: {pixels}")
+    second: dict[str, Any] | None = None
+    pixels: dict[str, int] | None = None
+    if live_match:
+        second = wait_record(
+            device, b"targets.radar", RADAR_SCHEMA,
+            lambda value: (
+                value.get("overlay_open") is True and
+                value.get("worker_control") == "running" and
+                value.get("signal_radio") == radio and
+                int(value.get("samples", 0)) > int(first["samples"]) and
+                int(value.get("rendered_revision", 0)) ==
+                    int(value.get("revision", -1)) and
+                int(value.get("delta_repaints", 0)) >
+                    int(first["delta_repaints"])
+            ),
+            25.0, f"{radio} target radar did not update atomically")
+        if int(second["full_repaints"]) != int(first["full_repaints"]) or \
+                int(second["content_clears"]) != \
+                    int(first["content_clears"]):
+            raise RuntimeError(f"{radio} live update performed a full repaint")
+        second_name = f"target-radar-{radio}-second"
+        screens[second_name] = capture(device, frames, second_name)
+        pixels = pixel_regions(frames, first_name, second_name)
+        if pixels["identity_changed_pixels"] != 0 or \
+                pixels["chrome_changed_pixels"] != 0 or \
+                pixels["live_changed_pixels"] == 0:
+            raise RuntimeError(
+                f"{radio} redraw escaped live region: {pixels}")
 
     stopping = action(device, "back")
     trace.append(stopping)
@@ -189,6 +238,8 @@ def run_selected_radar(device: PassiveSerial, frames: Path, radio: str,
         "radio": radio,
         "selected_target_id": target_id,
         "selected_graph_fingerprint": graph,
+        "source_lifecycle_proven": True,
+        "live_match": live_match,
         "first": first,
         "second": second,
         "after": radar_after,
@@ -310,6 +361,10 @@ def main() -> int:
             if wanted:
                 raise RuntimeError(
                     f"persisted Targets pair has no live candidates for {wanted}")
+            if not any(item["live_match"] for item in lifecycles):
+                raise RuntimeError(
+                    "Radar receiver lifecycles passed, but neither persisted "
+                    "target was present; atomic live delta remains unproven")
 
             home = action(device, "back")
             trace.append(home)

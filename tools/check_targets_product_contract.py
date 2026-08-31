@@ -120,13 +120,18 @@ def main() -> int:
                 entry and
             "restoreTargetsAfterRadar()" in entry and
             "prepareBleProductSurveyMemory()" in entry and
+            "plan.durationMs = 1000U;" in entry and
+            "boardBleScanStatusName(bleScan.status)" in entry and
+            '\\"ble_scan_status\\":' in entry and
             "kMinimumInternalFreeHeapBeforeBegin" in ble_scanner_header and
             "kMinimumInternalLargestHeapBeforeBegin" in ble_scanner_header and
             "MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT" in ble_scanner and
             "ESP_ERR_NO_MEM" in ble_scanner,
             "BLE Radar must release and read-only reconstruct the complete "
             "Target graph, reuse the boot-time Survey worker and reject "
-            "NimBLE admission before its fatal private low-memory assertion")
+            "NimBLE admission before its fatal private low-memory assertion; "
+            "its shortest scan window must satisfy the whole-second adapter "
+            "contract and expose its physical lifecycle result")
     load_start = entry.index("bool loadTargetsProduct")
     load_end = entry.index("bool rebuildTargetsProductFromCatalog")
     load_product = entry[load_start:load_end]
