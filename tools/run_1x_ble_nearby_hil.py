@@ -117,6 +117,21 @@ def ble_detail(device: PassiveSerial) -> dict[str, Any]:
                  "leshy.ble.device_detail.v1", "state")
 
 
+def wait_ble_list_refresh(device: PassiveSerial,
+                          timeout_seconds: float = 2.0) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        state = ble_detail(device)
+        if state.get("list_refresh_period_us") != 250000:
+            raise RuntimeError(
+                "BLE list refresh cadence is not bounded to four Hz")
+        if state.get("list_refresh_pending") is False:
+            return state
+        if time.monotonic() >= deadline:
+            raise RuntimeError("BLE deferred list update did not flush")
+        time.sleep(0.05)
+
+
 def fact_signature(state: dict[str, Any]) -> tuple[Any, ...]:
     fields = (
         "identity_hash", "label_known", "vendor_known", "vendor",
@@ -219,6 +234,7 @@ def main() -> int:
     live_second: dict[str, Any] = {}
     list_render_first: dict[str, Any] = {}
     list_render_second: dict[str, Any] = {}
+    list_cadence_window: dict[str, Any] = {}
     detail_first: dict[str, Any] = {}
     detail_second: dict[str, Any] = {}
     detail_oracle_first: dict[str, Any] = {}
@@ -301,7 +317,8 @@ def main() -> int:
                 # product worker is serviced between serial commands, so a
                 # post-capture baseline can already include the update that
                 # differentiates the first and second physical frames.
-                list_render_first = ble_detail(device)
+                list_render_first = wait_ble_list_refresh(device)
+                list_cadence_started = time.monotonic()
                 screens["ble_devices_first"] = capture(
                     device, frames, "ble-devices-first")
                 first_cycle = int(live_first["survey_product_ble_scan_cycles"])
@@ -322,9 +339,35 @@ def main() -> int:
                 if not bounded_pipeline_accounting_valid(live_second):
                     raise RuntimeError(
                         "second bounded BLE pipeline accounting mismatch")
+                list_render_second = wait_ble_list_refresh(device)
                 screens["ble_devices_second"] = capture(
                     device, frames, "ble-devices-second")
-                list_render_second = ble_detail(device)
+                list_cadence_elapsed_ms = int(
+                    (time.monotonic() - list_cadence_started) * 1000.0)
+                list_refresh_delta = int(list_render_second.get(
+                    "list_refreshes", -1)) - int(list_render_first.get(
+                        "list_refreshes", -1))
+                list_deferred_delta = int(list_render_second.get(
+                    "list_refreshes_deferred", -1)) - int(
+                        list_render_first.get(
+                            "list_refreshes_deferred", -1))
+                list_maximum_refreshes = list_cadence_elapsed_ms // 250 + 2
+                if list_render_second.get(
+                        "list_refresh_pending") is not False or \
+                        not 0 <= list_refresh_delta <= \
+                        list_maximum_refreshes or \
+                        list_deferred_delta < 0:
+                    raise RuntimeError(
+                        "BLE list cadence/coalescing failed: "
+                        f"first={list_render_first!r}, "
+                        f"second={list_render_second!r}")
+                list_cadence_window = {
+                    "elapsed_ms": list_cadence_elapsed_ms,
+                    "refreshes": list_refresh_delta,
+                    "refreshes_deferred": list_deferred_delta,
+                    "maximum_refreshes": list_maximum_refreshes,
+                    "content_clears": 0,
+                }
                 list_pixel_changes = changed_pixels(
                     frames, "ble-devices-first", "ble-devices-second")
                 row_repaint_delta = int(list_render_second.get(
@@ -628,6 +671,7 @@ def main() -> int:
         "live_second": live_second,
         "list_render_first": list_render_first,
         "list_render_second": list_render_second,
+        "list_cadence_window": list_cadence_window,
         "detail_first": detail_first,
         "detail_second": detail_second,
         "detail_oracle_first": detail_oracle_first,
@@ -652,6 +696,7 @@ def main() -> int:
             "strongest_first_unique_rows": True,
             "live_redraw_data_rows_only": True,
             "list_repaint_observation_windows": 2,
+            "list_refresh_cadence_hz_max": 4,
             "detail_live_radar_only": True,
             "detail_noop_scan_windows_checked": 2,
             "detail_refresh_cadence_hz_max": 4,

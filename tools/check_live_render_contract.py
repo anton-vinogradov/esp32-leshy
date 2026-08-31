@@ -49,6 +49,8 @@ def main() -> int:
         wifi_radar = function_body(source, "void renderWifiNetworkRadar(")
         ble_radar = function_body(source, "void renderBleDeviceRadar(")
         ble_list_row = function_body(source, "bool renderBleDeviceRow(")
+        ble_refresh_service = function_body(
+            source, "void serviceBleDeviceUiRefresh()")
         wifi_device = function_body(
             source, "void renderWifiDeviceDetailLiveData(bool force)")
         selection_delta = function_body(
@@ -156,6 +158,32 @@ def main() -> int:
                 ble_list_row.find("++bleDeviceListRowFullRepaints")]:
             failures.append(
                 "BLE signal delta still erases the complete menu row")
+        for marker in (
+            "bleDeviceListUiRefreshPending = true;",
+            "++bleDeviceListRefreshesDeferred;",
+            "nowUs < nextBleDeviceListUiRefreshUs",
+            "navigationChanged || stateChanged",
+        ):
+            if marker not in selection_delta:
+                failures.append(
+                    f"BLE list scanner-rate coalescing missing: {marker}")
+        for marker in (
+            "bleDeviceListUiRefreshPending",
+            "bleDeviceUiRefreshPending",
+            "renderInteractiveScreen(false);",
+        ):
+            if marker not in ble_refresh_service:
+                failures.append(
+                    f"BLE deadline refresh service missing: {marker}")
+        if "renderInteractiveScreen(true);" in ble_refresh_service:
+            failures.append(
+                "BLE deadline refresh service can force a full-scene repaint")
+        worker_then_visual = re.search(
+            r"serviceProductSurveyWorker\(\);\s*"
+            r"serviceBleDeviceUiRefresh\(\);", source)
+        if worker_then_visual is None:
+            failures.append(
+                "BLE pending visual refresh is not serviced after scanner work")
         if "renderProtocolWorkbenchSelection();" not in selection_delta:
             failures.append(
                 "Protocol Workbench selection is not dirty-region rendered")
@@ -182,7 +210,8 @@ def main() -> int:
         print("\n".join(f"FAIL: {failure}" for failure in failures))
         return 1
     print("PASS live renderer: static chrome/text retained; no-change ticks "
-          "are suppressed; signal fields, spectrum columns, one waterfall "
+          "are suppressed; scanner-rate BLE changes are coalesced with a "
+          "deadline flush; signal fields, spectrum columns, one waterfall "
           "row and Protocol Workbench cursor update incrementally")
     return 0
 

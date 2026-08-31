@@ -168,6 +168,7 @@ def main() -> int:
     list_changes = run.get("list_pixel_changes", {})
     list_render_first = run.get("list_render_first", {})
     list_render_second = run.get("list_render_second", {})
+    list_window = run.get("list_cadence_window", {})
     row_repaint_delta = list_render_second.get("list_row_repaints", -1) - \
         list_render_first.get("list_row_repaints", -1)
     content_changed = list_changes.get("content_changed_pixels", -1)
@@ -179,6 +180,17 @@ def main() -> int:
             list_render_second.get("list_content_clears") ==
                 list_render_first.get("list_content_clears"),
             "BLE list final pixels/counters show a full or unbounded repaint")
+    require(failures,
+            list_render_first.get("list_refresh_period_us") == 250000 and
+            list_render_second.get("list_refresh_period_us") == 250000 and
+            list_render_second.get("list_refresh_pending") is False and
+            list_window.get("content_clears") == 0 and
+            isinstance(list_window.get("refreshes"), int) and
+            0 <= list_window.get("refreshes", -1) <=
+                list_window.get("maximum_refreshes", -2) and
+            isinstance(list_window.get("refreshes_deferred"), int) and
+            list_window.get("refreshes_deferred", -1) >= 0,
+            "BLE list four-Hz cadence/coalescing contract failed")
     detail_changes = run.get("detail_pixel_changes", {})
     require(failures,
             detail_changes.get("radar_changed_pixels", 0) > 0 and
@@ -263,6 +275,7 @@ def main() -> int:
             scope.get("detail_refresh_cadence_hz_max") == 4 and
             scope.get("intermediate_clear_counters_checked") is True and
             scope.get("list_repaint_observation_windows") == 2 and
+            scope.get("list_refresh_cadence_hz_max") == 4 and
             scope.get("atomic_text_rows_checked") is True and
             scope.get("advertisement_facts_visible") is True and
             scope.get("offline_company_database") is True and

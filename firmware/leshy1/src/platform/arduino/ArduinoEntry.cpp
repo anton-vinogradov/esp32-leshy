@@ -2151,11 +2151,15 @@ BleDeviceRadarVisual bleDeviceRenderedRadar{};
 constexpr std::uint64_t kBleDeviceUiRefreshPeriodUs = 250000ULL;
 std::uint64_t nextBleDeviceUiRefreshUs = 0U;
 bool bleDeviceUiRefreshPending = false;
+std::uint64_t nextBleDeviceListUiRefreshUs = 0U;
+bool bleDeviceListUiRefreshPending = false;
 std::uint32_t bleDeviceListRowRepaints = 0U;
 std::uint32_t bleDeviceListRowFullRepaints = 0U;
 std::uint32_t bleDeviceListSignalDeltaRepaints = 0U;
 std::uint32_t bleDeviceListAtomicNotePushes = 0U;
 std::uint32_t bleDeviceListContentClears = 0U;
+std::uint32_t bleDeviceListRefreshes = 0U;
+std::uint32_t bleDeviceListRefreshesDeferred = 0U;
 std::uint32_t bleDeviceDetailContentClears = 0U;
 std::uint32_t bleDeviceRadarFullRepaints = 0U;
 std::uint32_t bleDeviceRadarDeltaRepaints = 0U;
@@ -22075,8 +22079,8 @@ UiDeltaRenderResult renderSelectionDelta() {
             bleDeviceUiRefreshPending = true;
             ++bleDeviceDetailRefreshesDeferred;
             // Acknowledge the catalog revision without painting. A later
-            // passive sample publishes the most recent aggregate at the
-            // bounded four-Hz visual cadence.
+            // deadline service publishes the most recent aggregate at the
+            // bounded four-Hz visual cadence even if no new packet arrives.
             return UiDeltaRenderResult::NoChange;
         }
         nextBleDeviceUiRefreshUs =
@@ -22114,21 +22118,54 @@ UiDeltaRenderResult renderSelectionDelta() {
             static_cast<std::uint8_t>(surveyWorkflow.state());
         const bool selectionChanged =
             renderedUi.bleDeviceSelection != current;
-        bool painted = false;
-        if (dataChanged || oldFirst != currentFirst || selectionChanged ||
-            stateChanged) {
+        const bool navigationChanged =
+            oldFirst != currentFirst || selectionChanged;
+        if (navigationChanged || stateChanged) {
+            // User input and source-state transitions are never throttled.
+            // The same pass consumes the newest catalog revision, so a
+            // previously deferred scan tick cannot repaint stale content.
             // The visible-row cache compares final pixels, so a catalog
             // revision repaints only rows whose user-facing content changed.
-            renderBleDevicesData(false);
-            painted = true;
+            const bool rowsPainted = renderBleDevicesData(false);
+            if (stateChanged) {
+                display.fillRect(128, 0, Layout::ScreenWidth - 128,
+                                 Layout::HeaderHeight, Palette::Header);
+                renderHeaderStatus();
+                renderNavigationFooter();
+            }
+            std::uint64_t nowUs =
+                static_cast<std::uint64_t>(esp_timer_get_time());
+            if (nowUs == 0U) nowUs = 1U;
+            nextBleDeviceListUiRefreshUs =
+                nowUs + kBleDeviceUiRefreshPeriodUs;
+            bleDeviceListUiRefreshPending = false;
+            ++bleDeviceListRefreshes;
+            return rowsPainted || stateChanged
+                ? UiDeltaRenderResult::Rendered
+                : UiDeltaRenderResult::NoChange;
         }
-        if (stateChanged) {
-            display.fillRect(128, 0, Layout::ScreenWidth - 128,
-                             Layout::HeaderHeight, Palette::Header);
-            renderHeaderStatus();
-            renderNavigationFooter();
-            painted = true;
+        if (!dataChanged && !bleDeviceListUiRefreshPending) {
+            // Duplicate advertisements and worker wakeups are explicit
+            // no-ops. They must never fall through to a scene repaint.
+            return UiDeltaRenderResult::NoChange;
         }
+        std::uint64_t nowUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (nowUs == 0U) nowUs = 1U;
+        if (nextBleDeviceListUiRefreshUs != 0U &&
+            nowUs < nextBleDeviceListUiRefreshUs) {
+            // Coalesce scanner-rate catalog churn. captureUiRenderSnapshot()
+            // may acknowledge this revision, therefore the independent
+            // pending bit is the durable promise to paint the newest model.
+            bleDeviceListUiRefreshPending = true;
+            ++bleDeviceListRefreshesDeferred;
+            return UiDeltaRenderResult::NoChange;
+        }
+        nextBleDeviceListUiRefreshUs =
+            nowUs + kBleDeviceUiRefreshPeriodUs;
+        bleDeviceListUiRefreshPending = false;
+        ++bleDeviceListRefreshes;
+        const bool painted = renderBleDevicesData(false);
         // The shared survey worker can report a duplicate advertisement.
         // Nothing visible changed, so acknowledge it as an explicit no-op.
         return painted ? UiDeltaRenderResult::Rendered
@@ -22695,6 +22732,26 @@ void renderInteractiveScreen(bool clearContent) {
     }
     lastUiRenderWasIncremental = incremental;
     lastUiRenderUs = finishedUs >= startedUs ? finishedUs - startedUs : 0;
+}
+
+void serviceBleDeviceUiRefresh() {
+    if (uiController.page() != 2U) return;
+    std::uint64_t nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0U) nowUs = 1U;
+    const bool listDue = bleProductView == BleProductView::Devices &&
+        bleDeviceListUiRefreshPending &&
+        (nextBleDeviceListUiRefreshUs == 0U ||
+         nowUs >= nextBleDeviceListUiRefreshUs);
+    const bool detailDue = bleProductView == BleProductView::DeviceDetail &&
+        bleDeviceUiRefreshPending &&
+        (nextBleDeviceUiRefreshUs == 0U ||
+         nowUs >= nextBleDeviceUiRefreshUs);
+    if (listDue || detailDue) {
+        // A deferred visual update is deadline-driven rather than dependent
+        // on another advertisement arriving. The tri-state renderer still
+        // confines the write to changed BLE rows or detail-card regions.
+        renderInteractiveScreen(false);
+    }
 }
 
 bool spectrumViewportWorkspaceAvailable() {
@@ -27508,12 +27565,16 @@ bool startBleDevicesProduct() {
     bleDeviceRenderedRadar = {};
     nextBleDeviceUiRefreshUs = 0U;
     bleDeviceUiRefreshPending = false;
+    nextBleDeviceListUiRefreshUs = 0U;
+    bleDeviceListUiRefreshPending = false;
     resetBleDeviceListRenderCache();
     bleDeviceListRowRepaints = 0U;
     bleDeviceListRowFullRepaints = 0U;
     bleDeviceListSignalDeltaRepaints = 0U;
     bleDeviceListAtomicNotePushes = 0U;
     bleDeviceListContentClears = 0U;
+    bleDeviceListRefreshes = 0U;
+    bleDeviceListRefreshesDeferred = 0U;
     bleDeviceDetailContentClears = 0U;
     bleDeviceRadarFullRepaints = 0U;
     bleDeviceRadarDeltaRepaints = 0U;
@@ -38672,6 +38733,9 @@ void emitBleDeviceDetailState(Stream& reply) {
         "\"list_signal_delta_repaints\":%lu,"
         "\"list_atomic_note_pushes\":%lu,"
         "\"list_content_clears\":%lu,"
+        "\"list_refreshes\":%lu,\"list_refreshes_deferred\":%lu,"
+        "\"list_refresh_period_us\":%llu,"
+        "\"list_refresh_pending\":%s,"
         "\"detail_content_clears\":%lu,"
         "\"radar_full_repaints\":%lu,\"radar_delta_repaints\":%lu,"
         "\"detail_refreshes\":%lu,\"detail_refreshes_deferred\":%lu,"
@@ -38717,6 +38781,10 @@ void emitBleDeviceDetailState(Stream& reply) {
         static_cast<unsigned long>(bleDeviceListSignalDeltaRepaints),
         static_cast<unsigned long>(bleDeviceListAtomicNotePushes),
         static_cast<unsigned long>(bleDeviceListContentClears),
+        static_cast<unsigned long>(bleDeviceListRefreshes),
+        static_cast<unsigned long>(bleDeviceListRefreshesDeferred),
+        static_cast<unsigned long long>(kBleDeviceUiRefreshPeriodUs),
+        bleDeviceListUiRefreshPending ? "true" : "false",
         static_cast<unsigned long>(bleDeviceDetailContentClears),
         static_cast<unsigned long>(bleDeviceRadarFullRepaints),
         static_cast<unsigned long>(bleDeviceRadarDeltaRepaints),
@@ -40886,6 +40954,7 @@ void loop() {
     if (!safetySupervisor.latched()) {
         serviceAutomationPackageUi();
         serviceProductSurveyWorker();
+        serviceBleDeviceUiRefresh();
         serviceBleGattProduct();
         serviceWifiDevicesProduct();
         serviceWifiChannelsProduct();
