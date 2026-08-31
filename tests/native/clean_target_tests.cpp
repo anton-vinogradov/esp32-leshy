@@ -2289,6 +2289,12 @@ void testPhysicalAndDiagnosticActionsShareNavigation() {
     CHECK(nested.openChild(5));
     CHECK(nested.page() == 5);
     CHECK(nested.parentPage() == 9);
+    CHECK(nested.returnToRoot());
+    CHECK(nested.isRoot());
+    CHECK(nested.parentPage() == UiController::kRootPage);
+    CHECK(!nested.returnToRoot());
+    CHECK(nested.apply(UiAction::Select, 1, true, 9));
+    CHECK(nested.openChild(5));
     CHECK(nested.apply(UiAction::Left, 1, true));
     CHECK(nested.page() == 9);
     CHECK(nested.parentPage() == UiController::kRootPage);
@@ -2374,12 +2380,15 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(catalog.size() == 9);
     CHECK(catalog.get(0) != nullptr && !catalog.get(0)->enabled);
     CHECK(std::strcmp(catalog.get(0)->id, "wifi") == 0);
+    CHECK(catalog.get(0)->section == AppSection::Nearby);
+    CHECK(catalog.get(0)->presentation == AppPresentation::Standard);
     CHECK(!catalog.get(0)->simulated);
     CHECK(std::strcmp(catalog.get(0)->reason, "passive source unavailable") == 0);
     CHECK(catalog.get(1) != nullptr && !catalog.get(1)->enabled);
     CHECK(std::strcmp(catalog.get(1)->id, "ble") == 0);
     CHECK(catalog.get(2) != nullptr && catalog.get(2)->enabled);
     CHECK(std::strcmp(catalog.get(2)->id, "spectrum24") == 0);
+    CHECK(catalog.get(2)->section == AppSection::Air);
     CHECK(catalog.get(3) != nullptr && catalog.get(3)->enabled);
     CHECK(std::strcmp(catalog.get(3)->id, "subghz") == 0);
     CHECK((catalog.get(0)->resources & resourceMask(Resource::EspRf)) != 0);
@@ -2388,6 +2397,7 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
            resourceMask(Resource::RadioSpi)));
     CHECK(catalog.get(4) != nullptr && !catalog.get(4)->enabled);
     CHECK(std::strcmp(catalog.get(4)->id, "capture") == 0);
+    CHECK(catalog.get(4)->section == AppSection::Evidence);
     CHECK(catalog.get(4)->page == 4);
     CHECK((catalog.get(4)->resources & resourceMask(Resource::EspRf)) != 0);
     CHECK(catalog.get(5) != nullptr && !catalog.get(5)->enabled);
@@ -2402,11 +2412,15 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(std::strcmp(catalog.get(7)->label, "LAB") == 0);
     CHECK(catalog.get(7)->page == 8);
     CHECK(catalog.get(7)->resources == resourceMask(Resource::UiForeground));
+    CHECK(catalog.get(7)->section == AppSection::Controlled);
+    CHECK(catalog.get(7)->presentation == AppPresentation::Controlled);
     CHECK(catalog.get(8) != nullptr && catalog.get(8)->enabled);
     CHECK(std::strcmp(catalog.get(8)->id, "device") == 0);
     CHECK(std::strcmp(catalog.get(8)->label, "DEVICE") == 0);
     CHECK(catalog.get(8)->page == 9);
     CHECK(catalog.get(8)->resources == resourceMask(Resource::UiForeground));
+    CHECK(catalog.get(8)->section == AppSection::Service);
+    CHECK(catalog.get(8)->presentation == AppPresentation::Service);
 
     HardwareInventory availableInventory;
     CHECK(availableInventory.add(
@@ -3862,6 +3876,49 @@ void testOfflineLibraryControllerIsBoundedAndPreservesProvenance() {
     CHECK(library.formatSelectedJsonExport(exported, sizeof(exported)).status ==
           LibraryExportStatus::SessionUnavailable);
     CHECK(std::strcmp(libraryExportStatusName(LibraryExportStatus::Valid), "valid") == 0);
+}
+
+void testScreenshotLibraryEntryIsProtectedAndSurvivesSessionReplacement() {
+    LibraryController library;
+    leshy1::storage::ScreenshotMetadata screenshot{};
+    screenshot.generation = 7U;
+    screenshot.pixelCrc32c = 0x1234abcdU;
+    screenshot.capturedUs = 9000U;
+    screenshot.uiRevision = 19U;
+    screenshot.uiPage = 4U;
+    std::snprintf(screenshot.buildVersion.data(),
+                  screenshot.buildVersion.size(), "1.0.0-dev.329");
+    CHECK(library.addScreenshot(screenshot, SessionIntegrity::Valid, true));
+    CHECK(library.size() == 1U);
+    CHECK(library.selected() != nullptr);
+    CHECK(library.selected()->kind == LibraryEntryKind::Screenshot);
+    CHECK(library.openSelected());
+    CHECK(library.requestExport());
+    char metadata[512] = {};
+    const LibraryExportResult exported =
+        library.formatSelectedJsonExport(metadata, sizeof(metadata));
+    CHECK(exported.valid());
+    CHECK(std::strstr(metadata, "leshy.screenshot.v1") != nullptr);
+    CHECK(std::strstr(metadata, "\"generation\":7") != nullptr);
+    CHECK(std::strstr(metadata, "\"format\":\"rgb565be\"") != nullptr);
+    CHECK(library.back());
+    CHECK(library.back());
+
+    SurveySession owned;
+    const SurveySession session = goldenStoppedSession();
+    CHECK(library.replaceWithOwnedCopy(
+        session, owned, 8U, SessionIntegrity::Valid, true, false));
+    CHECK(library.size() == 2U);
+    CHECK(library.get(0) != nullptr &&
+          library.get(0)->kind == LibraryEntryKind::Session);
+    CHECK(library.get(1) != nullptr &&
+          library.get(1)->kind == LibraryEntryKind::Screenshot);
+
+    LibraryController copied;
+    CHECK(copied.copyScreenshotEntriesFrom(library));
+    CHECK(copied.size() == 1U);
+    CHECK(copied.selected() != nullptr &&
+          copied.selected()->generation == 7U);
 }
 
 void testSessionCatalogRecoversReadOnlyAndMarksFallbackIntegrity() {
@@ -5331,6 +5388,16 @@ void testProductStorePolicySeparatesReadOnlyBootFromExplicitWrites() {
     CHECK(permit.operation == ProductStoreOperation::CommitSession);
     CHECK(std::strcmp(productStoreAccessStatusName(permit.status),
                       "permitted") == 0);
+
+    ProductStoreRequest evidence = commit;
+    evidence.operation = ProductStoreOperation::CommitEvidence;
+    permit = authorizeProductStore(media, evidence);
+    CHECK(permit.allowed());
+    CHECK(permit.writable);
+    CHECK(permit.existingRootVerified);
+    CHECK(permit.operation == ProductStoreOperation::CommitEvidence);
+    CHECK(std::strcmp(productStoreOperationName(permit.operation),
+                      "commit_evidence") == 0);
 }
 
 void testProductSurveyAdmissionNeverFallsBackToSimulatedOrRam() {
@@ -6627,6 +6694,7 @@ int main() {
     testTrustedSurveyContextPersistsWithoutInventingGps();
     testWifiFrameCaptureExportsByteExactRadiotapPcap();
     testOfflineLibraryControllerIsBoundedAndPreservesProvenance();
+    testScreenshotLibraryEntryIsProtectedAndSurvivesSessionReplacement();
     testSessionCatalogRecoversReadOnlyAndMarksFallbackIntegrity();
     testBoundedSessionStoreCommitsRecoversAndFallsBack();
     testSessionStoreBoundaryWrapperStopsAfterEachSuccessfulBoundary();

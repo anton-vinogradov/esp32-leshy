@@ -24,6 +24,7 @@ public:
     bool apply(UiAction action, std::uint8_t itemCount, bool selectedOpenable,
                std::uint8_t selectedPage = kRootPage);
     bool openChild(std::uint8_t page);
+    bool returnToRoot();
     void recordHandledAction(UiAction action);
 
     std::uint8_t page() const { return page_; }

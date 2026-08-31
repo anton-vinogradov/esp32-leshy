@@ -79,7 +79,41 @@ bool LibraryController::add(const services::survey::SurveySession& session,
             return false;
         }
     }
-    entries_[size_++] = {&session, generation, integrity, persistent, simulated};
+    entries_[size_++] = {&session, generation, integrity, persistent,
+                         simulated, LibraryEntryKind::Session, nullptr};
+    return true;
+}
+
+bool LibraryController::addScreenshot(
+    const storage::ScreenshotMetadata& screenshot, SessionIntegrity integrity,
+    bool persistent) {
+    if (screenshot.generation == 0U) return false;
+    for (std::size_t index = 0; index < size_; ++index) {
+        const LibraryEntry& entry = entries_[index];
+        if (entry.kind == LibraryEntryKind::Screenshot) {
+            entries_[index] = {
+                nullptr, screenshot.generation, integrity, persistent, false,
+                LibraryEntryKind::Screenshot, &screenshot};
+            return true;
+        }
+    }
+    if (size_ >= entries_.size()) return false;
+    entries_[size_++] = {nullptr, screenshot.generation, integrity, persistent,
+                         false, LibraryEntryKind::Screenshot, &screenshot};
+    return true;
+}
+
+bool LibraryController::copyScreenshotEntriesFrom(
+    const LibraryController& source) {
+    for (std::size_t index = 0U; index < source.size_; ++index) {
+        const LibraryEntry& entry = source.entries_[index];
+        if (entry.kind != LibraryEntryKind::Screenshot) continue;
+        if (entry.screenshot == nullptr ||
+            !addScreenshot(*entry.screenshot, entry.integrity,
+                           entry.persistent)) {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -91,13 +125,46 @@ bool LibraryController::replaceWithOwnedCopy(
         staged.id() == nullptr || staged.id()[0] == '\0') {
         return false;
     }
+    std::array<LibraryEntry, kCapacity> retainedScreenshots{};
+    std::size_t retainedCount = 0U;
+    for (std::size_t index = 0; index < size_; ++index) {
+        if (entries_[index].kind == LibraryEntryKind::Screenshot &&
+            entries_[index].screenshot != nullptr &&
+            retainedCount < retainedScreenshots.size()) {
+            retainedScreenshots[retainedCount++] = entries_[index];
+        }
+    }
     owned = staged;
     entries_.fill({});
-    entries_[0] = {&owned, generation, integrity, persistent, simulated};
+    entries_[0] = {&owned, generation, integrity, persistent, simulated,
+                   LibraryEntryKind::Session, nullptr};
     size_ = 1;
+    for (std::size_t index = 0; index < retainedCount &&
+         size_ < entries_.size(); ++index) {
+        entries_[size_++] = retainedScreenshots[index];
+    }
     selection_ = 0;
     view_ = LibraryView::SessionList;
     return true;
+}
+
+LibraryExportResult LibraryController::formatSelectedScreenshotMetadata(
+    char* output, std::size_t capacity) const {
+    if (output == nullptr || capacity == 0U) {
+        return {LibraryExportStatus::InvalidArgument, 0U};
+    }
+    const LibraryEntry* entry = selected();
+    if (entry == nullptr || entry->kind != LibraryEntryKind::Screenshot ||
+        entry->screenshot == nullptr) {
+        output[0] = '\0';
+        return {LibraryExportStatus::SessionUnavailable, 0U};
+    }
+    if (!storage::formatScreenshotJsonSummary(
+            *entry->screenshot, output, capacity)) {
+        output[0] = '\0';
+        return {LibraryExportStatus::BufferTooSmall, 0U};
+    }
+    return {LibraryExportStatus::Valid, std::strlen(output)};
 }
 
 bool LibraryController::next() {
@@ -140,6 +207,9 @@ LibraryExportResult LibraryController::formatSelectedJsonExport(char* output,
         return {LibraryExportStatus::InvalidArgument, 0};
     }
     const LibraryEntry* entry = selected();
+    if (entry != nullptr && entry->kind == LibraryEntryKind::Screenshot) {
+        return formatSelectedScreenshotMetadata(output, capacity);
+    }
     if (entry == nullptr || entry->session == nullptr ||
         entry->session->state() != services::survey::SessionState::Stopped) {
         output[0] = '\0';

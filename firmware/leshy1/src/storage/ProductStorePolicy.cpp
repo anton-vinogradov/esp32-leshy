@@ -48,6 +48,7 @@ const char* productStoreOperationName(ProductStoreOperation operation) {
         case ProductStoreOperation::RecoverCatalog: return "recover_catalog";
         case ProductStoreOperation::InitializeStore: return "initialize_store";
         case ProductStoreOperation::CommitSession: return "commit_session";
+        case ProductStoreOperation::CommitEvidence: return "commit_evidence";
     }
     return "recover_catalog";
 }

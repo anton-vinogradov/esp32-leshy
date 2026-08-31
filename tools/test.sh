@@ -2,6 +2,8 @@
 # Fast host-side tests for the hardware-independent firmware core.
 set -euo pipefail
 
+only_clean_target=false
+
 # Expensive retained-evidence validation is intentional for the complete
 # suite. Product slices use an explicit focused entry point so a delta never
 # silently expands into the several-minute full gate.
@@ -20,9 +22,19 @@ if [[ $# -gt 0 ]]; then
         if [[ "$2" == "target-radar" ]]; then
             exec "$(cd "$(dirname "$0")" && pwd)/test-target-radar.sh"
         fi
+        if [[ "$2" == "screenshot-store" ]]; then
+            exec "$(cd "$(dirname "$0")" && pwd)/test-screenshot-store.sh"
+        fi
+        if [[ "$2" == "clean-target" ]]; then
+            only_clean_target=true
+        else
+            echo "usage: $0 [--only automation-hid|clean-target|device-lock|screenshot-store|serial-console|target-radar]" >&2
+            exit 2
+        fi
+    else
+        echo "usage: $0 [--only automation-hid|clean-target|device-lock|screenshot-store|serial-console|target-radar]" >&2
+        exit 2
     fi
-    echo "usage: $0 [--only automation-hid|device-lock|serial-console|target-radar]" >&2
-    exit 2
 fi
 
 # HIL runner unit tests import pyserial even though they never open a device.
@@ -126,6 +138,7 @@ run_opaque_evidence_check() {
     "$repo_dir/firmware/leshy1/src/storage/SdReadOnlyProtocol.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/SdSectorInspection.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/SdSpiWireCodec.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/ScreenshotStore.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/SessionCodec.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/SessionStore.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/SessionStoreBoundary.cpp" \
@@ -143,6 +156,12 @@ run_opaque_evidence_check() {
     -o "$test_tmp/clean_target_tests"
 
 "$test_tmp/clean_target_tests"
+
+"$repo_dir/tools/test-screenshot-store.sh"
+
+if [[ "$only_clean_target" == "true" ]]; then
+    exit 0
+fi
 
 "${CXX:-c++}" \
     -std=c++17 \

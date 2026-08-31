@@ -7,6 +7,7 @@
 #include <ff.h>
 
 #include "storage/ProductStorePolicy.h"
+#include "storage/ScreenshotStore.h"
 #include "storage/SessionStore.h"
 #include "storage/StorageGuard.h"
 #include "storage/ProtectedFileEnvelope.h"
@@ -19,6 +20,8 @@ struct ArduinoFsSessionStoreWorkspace final {
     FILINFO information{};
     storage::ProtectedFileHeader protectedHeader{};
     storage::ProtectedFileAad protectedAad{};
+    std::array<std::uint8_t, storage::kProtectedFileChunkBytes>
+        protectedPlaintext{};
     std::array<std::uint8_t, storage::kProtectedFileChunkBytes>
         protectedChunk{};
     std::array<std::uint8_t, services::security::kDeviceLockAuthTagBytes>
@@ -37,7 +40,7 @@ struct ProtectedFileInspection final {
 // Confines SessionStore paths to one newly authorized /leshy-hil/<run-id>
 // directory. It uses FatFs directly so every open/write/sync/close result is
 // observable; Arduino FS::File hides the result of its flush barrier.
-class ArduinoFsSessionStoreIo final : public storage::SessionStoreIo {
+class ArduinoFsSessionStoreIo final : public storage::ScreenshotStoreIo {
 public:
     using ProgressCallback = bool (*)();
 
@@ -74,6 +77,13 @@ public:
     ReadStatus readFile(const char* path, std::uint8_t* output,
                         std::size_t capacity,
                         std::size_t* outputSize) override;
+    bool writeStreamFile(const char* path, std::size_t size,
+                         storage::ScreenshotSource source,
+                         void* context) override;
+    ReadStatus readStreamFile(const char* path,
+                              storage::ScreenshotSink sink,
+                              void* context,
+                              std::size_t* outputSize) override;
     bool syncFile(const char* path) override;
     bool syncDirectory() override;
 

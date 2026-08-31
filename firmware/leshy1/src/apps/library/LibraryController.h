@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "services/survey/SurveySession.h"
+#include "storage/ScreenshotStore.h"
 
 namespace leshy1::apps::library {
 
@@ -17,6 +18,11 @@ enum class LibraryView : std::uint8_t {
 enum class SessionIntegrity : std::uint8_t {
     Valid,
     RecoveredFallback,
+};
+
+enum class LibraryEntryKind : std::uint8_t {
+    Session,
+    Screenshot,
 };
 
 const char* sessionIntegrityName(SessionIntegrity integrity);
@@ -45,15 +51,20 @@ struct LibraryEntry final {
     SessionIntegrity integrity = SessionIntegrity::Valid;
     bool persistent = false;
     bool simulated = false;
+    LibraryEntryKind kind = LibraryEntryKind::Session;
+    const storage::ScreenshotMetadata* screenshot = nullptr;
 };
 
 class LibraryController final {
 public:
-    static constexpr std::size_t kCapacity = 4;
+    static constexpr std::size_t kCapacity = 5;
 
     void clear();
     bool add(const services::survey::SurveySession& session, std::uint32_t generation,
              SessionIntegrity integrity, bool persistent, bool simulated);
+    bool addScreenshot(const storage::ScreenshotMetadata& screenshot,
+                       SessionIntegrity integrity, bool persistent);
+    bool copyScreenshotEntriesFrom(const LibraryController& source);
     bool replaceWithOwnedCopy(
         const services::survey::SurveySession& staged,
         services::survey::SurveySession& owned, std::uint32_t generation,
@@ -71,6 +82,8 @@ public:
     LibraryExportResult formatSelectedCsvRow(
         std::size_t index, char* output, std::size_t capacity) const;
     LibraryExportResult formatSelectedPcapStatus(
+        char* output, std::size_t capacity) const;
+    LibraryExportResult formatSelectedScreenshotMetadata(
         char* output, std::size_t capacity) const;
 
     LibraryView view() const { return view_; }

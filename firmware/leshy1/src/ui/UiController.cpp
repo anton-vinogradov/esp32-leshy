@@ -40,6 +40,14 @@ bool UiController::openChild(std::uint8_t page) {
     return true;
 }
 
+bool UiController::returnToRoot() {
+    if (isRoot() && parentPage_ == kRootPage) return false;
+    page_ = kRootPage;
+    parentPage_ = kRootPage;
+    ++revision_;
+    return true;
+}
+
 void UiController::recordHandledAction(UiAction action) {
     if (action != UiAction::Unknown) ++revision_;
 }

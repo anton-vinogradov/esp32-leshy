@@ -143,6 +143,10 @@ SurveyWorkflowStatus SurveyWorkflow::stopAndCommit(
         return finish(SurveyWorkflowStatus::LibraryRejected,
                       SurveyWorkflowState::Error);
     }
+    if (!replacement.copyScreenshotEntriesFrom(library_)) {
+        return finish(SurveyWorkflowStatus::LibraryRejected,
+                      SurveyWorkflowState::Error);
+    }
     library_ = replacement;
     generation_ = recovered.generation;
     return finish(SurveyWorkflowStatus::Committed,

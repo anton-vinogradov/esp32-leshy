@@ -56,6 +56,11 @@ SessionCatalogResult SessionCatalog::recoverLatest(
                 recovery.generation, recovery.observations,
                 validated.integrity};
     }
+    if (!replacement.copyScreenshotEntriesFrom(library)) {
+        return {SessionCatalogStatus::AdmissionRejected, recovery.status,
+                recovery.generation, recovery.observations,
+                validated.integrity};
+    }
     library = replacement;
     return validated;
 }

@@ -14,6 +14,7 @@ enum class ProductStoreOperation : std::uint8_t {
     RecoverCatalog,
     InitializeStore,
     CommitSession,
+    CommitEvidence,
 };
 
 const char* productStoreOperationName(ProductStoreOperation operation);

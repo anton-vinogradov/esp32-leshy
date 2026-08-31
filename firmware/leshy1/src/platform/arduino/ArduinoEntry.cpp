@@ -154,6 +154,7 @@
 #include "storage/SessionStore.h"
 #include "storage/SessionStoreBoundary.h"
 #include "storage/SessionStoreIoRouter.h"
+#include "storage/ScreenshotStore.h"
 #include "storage/StorageGuard.h"
 #include "storage/StorageTiming.h"
 #include "storage/TargetStateStore.h"
@@ -184,6 +185,7 @@ extern const std::uint8_t bleCompanyAssetEnd[]
 using leshy1::boards::esp32_div_v2::BoardProfile;
 using leshy1::apps::library::LibraryController;
 using leshy1::apps::library::LibraryEntry;
+using leshy1::apps::library::LibraryEntryKind;
 using leshy1::apps::library::LibraryView;
 using leshy1::apps::library::SessionCatalog;
 using leshy1::apps::library::SessionIntegrity;
@@ -303,6 +305,7 @@ using leshy1::apps::wifi::WifiDeviceState;
 using leshy1::apps::wifi::WifiChannelLoadSnapshot;
 using leshy1::domain::apps::AppCatalog;
 using leshy1::domain::apps::AppMenuItem;
+using leshy1::domain::apps::AppPresentation;
 using leshy1::domain::hardware::CapabilityRecord;
 using leshy1::domain::targets::TargetChangeKind;
 using leshy1::domain::targets::TargetComparisonClass;
@@ -475,6 +478,7 @@ constexpr leshy1::kernel::runtime::ResourceOwner kSdIdentificationOwner = 2;
 constexpr leshy1::kernel::runtime::ResourceOwner kWifiIngressOwner = 3;
 constexpr leshy1::kernel::runtime::ResourceOwner kBootCatalogOwner = 4;
 constexpr leshy1::kernel::runtime::ResourceOwner kLittleFsHilOwner = 5;
+constexpr leshy1::kernel::runtime::ResourceOwner kScreenshotOwner = 6;
 constexpr leshy1::kernel::runtime::ResourceOwner kBleGattHilConflictOwner = 7;
 constexpr std::size_t kSdThroughputSamples = 32;
 constexpr std::size_t kWifiIngressMaxSamples = 32;
@@ -484,6 +488,7 @@ constexpr std::uint64_t kStorageRequiredEncodedBytesPerSecond =
     kWifiIngressP99EncodedBytesPerSecond * kStorageRateSafetyMultiplier;
 constexpr std::uint64_t kProductSurveyCommitBytes = 64U * 1024U;
 constexpr std::uint64_t kProductSurveyReserveBytes = 1024U * 1024U;
+constexpr std::uint64_t kProductScreenshotCommitBytes = 192U * 1024U;
 constexpr unsigned kWifiPersistMaxScans = 8;
 constexpr const char* kFullGuidedDisposableRunId = "full-guided-v10";
 constexpr std::uint64_t kFullGuidedDisposableBytes = 64U * 1024U;
@@ -579,6 +584,19 @@ SurveySession librarySession;
 // permanently reserving another 10 KiB on N16 boards without PSRAM.
 SurveySession& littleFsResetSession = surveySession;
 LibraryController libraryController;
+leshy1::storage::ScreenshotStoreWorkspace screenshotStoreWorkspace;
+leshy1::storage::ScreenshotMetadata latestScreenshotMetadata;
+bool latestScreenshotAvailable = false;
+bool screenshotArmed = false;
+const char* screenshotStatus = "idle";
+enum class ScreenshotFeedback : std::uint8_t {
+    None,
+    Saved,
+    Failed,
+};
+ScreenshotFeedback screenshotFeedback = ScreenshotFeedback::None;
+std::int16_t screenshotHeaderX = -1;
+std::int16_t screenshotHeaderWidth = 0;
 AutomationPackageCatalog automationPackageCatalog;
 AutomationInspectorController automationInspectorController;
 leshy1::platform::arduino::NvsAutomationTrustStore automationTrustBackend;
@@ -2248,6 +2266,7 @@ enum class CaptureView : std::uint8_t {
 };
 CaptureView captureView = CaptureView::SourceMenu;
 std::uint8_t captureSourceSelection = 0;
+bool captureAndPersistScreenshot();
 InfraredCapture infraredCapture;
 constexpr InfraredCapturePlan kProductInfraredCapturePlan{};
 BoardInfraredReceiver boardInfraredReceiver;
@@ -2386,6 +2405,10 @@ struct ProductBootRecoveryState final {
     std::uint64_t cachedFreeBytes = 0;
     bool opened = false;
     bool catalogAdmitted = false;
+    bool screenshotAdmitted = false;
+    leshy1::storage::ScreenshotStoreStatus screenshotStatus =
+        leshy1::storage::ScreenshotStoreStatus::Empty;
+    std::uint32_t screenshotGeneration = 0;
     bool cleanupComplete = false;
     leshy1::storage::ProductStoreAccessStatus permitStatus =
         leshy1::storage::ProductStoreAccessStatus::MissingMedia;
@@ -7687,6 +7710,8 @@ void serviceProductSurveyWorker() {
 void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
                                          bool enrollmentPresent) {
     productBootRecovery = {};
+    latestScreenshotAvailable = false;
+    latestScreenshotMetadata = {};
     productBootRecovery.status = "invalid_enrollment";
     productBootRecovery.cleanupComplete = true;
     productBootRecovery.enrolled = enrollmentPresent;
@@ -7774,6 +7799,17 @@ void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
                 true, false);
             productBootRecovery.catalogAdmitted =
                 productBootRecovery.catalog.admitted();
+            const auto screenshot = leshy1::storage::recoverScreenshot(
+                io, screenshotStoreWorkspace, &latestScreenshotMetadata);
+            productBootRecovery.screenshotStatus = screenshot.status;
+            productBootRecovery.screenshotGeneration = screenshot.generation;
+            if (screenshot.valid()) {
+                latestScreenshotAvailable = true;
+                productBootRecovery.screenshotAdmitted =
+                    libraryController.addScreenshot(
+                        latestScreenshotMetadata, SessionIntegrity::Valid,
+                        true);
+            }
         }
         io.end();
     }
@@ -7802,6 +7838,9 @@ void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
         productBootRecovery.status = "open_failed";
     } else if (productBootRecovery.catalogAdmitted) {
         productBootRecovery.status = "admitted";
+        libraryDemoReady = true;
+    } else if (productBootRecovery.screenshotAdmitted) {
+        productBootRecovery.status = "screenshot_admitted";
         libraryDemoReady = true;
     } else {
         productBootRecovery.status =
@@ -9387,7 +9426,7 @@ bool serviceTargetRadar() {
     targetRadarOverlay = false;
     portEXIT_CRITICAL(&targetRadarMux);
     delete tracker;
-    // esp_wifi_deinit() releases its event task asynchronously through the
+    // Driver deinitialization releases its event task asynchronously through the
     // idle task.  Loading the multi-block Targets workspace in the same loop
     // turn can therefore fail despite sufficient total heap.  The tracker no
     // longer owns any state needed for restore, so release it first and give
@@ -11160,6 +11199,8 @@ void emitProductBootRecovery(Stream& reply) {
         "\"blocked_write_attempts\":%lu,\"product_root\":\"%s\","
         "\"root_exists\":%s,\"permit_status\":\"%s\",\"opened\":%s,"
         "\"catalog_status\":\"%s\",\"catalog_admitted\":%s,"
+        "\"screenshot_status\":\"%s\",\"screenshot_admitted\":%s,"
+        "\"screenshot_generation\":%lu,"
         "\"generation\":%lu,\"observations\":%u,"
         "\"integrity\":\"%s\",\"attempts\":%u,\"transient_retries\":%u,"
         "\"timeout_restarts\":%u,"
@@ -11181,6 +11222,11 @@ void emitProductBootRecovery(Stream& reply) {
         leshy1::apps::library::sessionCatalogStatusName(
             productBootRecovery.catalog.status),
         productBootRecovery.catalogAdmitted ? "true" : "false",
+        leshy1::storage::screenshotStoreStatusName(
+            productBootRecovery.screenshotStatus),
+        productBootRecovery.screenshotAdmitted ? "true" : "false",
+        static_cast<unsigned long>(
+            productBootRecovery.screenshotGeneration),
         static_cast<unsigned long>(productBootRecovery.catalog.generation),
         static_cast<unsigned>(productBootRecovery.catalog.observations),
         leshy1::apps::library::sessionIntegrityName(
@@ -13639,6 +13685,8 @@ const char* headerReceiverStatus() {
 }
 
 void renderHeaderStatus() {
+    screenshotHeaderX = -1;
+    screenshotHeaderWidth = 0;
     if (safetySupervisor.latched()) {
         constexpr const char* stopped = "STOP";
         selectUiFont(UiTextRole::Meta);
@@ -13659,6 +13707,23 @@ void renderHeaderStatus() {
     const std::int16_t transmitterX =
         Layout::ScreenWidth - 6 - transmitterWidth;
     const std::int16_t receiverX = transmitterX - 6 - receiverWidth;
+    if (screenshotArmed) {
+        const char* shot = screenshotFeedback == ScreenshotFeedback::Saved
+            ? tr(UiTextId::ScreenshotSavedShort)
+            : screenshotFeedback == ScreenshotFeedback::Failed
+                  ? tr(UiTextId::ScreenshotFailedShort)
+                  : tr(UiTextId::ScreenshotArmed);
+        const std::int16_t shotWidth = display.textWidth(shot);
+        screenshotHeaderX = receiverX - 6 - shotWidth;
+        screenshotHeaderWidth = shotWidth;
+        display.setTextColor(
+            screenshotFeedback == ScreenshotFeedback::Saved
+                ? Palette::Positive
+                : Palette::Danger,
+            Palette::Header);
+        setUiCursor(UiTextRole::Meta, screenshotHeaderX, 5);
+        display.print(shot);
+    }
     display.setTextColor(receiving ? Palette::Positive : Palette::TextMuted,
                          Palette::Header);
     setUiCursor(UiTextRole::Meta, receiverX, 5);
@@ -13863,13 +13928,16 @@ void renderHomeRow(std::uint8_t index, std::uint8_t firstVisible) {
     const Rect bounds = Components::homeRow(
         static_cast<std::uint8_t>(index - firstVisible));
     const bool selected = uiController.selection() == index;
-    const bool lab = std::strcmp(item->id, "lab") == 0;
-    const bool device = std::strcmp(item->id, "device") == 0;
     const Tone itemTone = !item->enabled
         ? Tone::Muted
-        : (lab ? Tone::Danger : (device ? Tone::Muted : Tone::Positive));
+        : (item->presentation == AppPresentation::Controlled
+               ? Tone::Danger
+               : (item->presentation == AppPresentation::Service
+                      ? Tone::Muted : Tone::Positive));
     renderMenuRow(bounds, tr(homeLabel(*item)), tr(homeNote(*item)), selected,
-                  item->enabled, itemTone, lab ? Tone::Danger : Tone::Neutral);
+                  item->enabled, itemTone,
+                  item->presentation == AppPresentation::Controlled
+                      ? Tone::Danger : Tone::Neutral);
 }
 
 void renderHome(bool clearContent) {
@@ -15668,6 +15736,12 @@ void renderCaptureSourceMenu(bool clearContent) {
                   tr(UiTextId::CaptureIrSourceNote),
                   captureSourceSelection == 1, BoardProfile::kIrDeclared,
                   BoardProfile::kIrDeclared ? Tone::Positive : Tone::Muted);
+    renderMenuRow(Components::choiceRow(2),
+                  tr(UiTextId::CaptureScreenshotSource),
+                  tr(UiTextId::CaptureScreenshotSourceNote),
+                  captureSourceSelection == 2, true,
+                  screenshotArmed ? Tone::Danger : Tone::Positive,
+                  screenshotArmed ? Tone::Danger : Tone::Neutral);
 }
 
 void renderInfraredCapturePage(bool clearContent) {
@@ -19805,6 +19879,10 @@ void renderInventoryPage(bool clearContent) {
 }
 
 UiTextId libraryEntryTitle(const LibraryEntry& entry) {
+    if (entry.kind == LibraryEntryKind::Screenshot &&
+        entry.screenshot != nullptr) {
+        return UiTextId::LibraryScreenshot;
+    }
     if (entry.session == nullptr) return UiTextId::LibraryRecord;
     if (std::strcmp(entry.session->id(), FieldSurveyTracker::kSessionId) == 0) {
         return UiTextId::FieldSurveyTitle;
@@ -19847,7 +19925,13 @@ void libraryObservationCounts(const LibraryEntry& entry,
 
 void renderLibraryListRow(std::size_t index) {
     const LibraryEntry* entry = libraryController.get(index);
-    if (entry == nullptr || entry->session == nullptr) return;
+    if (entry == nullptr ||
+        (entry->kind == LibraryEntryKind::Session &&
+         entry->session == nullptr) ||
+        (entry->kind == LibraryEntryKind::Screenshot &&
+         entry->screenshot == nullptr)) {
+        return;
+    }
     const std::int32_t y = 94 + static_cast<std::int32_t>(index) * 48;
     const bool selected = libraryController.selection() == index;
     const std::uint16_t background = selected ? Palette::SurfaceFocus
@@ -19879,8 +19963,16 @@ void renderLibraryPage(bool clearContent) {
     const bool persistent = selected != nullptr && selected->persistent;
     if (libraryController.view() == LibraryView::ExportReady) {
         renderHeader(tr(UiTextId::ExportReady), clearContent);
-        if (selected == nullptr || selected->session == nullptr) return;
+        if (selected == nullptr) return;
         renderMetric(0, tr(libraryEntryTitle(*selected)), Tone::Positive);
+        if (selected->kind == LibraryEntryKind::Screenshot) {
+            renderMetric(1, tr(UiTextId::FormatScreenshotReady),
+                         Tone::Positive);
+            renderMetric(2, tr(UiTextId::LibraryScreenshotRgb565));
+            renderMetric(3, tr(UiTextId::ExportUsbRequired), Tone::Positive);
+            return;
+        }
+        if (selected->session == nullptr) return;
         if (std::strcmp(selected->session->id(),
                         FieldSurveyTracker::kSessionId) == 0) {
             renderMetric(1, tr(UiTextId::FieldSurveyNativeReady),
@@ -19905,8 +19997,22 @@ void renderLibraryPage(bool clearContent) {
     }
     if (libraryController.view() == LibraryView::SessionDetail) {
         renderHeader(tr(UiTextId::SessionDetail), clearContent);
-        if (selected == nullptr || selected->session == nullptr) return;
+        if (selected == nullptr) return;
         renderMetric(0, tr(libraryEntryTitle(*selected)), Tone::Positive);
+        if (selected->kind == LibraryEntryKind::Screenshot) {
+            renderMetric(1, tr(UiTextId::LibraryScreenshotRgb565),
+                         Tone::Positive);
+            if (selected->screenshot != nullptr) {
+                std::snprintf(line, sizeof(line), "CRC %08lX",
+                              static_cast<unsigned long>(
+                                  selected->screenshot->pixelCrc32c));
+                renderMetric(2, line);
+            }
+            renderMetric(3, tr(UiTextId::LibraryStoredOnSd),
+                         Tone::Positive);
+            return;
+        }
+        if (selected->session == nullptr) return;
         const auto& capture = selected->session->captureMetadata();
         if (capture.infraredRawCaptured) {
             if (capture.infraredDecode.integrityValid) {
@@ -24668,6 +24774,13 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"library_simulated\":%s,\"library_view\":\"%s\","
                       "\"library_entries\":%u,\"library_generation\":%lu,"
                       "\"library_persistent\":%s,"
+                      "\"library_selected_kind\":\"%s\","
+                      "\"capture_source_selection\":%u,"
+                      "\"screenshot_armed\":%s,"
+                      "\"screenshot_status\":\"%s\","
+                      "\"screenshot_available\":%s,"
+                      "\"screenshot_generation\":%lu,"
+                      "\"screenshot_crc32c\":%lu,"
                       "\"self_test_view\":\"%s\","
                       "\"self_test_visual_state\":\"%s\","
                       "\"self_test_mode\":\"%s\","
@@ -24999,6 +25112,21 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                                                      : selectedLibrary->generation),
                       selectedLibrary != nullptr && selectedLibrary->persistent
                           ? "true" : "false",
+                      selectedLibrary == nullptr
+                          ? "none"
+                          : selectedLibrary->kind ==
+                                  LibraryEntryKind::Screenshot
+                                ? "screenshot" : "session",
+                      static_cast<unsigned>(captureSourceSelection),
+                      screenshotArmed ? "true" : "false",
+                      screenshotStatus,
+                      latestScreenshotAvailable ? "true" : "false",
+                      static_cast<unsigned long>(
+                          latestScreenshotAvailable
+                              ? latestScreenshotMetadata.generation : 0U),
+                      static_cast<unsigned long>(
+                          latestScreenshotAvailable
+                              ? latestScreenshotMetadata.pixelCrc32c : 0U),
                       leshy1::apps::self_test::selfTestViewName(
                           selfTestController.view()),
                       selfTestController.view() == SelfTestView::VisualCheck
@@ -27765,6 +27893,10 @@ bool applyUiAction(UiAction action, bool render = true) {
             deviceLockController.enter(deviceLock.audit(nowUs));
         }
     }
+    if (screenshotArmed && action == UiAction::Select) {
+        uiController.recordHandledAction(action);
+        return finish(captureAndPersistScreenshot());
+    }
     const AppMenuItem* selected = appCatalog.get(uiController.selection());
     const bool wasRoot = uiController.isRoot();
     const std::uint8_t pageBefore = uiController.page();
@@ -29020,21 +29152,32 @@ bool applyUiAction(UiAction action, bool render = true) {
             bool handled = false;
             bool changed = false;
             if (action == UiAction::Up && captureSourceSelection != 0) {
-                captureSourceSelection = 0;
+                --captureSourceSelection;
                 handled = changed = true;
             } else if (action == UiAction::Down &&
-                       captureSourceSelection != 1) {
-                captureSourceSelection = 1;
+                       captureSourceSelection != 2) {
+                ++captureSourceSelection;
                 handled = changed = true;
             } else if ((action == UiAction::Select ||
                         action == UiAction::Right) &&
-                       (captureSourceSelection == 0 ||
+                       (captureSourceSelection != 1 ||
                         BoardProfile::kIrDeclared)) {
-                captureView = captureSourceSelection == 0
-                    ? CaptureView::Wifi : CaptureView::Infrared;
-                lastRuntimeEvent = captureSourceSelection == 0
-                    ? "capture_wifi_setup" : "capture_infrared_setup";
-                handled = changed = true;
+                if (captureSourceSelection == 2) {
+                    screenshotArmed = !screenshotArmed;
+                    screenshotFeedback = ScreenshotFeedback::None;
+                    screenshotStatus = screenshotArmed ? "armed" : "idle";
+                    if (appRuntime.running()) appRuntime.stop();
+                    changed = uiController.returnToRoot();
+                    lastRuntimeEvent = screenshotArmed
+                        ? "screenshot_armed" : "screenshot_disarmed";
+                } else {
+                    captureView = captureSourceSelection == 0
+                        ? CaptureView::Wifi : CaptureView::Infrared;
+                    lastRuntimeEvent = captureSourceSelection == 0
+                        ? "capture_wifi_setup" : "capture_infrared_setup";
+                    changed = true;
+                }
+                handled = true;
             }
             if (handled) {
                 uiController.recordHandledAction(action);
@@ -30113,7 +30256,7 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
     if (uiController.page() == 4 &&
         captureView == CaptureView::SourceMenu) {
         return {leshy1::ui::hitTouchTarget(
-                    TouchTargetLayout::TwoChoices, point),
+                    TouchTargetLayout::ThreeChoices, point),
                 captureSourceSelection};
     }
     if (uiController.page() == 5) {
@@ -30166,6 +30309,17 @@ bool dispatchTouchPoint(TouchPoint point, bool synthetic = false) {
     lastTouchPoint = point;
     lastTouchChanged = false;
     if (synthetic) ++syntheticTouchPresses;
+    if (screenshotArmed && screenshotHeaderX >= 0 &&
+        point.x + 4U >= static_cast<std::uint16_t>(screenshotHeaderX) &&
+        point.x <= static_cast<std::uint16_t>(
+            screenshotHeaderX + screenshotHeaderWidth + 4) &&
+        point.y < static_cast<std::uint16_t>(Components::header().height)) {
+        ++touchHandledPresses;
+        const bool changed = captureAndPersistScreenshot();
+        lastTouchChanged = changed;
+        if (changed) renderInteractiveScreen(true);
+        return changed;
+    }
     if (uiController.page() == kDeviceLockPage) {
         UiAction action = UiAction::Unknown;
         const DeviceLockView view = deviceLockController.view();
@@ -30343,6 +30497,261 @@ void captureDisplay(Stream& reply) {
                   static_cast<unsigned long>(uiController.revision()));
     reply.println(line);
     reply.flush();
+}
+
+struct ScreenshotBufferSource final {
+    const std::uint8_t* bytes = nullptr;
+    std::size_t size = 0U;
+};
+
+bool copyScreenshotBuffer(std::size_t offset, std::uint8_t* output,
+                          std::size_t size, void* rawContext) {
+    const auto* context = static_cast<const ScreenshotBufferSource*>(rawContext);
+    if (context == nullptr || context->bytes == nullptr || output == nullptr ||
+        offset > context->size || size > context->size - offset) {
+        return false;
+    }
+    std::memcpy(output, context->bytes + offset, size);
+    return true;
+}
+
+bool screenshotStorageProgress() {
+    feedRuntimeSafetyWatchdog();
+    delay(0);
+    return !safetySupervisor.latched();
+}
+
+bool screenshotLiveWorkActive() {
+    const auto infraredState = infraredCapture.stats().state;
+    const auto subGhzState = subGhzRawCapture.stats().state;
+    const BleGattInspectorState gattState = bleGattTransport.state();
+    return productSurveyControl() != ProductSurveyWorkerControl::Idle ||
+        productSurveyScanActive() || productSurveyRuntime.sourceActive ||
+        captureStoreTaskHandle != nullptr ||
+        subGhzCaptureStoreTaskHandle != nullptr ||
+        infraredCaptureStoreTaskHandle != nullptr ||
+        targetsMutationTaskHandle != nullptr || automationCatalogRefreshPending ||
+        automationInspectionPending || boardNrf24Spectrum.active() ||
+        boardCc1101Spectrum.active() ||
+        wifiFrameCapture.stats().state == WifiFrameCaptureState::Running ||
+        wifiFrameCapture.deviceMonitorStats().active ||
+        wifiFrameCapture.channelMonitorStats().active ||
+        infraredState == InfraredCaptureState::Waiting ||
+        infraredState == InfraredCaptureState::Capturing ||
+        subGhzState == SubGhzRawCaptureState::Waiting ||
+        subGhzState == SubGhzRawCaptureState::Capturing ||
+        gattState == BleGattInspectorState::Connecting ||
+        gattState == BleGattInspectorState::Discovering ||
+        gattState == BleGattInspectorState::Ready ||
+        gattState == BleGattInspectorState::CleanupPending ||
+        arduinoCompanionWebService.active();
+}
+
+bool captureAndPersistScreenshot() {
+    screenshotFeedback = ScreenshotFeedback::None;
+    screenshotStatus = "preflight";
+    if (!deviceLockOperationAllowed(
+            leshy1::services::security::
+                DeviceLockOperation::ProtectedEvidence)) {
+        noteDeviceLockAdmissionBlocked();
+        screenshotStatus = "device_locked";
+        screenshotFeedback = ScreenshotFeedback::Failed;
+        lastRuntimeEvent = "screenshot_device_locked";
+        return true;
+    }
+    if (powerSafetyPolicy.writeDisposition() ==
+        PowerWriteDisposition::ProhibitedLowVoltage) {
+        screenshotStatus = "power_unsafe";
+        screenshotFeedback = ScreenshotFeedback::Failed;
+        lastRuntimeEvent = "screenshot_power_unsafe";
+        return true;
+    }
+    if (screenshotLiveWorkActive()) {
+        screenshotStatus = "live_work_busy";
+        screenshotFeedback = ScreenshotFeedback::Failed;
+        lastRuntimeEvent = "screenshot_live_work_busy";
+        return true;
+    }
+
+    const auto requestedResources =
+        leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    const auto owner = appRuntime.running()
+        ? AppRuntime::kForegroundOwner : kScreenshotOwner;
+    const auto ownedBefore = resourceBroker.ownedBy(owner);
+    const auto acquiredForScreenshot = requestedResources & ~ownedBefore;
+    if (!resourceBroker.acquire(owner, requestedResources)) {
+        screenshotStatus = "resources_busy";
+        screenshotFeedback = ScreenshotFeedback::Failed;
+        lastRuntimeEvent = "screenshot_resources_busy";
+        return true;
+    }
+
+    auto* pixels = static_cast<std::uint8_t*>(heap_caps_malloc(
+        leshy1::storage::kScreenshotPixelBytes,
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    bool valid = pixels != nullptr;
+    const char* failure = valid ? "none" : "psram_unavailable";
+    if (valid) {
+        constexpr std::int32_t kRowsPerRead = 4;
+        for (std::int32_t y = 0; y < Layout::ScreenHeight;
+             y += kRowsPerRead) {
+            const std::size_t offset = static_cast<std::size_t>(y) *
+                Layout::ScreenWidth * sizeof(std::uint16_t);
+            display.readRect(
+                0, y, Layout::ScreenWidth, kRowsPerRead,
+                reinterpret_cast<std::uint16_t*>(pixels + offset));
+            if (!screenshotStorageProgress()) {
+                valid = false;
+                failure = "safety_latched";
+                break;
+            }
+        }
+    }
+
+    char expectedFingerprint[33] = {};
+    char observedFingerprint[33] = {};
+    leshy1::storage::SdTransportRunResult identity;
+    bool identityCleanup = true;
+    BoardSdFilesystem filesystem;
+    bool filesystemAttempted = false;
+    ArduinoFsSessionStoreIo io(
+        sdSessionStoreIoWorkspace, screenshotStorageProgress,
+        &protectedDataCipher, &deviceLock);
+    bool ioOpened = false;
+    ScreenshotBufferSource source{pixels,
+                                  leshy1::storage::kScreenshotPixelBytes};
+    leshy1::storage::ScreenshotStoreResult committed{};
+    leshy1::storage::ScreenshotStoreResult reopened{};
+    leshy1::storage::ScreenshotMetadata metadata{};
+
+    if (valid && !loadProductFingerprint(expectedFingerprint,
+                                         sizeof(expectedFingerprint))) {
+        valid = false;
+        failure = "enrollment_missing";
+    }
+    if (valid) {
+        BoardSdSpiTransport transport;
+        const bool begun = transport.begin();
+        if (begun) {
+            leshy1::storage::SdTransportRunPolicy policy;
+            policy.allowPhysical = true;
+            policy.explicitlySelected = true;
+            policy.identificationOnly = true;
+            policy.ownedResources = resourceBroker.ownedBy(owner);
+            identity = leshy1::storage::runSdIdentificationStateMachine(
+                leshy1::storage::defaultSdIdentificationPlan(), transport,
+                policy);
+            transport.end();
+        }
+        identityCleanup = transport.cleanupComplete();
+        formatCidFingerprint(identity.identity, observedFingerprint,
+                             sizeof(observedFingerprint));
+        valid = begun && identityCleanup &&
+            identity.status ==
+                leshy1::storage::SdTransportRunStatus::Valid &&
+            std::strcmp(expectedFingerprint, observedFingerprint) == 0;
+        if (!valid) failure = "identity_failed";
+    }
+    if (valid) {
+        filesystemAttempted = true;
+        valid = filesystem.begin();
+        if (!valid) failure = "mount_failed";
+    }
+    if (valid) {
+        const std::uint64_t capacity = filesystem.cardCapacityBytes();
+        const bool rootExists = filesystem.exists(
+            leshy1::storage::kProductSessionStoreRoot);
+        leshy1::storage::MediaIdentity media;
+        media.present = capacity != 0U &&
+            capacity == identity.identity.capacityBytes;
+        media.kind = leshy1::storage::MediaKind::Sd;
+        media.fingerprint = observedFingerprint;
+        media.capacityBytes = capacity;
+        media.freeBytes = filesystem.cachedFreeBytes();
+        leshy1::storage::ProductStoreRequest request;
+        request.operation =
+            leshy1::storage::ProductStoreOperation::CommitEvidence;
+        request.explicitlySelected = true;
+        request.expectedFingerprint = expectedFingerprint;
+        request.rootPath = leshy1::storage::kProductSessionStoreRoot;
+        request.rootExists = rootExists;
+        request.driverWriteEnabled = true;
+        request.requiredBytes = kProductScreenshotCommitBytes;
+        request.reserveBytes = kProductSurveyReserveBytes;
+        request.ownedResources = resourceBroker.ownedBy(owner);
+        request.power = powerSafetyPolicy.writeDisposition();
+        const auto permit = leshy1::storage::authorizeProductStore(
+            media, request);
+        valid = permit.allowed();
+        if (!valid) {
+            failure = leshy1::storage::productStoreAccessStatusName(
+                permit.status);
+        } else {
+            ioOpened = io.selectDrive(filesystem.driveNumber()) &&
+                io.openExistingWritable(permit);
+            valid = ioOpened;
+            if (!valid) failure = "store_open_failed";
+        }
+    }
+    if (valid) {
+        metadata.width = leshy1::storage::kScreenshotWidth;
+        metadata.height = leshy1::storage::kScreenshotHeight;
+        metadata.pixelBytes = leshy1::storage::kScreenshotPixelBytes;
+        metadata.pixelCrc32c = leshy1::storage::crc32c(
+            pixels, leshy1::storage::kScreenshotPixelBytes);
+        metadata.capturedUs = static_cast<std::uint64_t>(esp_timer_get_time());
+        if (metadata.capturedUs == 0U) metadata.capturedUs = 1U;
+        metadata.uiRevision = uiController.revision();
+        metadata.uiPage = uiController.page();
+        std::snprintf(metadata.buildVersion.data(),
+                      metadata.buildVersion.size(), "%s", LESHY1_VERSION);
+        const esp_app_desc_t* description = esp_app_get_description();
+        if (description != nullptr &&
+            description->magic_word == ESP_APP_DESC_MAGIC_WORD) {
+            std::memcpy(metadata.appElfSha256.data(),
+                        description->app_elf_sha256,
+                        metadata.appElfSha256.size());
+        }
+        committed = leshy1::storage::commitNextScreenshot(
+            io, screenshotStoreWorkspace, metadata, copyScreenshotBuffer,
+            &source);
+        valid = committed.valid();
+        if (!valid) {
+            failure = leshy1::storage::screenshotStoreStatusName(
+                committed.status);
+        }
+    }
+    if (valid) {
+        reopened = leshy1::storage::recoverScreenshot(
+            io, screenshotStoreWorkspace, &latestScreenshotMetadata);
+        valid = reopened.valid() &&
+            reopened.generation == committed.generation &&
+            latestScreenshotMetadata.pixelCrc32c == metadata.pixelCrc32c;
+        if (!valid) failure = "reopen_failed";
+    }
+    if (ioOpened) io.end();
+    if (filesystem.mounted()) filesystem.end();
+    const bool filesystemCleanup = !filesystemAttempted ||
+        filesystem.cleanupComplete();
+    if (pixels != nullptr) {
+        std::memset(pixels, 0, leshy1::storage::kScreenshotPixelBytes);
+        heap_caps_free(pixels);
+    }
+    if (acquiredForScreenshot != 0U) {
+        resourceBroker.release(owner, acquiredForScreenshot);
+    }
+    valid = valid && identityCleanup && filesystemCleanup;
+    if (valid) {
+        latestScreenshotAvailable = true;
+        valid = libraryController.addScreenshot(
+            latestScreenshotMetadata, SessionIntegrity::Valid, true);
+    }
+    screenshotStatus = valid ? "saved" : failure;
+    screenshotFeedback = valid ? ScreenshotFeedback::Saved
+                               : ScreenshotFeedback::Failed;
+    lastRuntimeEvent = valid ? "screenshot_saved" : "screenshot_failed";
+    return true;
 }
 
 void emitStorageContract(Stream& reply) {
@@ -34760,6 +35169,197 @@ void emitLibraryExport(Stream& reply) {
     reply.println(line);
 }
 
+struct ScreenshotUsbSinkContext final {
+    Stream* stream = nullptr;
+    std::size_t bytes = 0U;
+};
+
+bool writeScreenshotUsbChunk(std::size_t offset,
+                             const std::uint8_t* input,
+                             std::size_t size, void* rawContext) {
+    auto* context = static_cast<ScreenshotUsbSinkContext*>(rawContext);
+    if (context == nullptr || context->stream == nullptr || input == nullptr ||
+        offset != context->bytes) {
+        return false;
+    }
+    const std::size_t written = context->stream->write(input, size);
+    if (written != size) return false;
+    context->bytes += written;
+    return screenshotStorageProgress();
+}
+
+void emitLibraryScreenshotExportError(Stream& reply, const char* reason) {
+    char line[256] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.screenshot.export.v1\",\"kind\":\"error\","
+        "\"reason\":\"%s\",\"protected\":true,\"radio_touched\":false}",
+        reason == nullptr ? "unknown" : reason);
+    reply.println(line);
+}
+
+void emitLibraryScreenshotExport(Stream& reply) {
+    const LibraryEntry* entry = libraryController.selected();
+    if (libraryController.view() != LibraryView::ExportReady ||
+        entry == nullptr || entry->kind != LibraryEntryKind::Screenshot ||
+        entry->screenshot == nullptr) {
+        emitLibraryScreenshotExportError(reply, "not_requested");
+        return;
+    }
+    if (screenshotLiveWorkActive()) {
+        emitLibraryScreenshotExportError(reply, "live_work_busy");
+        return;
+    }
+
+    const auto requestedResources =
+        leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    const auto owner = appRuntime.running()
+        ? AppRuntime::kForegroundOwner : kScreenshotOwner;
+    const auto ownedBefore = resourceBroker.ownedBy(owner);
+    const auto acquiredForExport = requestedResources & ~ownedBefore;
+    if (!resourceBroker.acquire(owner, requestedResources)) {
+        emitLibraryScreenshotExportError(reply, "resources_busy");
+        return;
+    }
+
+    bool valid = true;
+    const char* failure = "none";
+    char expectedFingerprint[33] = {};
+    char observedFingerprint[33] = {};
+    leshy1::storage::SdTransportRunResult identity;
+    bool identityCleanup = true;
+    BoardSdFilesystem filesystem;
+    bool filesystemAttempted = false;
+    ArduinoFsSessionStoreIo io(
+        sdSessionStoreIoWorkspace, screenshotStorageProgress,
+        &protectedDataCipher, &deviceLock);
+    bool ioOpened = false;
+    leshy1::storage::ScreenshotMetadata recoveredMetadata{};
+
+    if (!loadProductFingerprint(expectedFingerprint,
+                                sizeof(expectedFingerprint))) {
+        valid = false;
+        failure = "enrollment_missing";
+    }
+    if (valid) {
+        BoardSdSpiTransport transport;
+        const bool begun = transport.begin();
+        if (begun) {
+            leshy1::storage::SdTransportRunPolicy policy;
+            policy.allowPhysical = true;
+            policy.explicitlySelected = true;
+            policy.identificationOnly = true;
+            policy.ownedResources = resourceBroker.ownedBy(owner);
+            identity = leshy1::storage::runSdIdentificationStateMachine(
+                leshy1::storage::defaultSdIdentificationPlan(), transport,
+                policy);
+            transport.end();
+        }
+        identityCleanup = transport.cleanupComplete();
+        formatCidFingerprint(identity.identity, observedFingerprint,
+                             sizeof(observedFingerprint));
+        valid = begun && identityCleanup &&
+            identity.status ==
+                leshy1::storage::SdTransportRunStatus::Valid &&
+            std::strcmp(expectedFingerprint, observedFingerprint) == 0;
+        if (!valid) failure = "identity_failed";
+    }
+    if (valid) {
+        filesystemAttempted = true;
+        valid = filesystem.beginReadOnly() &&
+            filesystem.readOnlyGuaranteed();
+        if (!valid) failure = "readonly_mount_failed";
+    }
+    if (valid) {
+        const std::uint64_t capacity = filesystem.cardCapacityBytes();
+        leshy1::storage::MediaIdentity media;
+        media.present = capacity != 0U &&
+            capacity == identity.identity.capacityBytes;
+        media.kind = leshy1::storage::MediaKind::Sd;
+        media.fingerprint = observedFingerprint;
+        media.capacityBytes = capacity;
+        media.freeBytes = 0U;
+        leshy1::storage::ProductStoreRequest request;
+        request.operation =
+            leshy1::storage::ProductStoreOperation::RecoverCatalog;
+        request.expectedFingerprint = expectedFingerprint;
+        request.rootPath = leshy1::storage::kProductSessionStoreRoot;
+        request.rootExists = filesystem.exists(
+            leshy1::storage::kProductSessionStoreRoot);
+        request.driverReadOnlyGuaranteed =
+            filesystem.readOnlyGuaranteed();
+        request.ownedResources = resourceBroker.ownedBy(owner);
+        const auto permit = leshy1::storage::authorizeProductStore(
+            media, request);
+        valid = permit.allowed();
+        if (!valid) {
+            failure = leshy1::storage::productStoreAccessStatusName(
+                permit.status);
+        } else {
+            ioOpened = io.selectDrive(filesystem.driveNumber()) &&
+                io.openExistingReadOnly(permit);
+            valid = ioOpened;
+            if (!valid) failure = "store_open_failed";
+        }
+    }
+    if (valid) {
+        const auto recovered = leshy1::storage::recoverScreenshot(
+            io, screenshotStoreWorkspace, &recoveredMetadata);
+        valid = recovered.valid() &&
+            recovered.generation == entry->generation;
+        if (!valid) failure = "selected_generation_unavailable";
+    }
+
+    ScreenshotUsbSinkContext sink{&reply, 0U};
+    if (valid && !leshy1::storage::formatScreenshotJsonSummary(
+                     recoveredMetadata, diagnosticJson,
+                     sizeof(diagnosticJson))) {
+        valid = false;
+        failure = "metadata_encode_failed";
+    }
+    if (valid) {
+        reply.print(
+            "{\"schema\":\"leshy.screenshot.export.v1\","
+            "\"kind\":\"frame_begin\",\"bytes\":");
+        reply.print(static_cast<unsigned long>(
+            recoveredMetadata.pixelBytes));
+        reply.print(",\"protected\":true,\"metadata\":");
+        reply.print(diagnosticJson);
+        reply.println('}');
+        reply.flush();
+        const auto streamed = leshy1::storage::streamScreenshotPixels(
+            io, recoveredMetadata, writeScreenshotUsbChunk, &sink);
+        valid = streamed.valid() &&
+            sink.bytes == recoveredMetadata.pixelBytes;
+        if (!valid) failure = "stream_failed";
+    }
+    if (sink.bytes != 0U) {
+        reply.print('\n');
+    }
+
+    if (ioOpened) io.end();
+    if (filesystem.mounted()) filesystem.end();
+    const bool filesystemCleanup = !filesystemAttempted ||
+        filesystem.cleanupComplete();
+    if (acquiredForExport != 0U) {
+        resourceBroker.release(owner, acquiredForExport);
+    }
+    valid = valid && identityCleanup && filesystemCleanup;
+    if (valid) {
+        char line[192] = {};
+        std::snprintf(
+            line, sizeof(line),
+            "{\"schema\":\"leshy.screenshot.export.v1\","
+            "\"kind\":\"frame_end\",\"bytes\":%lu,\"status\":\"valid\"}",
+            static_cast<unsigned long>(sink.bytes));
+        reply.println(line);
+        reply.flush();
+    } else {
+        emitLibraryScreenshotExportError(reply, failure);
+    }
+}
+
 void emitLibraryCaptureMetadata(Stream& reply) {
     if (libraryController.view() != LibraryView::ExportReady) {
         reply.println(
@@ -38179,7 +38779,7 @@ bool handleWebCompanionRequest(
 
 bool commandRequiresDeviceLockExport(const char* command) {
     if (command == nullptr) return false;
-    constexpr std::array<const char*, 10> commands{{
+    constexpr std::array<const char*, 11> commands{{
         "ble.inspector.export.raw",
         "capture.export.pcap",
         "library.field-survey.export.native",
@@ -38190,6 +38790,7 @@ bool commandRequiresDeviceLockExport(const char* command) {
         "library.export.csv",
         "library.export.pcap",
         "library.export.hc22000",
+        "library.export.screenshot",
     }};
     for (const char* candidate : commands) {
         if (std::strcmp(command, candidate) == 0) return true;
@@ -39062,6 +39663,8 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitLibraryPcapStatus(reply);
     } else if (std::strcmp(command, "library.export.hc22000") == 0) {
         emitLibraryHc22000(reply);
+    } else if (std::strcmp(command, "library.export.screenshot") == 0) {
+        emitLibraryScreenshotExport(reply);
     } else if (command[0] != '\0') {
         reply.println("{\"schema\":\"leshy.boot.v1\",\"kind\":\"error\","
                       "\"reason\":\"unknown_command\"}");
@@ -39527,7 +40130,8 @@ void setup() {
               "\"survey.contract\",\"session.fixture\",\"session.store.fixture\","
               "\"library.fixture\",\"library.export\",\"library.capture\","
               "\"library.export.csv\",\"library.export.pcap\","
-              "\"library.export.hc22000\"]}");
+              "\"library.export.hc22000\","
+              "\"library.export.screenshot\"]}");
 }
 
 void loop() {

@@ -9,6 +9,24 @@
 
 namespace leshy1::domain::apps {
 
+// Home stays flat for one-tap access, but every route still carries its
+// conceptual place and presentation semantics.  Consumers must not infer a
+// warning from a string id: the same metadata is reused by touch, rendering,
+// automation and future contextual deep links.
+enum class AppSection : std::uint8_t {
+    Nearby,
+    Air,
+    Evidence,
+    Controlled,
+    Service,
+};
+
+enum class AppPresentation : std::uint8_t {
+    Standard,
+    Controlled,
+    Service,
+};
+
 struct AppMenuItem final {
     const char* id = nullptr;
     const char* label = nullptr;
@@ -17,6 +35,8 @@ struct AppMenuItem final {
     bool enabled = false;
     bool simulated = false;
     kernel::runtime::ResourceMask resources = 0;
+    AppSection section = AppSection::Nearby;
+    AppPresentation presentation = AppPresentation::Standard;
 };
 
 class AppCatalog final {

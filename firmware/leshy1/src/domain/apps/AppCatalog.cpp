@@ -46,13 +46,15 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory,
                                          ? "simulated / rf off"
                                          : "passive source unavailable")),
                        2, wifi, !realSurvey && simulatedSurvey,
-                       surveyResources};
+                       surveyResources, AppSection::Nearby,
+                       AppPresentation::Standard};
 
     const bool ble = available(inventory, "radio.ble");
     items_[size_++] = {
         "ble", "BLUETOOTH", ble ? "passive / persistent"
                                     : "passive source unavailable",
-        2, ble, false, surveyResources};
+        2, ble, false, surveyResources, AppSection::Nearby,
+        AppPresentation::Standard};
 
     // The fitted receiver shield is part of the exact board profile. Expose
     // its two user-facing receive-only jobs directly instead of hiding them
@@ -65,9 +67,11 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory,
             kernel::runtime::Resource::RadioSpi);
     items_[size_++] = {"spectrum24", "2.4 GHZ",
                        "spectrum / waterfall / signal finder",
-                       2, spectrum, false, spectrumResources};
+                       2, spectrum, false, spectrumResources,
+                       AppSection::Air, AppPresentation::Standard};
     items_[size_++] = {"subghz", "SUB-GHZ", "315 / 433 / 868 / 915",
-                       2, spectrum, false, spectrumResources};
+                       2, spectrum, false, spectrumResources,
+                       AppSection::Air, AppPresentation::Standard};
 
     const bool frameCapture = available(inventory, "capture.wifi_passive");
     items_[size_++] = {
@@ -77,7 +81,8 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory,
         kernel::runtime::resourceMask(
             kernel::runtime::Resource::UiForeground) |
             kernel::runtime::resourceMask(kernel::runtime::Resource::EspRf) |
-            kernel::runtime::resourceMask(kernel::runtime::Resource::RadioSpi)};
+            kernel::runtime::resourceMask(kernel::runtime::Resource::RadioSpi),
+        AppSection::Evidence, AppPresentation::Standard};
 
     const bool persistentLibrary = available(inventory, "storage.sd") ||
                                    available(inventory, "library.persistent_session");
@@ -100,8 +105,9 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory,
                   kernel::runtime::Resource::UiForeground) |
                   kernel::runtime::resourceMask(
                       kernel::runtime::Resource::Storage) |
-                  kernel::runtime::resourceMask(
-                      kernel::runtime::Resource::RadioSpi)};
+                      kernel::runtime::resourceMask(
+                      kernel::runtime::Resource::RadioSpi),
+        AppSection::Evidence, AppPresentation::Standard};
     items_[size_++] = {"library", "LIBRARY",
                        simulatedLibrary ? "simulated / ram only"
                                         : (persistentLibrary ? "ready"
@@ -110,19 +116,22 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory,
                        simulatedLibrary
                            ? kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)
                            : kernel::runtime::Resource::UiForeground |
-                                 kernel::runtime::Resource::Storage};
+                                 kernel::runtime::Resource::Storage,
+                       AppSection::Evidence, AppPresentation::Standard};
 
     // Lab starts with a passive package inspector. Storage is acquired only
     // around an explicit bounded read, so merely opening the page owns UI and
     // cannot touch the radio bus.
     items_[size_++] = {
         "lab", "LAB", "automation package inspection", 8, true, false,
-        kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)};
+        kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground),
+        AppSection::Controlled, AppPresentation::Controlled};
 
     // Service functions remain the final entry.
     items_[size_++] = {
         "device", "DEVICE", "settings / checks / information", 9, true, false,
-        kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)};
+        kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground),
+        AppSection::Service, AppPresentation::Service};
 }
 
 const AppMenuItem* AppCatalog::get(std::size_t index) const {
