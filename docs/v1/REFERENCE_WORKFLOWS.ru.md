@@ -35,7 +35,7 @@
 | WF-05 | Запустить и физически остановить разрешённое Lab action | J-06 | PR-002, PR-009, PR-013; NFR-002/003/006/010 | S7 |
 | WF-06 | Обнаружить и сохранить объяснённое wireless evidence в поле | J-03, J-07 | PR-020…PR-023; NFR-002/005…010 | S7 |
 | WF-07 | Разблокировать устройство и безопасно работать с явным serial target | J-05, J-08 | PR-017, PR-024, PR-025; NFR-002/006/010 | S7 |
-| WF-08 | Запустить permissioned automation или authorized wireless recipe | J-06, J-08 | PR-013, PR-026, PR-027; NFR-002/003/005…007/010 | S7 |
+| WF-08 | Запустить permissioned automation, owned-evidence verification или authorized Owned Lab recipe | J-03, J-06, J-08 | PR-013, PR-026…PR-034; NFR-002/003/005…007/010…013 | S7 |
 
 ## WF-01 — загрузиться, диагностировать, решить
 

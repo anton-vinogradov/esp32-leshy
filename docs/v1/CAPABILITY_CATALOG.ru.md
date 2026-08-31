@@ -2,7 +2,8 @@
 
 *Read in: [English](CAPABILITY_CATALOG.md) · **Русский***
 
-Статус документа: **product-reviewed baseline scope 1.0**, расширен 27 августа 2026 года.
+Статус документа: **product-reviewed baseline scope 1.x**, расширен решениями
+27 августа и 1 сентября 2026 года.
 
 Этот каталог — пользовательское представление границы 1.0. Нормативные критерии
 остаются в [PRODUCT_REQUIREMENTS.ru.md](PRODUCT_REQUIREMENTS.ru.md), а текущее
@@ -31,9 +32,9 @@
 | CAP-002 | Главный экран строится по доступным возможностям и объясняет disabled/conflicted/fault до запуска | P0 | PR-002 | S2 |
 | CAP-003 | Diagnostics выполняет безопасный self-test без TX и экспортирует отчёт | P0 | PR-009 | S2/S5 |
 | CAP-004 | TFT, кнопки и touch используют единые Actions; есть калибровка и доступный Back | P0 | PR-002, NFR-002, NFR-010 | S2 |
-| CAP-005 | Настройки языка EN/RU, яркости, темы, звука и поведения экрана сохраняются локально | P1 | PR-011, NFR-010 | S2/S5 |
+| CAP-005 | Настройки языка EN/RU, яркости, темы, звука, масштаба/контраста/reduced motion, repeat, favorite/hidden apps, shortcuts и optional startup app сохраняются локально | P1 | PR-011, NFR-010 | S2/S5/S7 |
 | CAP-006 | Питание, заряд, low-voltage safe-write, sleep/resume и причины reset видимы и проверяемы | P0 | PR-009, NFR-004 | S5 |
-| CAP-007 | Browser install, stable/beta update, подпись, rollback и recovery image | P0 | PR-010 | S8 |
+| CAP-007 | Browser/SD install, stable/beta update, подпись, rollback и recovery image | P0 | PR-010 | S8 |
 | CAP-008 | Локальные логи, crash journal и диагностический bundle не требуют облака | P1 | PR-009, PR-012 | S6/S8 |
 
 ## Обзор и наблюдения
@@ -148,12 +149,12 @@ calibrated range, исторический Target tracking или доказат
 |---|---|---|---|---|
 | CAP-023 | Capture неизменяем и хранит время, источник, частоту/канал, RSSI, координаты и настройки приёма | P0 | PR-005, NFR-008 | S3/S4 |
 | CAP-024 | Session/Capture записываются атомарно и восстанавливаются после reset/power loss | P0 | PR-005, NFR-009 | S3/S5 |
-| CAP-025 | Library открывает сохранённые Session/Capture офлайн, с list/detail/search/filter | P0 | PR-006 | S3/S6 |
+| CAP-025 | Library открывает сохранённые Session/Capture офлайн, с list/detail/search/filter и recoverable trash/undo | P0 | PR-006 | S3/S6/S7 |
 | CAP-026 | Экспорт поддерживает JSON/CSV summary, PCAP для совместимых кадров и переносимые radio formats | P0/P1 | PR-007 | S3/S5 |
 | CAP-027 | Import/export через SD, USB и local companion использует versioned schemas и fail-closed parser | P0 | PR-007, NFR-007, NFR-009 | S5/S6 |
 | CAP-028 | SD и LittleFS имеют явную identity, capacity, recovery, integrity и degraded behavior | P0 | PR-005, PR-006, PR-009 | S3/S5 |
 | CAP-029 | IR capture/decode/library сохраняет оригинал и производные результаты | P0, conditional RF shield | PR-007, PR-014 | S5 |
-| CAP-030 | Sub-GHz RAW/decode/library сохраняет pulses, radio parameters и производные результаты | P0, conditional RF shield | PR-007, PR-014 | S5 |
+| CAP-030 | Sub-GHz RAW/decode/library сохраняет pulses, radio parameters и производные результаты, объявляет minimum decoder inventory и совместимый `.sub` transport | P0, conditional RF shield | PR-007, PR-014 | S5/S7 |
 | CAP-031 | PN532 читает tag/NDEF info и versioned dump при explicit assembly без GPIO-конфликта | conditional | PR-007, PR-014 | S5 |
 | CAP-043 | Пользователь сохраняет screenshot реального TFT с build/state/time provenance и открывает его в Library/export | P1 | J-03, PR-015 | S2/S5 |
 
@@ -163,7 +164,7 @@ calibrated range, исторический Target tracking или доказат
 |---|---|---|---|---|
 | CAP-032 | Lab context отделён от пассивных сценариев и показывает область работ, частоту, мощность, время и TX state | P0 для любого TX | PR-013 | S7 |
 | CAP-033 | Back, timeout, panic и fault физически прекращают каждый разрешённый TX path | P0 для любого TX | PR-013, NFR-002, NFR-006 | S7 |
-| CAP-034 | IR replay доступен только для выбранного сохранённого Capture в разрешённом контуре | conditional | PR-013, PR-014 | S5/S7 |
+| CAP-034 | IR replay и готовый signed TV/remote profile pack с multi-button/favorites доступны только в разрешённом контуре | conditional | PR-013, PR-014 | S5/S7 |
 | CAP-035 | Sub-GHz replay/TX использует ResourceBroker, bounds, явное подтверждение и исходный immutable Capture | conditional | PR-013, PR-014 | S5/S7 |
 | CAP-036 | NFC write/restore выполняется только для поддерживаемой собственной метки с preview и verify | conditional | PR-013, PR-014 | S5/S7 |
 | CAP-037 | Protocol workbench сравнивает pulses/waveforms, аннотирует поля и создаёт производный decode | P1 | J-06, NFR-008 | S7 |
@@ -190,21 +191,28 @@ calibrated range, исторический Target tracking или доказат
 
 | ID | Возможность 1.0 | Обязательство | Требования | Этап готовности |
 |---|---|---|---|---|
-| CAP-048 | Защита эфира пассивно обнаруживает и объясняет подозрительные Wi-Fi/BLE conditions: bursts отключений, конфликты/смену identity, устойчиво повышенный Wi-Fi noise и tracker-compatible BLE presence; каждый вывод открывает source evidence и uncertainty | P1 | J-07, PR-020 | S7 |
+| CAP-048 | Защита эфира использует именованные versioned profiles и объяснимую sensitivity для passive deauth/PineAP/evil-twin/tracker/skimmer/drone, WPA3/PMF/SAE compliance и Wi-Fi/BLE/nRF/Sub-GHz jamming warnings; каждый вывод открывает source evidence и uncertainty | P1 | J-07, PR-020 | S7 |
 | CAP-049 | Focused Wi-Fi authentication Capture распознаёт EAPOL/PMKID и complete/incomplete handshakes, затем экспортирует immutable PCAP и `hc22000` evidence | P1 | J-03, J-07, PR-015, PR-021 | S7 |
-| CAP-050 | Offline Field Survey объединяет Wi-Fi AP/station и BLE observations с optional GPS track, deduplication, сравнением повторного прохода и локальным WiGLE-compatible export | P1, GPS conditional | J-01, J-07, PR-022 | S7 |
+| CAP-050 | Offline Field Survey объединяет Wi-Fi AP/station и BLE observations с optional GPS track/per-satellite diagnostics, POI/notes, deduplication, сравнением повторного прохода и локальным WiGLE-compatible export | P1, GPS conditional | J-01, J-07, PR-022 | S7 |
 | CAP-051 | BLE Inspector сохраняет compatible raw packets и даёт явный permissioned connected-GATT mode с детерминированным disconnect и provenance | P1 | J-02, J-07, PR-023 | S7 |
-| CAP-052 | [Device Lock](DEVICE_LOCK.ru.md) даёт local PIN setup, bounded retry/recovery и защищает secrets/evidence, не блокируя safe cleanup или recovery | P0 до поставки sensitive data | J-05, J-08, PR-017, PR-024 | S7 |
+| CAP-052 | [Device Lock](DEVICE_LOCK.ru.md) даёт local PIN setup, bounded retry/recovery и lock overlay, под которым уже запущенный safe Capture может продолжаться при защищённых controls/data | P0 до поставки sensitive data | J-05, J-08, PR-017, PR-024 | S7 |
 | CAP-053 | [Устройство → Serial Console](SERIAL_CONSOLE.ru.md) даёт bounded UART bridge и общий Actions CLI с явной конфигурацией, permissions, leases и cleanup | P1 | J-05, J-08, PR-012, PR-025 | S7 |
 | CAP-054 | [Automation/HID](AUTOMATION_HID.ru.md) запускает signed permissioned scripts с preview, ceilings, finite runtime и scoped USB/BLE HID; defensive BadUSB inspection по умолчанию пассивен | P1 | J-08, PR-013, PR-026 | S7 |
-| CAP-055 | Authorized wireless Lab содержит только именованные и отдельно принятые Wi-Fi/BLE/nRF fixture recipes с bounded region/power/channel/time и physical stop | P0 для любого shipped wireless TX | J-06, J-08, PR-013, PR-027 | S7 |
+| CAP-055 | Owned Lab содержит только именованные и отдельно принятые Wi-Fi/BLE/nRF/IR fixture recipes: targeted handshake-assist, iBeacon/identity emulation, MouseJack injection, bounded robustness и IR-camera tests; каждый объявляет target/fixture, region/power/channel/time, evidence и physical stop | P0 для любого shipped active output | J-06, J-08, PR-013, PR-027, NFR-011…013 | S7 |
+| CAP-056 | nRF24 ESB Workbench сохраняет packet Capture, декодирует совместимые ESB payload и пассивно обнаруживает MouseJack; injection существует только как отдельно принятый owned-fixture recipe | P1, conditional RF shield | J-03, J-06, J-07, PR-028 | S7 |
+| CAP-057 | Live Companion потоково отдаёт Wi-Fi/BLE frames в USB Wireshark/extcap и read-only mirror реального TFT без изменения host network или расширения Actions permissions | P1 | J-03, J-05, PR-029 | S7 |
+| CAP-058 | Advanced NFC/EMV при explicit PN532 assembly даёт NDEF/ISO14443-4 emulation, erase, bounded recovery своей метки и redacted EMV protocol diagnostics без сохранения PAN/expiry | P1, conditional PN532 | J-03, J-06, PR-030, NFR-011…013 | S7 |
+| CAP-059 | Privacy Identity рандомизирует только собственный STA/AP Leshy и даёт короткоживущую synthetic identity emulation из owned Capture с TTL/provenance; чужая identity не клонируется скрыто | P1 | J-06, J-08, PR-031 | S7 |
+| CAP-060 | Physical USB Host Inspector перечисляет VID/PID/class/interfaces выбранного устройства и запускает только bounded signed keyboard/HID inspection после квалификации OTG/VBUS/cleanup | P1, conditional USB host | J-05, J-08, PR-032 | S7 |
+| CAP-061 | Owned Evidence Verification ограниченно проверяет собственные Wi-Fi/NFC/Sub-GHz/fixed-code Capture локально или через companion с preview, budget, pause/stop/checkpoint и без встроенных leaked corpora | P1 | J-03, J-06, PR-033 | S7 |
+| CAP-062 | Owned Network Lab даёт read-only LAN inventory, а captive-portal/ARP/DHCP/MITM robustness recipes допускает только на явно выбранном isolated fixture; training portal сохраняет outcome, но не введённый secret | P1 | J-06, J-08, PR-034, NFR-011…013 | S7 |
 
 ## Явно после 1.0
 
 Не входят в этот каталог как обязательства 1.0: authenticated DIV-to-DIV Peer Link,
-облачный аккаунт и telemetry по умолчанию, публичный marketplace исполняемых
-приложений, массовая поддержка других ESP32-плат, скрытые/disruptive действия и
-количество атак как метрика паритета. Кандидат после 1.0 получает собственную
+протокол внешних модулей, optional mobile sync/USB MSC/public reviewed catalog,
+облачный аккаунт и telemetry по умолчанию и массовая поддержка других ESP32-плат.
+Кандидат после 1.0 получает собственную
 пользовательскую задачу, risk review и stage proposal; он не добавляется в таблицу
 задним числом.
 

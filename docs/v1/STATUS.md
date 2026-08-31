@@ -21,16 +21,14 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 - **Working source checkpoint:** exact physical/build candidate `1.0.0-dev.343` at firmware source `a6617692d32913b281e23950831fdee53894b0e3` uses 233,592 B static RAM, 3,600,812 B linked flash and a 3,601,312 B app image, leaving 592,992 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 are `ecc5d198cce1a2ccf5a2898f8f0b1f1976ab523791f79ba573fad7a4f97a1f97`/`b8097fda6cea90a910456c91332dd2f8cefcbf39f3337e96cfb90793264c80cd`/`abe53484218146b6cd9f4aa9329202cd418313b842490889d6ec254ef116a2d6`/`5c31aa7f7b1569f6168d9d3ae69531629ad99f5fc87d8892cf3089f9c51666bd`. BLE/live-render contracts, focused policy tests, production build and retained two-lifecycle HIL pass. Original board-01 was flashed once; clone, Cardputer and Mac Wi-Fi were untouched, physical storage writes and RF TX remain zero.
 - **HIL cadence:** routine fixes run only the affected scenario plus adjacent negative/cleanup assertions and flash a changed candidate at most once. A full matrix is mandatory at stage end, RC, an unreviewed cross-cutting change, or after 15 accepted deltas. Exact dev.302 reset cadence to 0/15; the owner-accepted dev.343 Bluetooth lineage advances the focused count to **11/15**. Dev.341 remains retained as an honest machine pass rejected by the owner.
 - **Release state:** released `v0.*` remains the frozen PoC line; no 1.x binary has been released. Historic redesign checkpoints through exact 0.207 remain immutable evidence names. The first source-bearing 1.x build is `1.0.0-dev.208`; dev.343 is the latest accepted focused physical baseline, dev.344 is the current build candidate, and dev.302 remains the latest periodic full checkpoint. CAP-052 is complete including explicit non-destructive PIN disable; CAP-053 has product/stock-negative acceptance with its positive fixture open, CAP-054 has parser/admission, connected passive product route, accepted nested malformed/unsigned UI, real trust verifier/store, owner-visible UI and accepted positive enrollment/cold-restore/revocation, and FUNC-37 has its first host/build receive-only IR slice. Trusted/unknown/invalid signed-package inspection, stored Workbench annotations/compare and every execution path remain open. Phase-complete candidates use `1.0.0-rc.N`, and the first stable redesign release is `1.0.0`.
-- **Competitor parity review:** the 27 August official-source audit found nine useful
-  or strategically relevant families beyond the original 47-capability baseline.
-  The explicit product decision accepts all except `CF-005 Peer Link`: eight are now
-  `CAP-048…CAP-055`, `PR-020…PR-027`, `WF-06…WF-08`, with S7 ownership and risks
-  R-020…R-023. Peer Link remains explicitly after 1.0; disruptive,
-  social-engineering and unrelated-hardware features remain non-goals. The current
-  1.x boundary remains frozen at **55 capabilities**. A new official-source audit
-  completed on 1 September after competitor releases exposed safe outcomes that may
-  be narrower or absent here; they remain outside the denominator until explicit
-  owner decisions, so strict current parity is not claimed. Exact dev.242 physically accepts the
+- **Competitor parity review:** the 27 August official-source audit expanded the
+  original 47 capabilities to 55. The 1 September seven-competitor decision accepts
+  every valuable compatible refinement and adds `CAP-056…CAP-062`/`PR-028…PR-034`
+  under S7. The current 1.x boundary is now fixed at **62 capabilities**. Peer Link,
+  external-module protocol, mobile/MSC/public catalog, cloud/default telemetry and
+  broad board support remain visible post-1.0. Only retention of real submitted
+  credentials/payment secrets, unbounded/indiscriminate active output, and bypass
+  of broker/safety/watchdog/physical Stop remain hard exclusions. Exact dev.242 physically accepts the
   complete receive-only CAP-048 Airspace Guard workflow, including golden and
   deterministic capacity-loss lifecycles, stable TFT evidence navigation and clean
   release of both radio ownership and heap. Exact dev.246 now physically accepts the
@@ -200,12 +198,12 @@ not abandoned or claimed complete.
 
 ### User functionality status
 
-This is the complete front-page checklist for the accepted 55-capability baseline,
+This is the complete front-page checklist for the accepted 62-capability baseline,
 not a claim that every accepted feature is implemented. `FUNC-NN`
 deliberately mirrors `CAP-0NN` in the [capability catalog](CAPABILITY_CATALOG.md), so
 CI can prove coverage of all accepted capabilities without changing their stable
 identities. The [feature-level audit](COMPETITIVE_ANALYSIS.md#feature-level-parity-audit)
-records the eight promotions and the explicit post-1.0 Peer Link decision. The front-page projection sorts
+records both scope decisions, all accepted re-audit outcomes, and the explicit post-1.0 items. The front-page projection sorts
 rows by first implementation stage and then by stable ID. A `done` row has accepted
 evidence for its stated boundary; `blocked` means its software/UI or conditional path
 awaits the named physical proof.
@@ -217,9 +215,9 @@ awaits the named physical proof.
 | FUNC-02 | Capability-driven Home exposes only available jobs and explains disabled/conflicted/fault before launch | S2 | `done` |
 | FUNC-03 | Device → Self-Test/Diagnostics safely checks applicable hardware without TX and exports a report | S2 + S5 | `done` |
 | FUNC-04 | TFT, five keys and touch share Actions, calibration, stable selection and an accessible Back path | S2 | `done` |
-| FUNC-05 | Locally persisted EN/RU language, brightness, theme, quiet/sound and screen behavior | S2 + S5 | `done` |
+| FUNC-05 | Persisted EN/RU, brightness/theme/sound, font scale/contrast/reduced motion/input repeat, favorite/hidden apps, shortcuts and startup app | S2 + S5 + S7 | `active` |
 | FUNC-06 | Visible power/charge/reset reason, low-voltage safe write and verifiable sleep/resume | S5 | `blocked` |
-| FUNC-07 | Browser install and Device → Update: signed stable/beta OTA, rollback and recovery image | S8 | `planned` |
+| FUNC-07 | Browser/SD install and Device → Update: signed stable/beta OTA/SD package, rollback and recovery image | S8 | `planned` |
 | FUNC-08 | Local logs, crash journal and exportable diagnostic bundle without a cloud dependency | S6 + S8 | `active` |
 | FUNC-09 | Explicit Start/Stop creates a bounded multi-radio Survey Session with configuration and provenance | S3 + S6.6 | `done` |
 | FUNC-10 | Passive Wi-Fi scan: networks, hidden-name enrichment, security/channel/vendor facts and normalized Observations | S3 + S4 | `done` |
@@ -237,16 +235,16 @@ awaits the named physical proof.
 | FUNC-22 | Every compare/correlation conclusion opens its exact source evidence | S6.3 + S6.4 | `done` |
 | FUNC-23 | Immutable Capture preserves raw source, time, frequency/channel, RSSI, coordinates and receive settings | S3 + S4 | `done` |
 | FUNC-24 | Session/Capture commits are atomic and recover after reset and controlled power loss | S3 + S5 | `blocked` |
-| FUNC-25 | Library opens Sessions/Captures offline with list/detail/search/filter and visible integrity state | S3 + S6 | `done` |
+| FUNC-25 | Library opens Sessions/Captures offline with list/detail/search/filter, integrity state and recoverable Trash/Undo | S3 + S6 + S7 | `active` |
 | FUNC-26 | Export provides JSON/CSV summaries, PCAP and portable radio formats with exact provenance | S3 + S5 | `active` |
 | FUNC-27 | SD, USB and local-companion import/export uses versioned schemas and a fail-closed parser | S5 + S6 | `active` |
 | FUNC-28 | SD/LittleFS exposes identity, capacity, recovery, integrity and degraded behavior | S3 + S5 | `done` |
 | FUNC-29 | IR receive/decode preserves original and derived data, cold-reopens in Library and exports CSV | S5.2 | `done` |
-| FUNC-30 | Sub-GHz RAW/OOK/FSK Capture preserves pulses, radio parameters and derived decodes | S5.4 | `blocked` |
+| FUNC-30 | Sub-GHz RAW/OOK/FSK Capture preserves pulses/parameters/decodes and exports Flipper-compatible `.sub` from a declared decoder inventory | S5.4 + S7 | `blocked` |
 | FUNC-31 | PN532 reads tag/NDEF facts and a versioned dump only for an explicit non-conflicting assembly | S5 | `blocked` |
 | FUNC-32 | Separate Lab exposes authorized scope, source, frequency, power, duration and permanently visible TX state | S7 | `planned` |
 | FUNC-33 | Back, timeout, panic, fault or loss of control/telemetry physically stops every TX path | S7 | `planned` |
-| FUNC-34 | IR replay is available only from a selected immutable Capture after preview and explicit confirmation | S7 | `planned` |
+| FUNC-34 | IR replay uses selected immutable Capture or a ready signed multi-button/favorite remote/TV profile after preview and explicit confirmation | S7 | `planned` |
 | FUNC-35 | Sub-GHz replay/TX from an immutable Capture passes ResourceBroker, bounds, confirmation, countdown and stop result | S7 | `planned` |
 | FUNC-36 | NFC write/restore of a supported owned tag exposes preview, verify and the original recovery dump | S7, conditional hardware | `planned` |
 | FUNC-37 | Protocol Workbench compares pulses/waveforms, annotates fields and stores a derived decode without changing raw source | S7 | `active` |
@@ -260,14 +258,21 @@ awaits the named physical proof.
 | FUNC-45 | One feedback service owns antenna LEDs and buzzer: default 2/255, quiet mode, bounded tones and non-color-only cues | S5 + S6 | `done` |
 | FUNC-46 | Scoped Wi-Fi/USB setup isolates secrets, never exports them and never makes networking a Survey/Library prerequisite | S6 + S8 | `active` |
 | FUNC-47 | Versioned backup/restore and factory reset show scope/preview/checksum and never overwrite raw Capture without confirmation | S8 | `planned` |
-| FUNC-48 | Airspace Guard passively detects/explains suspicious Wi-Fi/BLE conditions and opens exact evidence/uncertainty for every finding | S7 | `done` |
+| FUNC-48 | Named Airspace Guard profiles/sensitivity explain Wi-Fi/BLE/nRF/Sub-GHz conditions, WPA3/PMF/SAE and jamming indicators with exact evidence/uncertainty | S7 | `active` |
 | FUNC-49 | Focused Wi-Fi authentication Capture reports EAPOL/PMKID and complete/incomplete handshakes, then exports PCAP and `hc22000` | S7 | `done` |
-| FUNC-50 | Offline Field Survey joins Wi-Fi AP/station and BLE observations with optional GPS track, revisit comparison and WiGLE-compatible export | S7 | `active` |
+| FUNC-50 | Offline Field Survey joins Wi-Fi AP/station and BLE with optional GPS track/satellite diagnostics/POI/notes, revisit comparison and WiGLE export | S7 | `active` |
 | FUNC-51 | BLE Inspector preserves raw compatible packets and enters connected GATT only after explicit target/permission/lease confirmation | S7 | `done` |
-| FUNC-52 | Device Lock protects secrets/evidence with local PIN, bounded retry and tested recovery without blocking Stop/panic/recovery | S7 | `done` |
+| FUNC-52 | Device Lock protects secrets/evidence with PIN/recovery and can continue an admitted Capture beneath a private lock overlay without blocking Stop | S7 | `active` |
 | FUNC-53 | Device → Serial Console provides a bounded UART bridge and shared Actions CLI under explicit target/configuration/lease | S7 | `active` |
 | FUNC-54 | Permissioned signed Automation/HID has preview, ceilings, finite runtime, scoped target and passive-by-default BadUSB inspection | S7 | `active` |
-| FUNC-55 | Authorized wireless Lab ships only named, individually accepted Wi-Fi/BLE/nRF fixture recipes with bounded power/channel/time and physical stop | S7 | `planned` |
+| FUNC-55 | Owned Lab ships named Wi-Fi/BLE/nRF/IR recipes for targeted handshake assist, identity/iBeacon, MouseJack, robustness and IR-camera fixtures with containment and Stop | S7 | `planned` |
+| FUNC-56 | nRF24 ESB Workbench captures/decodes compatible packets and passively detects MouseJack; injection is a separate owned-fixture recipe | S7 | `planned` |
+| FUNC-57 | Read-only Live Companion streams compatible Wi-Fi/BLE evidence to USB Wireshark/extcap and mirrors TFT without changing the host network | S7 | `planned` |
+| FUNC-58 | Conditional Advanced NFC/EMV provides NDEF/ISO14443-4 emulation, erase, owned-tag recovery and redacted protocol diagnostics | S7, conditional PN532 | `planned` |
+| FUNC-59 | Privacy Identity randomizes Leshy STA/AP and offers ephemeral provenance-labeled synthetic lab identities from owned Captures | S7 | `planned` |
+| FUNC-60 | Conditional USB Host Inspector enumerates device/class interfaces and bounded signed keyboard/HID behavior after VBUS/OTG qualification | S7, conditional hardware | `planned` |
+| FUNC-61 | Owned Evidence Verification checks owned Wi-Fi/NFC/Sub-GHz/fixed-code Captures with budget, pause/stop/checkpoint and provenance | S7 | `planned` |
+| FUNC-62 | Owned Network Lab gives read-only LAN inventory and bounded captive-portal/ARP/DHCP/MITM robustness tests on an isolated selected fixture | S7 | `planned` |
 <!-- LESHY-FUNCTIONS:END -->
 
 S6.4 is deliberately split into reviewable user interactions:
@@ -440,7 +445,7 @@ without changing the active phase or claiming their user workflows:
 ## Where we are in the functionality map
 
 The complete high-level scope and stage ownership live in the
-[functionality map](DELIVERY_PLAN.md#product-functionality-map), while all 55 testable
+[functionality map](DELIVERY_PLAN.md#product-functionality-map), while all 62 testable
 items remain in [CAPABILITY_CATALOG.md](CAPABILITY_CATALOG.md).
 
 | Product block | Now | Next qualitative transition |
@@ -450,7 +455,7 @@ items remain in [CAPABILITY_CATALOG.md](CAPABILITY_CATALOG.md).
 | Passive multi-radio and Capture | `done / S4`, refined in S5 — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV, persistent Wi-Fi PCAP, all-available nRF24 and CC1101 live maps, receiver-paced one-pixel waterfall rows, and ambient-calibrated nRF24/CC1101 finders are accepted; Full/Guided checks, endurance and physical power-cut recovery remain the common foundation | use board-02 to close positive known-signal evidence and retain the common observation/storage path |
 | Complete standard ESP32-DIV hardware | `blocked / S5` — the executable product and one-command matrix are ready; the faulty clone cannot provide qualified RF-positive evidence | when the ordered replacement DIV arrives, qualify it read-only and run positive nRF24/Sub-GHz OOK/FSK plus integrated S5.6 Full |
 | Targets, compare and companion | `active / S6.5` — exact 0.165.0 completes the accepted on-device List/Compare/Detail, metadata, correlation decisions and cold-reversible merge/split set with product storage/RF isolation | expose the same versioned records and typed Actions through a scoped local USB/Web companion without direct driver/storage access |
-| Competitive completeness, device security, Safe Lab and extensions | `ahead / S7` — eight audited additions are accepted and traced; safety/resource boundaries exist, but their user workflows and SDK are not implemented | Airspace Guard, auth Capture, Field Survey, BLE Inspector, Device Lock, Serial Console, permissioned Automation/HID and admitted wireless recipes plus proven panic/timeout stop |
+| Competitive completeness, device security, Owned Lab and extensions | `ahead / S7` — the 62-row scope is accepted and traced; safety/resource boundaries exist, but the newly expanded user workflows and SDK are not implemented | complete refinements plus nRF24 ESB, Live Companion, Advanced NFC/EMV, Privacy Identity, USB Host, Owned Evidence Verification and Owned Network Lab with proven containment/panic/timeout stop |
 | Reliability and 1.0 delivery | `ahead / S8` — exact 0.103 proves the main-loop watchdog and exact 0.135 accepts Product Survey preparation/admission plus calibrated Wi-Fi+BLE worker deadline slices; physical hard-stop evidence and release qualification remain open | extend worker deadlines to all remaining workers, signed OTA/rollback/recovery, full HIL/Self-Test, one-hour-budget mixed workload and two green RCs |
 
 In stage terms S0–S4 are closed, S5 is hardware-blocked, S6 implementation is active
@@ -467,8 +472,8 @@ be accepted until the deferred S5 physical predecessor gate is closed.
 - reviewed original ESP32-DIV, GhostESP, Bruce, Marauder, Flipper Zero, and secondary
   references;
 - initially defined `J-01…J-06`, `PR-001…PR-019`, and `NFR-001…NFR-010`; the
-  27 August product decision adds `J-07…J-08` and `PR-020…PR-027` without rewriting
-  the original gate evidence;
+  27 August product decision adds `J-07…J-08` and `PR-020…PR-027`; the 1 September
+  decision adds `PR-028…PR-034` and `NFR-011…NFR-013` without rewriting original evidence;
 - defined the first vertical outcome as a persisted Survey Session;
 - created the bilingual [`HARDWARE_ENVELOPE`](HARDWARE_ENVELOPE.md) from v2
   schematic/BOM, original firmware, and vendor datasheets;
@@ -491,7 +496,7 @@ be accepted until the deferred S5 physical predecessor gate is closed.
 - created risk register R-001…R-017 with controls, closure owners, stage gates, and
   an explicit critical physical-stop risk for any active action.
 - decomposed the initial user-facing 1.0 scope into `CAP-001…CAP-047`, then explicitly
-  expanded it to `CAP-001…CAP-055`; UX is controlled through S1 direction and the S2
+  expanded it to `CAP-001…CAP-055`, then to the fixed `CAP-001…CAP-062`; UX is controlled through S1 direction and the S2
   real-TFT `UX-01…UX-08` baseline, while every
   S2…S8 stage closes through a reproducible `DEMO-S*`, not by waiting for final firmware.
 - product review closed six hidden scope gaps: Wi-Fi packet/PCAP Capture, screenshot

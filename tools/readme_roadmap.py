@@ -20,7 +20,7 @@ QUEUE_END_MARKER = "<!-- LESHY-DELIVERY-QUEUE:END -->"
 FUNCTIONS_START_MARKER = "<!-- LESHY-FUNCTIONS:START -->"
 FUNCTIONS_END_MARKER = "<!-- LESHY-FUNCTIONS:END -->"
 EXPECTED_STAGES = tuple(f"S{index}" for index in range(9))
-EXPECTED_FUNCTIONS = 55
+EXPECTED_FUNCTIONS = 62
 
 
 @dataclass(frozen=True)
@@ -62,10 +62,10 @@ CONFIGS = (
         source_note=(
             "This front-page snapshot is generated from the authoritative 1.x "
             "documentation; CI rejects it if it drifts. The checklist is complete "
-            "for the currently frozen 55-capability 1.x baseline. The 1 September "
-            "competitor re-audit is complete; candidate additions and deliberate "
-            "exclusions remain outside this fixed denominator until an explicit "
-            "product decision in the "
+            "for the currently frozen 62-capability 1.x baseline. The 1 September "
+            "competitor re-audit and product decision are complete: every valuable "
+            "accepted outcome is inside this denominator, while deferred integrations "
+            "and the three hard product boundaries remain explicit in the "
             "[feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit)."
         ),
         detailed_status="live status and next evidence gate",
@@ -107,9 +107,10 @@ CONFIGS = (
         source_note=(
             "Этот срез главной страницы генерируется из документации-точки-истины "
             "1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline "
-            "из 55 capabilities, знаменатель зафиксирован. Повторный аудит "
-            "конкурентов от 1 сентября завершён; кандидаты и принципиальные "
-            "исключения не входят в эти 55 до явного product decision в "
+            "из 62 capabilities, знаменатель зафиксирован. Повторный аудит "
+            "конкурентов и product decision от 1 сентября завершены: все ценные "
+            "принятые outcomes входят в знаменатель, а отложенные integrations и "
+            "три жёсткие продуктовые границы явно перечислены в "
             "[пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета)."
         ),
         detailed_status="живой статус и ближайший evidence gate",

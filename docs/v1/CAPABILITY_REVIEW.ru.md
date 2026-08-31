@@ -5,7 +5,7 @@
 Дата: 17 августа 2026 года. Результат: **product scope coherent; catalog baseline
 reviewed; PRD technical baseline принят `E-GATE-001`**.
 
-Дополнение по competitor features: **27 августа 2026 года**.
+Дополнения по competitor features: **27 августа и 1 сентября 2026 года**.
 
 ## Входы и правила проверки
 
@@ -46,12 +46,13 @@ primary owner в IA, requirement, stage, error/cancel path и проверяем
 | Проверка | Результат |
 |---|---|
 | Jobs | J-01…J-08 имеют capabilities и WF owner |
-| Requirements | PR-001…PR-027 и NFR-001…NFR-010 присутствуют в stage/traceability; PRD принят как baseline 1.0, verification остаётся поэтапной |
-| Information architecture | Все CAP-001…CAP-055 имеют primary owner в task hierarchy UX-S01 |
+| Requirements | PR-001…PR-034 и NFR-001…NFR-013 присутствуют в stage/traceability; PRD принят как baseline 1.0, verification остаётся поэтапной |
+| Information architecture | Все CAP-001…CAP-062 имеют primary owner в task hierarchy UX-S01 |
 | Error/cancel behavior | UX-02 задаёт unavailable/loading/degraded/error/confirm/success и cleanup для каждого screen family |
 | Hardware conditionals | RF shield, GPS, PN532, sound HW-T09 не превращаются в unconditional availability |
-| Safety | Passive Capture отделён от Lab; любой TX имеет scope/confirm/deadline/Stop/Panic |
-| Explicit exclusions | Cloud/default telemetry, Peer Link, executable marketplace, broad boards и attack-count parity остаются после 1.0 |
+| Safety | Passive Capture отделён от Owned Lab; любой active output имеет selected target/fixture, scope, confirmation, deadline, cleanup и physical Stop; extension не может обойти platform enforcement |
+| Жёсткие исключения | Сохранение реальных submitted credentials/payment secrets; unbounded/indiscriminate active output; обход broker/safety/watchdog/Stop |
+| Отложено, но не отвергнуто | Cloud/default telemetry, Peer Link, public executable catalog/mobile sync, external-module protocol и broad board matrix остаются после 1.0 |
 
 ## Verdict
 
@@ -60,9 +61,25 @@ Product review первоначально принял CAP-001…CAP-047. Бол
 нашёл девять полезных или стратегически значимых семейств (`CF-001…CF-009`). Явным
 решением от 27 августа приняты все, кроме `CF-005 Peer Link`: восемь принятых
 семейств теперь имеют ID `CAP-048…CAP-055`, `PR-020…PR-027` и `WF-06…WF-08` с
-владельцем S7. Рабочая граница 1.0 теперь содержит **55 capabilities**. Peer Link,
-сознательно disruptive функции и функции для отсутствующего железа остаются явным
-post-1.0 scope или non-goals, а не скрытыми пропусками.
+владельцем S7. Решение 1 сентября затем приняло все полезные результаты повторного
+аудита семи конкурентов, совместимые с evidence-first instrument и bounded Owned Lab:
+существующие capabilities получили конкретные acceptance refinements, а в S7
+добавлены семь новых строк `CAP-056…CAP-062`/`PR-028…PR-034`. Стабильная граница 1.0
+теперь содержит **62 capabilities**.
+
+Непересматриваемыми остаются только три продуктовые границы: Leshy не сохраняет
+реальные submitted credentials или payment secrets; не даёт unbounded или
+indiscriminate active output без выбранного target/qualified isolated fixture; ни
+app, script, package, developer mode или companion не обходят ResourceBroker,
+Safety Supervisor, watchdog, expiry или physical Stop. Targeted handshake assist,
+identity/iBeacon emulation, MouseJack injection, bounded robustness/crash/interference
+tests, portal/ARP/DHCP/MITM fixtures, evidence verification и IR-camera tests не
+являются blanket exclusions: это именованные Owned Lab recipes, admission которых
+обязана доказать scope, containment, time bound и cleanup.
+
+Peer Link и остальные отложенные integrations остаются явным post-1.0 scope, а не
+скрытыми пропусками. Они не меняют фиксированный знаменатель до отдельного product
+decision следующей release boundary.
 
 Scope review вместе с constrained hardware/resource evidence закрывает S1 через
 `E-GATE-001`. Это не объявляет возможности реализованными или verified: такие статусы

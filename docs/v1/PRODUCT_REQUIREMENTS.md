@@ -1,6 +1,6 @@
 # ESP32-Leshy 1.x product requirements
 
-Document status: **accepted 1.0 baseline, expanded by product decision**, 27 August 2026.
+Document status: **accepted 1.0 baseline, expanded by product decision**, 1 September 2026.
 
 This document turns the [product vision](VISION.md) and
 [competitive analysis](COMPETITIVE_ANALYSIS.md) into a testable 1.0.0 boundary.
@@ -13,6 +13,11 @@ ESP32-Leshy 1.x is an autonomous field tool that collects observations from the
 available ESP32-DIV radios into one session, helps investigate a signal source, and
 preserves verifiable source data for later analysis. It remains useful without a
 phone, account, or internet connection.
+
+Its product identity is an **evidence-first multi-radio instrument with a separate,
+bounded Owned Lab**. Passive inspection and reproducible evidence are the default;
+active experiments exist only as named, scoped recipes for equipment the operator
+owns or is explicitly authorized to test.
 
 ## User jobs
 
@@ -50,12 +55,12 @@ phone, account, or internet connection.
 | PR-003 | Survey creates one Session | Wi-Fi/BLE and all available detected receivers share a timeline with honest duty cycle; absent external GPS/PN532 is not a defect | P0 |
 | PR-004 | Shared List/Detail/Radar patterns | Back, filters, and units behave consistently across supported radios | P0 |
 | PR-005 | Persist Session/Capture atomically | Power loss cannot corrupt previously committed data | P0 |
-| PR-006 | Reopen a Session offline after reboot | Lists, details, and source captures work with radios inactive | P0 |
-| PR-007 | Export portable data | PCAP where compatible, JSON/CSV summaries, and compatible IR/NFC/Sub-GHz formats where feasible | P0/P1 |
+| PR-006 | Reopen and manage evidence offline after reboot | Lists, details, and source captures work with radios inactive; delete uses recoverable Trash/Undo before permanent purge | P0 |
+| PR-007 | Export portable data | PCAP where compatible, JSON/CSV summaries, Flipper-compatible `.sub`, and compatible IR/NFC formats where feasible | P0/P1 |
 | PR-008 | Preserve Target history, notes, tags, and identity links | Merge/split is reversible; automatic links expose confidence/evidence | P1 |
 | PR-009 | Diagnose resources, firmware workflows, and installed hardware through an explicit Self-Test app | Home→Device→Self-Test offers read-only Quick and scoped Full/Guided modes; both use the same versioned checks as release HIL, report `not_applicable/blocked` honestly, leave zero leases, and save an exportable report; no Self-Test runs automatically at boot | P0 |
-| PR-010 | Document install, update, and recovery | Browser install, signed stable/beta OTA, rollback, and recovery pass HIL | P0 |
-| PR-011 | Provide the core experience in EN/RU | One build switches language without truncating critical copy | P1 |
+| PR-010 | Document install, update, and recovery | Browser install, signed stable/beta OTA, signed SD update, rollback, and recovery pass HIL | P0 |
+| PR-011 | Provide an accessible, configurable core experience in EN/RU | One build switches language without truncating critical copy; font scale, contrast/reduced-motion, input repeat, favorites, hidden apps, and shortcuts persist locally | P1 |
 | PR-012 | Use the same Actions/schema in the local companion | Offline viewing/export; permissions are no broader than the local session | P1 |
 | PR-013 | Restrict active actions to Lab context | Parameters, indication, timer, and stop are visible; panic/expiry physically stops TX | P0 for any shipped TX |
 | PR-014 | Cover documented ESP32-DIV v2 configurations | Main board and RF shield have probes/baseline workflows; GPS and PN532 use separate explicit assembly profiles without GPIO5/6 contention | P0 |
@@ -64,14 +69,21 @@ phone, account, or internet connection.
 | PR-017 | Keep connectivity offline-first and secrets scoped | Wi-Fi/USB setup stores credentials outside Sessions/reports/backups; Survey/Library work without a network; OTA/companion receive only explicitly granted scope | P0 for PR-010/012 |
 | PR-018 | Make backup/restore and factory reset safe for user data | Scope, schema, checksum, and overwrite plan appear before execution; cancel changes nothing; raw Capture is never replaced silently; restore/reset have recovery tests | P1 |
 | PR-019 | Keep offline enrichment subordinate to source facts | OUI/BLE/protocol database exposes version/provenance; missing or stale data leaves raw identity available and never invents correlation | P1 |
-| PR-020 | Detect suspicious wireless conditions passively and explain every alert | Airspace Guard labels detector/version/threshold/confidence and opens exact source evidence; insufficient data remains inconclusive and never triggers an active response | P1 |
+| PR-020 | Detect suspicious wireless conditions passively and explain every alert | Airspace Guard exposes named detector profiles and sensitivity, labels detector/version/threshold/confidence, covers WPA3/PMF/SAE and cross-radio jamming indicators, and opens exact source evidence; insufficient data remains inconclusive and never triggers an active response | P1 |
 | PR-021 | Capture Wi-Fi authentication evidence as a focused passive workflow | EAPOL/PMKID and complete/incomplete handshake state are explicit; immutable evidence exports compatible PCAP and `hc22000` with provenance; no active provocation occurs outside a separately admitted Lab recipe | P1 |
-| PR-022 | Provide an offline Field Survey workflow | Wi-Fi AP/station and BLE observations are deduplicated and, when GPS is available, bound to a track; revisit comparison and WiGLE-compatible local export preserve source IDs and uncertainty without requiring cloud upload | P1 |
+| PR-022 | Provide an offline Field Survey workflow | Wi-Fi AP/station and BLE observations are deduplicated and, when GPS is available, bound to a track with satellite diagnostics, POIs, and field notes; revisit comparison and WiGLE-compatible local export preserve source IDs and uncertainty without requiring cloud upload | P1 |
 | PR-023 | Inspect BLE beyond advertisement summaries without hidden connection | Compatible raw packets remain exportable; connected GATT enumeration requires an explicit mode transition, selected target, permission, visible connection state, separate lease, and deterministic disconnect/cleanup | P1 |
-| PR-024 | Protect local secrets and evidence through Device Lock | First-run/local PIN setup, bounded retry and documented recovery cannot bypass safe cleanup, panic, update recovery, or factory reset; locked UI and exports reveal no protected content; the owner can explicitly disable PIN protection without deleting or re-encrypting existing data and can enroll a new PIN later | P0 before a release stores credentials or sensitive captures |
+| PR-024 | Protect local secrets and evidence through Device Lock | First-run/local PIN setup, bounded retry and documented recovery cannot bypass safe cleanup, panic, update recovery, or factory reset; the lock overlay may continue a previously admitted safe Capture but controls, identities, and exports reveal no protected content; the owner can explicitly disable PIN protection without deleting or re-encrypting existing data and can enroll a new PIN later | P0 before a release stores credentials or sensitive captures |
 | PR-025 | Expose a bounded [Serial Console and shared Actions CLI](SERIAL_CONSOLE.md) | User explicitly selects a named UART profile/baud/mode and target; ResourceBroker owns the session; exit/error releases it; CLI permissions are no broader than on-device Actions and raw GPIO control is absent | P1 |
 | PR-026 | Run [permissioned signed automation and explicitly scoped HID workflows](AUTOMATION_HID.md) | Package signature/version/permissions, resource ceilings, action preview, finite runtime and cancel/panic are mandatory; USB/BLE HID requires a confirmed target/scope, while BadUSB inspection is passive by default | P1 |
-| PR-027 | Ship only named, individually accepted wireless Lab recipes | Every Wi-Fi/BLE/nRF recipe declares owned fixture/target, region, channel/frequency, power, duration, expected evidence and hardware stop path; jamming, indiscriminate flood, crash and credential-harvest recipes are rejected | P0 for any shipped wireless TX |
+| PR-027 | Ship only named, individually accepted wireless Lab recipes | Every Wi-Fi/BLE/nRF/IR recipe declares owned fixture/target, region, channel/frequency, power, duration, expected evidence and hardware stop path; targeted handshake-assist, synthetic iBeacon/identity emulation, MouseJack injection, bounded robustness/crash and IR-camera tests are admitted only when target and containment are proven; unbounded or indiscriminate output and secret harvesting are rejected | P0 for any shipped active output |
+| PR-028 | Capture and inspect nRF24 ESB evidence | Compatible ESB packets are retained and decoded; passive MouseJack detection is available; injection exists only as a separately admitted Owned Lab fixture recipe | P1 |
+| PR-029 | Provide a read-only Live Companion | USB Wireshark/extcap streams compatible Wi-Fi/BLE evidence and mirrors the TFT without changing the host network, widening permissions, or becoming required for autonomous use | P1 |
+| PR-030 | Provide advanced NFC/EMV inspection within hardware capability | Conditional PN532 workflows cover NDEF/ISO14443-4 emulation, erase, bounded owned-tag recovery, and redacted EMV protocol metadata; PAN, expiry, submitted PIN, and equivalent payment secrets are never retained | P1, conditional PN532 |
+| PR-031 | Control Leshy's own and synthetic lab identities | STA/AP randomization is locally configurable; identity emulation derives only from an owned Capture or explicit synthetic template and is ephemeral, provenance-labeled, time-bounded, and confined to Owned Lab | P1 |
+| PR-032 | Inspect physical USB devices safely | Conditional USB Host shows VID/PID/class/interfaces and bounded signed keyboard/HID inspection only after OTG/VBUS/current-limit and deterministic cleanup qualification | P1, conditional hardware profile |
+| PR-033 | Verify owned evidence without disguising cracking as observation | Bounded local or companion-assisted verification supports owned Wi-Fi/NFC/Sub-GHz/fixed-code evidence with preview, budget, pause/stop, checkpoint and provenance; leaked/default secret corpora are not bundled | P1 |
+| PR-034 | Test an owned isolated network fixture | Read-only LAN inventory is available normally; captive-portal/ARP/DHCP/MITM robustness recipes require an explicitly selected isolated fixture, bounded duration and physical Stop; a training portal records the outcome, never the submitted secret | P1 |
 
 ## System requirements
 
@@ -87,23 +99,30 @@ phone, account, or internet connection.
 | NFR-008 | Source Captures are immutable; decode/edit operations create derived data |
 | NFR-009 | Schemas migrate forward or fail clearly without source-data loss |
 | NFR-010 | Critical state never depends on color alone; standard buttons operate all core workflows |
+| NFR-011 | Real submitted credentials, payment identifiers, PINs, and equivalent secrets are never retained in persistence, logs, screenshots, reports, or exports; useful protocol metadata is minimized and redacted |
+| NFR-012 | Every active output has an explicit selected target or qualified fixture, declared scope and expiry, visible state, deterministic cleanup, and physical Stop; broadcast stress/interference requires proven isolation/interlock |
+| NFR-013 | No app, script, signed package, developer mode, or companion command can bypass ResourceBroker, Safety Supervisor, watchdog, permission review, expiry, or physical Stop |
 
 ## 1.0.0 boundary
 
 In scope: an independent ESP32-DIV v2 build; Diagnostics, Survey, Targets,
 Capture/Library, settings; passive baseline workflows for all standard receivers;
-Airspace Guard, focused Wi-Fi authentication Capture, offline Field Survey, and BLE
-Inspector; Device Lock and bounded Serial Console/Actions CLI; permissioned signed
-automation/HID and individually admitted wireless Lab recipes; Wi-Fi packet/PCAP
-Capture, screenshot evidence, versioned offline enrichment; SafetyPolicy-approved
-IR/NFC work on owned devices; SD/LittleFS storage and portable exports; scoped
-connectivity, safe LED/buzzer feedback, backup/restore/factory reset; browser install,
-OTA/rollback/recovery; EN/RU UI; host, HIL, and endurance gates.
+Airspace Guard, focused Wi-Fi authentication Capture, offline Field Survey, BLE
+Inspector, nRF24 ESB Workbench, Advanced NFC/EMV, USB Host Inspector, Owned Evidence
+Verification and Owned Network Lab; Device Lock, Privacy Identity, bounded Serial
+Console/Actions CLI, and read-only Live Companion; permissioned signed automation/HID
+and individually admitted wireless/IR Lab recipes; Wi-Fi packet/PCAP Capture,
+screenshot evidence, versioned offline enrichment and portable `.sub`; SafetyPolicy-
+approved IR/NFC work on owned devices; SD/LittleFS storage and portable exports;
+scoped connectivity, safe LED/buzzer feedback, backup/restore/factory reset; browser
+install, signed OTA/SD update, rollback/recovery; EN/RU UI; host, HIL, and endurance
+gates.
 
 Not required for 1.0.0: other boards without a profile owner and HIL target; cloud
-accounts or default telemetry; an executable app store before SDK/threat-model
-stability; authenticated DIV-to-DIV Peer Link; attack-count parity; unexplained or
-irreversible identity correlation.
+accounts or default telemetry; public executable catalogs/mobile sync before SDK and
+threat-model stability; authenticated DIV-to-DIV Peer Link; unexplained or
+irreversible identity correlation. Those are deferred scope, not permission to relax
+NFR-011…NFR-013.
 
 ## First vertical slice: Survey Session
 

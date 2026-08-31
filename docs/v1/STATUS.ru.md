@@ -21,16 +21,14 @@
 - **Текущий source checkpoint:** exact physical/build candidate `1.0.0-dev.343` на firmware source `a6617692d32913b281e23950831fdee53894b0e3` использует 233 592 B static RAM, 3 600 812 B linked flash и app image 3 601 312 B, оставляя 592 992 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map — `ecc5d198cce1a2ccf5a2898f8f0b1f1976ab523791f79ba573fad7a4f97a1f97`/`b8097fda6cea90a910456c91332dd2f8cefcbf39f3337e96cfb90793264c80cd`/`abe53484218146b6cd9f4aa9329202cd418313b842490889d6ec254ef116a2d6`/`5c31aa7f7b1569f6168d9d3ae69531629ad99f5fc87d8892cf3089f9c51666bd`. Проходят BLE/live-render contracts, focused policy tests, production build и retained HIL двух lifecycle. Original board-01 прошита один раз; clone, Cardputer и Wi-Fi Mac не затронуты, physical storage writes и RF TX остаются zero.
 - **Cadence HIL:** обычная правка запускает только затронутый scenario плюс соседние negative/cleanup assertions и прошивает изменившийся candidate максимум один раз. Full matrix обязателен в конце этапа, на RC, при непроверенном cross-cutting change или после 15 принятых deltas. Exact dev.302 сбросил cadence до 0/15; принятая владельцем lineage Bluetooth dev.343 продвигает focused count до **11/15**. Dev.341 остаётся честно сохранённым machine pass, отклонённым владельцем.
 - **Релизный статус:** выпущенная линейка `v0.*` остаётся замороженным PoC; бинарник 1.x ещё не выпускался. Исторические checkpoints редизайна по exact 0.207 включительно сохраняют неизменяемые evidence names. Первая source-bearing сборка 1.x — `1.0.0-dev.208`; dev.343 — последний принятый focused physical baseline, dev.344 — текущий build candidate, dev.302 — последний periodic full checkpoint. CAP-052 завершён, включая явное non-destructive отключение PIN; CAP-053 имеет product/stock-negative acceptance с открытым positive fixture, CAP-054 имеет parser/admission, подключённый passive product route, принятый nested malformed/unsigned UI, real trust verifier/store, owner-visible UI и принятый positive enrollment/cold-restore/revocation, а FUNC-37 получил первый host/build receive-only IR slice. Inspection signed package trusted/unknown/invalid, сохранение annotations/compare Workbench и каждый execution path остаются открыты. Phase-complete candidates имеют вид `1.0.0-rc.N`, первый stable релиз редизайна — `1.0.0`.
-- **Review конкурентного паритета:** официальный аудит 27 августа нашёл девять
-  полезных или стратегически значимых семейств сверх исходного baseline из 47
-  capabilities. Явным product decision приняты все, кроме `CF-005 Peer Link`:
-  восемь теперь имеют ID `CAP-048…CAP-055`, `PR-020…PR-027`, `WF-06…WF-08`,
-  владельца S7 и risks R-020…R-023. Peer Link явно остаётся после 1.0; disruptive,
-  social-engineering и unrelated-hardware функции — non-goals. Текущая граница
-  1.x остаётся замороженной на **55 capabilities**. После новых релизов конкурентов
-  1 сентября завершён повторный аудит официальных источников: безопасные outcomes,
-  для которых наше покрытие уже или отсутствует, не меняют знаменатель без явного
-  решения владельца, поэтому строгий актуальный паритет пока не заявляется. Exact dev.242 физически принимает полный
+- **Review конкурентного паритета:** официальный аудит 27 августа расширил исходные
+  47 capabilities до 55. Решением 1 сентября по семи конкурентам приняты все ценные
+  совместимые refinements и добавлены `CAP-056…CAP-062`/`PR-028…PR-034` под S7.
+  Текущая граница 1.x теперь зафиксирована на **62 capabilities**. Peer Link,
+  протокол внешних модулей, mobile/MSC/public catalog, cloud/default telemetry и
+  broad board support остаются видимым post-1.0 scope. Жёстко исключены только
+  сохранение реальных submitted credentials/payment secrets, unbounded/
+  indiscriminate active output и обход broker/safety/watchdog/physical Stop. Exact dev.242 физически принимает полный
   receive-only workflow CAP-048 «Защита эфира», включая golden и deterministic
   capacity-loss lifecycles, стабильную TFT navigation evidence и чистое освобождение
   radio ownership и heap. Exact dev.246 теперь физически принимает mechanics
@@ -198,13 +196,13 @@
 
 ### Статус пользовательских возможностей
 
-Это полный front-page checklist для принятого baseline из 55 capabilities, а не
+Это полный front-page checklist для принятого baseline из 62 capabilities, а не
 заявление, что все принятые функции уже реализованы. `FUNC-NN`
 намеренно соответствует `CAP-0NN` в
 [каталоге возможностей](CAPABILITY_CATALOG.ru.md), поэтому CI может доказать
 покрытие всех принятых capability без изменения их стабильных идентификаторов.
 [Пофункциональный аудит](COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета)
-фиксирует восемь повышений и явное post-1.0 решение для Peer Link. Проекция на главную сортирует
+фиксирует оба scope decision, все принятые outcomes повторного аудита и явный post-1.0 scope. Проекция на главную сортирует
 строки по первому этапу реализации, а внутри этапа — по стабильному ID. Строка
 `done` имеет принятое evidence в указанной границе; `blocked` означает, что
 software/UI или conditional path ожидают названное physical proof.
@@ -216,9 +214,9 @@ software/UI или conditional path ожидают названное physical p
 | FUNC-02 | Capability-driven Home показывает только доступные задачи и до запуска объясняет disabled/conflicted/fault | S2 | `done` |
 | FUNC-03 | Устройство → Самопроверка/Диагностика безопасно проверяет применимое железо без TX и экспортирует отчёт | S2 + S5 | `done` |
 | FUNC-04 | TFT, пять клавиш и touch используют единые Actions, калибровку, стабильный выбор и доступный Back | S2 | `done` |
-| FUNC-05 | Локально сохраняемые EN/RU, яркость, тема, quiet/sound и поведение экрана | S2 + S5 | `done` |
+| FUNC-05 | Сохраняемые EN/RU, brightness/theme/sound, font scale/contrast/reduced motion/input repeat, favorite/hidden apps, shortcuts и startup app | S2 + S5 + S7 | `active` |
 | FUNC-06 | Видимые питание/заряд/reset reason, low-voltage safe-write и проверяемые sleep/resume | S5 | `blocked` |
-| FUNC-07 | Browser install и Устройство → Обновление: signed stable/beta OTA, rollback и recovery image | S8 | `planned` |
+| FUNC-07 | Browser/SD install и Устройство → Обновление: signed stable/beta OTA/SD package, rollback и recovery image | S8 | `planned` |
 | FUNC-08 | Локальные логи, crash journal и экспортируемый diagnostic bundle без облака | S6 + S8 | `active` |
 | FUNC-09 | Явные Start/Stop создают bounded multi-radio Survey Session с конфигурацией и provenance | S3 + S6.6 | `done` |
 | FUNC-10 | Пассивный Wi-Fi scan: сети, hidden-name enrichment, security/channel/vendor facts и нормализованные Observation | S3 + S4 | `done` |
@@ -236,16 +234,16 @@ software/UI или conditional path ожидают названное physical p
 | FUNC-22 | Каждый вывод compare/correlation открывает точное исходное evidence | S6.3 + S6.4 | `done` |
 | FUNC-23 | Immutable Capture хранит raw source, время, частоту/канал, RSSI, координаты и настройки приёма | S3 + S4 | `done` |
 | FUNC-24 | Session/Capture сохраняются атомарно и восстанавливаются после reset и controlled power loss | S3 + S5 | `blocked` |
-| FUNC-25 | Библиотека офлайн открывает Сессии/Захваты и поддерживает list/detail/search/filter и integrity state | S3 + S6 | `done` |
+| FUNC-25 | Библиотека офлайн открывает Сессии/Захваты с list/detail/search/filter, integrity state и восстанавливаемой Корзиной/Отменой | S3 + S6 + S7 | `active` |
 | FUNC-26 | Экспорт JSON/CSV summary, PCAP и переносимых radio formats с точным provenance | S3 + S5 | `active` |
 | FUNC-27 | Import/export через SD, USB и local companion использует versioned schemas и fail-closed parser | S5 + S6 | `active` |
 | FUNC-28 | SD/LittleFS показывают identity, capacity, recovery, integrity и degraded behavior | S3 + S5 | `done` |
 | FUNC-29 | ИК receive/decode сохраняет оригинал и производные данные, cold-reopen-ит их в Библиотеке и экспортирует CSV | S5.2 | `done` |
-| FUNC-30 | Sub-GHz RAW/OOK/FSK Capture сохраняет pulses, radio parameters и производные decode | S5.4 | `blocked` |
+| FUNC-30 | Sub-GHz RAW/OOK/FSK Capture сохраняет pulses/parameters/decodes и экспортирует Flipper-compatible `.sub` из declared decoder inventory | S5.4 + S7 | `blocked` |
 | FUNC-31 | PN532 читает tag/NDEF info и versioned dump только при explicit non-conflicting assembly | S5 | `blocked` |
 | FUNC-32 | Отдельная Лаборатория показывает разрешённый scope, source, frequency, power, duration и постоянно видимый TX state | S7 | `planned` |
 | FUNC-33 | Назад, timeout, panic, fault или потеря control/telemetry физически прекращает каждый TX path | S7 | `planned` |
-| FUNC-34 | IR replay доступен только из выбранного immutable Capture после preview и явного подтверждения | S7 | `planned` |
+| FUNC-34 | IR replay использует selected immutable Capture или ready signed multi-button/favorite remote/TV profile после preview и confirmation | S7 | `planned` |
 | FUNC-35 | Sub-GHz replay/TX из immutable Capture проходит ResourceBroker, bounds, confirm, countdown и stop result | S7 | `planned` |
 | FUNC-36 | NFC write/restore поддерживаемой собственной метки показывает preview, verify и исходный dump для восстановления | S7, conditional hardware | `planned` |
 | FUNC-37 | Protocol Workbench сравнивает pulses/waveforms, аннотирует поля и сохраняет derived decode без изменения raw source | S7 | `active` |
@@ -259,14 +257,21 @@ software/UI или conditional path ожидают названное physical p
 | FUNC-45 | Единый feedback service владеет status LED антенн и buzzer: default 2/255, quiet mode, bounded tones и доступные без цвета cues | S5 + S6 | `done` |
 | FUNC-46 | Scoped Wi-Fi/USB setup изолирует secrets, не экспортирует их и не делает сеть условием Survey/Library | S6 + S8 | `active` |
 | FUNC-47 | Versioned backup/restore и factory reset показывают scope/preview/checksum и не перезаписывают raw Capture без confirm | S8 | `planned` |
-| FUNC-48 | Защита эфира пассивно обнаруживает/объясняет подозрительные Wi-Fi/BLE conditions и открывает exact evidence/uncertainty каждой находки | S7 | `done` |
+| FUNC-48 | Named profiles/sensitivity Защиты эфира объясняют Wi-Fi/BLE/nRF/Sub-GHz conditions, WPA3/PMF/SAE и jamming indicators с exact evidence/uncertainty | S7 | `active` |
 | FUNC-49 | Focused Wi-Fi authentication Capture показывает EAPOL/PMKID и complete/incomplete handshakes, затем экспортирует PCAP и `hc22000` | S7 | `done` |
-| FUNC-50 | Offline Field Survey объединяет Wi-Fi AP/station и BLE observations с optional GPS track, revisit comparison и WiGLE-compatible export | S7 | `active` |
+| FUNC-50 | Offline Field Survey объединяет Wi-Fi AP/station и BLE с optional GPS track/satellite diagnostics/POI/notes, revisit comparison и WiGLE export | S7 | `active` |
 | FUNC-51 | BLE Inspector сохраняет raw compatible packets и входит в connected GATT только после explicit target/permission/lease confirmation | S7 | `done` |
-| FUNC-52 | Device Lock защищает secrets/evidence local PIN, bounded retry и tested recovery, не блокируя Stop/panic/recovery | S7 | `done` |
+| FUNC-52 | Device Lock защищает secrets/evidence с PIN/recovery и продолжает admitted Capture под private lock overlay без блокировки Stop | S7 | `active` |
 | FUNC-53 | Устройство → Serial Console даёт bounded UART bridge и общий Actions CLI с explicit target/configuration/lease | S7 | `active` |
 | FUNC-54 | Permissioned signed Automation/HID имеет preview, ceilings, finite runtime, scoped target и passive-by-default BadUSB inspection | S7 | `active` |
-| FUNC-55 | Authorized wireless Lab поставляет только именованные отдельно принятые Wi-Fi/BLE/nRF fixture recipes с bounded power/channel/time и physical stop | S7 | `planned` |
+| FUNC-55 | Owned Lab поставляет named Wi-Fi/BLE/nRF/IR recipes для targeted handshake assist, identity/iBeacon, MouseJack, robustness и IR-camera fixtures с containment и Stop | S7 | `planned` |
+| FUNC-56 | nRF24 ESB Workbench захватывает/декодирует совместимые packets и пассивно обнаруживает MouseJack; injection — отдельный owned-fixture recipe | S7 | `planned` |
+| FUNC-57 | Read-only Live Companion потоково отдаёт Wi-Fi/BLE evidence в USB Wireshark/extcap и зеркалирует TFT без изменения host network | S7 | `planned` |
+| FUNC-58 | Conditional Advanced NFC/EMV даёт NDEF/ISO14443-4 emulation, erase, recovery собственной метки и redacted protocol diagnostics | S7, conditional PN532 | `planned` |
+| FUNC-59 | Privacy Identity рандомизирует STA/AP Leshy и даёт ephemeral provenance-labeled synthetic lab identities из owned Captures | S7 | `planned` |
+| FUNC-60 | Conditional USB Host Inspector перечисляет device/class interfaces и bounded signed keyboard/HID behavior после VBUS/OTG qualification | S7, conditional hardware | `planned` |
+| FUNC-61 | Owned Evidence Verification проверяет свои Wi-Fi/NFC/Sub-GHz/fixed-code Captures с budget, pause/stop/checkpoint и provenance | S7 | `planned` |
+| FUNC-62 | Owned Network Lab даёт read-only LAN inventory и bounded captive-portal/ARP/DHCP/MITM robustness tests на selected isolated fixture | S7 | `planned` |
 <!-- LESHY-FUNCTIONS:END -->
 
 S6.4 намеренно разбита на пользовательские interactions, которые можно ревьюить отдельно:
@@ -442,7 +447,7 @@ S6.5 разбита на независимо ревьюимые boundaries comp
 
 Полный верхнеуровневый scope и владельцы этапов зафиксированы в
 [карте функциональности](DELIVERY_PLAN.ru.md#карта-функциональности-продукта), а
-все 55 проверяемых пунктов — в [CAPABILITY_CATALOG.ru.md](CAPABILITY_CATALOG.ru.md).
+все 62 проверяемых пункта — в [CAPABILITY_CATALOG.ru.md](CAPABILITY_CATALOG.ru.md).
 
 | Блок продукта | Сейчас | Ближайший качественный переход |
 |---|---|---|
@@ -451,7 +456,7 @@ S6.5 разбита на независимо ревьюимые boundaries comp
 | Passive multi-radio и Capture | `готово / S4`, уточнено в S5 — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV, persistent Wi-Fi PCAP, all-available live-карты nRF24/CC1101, receiver-paced однопиксельные строки водопадов и ambient-calibrated finder nRF24/CC1101 приняты; Full/Guided checks, endurance и physical power-cut recovery остаются общим фундаментом | закрыть positive known-signal evidence на board-02 и сохранить единый observation/storage path |
 | Всё штатное железо ESP32-DIV | `заблокировано / S5` — исполнимая часть product и one-command matrix готовы; неисправный клон не может дать qualified RF-positive evidence | после прибытия заказанного replacement DIV квалифицировать его read-only и выполнить positive nRF24/Sub-GHz OOK/FSK плюс integrated Full S5.6 |
 | Targets, compare и companion | `в работе / S6.5` — exact 0.165.0 завершает принятый on-device набор List/Compare/Detail, metadata, decisions correlation и cold-reversible merge/split с изоляцией product storage/RF | вывести те же versioned records и typed Actions через scoped local USB/Web companion без direct driver/storage access |
-| Конкурентная полнота, защита устройства, Safe Lab и расширения | `впереди / S7` — восемь audited additions приняты и трассированы; safety/resource boundaries существуют, но их user workflows и SDK ещё не реализованы | Защита эфира, auth Capture, Field Survey, BLE Inspector, Device Lock, Serial Console, permissioned Automation/HID, admitted wireless recipes и доказанный panic/timeout stop |
+| Конкурентная полнота, защита устройства, Owned Lab и расширения | `впереди / S7` — scope из 62 строк принят и трассирован; safety/resource boundaries существуют, но новые расширенные user workflows и SDK ещё не реализованы | завершить refinements плюс nRF24 ESB, Live Companion, Advanced NFC/EMV, Privacy Identity, USB Host, Owned Evidence Verification и Owned Network Lab с доказанными containment/panic/timeout stop |
 | Надёжность и доставка 1.0 | `впереди / S8` — exact 0.103 доказывает main-loop watchdog, а exact 0.135 принимает preparation/admission Product Survey плюс калиброванные deadline slices workers Wi-Fi+BLE; physical hard-stop evidence и release qualification остаются открыты | расширить worker deadlines на все остальные workers, signed OTA/rollback/recovery, полный HIL/Self-Test, mixed workload с часовым бюджетом и два зелёных RC |
 
 Итого по этапам: S0–S4 закрыты, S5 аппаратно заблокирован, реализация S6 активна,
@@ -467,8 +472,8 @@ Targets/compare/companion теперь являются активной раб�
 - проанализированы ESP32-DIV original, GhostESP, Bruce, Marauder, Flipper Zero и
   вторичные ориентиры;
 - первоначально сформулированы `J-01…J-06`, `PR-001…PR-019`, `NFR-001…NFR-010`;
-  product decision 27 августа добавляет `J-07…J-08` и `PR-020…PR-027`, не
-  переписывая исходное gate evidence;
+  product decision 27 августа добавляет `J-07…J-08` и `PR-020…PR-027`, а решение
+  1 сентября — `PR-028…PR-034` и `NFR-011…NFR-013`, не переписывая исходное evidence;
 - первый вертикальный результат определён как сохраняемая Survey Session;
 - создан двуязычный [`HARDWARE_ENVELOPE`](HARDWARE_ENVELOPE.ru.md) по v2
   schematic/BOM, original firmware и vendor datasheets;
@@ -492,7 +497,7 @@ Targets/compare/companion теперь являются активной раб�
 - создан risk register R-001…R-017 с controls, closure owners, stage gates и явным
   critical physical-stop risk для любого active action.
 - initial пользовательский scope 1.0 разложен на `CAP-001…CAP-047`, затем явно
-  расширен до `CAP-001…CAP-055`; UX управляется через S1 direction и S2 real-TFT
+  расширен до `CAP-001…CAP-055`, затем до фиксированных `CAP-001…CAP-062`; UX управляется через S1 direction и S2 real-TFT
   baseline `UX-01…UX-08`, а каждый этап S2…S8
   закрывается воспроизводимым `DEMO-S*`, не ожиданием финальной прошивки.
 - product review закрыл шесть скрытых scope gaps: Wi-Fi packet/PCAP Capture,

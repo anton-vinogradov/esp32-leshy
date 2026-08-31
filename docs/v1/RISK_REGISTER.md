@@ -42,6 +42,10 @@ owns durable risks, controls, triggers, and closure evidence.
 | R-021 | Authentication frames, precise tracks, lock state/recovery data, or automation transcripts leak sensitive information or lock out the owner | M | H | encrypted/scoped storage, redacted defaults, explicit export selection, bounded retries and tested owner recovery; safe cleanup/recovery never requires unlock | security/storage; PR-021/022/024 privacy, recovery and export matrix | open |
 | R-022 | Connected BLE, UART, CLI, USB/BLE HID or scripts broaden the active interface and bypass target consent, leases, or policy | H | critical | explicit mode/target/permission preview, separate finite leases, least privilege, no raw GPIO, passive inspection default, audit and deterministic disconnect/cleanup | security/runtime; WF-06-A4, WF-07-A3/A4, WF-08-A1/A2 | open |
 | R-023 | A script or wireless recipe runs away, exceeds resource/TX bounds, or smuggles a forbidden disruptive action | M | critical | signed/versioned packages, per-recipe review, resource/time ceilings, SafetySupervisor, watchdog, panic/expiry physical stop and forbidden-class rejection | safety/extensions; WF-08-A1/A3/A4 + independent physical HIL | open |
+| R-024 | NFC/EMV, captive portal, or evidence verification retains a real submitted credential/payment secret | M | critical | NFR-011 data-minimization schemas, redacted views, forbidden-field guards, evidence inventory and persistence/export negative tests | privacy/storage; PR-030/033/034 | open |
+| R-025 | A bounded robustness/interference/network recipe affects an ambient or wrong target | M | critical | NFR-012 selected target, qualified isolated fixture/interlock, preview, deadline, physical Stop, RF/network containment oracle and fail-closed admission | safety/Lab; PR-027/028/031/034 | open |
+| R-026 | Signed package, developer mode, companion, or USB host path bypasses broker/watchdog/Stop | M | critical | NFR-013 single brokered Actions path, no raw hooks, permission negatives, watchdog injection and independent physical-stop HIL | kernel/security; PR-026/029/032 | open |
+| R-027 | Conditional USB host, PN532, live companion or new decoder overcommits power/RAM/flash/bus or widens support beyond evidence | H | H | capability probe, measured per-profile budgets, mutually exclusive leases, conditional UI, fixture-specific HIL and no availability claim without evidence | hardware/runtime; CAP-056…060 | open |
 
 `critical` is reserved for a safety failure whose prevention takes priority over
 feature delivery; it is intentionally stronger than `high`.
@@ -71,7 +75,7 @@ feature delivery; it is intentionally stronger than `high`.
 - No active action ships until R-009 has independent physical stop evidence.
 - Signed update, rollback, recovery, import fuzzing, privacy, and EN/RU accessibility
   matrices are release gates.
-- S7 cannot close while R-020…R-023 lack negative corpora, privacy/recovery evidence,
+- S7 cannot close while R-020…R-027 lack negative corpora, privacy/recovery evidence,
   permission/lease tests, and independent stop evidence for every active interface.
 
 ## Review triggers

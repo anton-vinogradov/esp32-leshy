@@ -71,7 +71,7 @@ the release matrix, endurance, and recovery; S8 does not add major feature scope
 
 This is the readable top-level index of the complete planned 1.0 product. The
 [capability catalog](CAPABILITY_CATALOG.md) remains the normative, testable inventory
-of all 55 `CAP-*` items; this map groups them by user outcome and assigns every group
+of all 62 `CAP-*` items; this map groups them by user outcome and assigns every group
 to the stage that must deliver it. Live completion status belongs in
 [STATUS.md](STATUS.md).
 
@@ -82,7 +82,7 @@ to the stage that must deliver it. Live completion status belongs in
 | Passive multi-radio observation and packet Capture | selectable Wi-Fi/BLE; compatible nRF24/CC1101 spectrum contracts; GPS context; common timeline, filters, RSSI views and capture metadata; dedicated bounded Wi-Fi frame Capture; PCAP plus CSV/JSON; visible degradation/duty; privacy-aware persistence; power-cut recovery and multi-source endurance | S4 |
 | Complete standard ESP32-DIV hardware | IR capture/decode/library and authorized replay; PN532 tag/NDEF/dump and authorized write/restore; GPS fix/track/time; resilient SD/LittleFS browse/import/export; calibration, power, sleep/resume and low-voltage safety | S5 |
 | Targets, comparison and local companion | target identities/history/correlation, tags and notes; reversible merge/split; session/capture baseline and diff; localization and GPS map; offline search; local Web/USB companion over the same Actions and schemas | S6 |
-| Competitive completeness, device security, Safe Lab and extensions | Airspace Guard; focused Wi-Fi authentication Capture; offline Field Survey; BLE raw/GATT Inspector; Device Lock; bounded Serial Console/Actions CLI; permissioned signed automation and scoped HID; explicit legal/safety context; individually admitted Wi-Fi/BLE/nRF recipes; controlled TX/write paths, indication, timeout and panic stop; permissioned app descriptors/scoped storage; signed/versioned decoders; protocol workbench; SDK, sample extension and simulator traces | S7 |
+| Competitive completeness, device security, Owned Lab and extensions | Airspace Guard; focused Wi-Fi authentication Capture; offline Field Survey; BLE raw/GATT Inspector and nRF24 ESB Workbench; Device Lock and Privacy Identity; read-only Live Companion and USB Host Inspector; Advanced NFC/EMV; Owned Evidence Verification and Owned Network Lab; bounded Serial Console/Actions CLI; permissioned signed automation and scoped HID; explicit legal/safety context; individually admitted Wi-Fi/BLE/nRF/IR recipes; controlled TX/write paths, indication, timeout and panic stop; permissioned app descriptors/scoped storage; signed/versioned decoders; protocol workbench; SDK, sample extension and simulator traces | S7 |
 | Trust, recovery and distribution | stable/beta signed OTA, rollback and recovery; one release/on-device Self-Test plan; automated HIL, screenshots, endurance, fault injection and fuzzing; crash bundle; backup/restore; reproducible binaries, provenance, compatibility and support policy | S8 |
 
 Screenshots, accessibility, privacy, resource budgets, data integrity and fail-closed
@@ -208,16 +208,18 @@ data, and enable controlled research/automation of owned equipment without bypas
 platform guarantees.
 
 Outputs: evidence-backed Airspace Guard; focused authentication Capture; offline
-Field Survey and BLE Inspector; Device Lock and bounded Serial Console/Actions CLI;
-permissioned signed automation and scoped HID; Lab context, regulatory policy, TX
-indication/deadline/panic stop; named individually admitted Wi-Fi/BLE/nRF recipes;
+Field Survey, BLE Inspector and nRF24 ESB Workbench; Device Lock and Privacy Identity;
+read-only Live Companion, Advanced NFC/EMV, USB Host Inspector, Owned Evidence
+Verification and Owned Network Lab; bounded Serial Console/Actions CLI; permissioned
+signed automation and scoped HID; Lab context, regulatory policy, TX indication/
+deadline/panic stop; named individually admitted Wi-Fi/BLE/nRF/IR recipes;
 application descriptors, permissions, and scoped storage; signed/versioned decoder
 packages; protocol workbench; sample app/decoder, SDK docs, and simulator trace kit.
 
 **Exit gate:** an external developer builds a sample extension without kernel changes;
 extensions cannot bypass leases/permissions; HIL proves physical stop for every
 shipped TX path on timeout, Back, panic, and fault; the 1.0 catalog is
-feature-complete across all 55 accepted capabilities and passes `DEMO-S7`.
+feature-complete across all 62 accepted capabilities and passes `DEMO-S7`.
 
 ## S8 — Release hardening and 1.0.0
 

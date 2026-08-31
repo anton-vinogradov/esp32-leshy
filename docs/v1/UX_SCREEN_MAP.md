@@ -166,11 +166,11 @@ ordinary Back traverses the stack.
 | Targets | CAP-018…CAP-022, CAP-044 | Evidence→Observation/Capture; Target→Compare/Radar |
 | Capture | CAP-023, CAP-024, CAP-026…CAP-031, CAP-042, CAP-043, CAP-051 | Result→Library/Export/Lab; GATT requires explicit connected mode |
 | Wi-Fi Authentication Capture | CAP-049 | Result→Actions→Peer→Evidence→Detail; production Actions are Details/Save/Repeat, Save requires explicit confirmation and atomically persists schema-8 evidence, while PCAP and useful-evidence-gated `hc22000` export reopen the exact stored generation |
-| Lab | CAP-032…CAP-037, CAP-054, CAP-055 | accepts only reviewed source/package/recipe; Result links back to source and audit evidence |
+| Owned Lab | CAP-032…CAP-037, CAP-054…CAP-062 | accepts only reviewed source/package/recipe and qualified fixture; Result links back to source and audit evidence |
 | Library | CAP-025…CAP-031, CAP-038, CAP-043, CAP-047 | item→Compare/Export/Lab; import never bypasses parsers |
 | Device | CAP-001…CAP-008, CAP-045…CAP-047, CAP-052, CAP-053 | Diagnostics explains unavailability before task entry; Lock never blocks Stop/recovery; Serial owns one explicit UART lease |
 | Device → Settings | PR-011, NFR-010 | EN/RU switch; immediate application and persistent selection |
-| Device → Self-Test | CAP-001…CAP-055 as applicable, PR-009 | Quick/Full use the same versioned checks as release HIL; report→Diagnostics/remedy/export |
+| Device → Self-Test | CAP-001…CAP-062 as applicable, PR-009 | Quick/Full use the same versioned checks as release HIL; report→Diagnostics/remedy/export |
 
 ## UX-S31 Offline Field Survey baseline
 
@@ -256,7 +256,7 @@ derived decode remain open and therefore do not make FUNC-37 complete.
 
 ## UX-01 acceptance
 
-- Every `CAP-001…CAP-055` has one primary owner and a measurable
+- Every `CAP-001…CAP-062` has one primary owner and a measurable
   entry → success/error/cancel → Back path.
 - WF-01 uses Home→Device→Self-Test/Diagnostics; WF-02 uses UX-S02…S05; WF-03 uses UX-S15…S17;
   WF-04 uses UX-S06…S10; WF-05 uses UX-S18…S22; WF-06 uses UX-S29…S32;

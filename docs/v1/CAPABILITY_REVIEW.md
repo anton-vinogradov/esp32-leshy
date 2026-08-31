@@ -5,7 +5,7 @@
 Date: 17 August 2026. Result: **product scope coherent; catalog baseline reviewed;
 the PRD technical baseline is accepted by `E-GATE-001`**.
 
-Competitor-feature addendum: **27 August 2026**.
+Competitor-feature addenda: **27 August and 1 September 2026**.
 
 ## Inputs and review rules
 
@@ -46,12 +46,13 @@ must fail closed when its assembly/evidence is absent.
 | Check | Result |
 |---|---|
 | Jobs | J-01…J-08 have capability and WF owners |
-| Requirements | PR-001…PR-027 and NFR-001…NFR-010 appear in stages/traceability; PRD is accepted as baseline 1.0 while verification remains staged |
-| Information architecture | Every CAP-001…CAP-055 has a primary owner under the UX-S01 task hierarchy |
+| Requirements | PR-001…PR-034 and NFR-001…NFR-013 appear in stages/traceability; PRD is accepted as baseline 1.0 while verification remains staged |
+| Information architecture | Every CAP-001…CAP-062 has a primary owner under the UX-S01 task hierarchy |
 | Error/cancel behavior | UX-02 defines unavailable/loading/degraded/error/confirm/success and cleanup for every screen family |
 | Hardware conditionals | RF shield, GPS, PN532, and sound HW-T09 never become unconditional availability |
-| Safety | Passive Capture is separate from Lab; every TX has scope/confirm/deadline/Stop/Panic |
-| Explicit exclusions | Cloud/default telemetry, Peer Link, executable marketplace, broad boards, and attack-count parity remain post-1.0 |
+| Safety | Passive Capture is separate from Owned Lab; every active output has selected target/fixture, scope, confirmation, deadline, cleanup and physical Stop; no extension can bypass platform enforcement |
+| Hard exclusions | Retaining real submitted credentials/payment secrets; unbounded or indiscriminate active output; bypass of broker/safety/watchdog/Stop |
+| Deferred, not rejected | Cloud/default telemetry, Peer Link, public executable catalog/mobile sync, external-module protocol, and broad board matrix remain post-1.0 |
 
 ## Verdict
 
@@ -60,9 +61,25 @@ Product review initially accepted CAP-001…CAP-047. The later
 found nine useful or strategically relevant families (`CF-001…CF-009`). The explicit
 27 August product decision accepts all except `CF-005 Peer Link`: the eight accepted
 families are now `CAP-048…CAP-055`, `PR-020…PR-027`, and `WF-06…WF-08`, owned by S7.
-The working 1.0 boundary is therefore **55 capabilities**. Peer Link, deliberately
-disruptive features, and unrelated-hardware functions remain explicit post-1.0 or
-non-goals rather than hidden omissions.
+The 1 September decision then accepted every useful outcome of the seven-source
+competitor re-audit that fits the evidence-first instrument plus bounded Owned Lab:
+existing capabilities received concrete acceptance refinements and seven new rows
+`CAP-056…CAP-062`/`PR-028…PR-034` were added under S7. The stable 1.0 boundary is
+therefore **62 capabilities**.
+
+Only three product boundaries are non-negotiable: Leshy does not retain real
+submitted credentials or payment secrets; it does not provide unbounded or
+indiscriminate active output without a selected target/qualified isolated fixture;
+and no app, script, package, developer mode, or companion path can bypass
+ResourceBroker, Safety Supervisor, watchdog, expiry, or physical Stop. Targeted
+handshake assist, identity/iBeacon emulation, MouseJack injection, bounded
+robustness/crash/interference tests, portal/ARP/DHCP/MITM fixtures, evidence
+verification, and IR-camera tests are not blanket exclusions: they are named Owned
+Lab recipes whose admission must prove scope, containment, time bound and cleanup.
+
+Peer Link and the other deferred integrations remain explicit post-1.0 scope rather
+than hidden omissions. They do not change the fixed denominator until a later
+product decision creates a new release boundary.
 
 Together with constrained hardware/resource evidence, this scope review closes S1
 through `E-GATE-001`. It does not mark capabilities implemented or verified; those

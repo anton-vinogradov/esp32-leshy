@@ -34,11 +34,11 @@ UI automation.
 | DEMO-S4 | Cross-radio passive Session | multiple compatible receivers → timeline/radar → degradation → reopen/export | common Observation model, scheduler/duty cycle, and ≥45-minute/≥8-cycle passive stability inside a one-hour release budget |
 | DEMO-S5 | Stock-hardware completeness | Full/Guided preflight → probe every present module → observe/capture → Library → inspect/export; approved replay separately | hardware parity, optional/degraded behavior, honest N/A/blocked results, and recovery/power safety |
 | DEMO-S6 | Targets, compare, and companion | baseline Session → repeat visit → diff/Target evidence → local companion export | primary product differentiation and one Action/schema boundary |
-| DEMO-S7 | Competitive completeness, protected tools, Safe Lab and SDK | Airspace Guard/auth Capture/Field Survey/BLE Inspector evidence matrix → Lock/Serial negative paths → signed automation → admitted wireless recipe → timeout/panic; sample extension | all 55 accepted capabilities feature-complete, privacy/permission boundaries, physical stop, and extensibility without policy bypass |
+| DEMO-S7 | Competitive completeness, protected tools, Owned Lab and SDK | Airspace Guard/auth Capture/Field Survey/BLE/nRF evidence matrix → Lock/Serial/identity/companion/USB/NFC negative paths → signed automation → admitted Owned Lab recipes → timeout/panic; sample extension | all 62 accepted capabilities feature-complete, privacy/permission/containment boundaries, physical stop, and extensibility without policy bypass |
 | DEMO-S8 | Release candidate | exact candidate → complete Self-Test plan → mixed field workflow → interrupted update/write → rollback/recovery | same on-device/release checks, independent oracle, release-complete binary, provenance, endurance, and recovery |
 
 `DEMO-S7` is a stage matrix, not one unsafe monolithic run. It must cover WF-06…WF-08,
-R-020…R-023 negative cases, exact evidence/cleanup for CAP-048…CAP-055, and the WF-05
+R-020…R-023 negative cases, exact evidence/cleanup for CAP-048…CAP-062, and the WF-05
 independent physical-stop contract for every admitted active path. Passive detector,
 capture, route and inspection results never substitute for an active fixture proof,
 and an unavailable fixture remains a blocker rather than a simulated pass.

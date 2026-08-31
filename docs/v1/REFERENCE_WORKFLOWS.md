@@ -34,7 +34,7 @@ acceptance, and an evidence plan.
 | WF-05 | Run and physically stop an authorized Lab action | J-06 | PR-002, PR-009, PR-013; NFR-002/003/006/010 | S7 |
 | WF-06 | Detect and preserve explained wireless evidence in the field | J-03, J-07 | PR-020…PR-023; NFR-002/005…010 | S7 |
 | WF-07 | Unlock the device and operate an explicit serial target safely | J-05, J-08 | PR-017, PR-024, PR-025; NFR-002/006/010 | S7 |
-| WF-08 | Run permissioned automation or an authorized wireless recipe | J-06, J-08 | PR-013, PR-026, PR-027; NFR-002/003/005…007/010 | S7 |
+| WF-08 | Run permissioned automation, owned-evidence verification, or an authorized Owned Lab recipe | J-03, J-06, J-08 | PR-013, PR-026…PR-034; NFR-002/003/005…007/010…013 | S7 |
 
 ## WF-01 — boot, diagnose, decide
 

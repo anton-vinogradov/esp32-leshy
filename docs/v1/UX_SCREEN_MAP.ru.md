@@ -168,11 +168,11 @@ action. В активном TX `Back` никогда не открывает con
 | Цели | CAP-018…CAP-022, CAP-044 | Evidence→Observation/Capture; Target→Compare/Radar |
 | Захват | CAP-023, CAP-024, CAP-026…CAP-031, CAP-042, CAP-043, CAP-051 | Result→Library/Export/Lab; GATT требует explicit connected mode |
 | Захват Wi-Fi-аутентификации | CAP-049 | Результат→Действия→Устройство→Доказательства→Детали; production Actions — Детали/Сохранить/Повторить, Save требует явного подтверждения и атомарно сохраняет evidence schema 8, а экспорт PCAP и `hc22000` только с полезным evidence повторно открывает exact stored generation |
-| Лаборатория | CAP-032…CAP-037, CAP-054, CAP-055 | принимает только reviewed source/package/recipe; Result возвращает source/audit evidence |
+| Owned Lab | CAP-032…CAP-037, CAP-054…CAP-062 | принимает только reviewed source/package/recipe и qualified fixture; Result возвращает source/audit evidence |
 | Библиотека | CAP-025…CAP-031, CAP-038, CAP-043, CAP-047 | item→Compare/Export/Lab; import никогда не обходит parser |
 | Устройство | CAP-001…CAP-008, CAP-045…CAP-047, CAP-052, CAP-053 | Diagnostics объясняет недоступность до входа; Lock не блокирует Stop/recovery; Serial владеет одним explicit UART lease |
 | Устройство → Настройки | PR-011, NFR-010 | переключение EN/RU; немедленное применение и persistent selection |
-| Устройство → Самопроверка | применимые CAP-001…CAP-055, PR-009 | Quick/Full выполняют те же versioned checks, что release HIL; report→Diagnostics/remedy/export |
+| Устройство → Самопроверка | применимые CAP-001…CAP-062, PR-009 | Quick/Full выполняют те же versioned checks, что release HIL; report→Diagnostics/remedy/export |
 
 ## Baseline UX-S31 «Полевой обзор»
 
@@ -261,7 +261,7 @@ decode остаются открытыми, поэтому FUNC-37 ещё не �
 
 ## Acceptance UX-01
 
-- Каждая `CAP-001…CAP-055` имеет один primary owner и измеримый путь
+- Каждая `CAP-001…CAP-062` имеет один primary owner и измеримый путь
   entry → success/error/cancel → Back.
 - WF-01 использует Home→Устройство→Самопроверка/Диагностика; WF-02 — UX-S02…S05; WF-03 — UX-S15…S17;
   WF-04 — UX-S06…S10; WF-05 — UX-S18…S22; WF-06 — UX-S29…S32;

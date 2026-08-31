@@ -42,6 +42,10 @@
 | R-021 | Authentication frames, precise tracks, lock state/recovery data или automation transcripts раскрывают sensitive information либо блокируют owner | M | H | encrypted/scoped storage, redacted defaults, explicit export selection, bounded retries и tested owner recovery; safe cleanup/recovery не требует unlock | security/storage; PR-021/022/024 privacy, recovery и export matrix | open |
 | R-022 | Connected BLE, UART, CLI, USB/BLE HID или scripts расширяют active interface и обходят target consent, leases либо policy | H | critical | explicit mode/target/permission preview, отдельные finite leases, least privilege, no raw GPIO, passive inspection default, audit и deterministic disconnect/cleanup | security/runtime; WF-06-A4, WF-07-A3/A4, WF-08-A1/A2 | open |
 | R-023 | Script или wireless recipe выходит из bounds, превышает resource/TX limits либо прячет forbidden disruptive action | M | critical | signed/versioned packages, per-recipe review, resource/time ceilings, SafetySupervisor, watchdog, panic/expiry physical stop и forbidden-class rejection | safety/extensions; WF-08-A1/A3/A4 + independent physical HIL | open |
+| R-024 | NFC/EMV, captive portal или evidence verification сохраняет реальный submitted credential/payment secret | M | critical | data-minimization schema NFR-011, redacted views, forbidden-field guards, evidence inventory и persistence/export negative tests | privacy/storage; PR-030/033/034 | open |
+| R-025 | Bounded robustness/interference/network recipe затрагивает ambient или неверный target | M | critical | NFR-012 selected target, qualified isolated fixture/interlock, preview, deadline, physical Stop, RF/network containment oracle и fail-closed admission | safety/Lab; PR-027/028/031/034 | open |
+| R-026 | Signed package, developer mode, companion или USB host path обходит broker/watchdog/Stop | M | critical | единый brokered Actions path NFR-013, отсутствие raw hooks, permission negatives, watchdog injection и independent physical-stop HIL | kernel/security; PR-026/029/032 | open |
+| R-027 | Conditional USB host, PN532, live companion или новый decoder превышает power/RAM/flash/bus budget либо расширяет support без evidence | H | H | capability probe, measured per-profile budgets, mutually exclusive leases, conditional UI, fixture-specific HIL и отсутствие availability claim без evidence | hardware/runtime; CAP-056…060 | open |
 
 `critical` используется только для safety failure, предотвращение которого важнее
 feature delivery; это намеренно сильнее `high`.
@@ -71,7 +75,7 @@ feature delivery; это намеренно сильнее `high`.
 - Active action не выпускается до independent physical stop evidence для R-009.
 - Signed update, rollback, recovery, import fuzzing, privacy и EN/RU accessibility
   matrices входят в release gates.
-- S7 не закрывается, пока R-020…R-023 не имеют negative corpora, privacy/recovery
+- S7 не закрывается, пока R-020…R-027 не имеют negative corpora, privacy/recovery
   evidence, permission/lease tests и independent stop evidence для каждого active
   interface.
 

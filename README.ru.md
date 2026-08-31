@@ -12,9 +12,9 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 >
 > Закрыто этапов: 5 из 9.
 >
-> Пользовательские функции: **26/55 готовы** · 11 в работе · 6 заблокированы · 12 запланированы.
+> Пользовательские функции: **22/62 готовы** · 15 в работе · 6 заблокированы · 19 запланированы.
 
-Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline из 55 capabilities, знаменатель зафиксирован. Повторный аудит конкурентов от 1 сентября завершён; кандидаты и принципиальные исключения не входят в эти 55 до явного product decision в [пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
+Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline из 62 capabilities, знаменатель зафиксирован. Повторный аудит конкурентов и product decision от 1 сентября завершены: все ценные принятые outcomes входят в знаменатель, а отложенные integrations и три жёсткие продуктовые границы явно перечислены в [пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
@@ -52,13 +52,13 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | Capability-driven Home показывает только доступные задачи и до запуска объясняет disabled/conflicted/fault | S2 | ✅ готово |
 | Устройство → Самопроверка/Диагностика безопасно проверяет применимое железо без TX и экспортирует отчёт | S2 + S5 | ✅ готово |
 | TFT, пять клавиш и touch используют единые Actions, калибровку, стабильный выбор и доступный Back | S2 | ✅ готово |
-| Локально сохраняемые EN/RU, яркость, тема, quiet/sound и поведение экрана | S2 + S5 | ✅ готово |
+| Сохраняемые EN/RU, brightness/theme/sound, font scale/contrast/reduced motion/input repeat, favorite/hidden apps, shortcuts и startup app | S2 + S5 + S7 | 🟡 в работе |
 | Явные Start/Stop создают bounded multi-radio Survey Session с конфигурацией и provenance | S3 + S6.6 | ✅ готово |
 | Пассивный Wi-Fi scan: сети, hidden-name enrichment, security/channel/vendor facts и нормализованные Observation | S3 + S4 | ✅ готово |
 | Общие стабильные List/Detail/filter для Wi-Fi/BLE/других радио с полной полезной информацией | S3 + S4 | ✅ готово |
 | Immutable Capture хранит raw source, время, частоту/канал, RSSI, координаты и настройки приёма | S3 + S4 | ✅ готово |
 | Session/Capture сохраняются атомарно и восстанавливаются после reset и controlled power loss | S3 + S5 | 🔴 заблокировано |
-| Библиотека офлайн открывает Сессии/Захваты и поддерживает list/detail/search/filter и integrity state | S3 + S6 | ✅ готово |
+| Библиотека офлайн открывает Сессии/Захваты с list/detail/search/filter, integrity state и восстанавливаемой Корзиной/Отменой | S3 + S6 + S7 | 🟡 в работе |
 | Экспорт JSON/CSV summary, PCAP и переносимых radio formats с точным provenance | S3 + S5 | 🟡 в работе |
 | SD/LittleFS показывают identity, capacity, recovery, integrity и degraded behavior | S3 + S5 | ✅ готово |
 | Пассивный BLE scan: strongest-first устройства, company/services facts и нормализованные Observation без active probe | S4 | ✅ готово |
@@ -71,7 +71,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | Видимые питание/заряд/reset reason, low-voltage safe-write и проверяемые sleep/resume | S5 | 🔴 заблокировано |
 | Import/export через SD, USB и local companion использует versioned schemas и fail-closed parser | S5 + S6 | 🟡 в работе |
 | ИК receive/decode сохраняет оригинал и производные данные, cold-reopen-ит их в Библиотеке и экспортирует CSV | S5.2 | ✅ готово |
-| Sub-GHz RAW/OOK/FSK Capture сохраняет pulses, radio parameters и производные decode | S5.4 | 🔴 заблокировано |
+| Sub-GHz RAW/OOK/FSK Capture сохраняет pulses/parameters/decodes и экспортирует Flipper-compatible `.sub` из declared decoder inventory | S5.4 + S7 | 🔴 заблокировано |
 | PN532 читает tag/NDEF info и versioned dump только при explicit non-conflicting assembly | S5 | 🔴 заблокировано |
 | Пользователь сохраняет screenshot реального TFT с build/state/time provenance и открывает его в Library/export | S5 | 🟡 в работе |
 | Единый feedback service владеет status LED антенн и buzzer: default 2/255, quiet mode, bounded tones и доступные без цвета cues | S5 + S6 | ✅ готово |
@@ -86,22 +86,29 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | Scoped Wi-Fi/USB setup изолирует secrets, не экспортирует их и не делает сеть условием Survey/Library | S6 + S8 | 🟡 в работе |
 | Отдельная Лаборатория показывает разрешённый scope, source, frequency, power, duration и постоянно видимый TX state | S7 | ⬜ дальше |
 | Назад, timeout, panic, fault или потеря control/telemetry физически прекращает каждый TX path | S7 | ⬜ дальше |
-| IR replay доступен только из выбранного immutable Capture после preview и явного подтверждения | S7 | ⬜ дальше |
+| IR replay использует selected immutable Capture или ready signed multi-button/favorite remote/TV profile после preview и confirmation | S7 | ⬜ дальше |
 | Sub-GHz replay/TX из immutable Capture проходит ResourceBroker, bounds, confirm, countdown и stop result | S7 | ⬜ дальше |
 | NFC write/restore поддерживаемой собственной метки показывает preview, verify и исходный dump для восстановления | S7, conditional hardware | ⬜ дальше |
 | Protocol Workbench сравнивает pulses/waveforms, аннотирует поля и сохраняет derived decode без изменения raw source | S7 | 🟡 в работе |
 | Permissioned app descriptor до запуска объявляет capabilities, ресурсы, permissions, safety policy и строки UI | S7 | ⬜ дальше |
 | Versioned decoder/profile packages имеют compatibility gate, integrity/signature и scoped storage | S7 + S8 | ⬜ дальше |
 | SDK, sample extension и simulator trace kit не позволяют обойти ResourceBroker, permissions или Safety Supervisor | S7 | ⬜ дальше |
-| Защита эфира пассивно обнаруживает/объясняет подозрительные Wi-Fi/BLE conditions и открывает exact evidence/uncertainty каждой находки | S7 | ✅ готово |
+| Named profiles/sensitivity Защиты эфира объясняют Wi-Fi/BLE/nRF/Sub-GHz conditions, WPA3/PMF/SAE и jamming indicators с exact evidence/uncertainty | S7 | 🟡 в работе |
 | Focused Wi-Fi authentication Capture показывает EAPOL/PMKID и complete/incomplete handshakes, затем экспортирует PCAP и `hc22000` | S7 | ✅ готово |
-| Offline Field Survey объединяет Wi-Fi AP/station и BLE observations с optional GPS track, revisit comparison и WiGLE-compatible export | S7 | 🟡 в работе |
+| Offline Field Survey объединяет Wi-Fi AP/station и BLE с optional GPS track/satellite diagnostics/POI/notes, revisit comparison и WiGLE export | S7 | 🟡 в работе |
 | BLE Inspector сохраняет raw compatible packets и входит в connected GATT только после explicit target/permission/lease confirmation | S7 | ✅ готово |
-| Device Lock защищает secrets/evidence local PIN, bounded retry и tested recovery, не блокируя Stop/panic/recovery | S7 | ✅ готово |
+| Device Lock защищает secrets/evidence с PIN/recovery и продолжает admitted Capture под private lock overlay без блокировки Stop | S7 | 🟡 в работе |
 | Устройство → Serial Console даёт bounded UART bridge и общий Actions CLI с explicit target/configuration/lease | S7 | 🟡 в работе |
 | Permissioned signed Automation/HID имеет preview, ceilings, finite runtime, scoped target и passive-by-default BadUSB inspection | S7 | 🟡 в работе |
-| Authorized wireless Lab поставляет только именованные отдельно принятые Wi-Fi/BLE/nRF fixture recipes с bounded power/channel/time и physical stop | S7 | ⬜ дальше |
-| Browser install и Устройство → Обновление: signed stable/beta OTA, rollback и recovery image | S8 | ⬜ дальше |
+| Owned Lab поставляет named Wi-Fi/BLE/nRF/IR recipes для targeted handshake assist, identity/iBeacon, MouseJack, robustness и IR-camera fixtures с containment и Stop | S7 | ⬜ дальше |
+| nRF24 ESB Workbench захватывает/декодирует совместимые packets и пассивно обнаруживает MouseJack; injection — отдельный owned-fixture recipe | S7 | ⬜ дальше |
+| Read-only Live Companion потоково отдаёт Wi-Fi/BLE evidence в USB Wireshark/extcap и зеркалирует TFT без изменения host network | S7 | ⬜ дальше |
+| Conditional Advanced NFC/EMV даёт NDEF/ISO14443-4 emulation, erase, recovery собственной метки и redacted protocol diagnostics | S7, conditional PN532 | ⬜ дальше |
+| Privacy Identity рандомизирует STA/AP Leshy и даёт ephemeral provenance-labeled synthetic lab identities из owned Captures | S7 | ⬜ дальше |
+| Conditional USB Host Inspector перечисляет device/class interfaces и bounded signed keyboard/HID behavior после VBUS/OTG qualification | S7, conditional hardware | ⬜ дальше |
+| Owned Evidence Verification проверяет свои Wi-Fi/NFC/Sub-GHz/fixed-code Captures с budget, pause/stop/checkpoint и provenance | S7 | ⬜ дальше |
+| Owned Network Lab даёт read-only LAN inventory и bounded captive-portal/ARP/DHCP/MITM robustness tests на selected isolated fixture | S7 | ⬜ дальше |
+| Browser/SD install и Устройство → Обновление: signed stable/beta OTA/SD package, rollback и recovery image | S8 | ⬜ дальше |
 | Versioned backup/restore и factory reset показывают scope/preview/checksum и не перезаписывают raw Capture без confirm | S8 | ⬜ дальше |
 
 ### Роадмап

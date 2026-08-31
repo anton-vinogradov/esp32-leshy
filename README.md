@@ -12,9 +12,9 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 >
 > Stage gates complete: 5 of 9.
 >
-> User functionality: **26/55 done** · 11 active · 6 blocked · 12 planned.
+> User functionality: **22/62 done** · 15 active · 6 blocked · 19 planned.
 
-This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts. The checklist is complete for the currently frozen 55-capability 1.x baseline. The 1 September competitor re-audit is complete; candidate additions and deliberate exclusions remain outside this fixed denominator until an explicit product decision in the [feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
+This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts. The checklist is complete for the currently frozen 62-capability 1.x baseline. The 1 September competitor re-audit and product decision are complete: every valuable accepted outcome is inside this denominator, while deferred integrations and the three hard product boundaries remain explicit in the [feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
@@ -52,13 +52,13 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | Capability-driven Home exposes only available jobs and explains disabled/conflicted/fault before launch | S2 | ✅ complete |
 | Device → Self-Test/Diagnostics safely checks applicable hardware without TX and exports a report | S2 + S5 | ✅ complete |
 | TFT, five keys and touch share Actions, calibration, stable selection and an accessible Back path | S2 | ✅ complete |
-| Locally persisted EN/RU language, brightness, theme, quiet/sound and screen behavior | S2 + S5 | ✅ complete |
+| Persisted EN/RU, brightness/theme/sound, font scale/contrast/reduced motion/input repeat, favorite/hidden apps, shortcuts and startup app | S2 + S5 + S7 | 🟡 in progress |
 | Explicit Start/Stop creates a bounded multi-radio Survey Session with configuration and provenance | S3 + S6.6 | ✅ complete |
 | Passive Wi-Fi scan: networks, hidden-name enrichment, security/channel/vendor facts and normalized Observations | S3 + S4 | ✅ complete |
 | Shared stable List/Detail/filter behavior for Wi-Fi, BLE and other radios with all useful facts | S3 + S4 | ✅ complete |
 | Immutable Capture preserves raw source, time, frequency/channel, RSSI, coordinates and receive settings | S3 + S4 | ✅ complete |
 | Session/Capture commits are atomic and recover after reset and controlled power loss | S3 + S5 | 🔴 blocked |
-| Library opens Sessions/Captures offline with list/detail/search/filter and visible integrity state | S3 + S6 | ✅ complete |
+| Library opens Sessions/Captures offline with list/detail/search/filter, integrity state and recoverable Trash/Undo | S3 + S6 + S7 | 🟡 in progress |
 | Export provides JSON/CSV summaries, PCAP and portable radio formats with exact provenance | S3 + S5 | 🟡 in progress |
 | SD/LittleFS exposes identity, capacity, recovery, integrity and degraded behavior | S3 + S5 | ✅ complete |
 | Passive BLE scan: strongest-first devices, company/service facts and normalized Observations without active probes | S4 | ✅ complete |
@@ -71,7 +71,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | Visible power/charge/reset reason, low-voltage safe write and verifiable sleep/resume | S5 | 🔴 blocked |
 | SD, USB and local-companion import/export uses versioned schemas and a fail-closed parser | S5 + S6 | 🟡 in progress |
 | IR receive/decode preserves original and derived data, cold-reopens in Library and exports CSV | S5.2 | ✅ complete |
-| Sub-GHz RAW/OOK/FSK Capture preserves pulses, radio parameters and derived decodes | S5.4 | 🔴 blocked |
+| Sub-GHz RAW/OOK/FSK Capture preserves pulses/parameters/decodes and exports Flipper-compatible `.sub` from a declared decoder inventory | S5.4 + S7 | 🔴 blocked |
 | PN532 reads tag/NDEF facts and a versioned dump only for an explicit non-conflicting assembly | S5 | 🔴 blocked |
 | User saves a real-TFT screenshot with build/state/time provenance and opens it in Library/export | S5 | 🟡 in progress |
 | One feedback service owns antenna LEDs and buzzer: default 2/255, quiet mode, bounded tones and non-color-only cues | S5 + S6 | ✅ complete |
@@ -86,22 +86,29 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | Scoped Wi-Fi/USB setup isolates secrets, never exports them and never makes networking a Survey/Library prerequisite | S6 + S8 | 🟡 in progress |
 | Separate Lab exposes authorized scope, source, frequency, power, duration and permanently visible TX state | S7 | ⬜ later |
 | Back, timeout, panic, fault or loss of control/telemetry physically stops every TX path | S7 | ⬜ later |
-| IR replay is available only from a selected immutable Capture after preview and explicit confirmation | S7 | ⬜ later |
+| IR replay uses selected immutable Capture or a ready signed multi-button/favorite remote/TV profile after preview and explicit confirmation | S7 | ⬜ later |
 | Sub-GHz replay/TX from an immutable Capture passes ResourceBroker, bounds, confirmation, countdown and stop result | S7 | ⬜ later |
 | NFC write/restore of a supported owned tag exposes preview, verify and the original recovery dump | S7, conditional hardware | ⬜ later |
 | Protocol Workbench compares pulses/waveforms, annotates fields and stores a derived decode without changing raw source | S7 | 🟡 in progress |
 | Permissioned app descriptor declares capabilities, resources, permissions, safety policy and UI strings before launch | S7 | ⬜ later |
 | Versioned decoder/profile packages have a compatibility gate, integrity/signature and scoped storage | S7 + S8 | ⬜ later |
 | SDK, sample extension and simulator trace kit cannot bypass ResourceBroker, permissions or Safety Supervisor | S7 | ⬜ later |
-| Airspace Guard passively detects/explains suspicious Wi-Fi/BLE conditions and opens exact evidence/uncertainty for every finding | S7 | ✅ complete |
+| Named Airspace Guard profiles/sensitivity explain Wi-Fi/BLE/nRF/Sub-GHz conditions, WPA3/PMF/SAE and jamming indicators with exact evidence/uncertainty | S7 | 🟡 in progress |
 | Focused Wi-Fi authentication Capture reports EAPOL/PMKID and complete/incomplete handshakes, then exports PCAP and `hc22000` | S7 | ✅ complete |
-| Offline Field Survey joins Wi-Fi AP/station and BLE observations with optional GPS track, revisit comparison and WiGLE-compatible export | S7 | 🟡 in progress |
+| Offline Field Survey joins Wi-Fi AP/station and BLE with optional GPS track/satellite diagnostics/POI/notes, revisit comparison and WiGLE export | S7 | 🟡 in progress |
 | BLE Inspector preserves raw compatible packets and enters connected GATT only after explicit target/permission/lease confirmation | S7 | ✅ complete |
-| Device Lock protects secrets/evidence with local PIN, bounded retry and tested recovery without blocking Stop/panic/recovery | S7 | ✅ complete |
+| Device Lock protects secrets/evidence with PIN/recovery and can continue an admitted Capture beneath a private lock overlay without blocking Stop | S7 | 🟡 in progress |
 | Device → Serial Console provides a bounded UART bridge and shared Actions CLI under explicit target/configuration/lease | S7 | 🟡 in progress |
 | Permissioned signed Automation/HID has preview, ceilings, finite runtime, scoped target and passive-by-default BadUSB inspection | S7 | 🟡 in progress |
-| Authorized wireless Lab ships only named, individually accepted Wi-Fi/BLE/nRF fixture recipes with bounded power/channel/time and physical stop | S7 | ⬜ later |
-| Browser install and Device → Update: signed stable/beta OTA, rollback and recovery image | S8 | ⬜ later |
+| Owned Lab ships named Wi-Fi/BLE/nRF/IR recipes for targeted handshake assist, identity/iBeacon, MouseJack, robustness and IR-camera fixtures with containment and Stop | S7 | ⬜ later |
+| nRF24 ESB Workbench captures/decodes compatible packets and passively detects MouseJack; injection is a separate owned-fixture recipe | S7 | ⬜ later |
+| Read-only Live Companion streams compatible Wi-Fi/BLE evidence to USB Wireshark/extcap and mirrors TFT without changing the host network | S7 | ⬜ later |
+| Conditional Advanced NFC/EMV provides NDEF/ISO14443-4 emulation, erase, owned-tag recovery and redacted protocol diagnostics | S7, conditional PN532 | ⬜ later |
+| Privacy Identity randomizes Leshy STA/AP and offers ephemeral provenance-labeled synthetic lab identities from owned Captures | S7 | ⬜ later |
+| Conditional USB Host Inspector enumerates device/class interfaces and bounded signed keyboard/HID behavior after VBUS/OTG qualification | S7, conditional hardware | ⬜ later |
+| Owned Evidence Verification checks owned Wi-Fi/NFC/Sub-GHz/fixed-code Captures with budget, pause/stop/checkpoint and provenance | S7 | ⬜ later |
+| Owned Network Lab gives read-only LAN inventory and bounded captive-portal/ARP/DHCP/MITM robustness tests on an isolated selected fixture | S7 | ⬜ later |
+| Browser/SD install and Device → Update: signed stable/beta OTA/SD package, rollback and recovery image | S8 | ⬜ later |
 | Versioned backup/restore and factory reset show scope/preview/checksum and never overwrite raw Capture without confirmation | S8 | ⬜ later |
 
 ### Roadmap

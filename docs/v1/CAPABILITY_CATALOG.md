@@ -2,7 +2,8 @@
 
 *Read in: **English** · [Русский](CAPABILITY_CATALOG.ru.md)*
 
-Document status: **product-reviewed 1.0 scope baseline**, expanded 27 August 2026.
+Document status: **product-reviewed 1.x scope baseline**, expanded by the 27 August
+and 1 September 2026 product decisions.
 
 This catalog is the user-facing view of the 1.0 boundary. Normative acceptance
 criteria remain in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md), while current
@@ -30,9 +31,9 @@ explicit release-boundary change.
 | CAP-002 | Home is projected from available capabilities and explains disabled/conflicted/fault before launch | P0 | PR-002 | S2 |
 | CAP-003 | Diagnostics performs a safe no-TX self-test and exports a report | P0 | PR-009 | S2/S5 |
 | CAP-004 | TFT, buttons, and touch use common Actions, calibration, and an accessible Back path | P0 | PR-002, NFR-002, NFR-010 | S2 |
-| CAP-005 | EN/RU language, brightness, theme, sound, and screen behavior settings persist locally | P1 | PR-011, NFR-010 | S2/S5 |
+| CAP-005 | EN/RU language, brightness, theme, sound, font scale/contrast/reduced motion, repeat, favorite/hidden apps, shortcuts, and optional startup app persist locally | P1 | PR-011, NFR-010 | S2/S5/S7 |
 | CAP-006 | Power, charging, low-voltage safe writes, sleep/resume, and reset reasons are visible and testable | P0 | PR-009, NFR-004 | S5 |
-| CAP-007 | Browser install, stable/beta update, signatures, rollback, and recovery image | P0 | PR-010 | S8 |
+| CAP-007 | Browser/SD install, stable/beta update, signatures, rollback, and recovery image | P0 | PR-010 | S8 |
 | CAP-008 | Local logs, crash journal, and diagnostic bundle work without cloud services | P1 | PR-009, PR-012 | S6/S8 |
 
 ## Survey and observations
@@ -147,12 +148,12 @@ receiver, calibrated range, historical Target tracking or proof of packet traffi
 |---|---|---|---|---|
 | CAP-023 | Capture is immutable and stores time, source, frequency/channel, RSSI, coordinates, and receive settings | P0 | PR-005, NFR-008 | S3/S4 |
 | CAP-024 | Session/Capture writes are atomic and recover after reset or power loss | P0 | PR-005, NFR-009 | S3/S5 |
-| CAP-025 | Library opens saved Session/Capture data offline with list/detail/search/filter | P0 | PR-006 | S3/S6 |
+| CAP-025 | Library opens saved Session/Capture data offline with list/detail/search/filter and recoverable trash/undo | P0 | PR-006 | S3/S6/S7 |
 | CAP-026 | Export provides JSON/CSV summary, PCAP for compatible frames, and portable radio formats | P0/P1 | PR-007 | S3/S5 |
 | CAP-027 | SD, USB, and local companion import/export use versioned schemas and fail-closed parsers | P0 | PR-007, NFR-007, NFR-009 | S5/S6 |
 | CAP-028 | SD and LittleFS expose identity, capacity, recovery, integrity, and degraded behavior | P0 | PR-005, PR-006, PR-009 | S3/S5 |
 | CAP-029 | IR capture/decode/library preserves the original and derived results | P0, conditional RF shield | PR-007, PR-014 | S5 |
-| CAP-030 | Sub-GHz RAW/decode/library preserves pulses, radio parameters, and derived results | P0, conditional RF shield | PR-007, PR-014 | S5 |
+| CAP-030 | Sub-GHz RAW/decode/library preserves pulses, radio parameters and derived results, with a declared minimum decoder inventory and compatible `.sub` transport | P0, conditional RF shield | PR-007, PR-014 | S5/S7 |
 | CAP-031 | PN532 reads tag/NDEF info and versioned dumps under an explicit non-conflicting assembly | conditional | PR-007, PR-014 | S5 |
 | CAP-043 | A user saves a real-TFT screenshot with build/state/time provenance and opens it in Library/export | P1 | J-03, PR-015 | S2/S5 |
 
@@ -162,7 +163,7 @@ receiver, calibrated range, historical Target tracking or proof of packet traffi
 |---|---|---|---|---|
 | CAP-032 | Lab context is separate from passive work and shows scope, frequency, power, time, and TX state | P0 for any TX | PR-013 | S7 |
 | CAP-033 | Back, timeout, panic, and fault physically stop every enabled TX path | P0 for any TX | PR-013, NFR-002, NFR-006 | S7 |
-| CAP-034 | IR replay is available only for a selected saved Capture in an authorized context | conditional | PR-013, PR-014 | S5/S7 |
+| CAP-034 | IR replay and a ready signed TV/remote profile pack with multi-button/favorites operate only inside an authorized context | conditional | PR-013, PR-014 | S5/S7 |
 | CAP-035 | Sub-GHz replay/TX uses ResourceBroker, bounds, explicit confirmation, and an immutable source Capture | conditional | PR-013, PR-014 | S5/S7 |
 | CAP-036 | NFC write/restore runs only for a supported owned tag with preview and verify | conditional | PR-013, PR-014 | S5/S7 |
 | CAP-037 | Protocol workbench compares pulses/waveforms, annotates fields, and creates derived decodes | P1 | J-06, NFR-008 | S7 |
@@ -189,20 +190,27 @@ receiver, calibrated range, historical Target tracking or proof of packet traffi
 
 | ID | 1.0 capability | Commitment | Requirements | Ready stage |
 |---|---|---|---|---|
-| CAP-048 | Airspace Guard passively detects and explains suspicious Wi-Fi/BLE conditions: disconnect bursts, identity conflicts/churn, sustained elevated Wi-Fi noise and tracker-compatible BLE presence; every conclusion opens its source evidence and uncertainty | P1 | J-07, PR-020 | S7 |
+| CAP-048 | Airspace Guard uses named versioned profiles and explainable sensitivity for passive deauth/PineAP/evil-twin/tracker/skimmer/drone, WPA3/PMF/SAE compliance, and Wi-Fi/BLE/nRF/Sub-GHz jamming warnings; every conclusion opens source evidence and uncertainty | P1 | J-07, PR-020 | S7 |
 | CAP-049 | Focused Wi-Fi authentication Capture identifies EAPOL/PMKID and complete/incomplete handshakes, then exports immutable PCAP and `hc22000` evidence | P1 | J-03, J-07, PR-015, PR-021 | S7 |
-| CAP-050 | Offline Field Survey joins Wi-Fi AP/station and BLE observations with optional GPS track, deduplication, revisit comparison, and WiGLE-compatible local export | P1, GPS conditional | J-01, J-07, PR-022 | S7 |
+| CAP-050 | Offline Field Survey joins Wi-Fi AP/station and BLE observations with optional GPS track/per-satellite diagnostics, POI/notes, deduplication, revisit comparison, and WiGLE-compatible local export | P1, GPS conditional | J-01, J-07, PR-022 | S7 |
 | CAP-051 | BLE Inspector preserves compatible raw packets and offers an explicit permissioned connected-GATT mode with deterministic disconnect and provenance | P1 | J-02, J-07, PR-023 | S7 |
-| CAP-052 | [Device Lock](DEVICE_LOCK.md) provides local PIN setup, bounded retry/recovery, and protects secrets/evidence without blocking safe cleanup or recovery | P0 before sensitive data ships | J-05, J-08, PR-017, PR-024 | S7 |
+| CAP-052 | [Device Lock](DEVICE_LOCK.md) provides local PIN setup, bounded retry/recovery and a lock overlay that lets an already-started safe Capture continue while controls/data stay protected | P0 before sensitive data ships | J-05, J-08, PR-017, PR-024 | S7 |
 | CAP-053 | [Device → Serial Console](SERIAL_CONSOLE.md) provides a bounded UART bridge and shared Actions CLI under explicit configuration, permissions, leases, and cleanup | P1 | J-05, J-08, PR-012, PR-025 | S7 |
 | CAP-054 | [Automation/HID](AUTOMATION_HID.md) runs signed permissioned scripts with preview, ceilings, finite runtime and scoped USB/BLE HID; defensive BadUSB inspection is passive by default | P1 | J-08, PR-013, PR-026 | S7 |
-| CAP-055 | Authorized wireless Lab contains only named, individually accepted Wi-Fi/BLE/nRF fixture recipes with bounded region/power/channel/time and physical stop | P0 for any shipped wireless TX | J-06, J-08, PR-013, PR-027 | S7 |
+| CAP-055 | Owned Lab contains only named, individually accepted Wi-Fi/BLE/nRF/IR fixture recipes: targeted handshake-assist, iBeacon/identity emulation, MouseJack injection, bounded robustness and IR-camera tests; each declares target/fixture, region/power/channel/time, evidence and physical stop | P0 for any shipped active output | J-06, J-08, PR-013, PR-027, NFR-011…013 | S7 |
+| CAP-056 | nRF24 ESB Workbench preserves packet Capture, decodes compatible ESB payloads and passively detects MouseJack; injection exists only as a separately admitted owned-fixture recipe | P1, conditional RF shield | J-03, J-06, J-07, PR-028 | S7 |
+| CAP-057 | Live Companion streams Wi-Fi/BLE frames to USB Wireshark/extcap and mirrors the real TFT read-only without changing the host network or widening Actions permissions | P1 | J-03, J-05, PR-029 | S7 |
+| CAP-058 | Advanced NFC/EMV on an explicit PN532 assembly provides NDEF/ISO14443-4 emulation, erase, bounded owned-tag recovery and redacted EMV protocol diagnostics without retaining PAN/expiry | P1, conditional PN532 | J-03, J-06, PR-030, NFR-011…013 | S7 |
+| CAP-059 | Privacy Identity randomizes only Leshy's own STA/AP and provides short-lived synthetic identity emulation from an owned Capture with TTL/provenance; another identity is never cloned covertly | P1 | J-06, J-08, PR-031 | S7 |
+| CAP-060 | Physical USB Host Inspector enumerates VID/PID/class/interfaces for a selected device and runs only bounded signed keyboard/HID inspection after OTG/VBUS/cleanup qualification | P1, conditional USB host | J-05, J-08, PR-032 | S7 |
+| CAP-061 | Owned Evidence Verification checks owned Wi-Fi/NFC/Sub-GHz/fixed-code Captures locally or through the companion with preview, budget, pause/stop/checkpoint and no bundled leaked corpora | P1 | J-03, J-06, PR-033 | S7 |
+| CAP-062 | Owned Network Lab provides read-only LAN inventory and admits captive-portal/ARP/DHCP/MITM robustness recipes only on an explicitly selected isolated fixture; a training portal retains the outcome, never the submitted secret | P1 | J-06, J-08, PR-034, NFR-011…013 | S7 |
 
 ## Explicitly after 1.0
 
-Authenticated DIV-to-DIV Peer Link, cloud accounts and default telemetry, a public
-executable-app marketplace, broad support for unrelated ESP32 boards,
-hidden/disruptive actions, and attack count as a parity metric are not 1.0
+Authenticated DIV-to-DIV Peer Link, an external-module protocol, optional mobile
+sync/USB MSC/public reviewed catalog, cloud accounts/default telemetry, and broad
+support for unrelated ESP32 boards are not 1.0
 commitments. A post-1.0 candidate gets its own user job, risk review, and stage
 proposal; it is not inserted retroactively.
 

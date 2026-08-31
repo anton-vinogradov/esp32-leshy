@@ -74,7 +74,7 @@ release matrix, endurance и recovery; крупный feature scope в S8 не �
 ## Карта функциональности продукта
 
 Это человекочитаемый верхнеуровневый индекс всего запланированного продукта 1.0.
-Нормативным проверяемым перечнем всех 55 пунктов `CAP-*` остаётся
+Нормативным проверяемым перечнем всех 62 пунктов `CAP-*` остаётся
 [каталог возможностей](CAPABILITY_CATALOG.ru.md); здесь они сгруппированы по
 пользовательскому результату, и у каждого блока есть этап-владелец. Живой статус
 реализации находится в [STATUS.ru.md](STATUS.ru.md).
@@ -86,7 +86,7 @@ release matrix, endurance и recovery; крупный feature scope в S8 не �
 | Пассивное multi-radio наблюдение и packet Capture | выбираемые Wi-Fi/BLE; совместимые contracts nRF24/CC1101 spectrum; GPS context; общие timeline, filters, RSSI views и capture metadata; отдельный bounded Wi-Fi frame Capture; PCAP и CSV/JSON; видимые degradation/duty; privacy-aware persistence; power-cut recovery и multi-source endurance | S4 |
 | Всё штатное железо ESP32-DIV | IR capture/decode/library и разрешённый replay; PN532 tag/NDEF/dump и разрешённые write/restore; GPS fix/track/time; устойчивые SD/LittleFS browse/import/export; calibration, power, sleep/resume и low-voltage safety | S5 |
 | Targets, сравнение и локальный companion | identities/history/correlation целей, tags и notes; обратимые merge/split; baseline/diff сессий и захватов; localization и GPS map; offline search; локальный Web/USB companion над теми же Actions и schemas | S6 |
-| Конкурентная полнота, защита устройства, безопасная Lab и расширения | Защита эфира; focused Wi-Fi authentication Capture; offline Field Survey; BLE raw/GATT Inspector; Device Lock; bounded Serial Console/Actions CLI; permissioned signed automation и scoped HID; explicit legal/safety context; отдельно допускаемые Wi-Fi/BLE/nRF recipes; контролируемые TX/write paths, indication, timeout/panic stop; permissioned app descriptors/scoped storage; signed/versioned decoders; protocol workbench; SDK, sample extension и simulator traces | S7 |
+| Конкурентная полнота, защита устройства, Owned Lab и расширения | Защита эфира; focused Wi-Fi authentication Capture; offline Field Survey; BLE raw/GATT Inspector и nRF24 ESB Workbench; Device Lock и Privacy Identity; read-only Live Companion и USB Host Inspector; Advanced NFC/EMV; Owned Evidence Verification и Owned Network Lab; bounded Serial Console/Actions CLI; permissioned signed automation и scoped HID; explicit legal/safety context; отдельно допускаемые Wi-Fi/BLE/nRF/IR recipes; контролируемые TX/write paths, indication, timeout/panic stop; permissioned app descriptors/scoped storage; signed/versioned decoders; protocol workbench; SDK, sample extension и simulator traces | S7 |
 | Доверие, восстановление и доставка | stable/beta signed OTA, rollback и recovery; единый release/on-device Self-Test plan; автоматические HIL, screenshots, endurance, fault injection и fuzzing; crash bundle; backup/restore; воспроизводимые binaries, provenance, compatibility и support policy | S8 |
 
 Screenshots, accessibility, privacy, resource budgets, data integrity и fail-closed
@@ -252,12 +252,14 @@ probe → observe/capture → library → inspect/export.
 
 Результаты:
 
-- evidence-backed Защита эфира, focused authentication Capture, offline Field Survey
-  и BLE Inspector;
-- Device Lock и bounded Serial Console/Actions CLI;
+- evidence-backed Защита эфира, focused authentication Capture, offline Field Survey,
+  BLE Inspector и nRF24 ESB Workbench;
+- Device Lock, Privacy Identity, read-only Live Companion, Advanced NFC/EMV, USB Host
+  Inspector, Owned Evidence Verification и Owned Network Lab;
+- bounded Serial Console/Actions CLI;
 - permissioned signed automation и scoped USB/BLE HID;
 - общий Lab context, regulatory policy, TX indication/deadline/panic stop;
-- именованные и отдельно допускаемые Wi-Fi/BLE/nRF fixture recipes;
+- именованные и отдельно допускаемые Wi-Fi/BLE/nRF/IR fixture recipes;
 - application descriptor: capabilities, resources, permissions, safety, strings;
 - scoped storage и ограниченный driver/action access;
 - decoder/profile packages с проверкой версии и подписи;
@@ -266,7 +268,7 @@ probe → observe/capture → library → inspect/export.
 
 **Exit gate S7:** внешний разработчик создаёт sample extension без изменения kernel;
 extension не может обойти leases/permissions; HIL подтверждает физическую остановку
-каждого включённого TX path при timeout, Back, panic и fault; все 55 принятых
+каждого включённого TX path при timeout, Back, panic и fault; все 62 принятых
 capabilities feature-complete и проходят `DEMO-S7`.
 
 ## S8 — Release hardening и 1.0.0
