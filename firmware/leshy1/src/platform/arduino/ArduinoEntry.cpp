@@ -9337,13 +9337,20 @@ bool serviceTargetRadar() {
     // detached, returning to the exact memory topology that existed before
     // Radar admission.
     const bool memoryRestored = restoreBleProductSurveyMemory();
-    const bool restored = restoreTargetsAfterRadar();
     portENTER_CRITICAL(&targetRadarMux);
     TargetRadar* tracker = targetRadarTracker;
     targetRadarTracker = nullptr;
     targetRadarOverlay = false;
     portEXIT_CRITICAL(&targetRadarMux);
     delete tracker;
+    // esp_wifi_deinit() releases its event task asynchronously through the
+    // idle task.  Loading the multi-block Targets workspace in the same loop
+    // turn can therefore fail despite sufficient total heap.  The tracker no
+    // longer owns any state needed for restore, so release it first and give
+    // the allocator one deterministic coalescing boundary before reopening
+    // the exact read-only product view.
+    if (targetRadarWifiScans != 0U) vTaskDelay(1U);
+    const bool restored = restoreTargetsAfterRadar();
     targetsProductStatus = restored && memoryRestored
         ? "ready" : "radar_restore_failed";
     lastRuntimeEvent = restored && memoryRestored
