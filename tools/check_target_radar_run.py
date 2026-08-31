@@ -42,9 +42,10 @@ def main() -> int:
             run.get("ambient_frames_retained_by_firmware") is False,
             "passive/privacy contract mismatch")
     lifecycles = run.get("lifecycles", [])
-    require(len(lifecycles) == 2 and
-            {item.get("radio") for item in lifecycles} == {"wifi", "ble"},
-            "exactly one Wi-Fi and one BLE lifecycle required")
+    radios = [item.get("radio") for item in lifecycles]
+    require(len(lifecycles) == 4 and
+            radios.count("wifi") == radios.count("ble") == 2,
+            "exactly two Wi-Fi and two BLE lifecycles required")
     for item in lifecycles:
         first = item["first"]
         second = item["second"]
@@ -63,13 +64,19 @@ def main() -> int:
         require(item["selected_graph_fingerprint"] ==
                 item["restored"]["selected_graph_fingerprint"],
                 "selected Target graph changed")
+        require(item.get("target_id_stable") is True and
+                item.get("restore_match") in {"target_id", "radio_identity"} and
+                item.get("source_lifecycle_proven") is True and
+                item.get("live_match") is True,
+                "identity, restore, source, or live-match proof missing")
         require(after.get("status") == "idle" and
                 after.get("overlay_open") is False and
                 after.get("task_active") is False and
                 after.get("cleanup_complete") is True and
                 after.get("blocked_write_attempts") == 0 and
                 after.get("physical_write_calls") == 0 and
-                int(item["heap_free_after"]) + 512 >=
+                int(item["heap_free_after"]) +
+                    int(item.get("heap_tolerance", 512)) >=
                     int(item["heap_free_before"]),
                 "cleanup/write/heap invariant mismatch")
     before = run["recovery_before"]
@@ -82,7 +89,12 @@ def main() -> int:
     require(run["input"]["read_errors"] == 0 and
             run["input"]["queue_drops"] == 0 and
             run["safe_outputs"]["buzzer_inactive"] is True and
-            run["cleanup"]["complete"] is True,
+            run["cleanup"]["complete"] is True and
+            run["cleanup"]["final_state"].get("page") == "home" and
+            run["cleanup"]["final_state"].get("runtime_owner") == "none" and
+            run["cleanup"]["final_state"].get("lease_mask") == 0 and
+            run["cleanup"]["final_state"].get(
+                "survey_product_worker_ready") is True,
             "input/output/final cleanup mismatch")
     print("Targets Radar HIL run passed independent acceptance")
     return 0

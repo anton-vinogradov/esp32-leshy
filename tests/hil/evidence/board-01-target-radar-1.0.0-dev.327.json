@@ -1,0 +1,124 @@
+{
+  "automation": {
+    "automatic_screenshots": 8,
+    "checker_sha256": "9429eedbf366e5cbf9fb6b937a98185ebc12a7fd3ea95a775e16af6ea2dc25a3",
+    "flash_count": 1,
+    "independent_checker_output": "Targets Radar HIL run passed independent acceptance",
+    "manifest_sha256": "eabc6b95a820115c468cdd023b5cab01f44693dc12fd6caa865222603aced0c9",
+    "manual_button_presses": 0,
+    "run_sha256": "18bb4ee85ecec047024487b27f59868638fe3b15a6d6324234414827df110fda",
+    "runner_sha256": "280dabd448d087706db0e84108343e1e1250836f6c09fe784c3d52e62b9d2b94",
+    "screen_digests": {
+      "target-radar-ble-first": {
+        "png_sha256": "91f9d82b87ef0e868039ba9a09af522a78146ef1ff7c5e5e48186816ecb92a86",
+        "rgb565_sha256": "d93e9f96e5888dd5482297c48d4602b7e190f817ccf64986d3faba6a0073f56f"
+      },
+      "target-radar-ble-repeat-first": {
+        "png_sha256": "91f9d82b87ef0e868039ba9a09af522a78146ef1ff7c5e5e48186816ecb92a86",
+        "rgb565_sha256": "d93e9f96e5888dd5482297c48d4602b7e190f817ccf64986d3faba6a0073f56f"
+      },
+      "target-radar-ble-repeat-second": {
+        "png_sha256": "1dacfe44b442efa044582eaf6db3adeb929f1651ac9dba68e0e2cf0cfca8b951",
+        "rgb565_sha256": "d105aa367c931ee720cb78871c3057095a4874f503022942f40127e4c469f538"
+      },
+      "target-radar-ble-second": {
+        "png_sha256": "1dacfe44b442efa044582eaf6db3adeb929f1651ac9dba68e0e2cf0cfca8b951",
+        "rgb565_sha256": "d105aa367c931ee720cb78871c3057095a4874f503022942f40127e4c469f538"
+      },
+      "target-radar-wifi-first": {
+        "png_sha256": "48975cdb93b1c45b77547ad73dafe735062039448085291e48ddbef51af99b39",
+        "rgb565_sha256": "c93538cd8d01bf3b7a1d601a88e6556d4b5912402288b63d2bbda0ea0acba5ca"
+      },
+      "target-radar-wifi-repeat-first": {
+        "png_sha256": "b10cfab51af34f10bae56927c5e10084d48460ca04d6b263dd293ea1e19da82c",
+        "rgb565_sha256": "db11fa2ada6bf5b61fea77c24875a2c8f3720683f41ebaafddd84d808470e028"
+      },
+      "target-radar-wifi-repeat-second": {
+        "png_sha256": "9af1b5848715fcb567fea6051c4694b53c76483be63be29290442fab292a19d4",
+        "rgb565_sha256": "0f07bbc95a54a1ea8b19cd7ba6026621b467d8baab0bb093a287849998245c72"
+      },
+      "target-radar-wifi-second": {
+        "png_sha256": "c847a3aa5bae373788cf09ed225f72ad1ed2cc2e0ea050b7b1688b879ca4d2ab",
+        "rgb565_sha256": "4be17e4d569d0cf3a9f9d8de8a6e2b82d0b41a18c7ff6b3a0ea76207d56d1dcf"
+      }
+    }
+  },
+  "board": "board-01",
+  "candidate": {
+    "elf_sha256": "734ceaded8662212138612cef94e0d934faf6b180d59af2d1ae9cabfdc32893f",
+    "factory_bytes": 3643792,
+    "factory_sha256": "b75359a066be9540f13b752d02592e2f9746dd57cd7f89612476393fb4f96228",
+    "firmware_bytes": 3578256,
+    "firmware_sha256": "78d8d175afad80ee85ee991876624f24a0cc4813a214ece9684b263948c483ca",
+    "firmware_source_commit": "b8b0daed3ef30854b8b8e607609774f71a24384b",
+    "harness_commit": "b8b0daed3ef30854b8b8e607609774f71a24384b",
+    "linked_image_bytes": 3578100,
+    "map_sha256": "7864ee11a869c7032d7d44a1876118f9cc4de54b742e71127b34671dfa46ca98",
+    "ota_free_bytes": 616048,
+    "static_ram_bytes": 234064,
+    "version": "1.0.0-dev.327"
+  },
+  "cid": "FE343253440000002000000055019CB7",
+  "evidence_ids": [
+    "E-BUILD-213",
+    "E-AUTO-188",
+    "E-HIL-221",
+    "E-UX-072",
+    "RB-M224"
+  ],
+  "privacy": {
+    "ambient_identifiers_retained": false,
+    "frames_retained": false,
+    "note": "Only aggregate facts and frame digests are committed.",
+    "raw_run_retained": false
+  },
+  "schema": "leshy.target_radar.acceptance.v1",
+  "scope": {
+    "accepts": [
+      "passive Targets Radar for retained Wi-Fi and BLE identities",
+      "repeatable identity-preserving return to Targets Actions",
+      "atomic live-region redraw and restored Survey worker"
+    ],
+    "does_not_accept": [
+      "calibrated distance or direction finding",
+      "RF transmit or active probing",
+      "periodic full HIL matrix"
+    ],
+    "focused_cadence": "7/15",
+    "next": "coherent Wi-Fi/BLE/Targets interaction review and user-first Home hierarchy"
+  },
+  "status": "pass",
+  "verified": {
+    "active_probe_commands": 0,
+    "atomic_live_region_only": true,
+    "buzzer_inactive": true,
+    "deterministic_fallback_observations": 6,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "four_complete_lifecycles": true,
+    "generation_unchanged": true,
+    "identity_stable": true,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "observations_unchanged": true,
+    "physical_live_match_present": true,
+    "physical_storage_writes": 0,
+    "radio_tx_commands": 0,
+    "radios": [
+      "ble",
+      "ble",
+      "wifi",
+      "wifi"
+    ],
+    "repeat_heap_stable": true,
+    "restore_matches": [
+      "target_id",
+      "target_id",
+      "target_id",
+      "target_id"
+    ],
+    "source_lifecycle_proven": true,
+    "survey_worker_ready_after_cleanup": true
+  }
+}
