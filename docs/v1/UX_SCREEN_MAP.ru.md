@@ -5,8 +5,9 @@
 Статус: **реализованная task-first карта 1.x**. Exact physical `1.0.0-dev.328`
 принимает иерархию Home и прямой controlled-вход в «Лабораторию» на реальном TFT.
 Host/build `1.0.0-dev.329` дополнительно реализует ранний путь Screenshot→защищённая
-Библиотека→USB; physical gate ждёт настройки owner Device Lock. Карта задаёт
-структуру задач, семантику цветов и поведение Back/Stop.
+Библиотека→USB, а host/build `1.0.0-dev.333` добавляет первый receive-only IR
+Protocol Workbench за Библиотекой. Их connected physical gates остаются открытыми.
+Карта задаёт структуру задач, семантику цветов и поведение Back/Stop.
 
 ## Глобальная оболочка
 
@@ -120,6 +121,7 @@ UX-S01 Home
 ├─ Библиотека
 │  ├─ UX-S15 Sessions / Captures / Exports / Screenshots
 │  ├─ UX-S16 Item Detail: integrity, provenance, source/derived data
+│  │  └─ Анализ IR → UX-S37 Protocol Workbench: immutable waveform / pulse cursor
 │  └─ UX-S17 Import / Export / Compare / Open in Lab
 └─ Устройство
    ├─ Настройки → UX-S25 Language / Display / Input / Feedback / Connectivity
@@ -235,6 +237,27 @@ message mask не участвуют в навигации. Up/Down меняют
 нетронутыми, footer меняется только при изменении видимых hints. Extension
 Save/reopen/export dev.249 всё ещё требует physical acceptance TFT, SD и полезного
 evidence; dev.248 остаётся physical baseline.
+
+## UX-S37 receive-only IR Protocol Workbench
+
+Пользователь открывает один сохранённый IR Capture, чтобы сразу ответить на три
+вопроса: какую форму приняли, из каких timing families она состоит и какой exact
+pulse сейчас изучается. Поэтому detail Библиотеки сохраняет **Анализ** и **Экспорт**
+отдельными actions; анализ не подменяет и не изменяет evidence/export workflow.
+
+При входе один раз рисуются static chrome, summary protocol/pulse/base, уведомление
+immutable source, waveform на всю ширину, centers timing families и source
+fingerprint. Up/Down перемещают pulse cursor и заменяют только bounded cursor strip
+плюс одну atomic row с index, logical Mark/Space, microseconds и normalized units.
+Active-low electrical level штатного demodulator переводится в полезный logical
+envelope; bytes raw source не меняются. Reopen допускается только для exact выбранного
+persisted generation. Unavailable или stale input fail closed вместо анализа другой
+Session из памяти.
+
+Host/build dev.333 реализует этот первый read-only IR slice с fixed workspace 1 KiB
+и без heap allocation, TX, replay, output API или radio lease. Physical review
+TFT/navigation, comparison двух Captures, annotations полей и сохранение derived
+decode остаются открытыми, поэтому FUNC-37 ещё не завершён.
 
 ## Acceptance UX-01
 

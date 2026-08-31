@@ -5,8 +5,9 @@
 Status: **implemented task-first 1.x map**. Exact physical `1.0.0-dev.328` accepts
 the Home hierarchy and direct controlled Lab entry on the real TFT. Host/build
 `1.0.0-dev.329` additionally implements the early Screenshot→protected Library→USB
-path; its physical gate is waiting for owner Device Lock setup. This map binds task
-structure, color semantics and Back/Stop behavior.
+path, and host/build `1.0.0-dev.333` adds the first receive-only IR Protocol
+Workbench behind Library. Their connected physical gates remain open. This map
+binds task structure, color semantics and Back/Stop behavior.
 
 ## Global shell
 
@@ -118,6 +119,7 @@ UX-S01 Home
 ├─ Library
 │  ├─ UX-S15 Sessions / Captures / Exports / Screenshots
 │  ├─ UX-S16 Item Detail: integrity, provenance, source/derived data
+│  │  └─ IR Analyze → UX-S37 Protocol Workbench: immutable waveform / pulse cursor
 │  └─ UX-S17 Import / Export / Compare / Open in Lab
 └─ Device
    ├─ Settings → UX-S25 Language / Display / Input / Feedback / Connectivity
@@ -230,6 +232,27 @@ screen. A title is repainted only when its visible tone/color changes; identical
 list/detail titles are left intact, and the footer changes only when its visible
 hints differ. The dev.249 Save/reopen/export extension still requires physical TFT,
 SD and useful-evidence acceptance; dev.248 remains the physical baseline.
+
+## UX-S37 receive-only IR Protocol Workbench
+
+The user opens one saved IR Capture to answer three immediate questions: what shape
+was received, which timing families form it, and what exact pulse is under review.
+The Library detail therefore keeps **Analyze** and **Export** as separate actions;
+analysis never hijacks or mutates the evidence/export workflow.
+
+On entry, static chrome, protocol/pulse/base summary, immutable-source notice,
+full-width waveform, timing-family centers and source fingerprint render once.
+Up/Down moves a pulse cursor and replaces only the bounded cursor strip plus one
+atomic row containing index, logical Mark/Space, microseconds and normalized units.
+The stock demodulator's active-low electrical level is translated to the useful
+logical envelope; raw source bytes remain unchanged. Reopening is admitted only for
+the exact selected persisted generation. Unavailable or stale input fails closed
+instead of analyzing a different in-memory Session.
+
+Host/build dev.333 implements this first read-only IR slice with a fixed 1 KiB
+workspace and no heap allocation, TX, replay, output API or radio lease. Physical
+TFT/navigation review, comparison of two Captures, field annotations and storing a
+derived decode remain open and therefore do not make FUNC-37 complete.
 
 ## UX-01 acceptance
 

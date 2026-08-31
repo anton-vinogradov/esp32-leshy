@@ -1830,6 +1830,25 @@ Automation-folder state. The clean build and repaint/content/language/component
 guards pass; no device was connected, so physical heap and TFT acceptance remain
 dev.331 and cadence stays 10/15.
 
+Protocol Workbench IR-slice bound `RB-M230`: exact host/build
+`1.0.0-dev.333` at firmware source
+`61d8d90f652b0e198bbf18674092a4edcc954993` uses 236,184 B static RAM,
+3,599,972 B linked flash and 3,600,480/3,666,016 B app/factory images, leaving
+593,824 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`72f45936f2dae55f06e5196d97469bc5941a294960197d95dfa60fff04804fe9`/
+`60570816d2a26d6891bdc9a68a922bbc0580a66f0e6c4c31a959f580bd94e4f3`/
+`d7b1871550018f4c084ac0c49c9cf31ff01090fcae834e66e2fd97a13f6629e8`/
+`9c091c0b158565a7999cf029737631c1af8f815ed8a8d4f49e7a4dc7851c1fd3`.
+Against dev.332 this is +1,136 B static RAM, +3,636 B linked flash, +3,648 B
+in both app/factory images and 3,648 B less OTA headroom. The only explicit
+analysis workspace is 512 16-bit pulse durations (1,024 B); the immutable source
+is reopened by exact generation and no full-frame buffer, heap allocation, radio
+lease, TX, replay or output API is added. The waveform renders only on entry;
+pulse movement updates a bounded cursor strip and one atomic 1-bpp text row.
+Protocol, clean-target, repaint, language, content, component and production-build
+checks pass. Board-01 is disconnected, so physical heap/TFT acceptance remains
+dev.331 and cadence stays 10/15.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

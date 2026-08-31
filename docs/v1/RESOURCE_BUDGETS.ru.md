@@ -1818,6 +1818,25 @@ compositor строки Bluetooth плюс явная repaint telemetry и че�
 device не подключался, поэтому physical heap/TFT acceptance остаются dev.331,
 cadence — 10/15.
 
+Bound IR-среза Protocol Workbench `RB-M230`: exact host/build
+`1.0.0-dev.333` на firmware source
+`61d8d90f652b0e198bbf18674092a4edcc954993` используют 236 184 B static RAM,
+3 599 972 B linked flash и app/factory images 3 600 480/3 666 016 B, оставляя
+593 824 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`72f45936f2dae55f06e5196d97469bc5941a294960197d95dfa60fff04804fe9`/
+`60570816d2a26d6891bdc9a68a922bbc0580a66f0e6c4c31a959f580bd94e4f3`/
+`d7b1871550018f4c084ac0c49c9cf31ff01090fcae834e66e2fd97a13f6629e8`/
+`9c091c0b158565a7999cf029737631c1af8f815ed8a8d4f49e7a4dc7851c1fd3`.
+Относительно dev.332 это +1 136 B static RAM, +3 636 B linked flash, +3 648 B
+в обоих app/factory images и на 3 648 B меньше OTA headroom. Единственный explicit
+analysis workspace — 512 длительностей pulse по 16 bit (1 024 B); immutable source
+открывается по exact generation, а full-frame buffer, heap allocation, radio lease,
+TX, replay или output API не добавляются. Waveform рисуется только при входе;
+перемещение по pulse обновляет bounded cursor strip и одну atomic 1-bpp text row.
+Проходят checks Protocol, clean-target, repaint, language, content, component и
+production build. Board-01 отключена, поэтому physical heap/TFT acceptance остаётся
+dev.331, cadence — 10/15.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты
