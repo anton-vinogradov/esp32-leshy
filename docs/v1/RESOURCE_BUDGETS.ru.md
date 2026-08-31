@@ -1732,6 +1732,32 @@ Device Lock удалён, final owner/lease — none/0. Cadence двигаетс
 Wi-Fi-device часть FF-1 без заявления calibrated distance или оставшегося
 Targets/cross-radio review.
 
+Bound Targets Radar/localize `RB-M224`: exact physical `1.0.0-dev.327` на firmware
+source `b8b0daed3ef30854b8b8e607609774f71a24384b` использует 234 064 B static RAM,
+3 578 100 B linked flash и app/factory images 3 578 256/3 643 792 B, оставляя
+616 048 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`78d8d175afad80ee85ee991876624f24a0cc4813a214ece9684b263948c483ca`/
+`b75359a066be9540f13b752d02592e2f9746dd57cd7f89612476393fb4f96228`/
+`734ceaded8662212138612cef94e0d934faf6b180d59af2d1ae9cabfdc32893f`/
+`7864ee11a869c7032d7d44a1876118f9cc4de54b742e71127b34671dfa46ca98`.
+Четыре lifecycle Radar BLE×2/Wi-Fi×2 сохраняют heap invariant, identity и continuity
+generation/observations, заканчиваются с zero writes/drops/TX и без lease. Cadence
+двигается до 7/15.
+
+Bound task-first Home/Lab `RB-M225`: exact physical `1.0.0-dev.328` на firmware
+source `8b8ff984c8c881d13ca95abbbbb43f634747ffec` использует 234 064 B static RAM,
+3 578 092 B linked flash и app/factory images 3 578 592/3 644 128 B, оставляя
+615 712 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`a069ce661f56add492ece0d9f33df0343cfe7da20092048f9b315582e1a268c0`/
+`8076b250c3bd87e0ad25ae1b3237fd8178125e89f407289051acaa5b5a13723d`/
+`e0d2d5acf53fa65f804e7866cab7f6fb20e52abd27a0f9864c21b04ce60a8306`/
+`d4df20565d5c8414578ede7932292784328c27582ad482cafbbd96d6b4f616a6`.
+Относительно dev.327 это zero growth static RAM, -8 B linked flash и +336 B в обеих
+padded images app/factory с уменьшением OTA headroom на 336 B. Delta оплачивает
+только task-first strings, optional label tone и HIL observability. Проходят восемь
+стабильных dwell samples Lab, 1 160 danger pixels, 565 независимых focus pixels,
+zero input errors/drops и complete cleanup. Cadence двигается до 8/15.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

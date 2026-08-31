@@ -1744,6 +1744,32 @@ removed, and final owner/lease is none/0. Cadence advances to 6/15; this accepts
 Wi-Fi-device part of FF-1 without claiming calibrated distance or the remaining
 Targets/cross-radio review.
 
+Targets Radar/localize bound `RB-M224`: exact physical `1.0.0-dev.327` at firmware
+source `b8b0daed3ef30854b8b8e607609774f71a24384b` uses 234,064 B static RAM,
+3,578,100 B linked flash and 3,578,256/3,643,792 B app/factory images, leaving
+616,048 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`78d8d175afad80ee85ee991876624f24a0cc4813a214ece9684b263948c483ca`/
+`b75359a066be9540f13b752d02592e2f9746dd57cd7f89612476393fb4f96228`/
+`734ceaded8662212138612cef94e0d934faf6b180d59af2d1ae9cabfdc32893f`/
+`7864ee11a869c7032d7d44a1876118f9cc4de54b742e71127b34671dfa46ca98`.
+Four BLE×2/Wi-Fi×2 Radar lifecycles keep heap invariant, preserve identity and
+generation/observation continuity and finish with zero writes/drops/TX and no
+lease. Cadence advances to 7/15.
+
+Task-first Home/Lab bound `RB-M225`: exact physical `1.0.0-dev.328` at firmware
+source `8b8ff984c8c881d13ca95abbbbb43f634747ffec` uses 234,064 B static RAM,
+3,578,092 B linked flash and 3,578,592/3,644,128 B app/factory images, leaving
+615,712 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`a069ce661f56add492ece0d9f33df0343cfe7da20092048f9b315582e1a268c0`/
+`8076b250c3bd87e0ad25ae1b3237fd8178125e89f407289051acaa5b5a13723d`/
+`e0d2d5acf53fa65f804e7866cab7f6fb20e52abd27a0f9864c21b04ce60a8306`/
+`d4df20565d5c8414578ede7932292784328c27582ad482cafbbd96d6b4f616a6`.
+Against dev.327 this is zero static-RAM growth, -8 B linked flash and +336 B in
+both padded app/factory images, leaving 336 B less OTA headroom. The delta funds
+only task-first strings, one optional label tone and its HIL observability. Eight
+stable Lab dwell samples, 1,160 danger pixels, 565 independent focus pixels, zero
+input errors/drops and complete cleanup pass. Cadence advances to 8/15.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

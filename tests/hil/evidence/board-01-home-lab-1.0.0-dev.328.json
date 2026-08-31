@@ -1,0 +1,78 @@
+{
+  "automation": {
+    "app_elf_sha256": "e0d2d5acf53fa65f804e7866cab7f6fb20e52abd27a0f9864c21b04ce60a8306",
+    "danger_pixels": 1160,
+    "firmware_sha256": "a069ce661f56add492ece0d9f33df0343cfe7da20092048f9b315582e1a268c0",
+    "flash_count": 1,
+    "focus_pixels": 565,
+    "home_png_sha256": "b6ee4757b3e22c95c85640589a0cfb6cd42f4ccd500925f10a912d4202882b2a",
+    "home_trace_sha256": "fc86446392b051211ea0ea768fa8fe477e8dec52d2660bb2e45aa7d1c27d3d6f",
+    "lab_dwell_samples": 8,
+    "manual_button_presses": 0,
+    "run_sha256": "3632a5feeae914a52fb89fa94fbdfc041cea9e7b16ee6787d3a2a404d288f93c",
+    "source_sha256": {
+      "catalog": "0a8a90bbdb95675b4116b021ffe5bbefebbf814d5d6dd35e468822728a664324",
+      "checker": "fcef53006d1169dca48ada5d9fc670d200657f06eb3a8ef6a7b4e1e0c247c89d",
+      "renderer": "439ce7b50eae3f44122fc80f6898612dd3edcdbdc2f84b579534db1341a80441",
+      "runner": "c0a7c7ca766d7e055be4dee960f5d1ed283640f8c7191ae39eb61f265a8934e1",
+      "strings": "8327a1b111cb294e1845395c0a0b5d238ddf1571a5a3b3555f17510607d26edb"
+    }
+  },
+  "board": "board-01",
+  "candidate": {
+    "elf_sha256": "e0d2d5acf53fa65f804e7866cab7f6fb20e52abd27a0f9864c21b04ce60a8306",
+    "factory_bytes": 3644128,
+    "factory_sha256": "8076b250c3bd87e0ad25ae1b3237fd8178125e89f407289051acaa5b5a13723d",
+    "firmware_bytes": 3578592,
+    "firmware_sha256": "a069ce661f56add492ece0d9f33df0343cfe7da20092048f9b315582e1a268c0",
+    "linked_flash_bytes": 3578092,
+    "map_sha256": "d4df20565d5c8414578ede7932292784328c27582ad482cafbbd96d6b4f616a6",
+    "ota_free_bytes": 615712,
+    "source_commit": "8b8ff984c8c881d13ca95abbbbb43f634747ffec",
+    "static_ram_bytes": 234064,
+    "version": "1.0.0-dev.328"
+  },
+  "cid": "FE343253440000002000000055019CB7",
+  "evidence_ids": [
+    "E-BUILD-214",
+    "E-AUTO-189",
+    "E-HIL-222",
+    "E-UX-073",
+    "RB-M225"
+  ],
+  "retained": {
+    "ambient_identifiers": false,
+    "home_png": "tests/hil/evidence/board-01-home-lab-1.0.0-dev.328/home-lab-selected.png",
+    "home_png_sha256": "b6ee4757b3e22c95c85640589a0cfb6cd42f4ccd500925f10a912d4202882b2a",
+    "raw_run": false
+  },
+  "schema": "leshy.home_lab.acceptance.v1",
+  "scope": {
+    "accepts": [
+      "task-first Home wording and stable route identities",
+      "direct red controlled-zone Lab entry",
+      "focused Home to Lab to Home lifecycle"
+    ],
+    "does_not_accept": [
+      "Lab execution or RF transmit",
+      "full top-level menu matrix",
+      "periodic full HIL matrix"
+    ],
+    "focused_cadence": "8/15"
+  },
+  "status": "pass",
+  "verified": {
+    "buzzer_inactive": true,
+    "clean_home_return": true,
+    "direct_home_lab_entry": true,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "independent_selection_focus": true,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "lab_danger_text_and_color": true,
+    "nrf_ce_inactive": true,
+    "stable_lab_owner_and_lease": true
+  }
+}

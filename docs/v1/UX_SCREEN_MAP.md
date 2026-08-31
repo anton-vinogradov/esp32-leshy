@@ -2,27 +2,42 @@
 
 *Read in: **English** · [Русский](UX_SCREEN_MAP.ru.md)*
 
-Status: **S1 low-fidelity baseline**. Pixels, typography, and palette are frozen in
-S2 on the real TFT; this map already binds task structure and Back/Stop behavior.
+Status: **implemented task-first 1.x map**. Exact physical `1.0.0-dev.328` accepts
+the Home hierarchy and direct controlled Lab entry on the real TFT; this map binds
+task structure, color semantics and Back/Stop behavior.
 
 ## Global shell
 
-The current `UX-S01 Home` exposes seven implemented user jobs. The final `Device`
-entry contains settings, checks and system information:
+The current `UX-S01 Home` is one flat nine-entry list, ordered into five conceptual
+groups without extra group pages or taps. Labels describe the result the user wants,
+not an internal subsystem:
 
 ```text
-Wi-Fi          find nearby networks
-Bluetooth      find nearby devices
-2.4 GHz        see air / find a signal
-Sub-GHz        see air / record a signal
-Capture        record Wi-Fi or infrared
-Library        open saved records
-Device
+Nearby
+  WI-FI NEARBY        find networks and Wi-Fi devices
+  BLUETOOTH NEARBY    find Bluetooth devices
+Air
+  2.4 GHZ AIR         see 2.4 GHz activity / find a signal
+  SUB-GHZ AIR         see Sub-GHz activity / find a signal
+Evidence
+  RECORD              record Wi-Fi, Sub-GHz or infrared evidence
+  MY TARGETS          reopen named/correlated objects and Radar
+  SAVED RECORDS       open sessions, captures and exports
+Controlled
+  LAB                 direct advanced entry; red label and warning, yellow focus
+Service
+  DEVICE              final muted entry
   Settings
   Self-Test   (Quick / Full-Guided)
   Diagnostics
   About
 ```
+
+Red on `LAB` means “controlled functionality—review before use”; it does not mean
+that merely opening the entry transmits. The current entry is a read-only Inspector.
+Any future active action keeps its own preview, explicit confirmation, interlock,
+deadline and permanent Stop. Selection remains the common yellow geometric focus,
+so warning severity and navigation state are never encoded by the same color.
 
 Every screen retains a context title, the truthful active receive/transmit antenna
 summary, visible button roles, and a Back path. Storage state is shown only when it
@@ -50,6 +65,11 @@ sample, frame or redraw totals. Radio-object details therefore use compact ident
 and channel/mode facts plus one shared qualitative and numeric signal meter.
 
 ## Navigation tree
+
+The tree below is the capability hierarchy. The executable Home keeps the stable
+flat order above for one-tap access; group names are semantic documentation, not
+additional screens. Deep links may open `Target / Radar / Capture / Lab` from a
+result while preserving the same typed Action and safety admission path.
 
 ```text
 UX-S01 Home
