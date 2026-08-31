@@ -5401,19 +5401,6 @@ void runProductSurveyWorker(void*) {
 bool initializeProductSurveyWorker() {
     productSurveyScanStartGate = xSemaphoreCreateBinaryStatic(
         &productSurveyScanStartGateStorage);
-    if (productSurveyScanStartGate == nullptr) return false;
-    // Reserve the one comparatively large contiguous allocation before the
-    // small queues. After a Wi-Fi driver lifecycle the same total heap can be
-    // split into many usable small blocks; allocating those first needlessly
-    // strands the worker stack even though every byte is present.
-    const bool started = xTaskCreatePinnedToCore(
-        runProductSurveyWorker, "leshy-survey", 8192, nullptr, 1,
-        &productSurveyWorkerTaskHandle, 0) == pdPASS;
-    if (!started) {
-        productSurveyWorkerTaskHandle = nullptr;
-        productSurveyScanStartGate = nullptr;
-        return false;
-    }
     productSurveyWorkerEvents = xQueueCreate(
         kProductSurveyWorkerEventCapacity,
         sizeof(ProductSurveyWorkerEvent));
@@ -5421,12 +5408,10 @@ bool initializeProductSurveyWorker() {
         kProductSurveyObservationCapacity, sizeof(Observation));
     airspaceGuardBleWorkerEvents = xQueueCreate(
         1U, sizeof(std::uint32_t));
-    if (productSurveyWorkerEvents == nullptr ||
+    if (productSurveyScanStartGate == nullptr ||
+        productSurveyWorkerEvents == nullptr ||
         productSurveyObservations == nullptr ||
         airspaceGuardBleWorkerEvents == nullptr) {
-        TaskHandle_t task = productSurveyWorkerTaskHandle;
-        productSurveyWorkerTaskHandle = nullptr;
-        vTaskDelete(task);
         if (productSurveyWorkerEvents != nullptr) {
             vQueueDelete(productSurveyWorkerEvents);
             productSurveyWorkerEvents = nullptr;
@@ -5440,13 +5425,25 @@ bool initializeProductSurveyWorker() {
             airspaceGuardBleWorkerEvents = nullptr;
         }
         productSurveyScanStartGate = nullptr;
-        vTaskDelay(1U);
         return false;
     }
-    productSurveyObservationQueueCapacity =
-        kProductSurveyObservationCapacity;
-    bleProductSurveyMemoryCompact = false;
-    return true;
+    const bool started = xTaskCreatePinnedToCore(
+        runProductSurveyWorker, "leshy-survey", 8192, nullptr, 1,
+        &productSurveyWorkerTaskHandle, 0) == pdPASS;
+    if (!started) {
+        vQueueDelete(productSurveyWorkerEvents);
+        vQueueDelete(productSurveyObservations);
+        vQueueDelete(airspaceGuardBleWorkerEvents);
+        productSurveyWorkerEvents = nullptr;
+        productSurveyObservations = nullptr;
+        airspaceGuardBleWorkerEvents = nullptr;
+        productSurveyScanStartGate = nullptr;
+    } else {
+        productSurveyObservationQueueCapacity =
+            kProductSurveyObservationCapacity;
+        bleProductSurveyMemoryCompact = false;
+    }
+    return started;
 }
 
 bool resizeProductSurveyObservationQueue(UBaseType_t capacity) {
