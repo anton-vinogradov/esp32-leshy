@@ -123,6 +123,11 @@ def main() -> int:
             "plan.durationMs = 1000U;" in entry and
             "boardBleScanStatusName(bleScan.status)" in entry and
             '\\"ble_scan_status\\":' in entry and
+            "injectTargetRadarObservationForHil" in entry and
+            "hilSession.active()" in entry and
+            '\\"passive_receiver_untouched\\":true' in entry and
+            '\\"radio_tx_commands\\":0' in entry and
+            '\\"storage_writes\\":0' in entry and
             "kMinimumInternalFreeHeapBeforeBegin" in ble_scanner_header and
             "kMinimumInternalLargestHeapBeforeBegin" in ble_scanner_header and
             "MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT" in ble_scanner and
@@ -131,7 +136,9 @@ def main() -> int:
             "Target graph, reuse the boot-time Survey worker and reject "
             "NimBLE admission before its fatal private low-memory assertion; "
             "its shortest scan window must satisfy the whole-second adapter "
-            "contract and expose its physical lifecycle result")
+            "contract and expose its physical lifecycle result; deterministic "
+            "screen-delta evidence may inject only an identity-safe observation "
+            "inside an explicit HIL session without touching RF or storage")
     load_start = entry.index("bool loadTargetsProduct")
     load_end = entry.index("bool rebuildTargetsProductFromCatalog")
     load_product = entry[load_start:load_end]

@@ -25723,6 +25723,88 @@ void emitTargetRadarState(Stream& reply) {
     reply.println(line);
 }
 
+void injectTargetRadarObservationForHil(Stream& reply,
+                                        const char* command) {
+    constexpr const char* prefix = "targets.radar.hil-observe ";
+    char radioName[8] = {};
+    int requestedRssi = 0;
+    const bool parsed = command != nullptr &&
+        std::strncmp(command, prefix, std::strlen(prefix)) == 0 &&
+        std::sscanf(command + std::strlen(prefix), "%7s %d",
+                    radioName, &requestedRssi) == 2 &&
+        requestedRssi >= -127 && requestedRssi <= 20;
+    const RadioKind radio = std::strcmp(radioName, "ble") == 0
+        ? RadioKind::Ble : RadioKind::Wifi;
+    const bool knownRadio = std::strcmp(radioName, "ble") == 0 ||
+        std::strcmp(radioName, "wifi") == 0;
+    const TargetRadarSnapshot snapshot = targetRadarSnapshot();
+    const bool active = parsed && knownRadio && hilSession.active() &&
+        targetRadarOverlay &&
+        targetRadarControl() == TargetRadarWorkerControl::Running &&
+        targetRadarTracker != nullptr;
+    const TargetRadarSignal* signal = nullptr;
+    if (active) {
+        for (std::size_t index = 0U; index < snapshot.identityCount; ++index) {
+            if (snapshot.signals[index].supported &&
+                snapshot.signals[index].radio == radio) {
+                signal = &snapshot.signals[index];
+                break;
+            }
+        }
+    }
+
+    TargetRadarIngestStatus ingest =
+        TargetRadarIngestStatus::InvalidArgument;
+    if (signal != nullptr) {
+        Observation observation{};
+        observation.radio = radio;
+        observation.identity = signal->identity.value;
+        observation.identityLength = signal->identity.length;
+        observation.rssiDbm = static_cast<std::int16_t>(requestedRssi);
+        observation.monotonicUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (observation.monotonicUs == 0U) observation.monotonicUs = 1U;
+        if (radio == RadioKind::Ble) {
+            observation.bleAdvertisement.present = true;
+            observation.bleAdvertisement.addressType =
+                signal->identity.discriminator;
+        } else {
+            observation.wifiKind = signal->identity.kind ==
+                    leshy1::domain::targets::TargetIdentityKind::WifiStation
+                ? leshy1::domain::observations::WifiObservationKind::Station
+                : leshy1::domain::observations::WifiObservationKind::
+                      AccessPoint;
+            observation.channel = signal->channel == 0U ? 6U
+                                                        : signal->channel;
+        }
+        portENTER_CRITICAL(&targetRadarMux);
+        if (targetRadarTracker != nullptr) {
+            ingest = targetRadarTracker->ingest(observation);
+        }
+        portEXIT_CRITICAL(&targetRadarMux);
+    }
+    const bool injected = ingest == TargetRadarIngestStatus::Matched;
+    char line[384] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.targets.radar_hil_observation.v1\","
+        "\"kind\":\"observation\",\"status\":\"%s\","
+        "\"radio\":\"%s\",\"rssi_dbm\":%d,\"injected\":%s,"
+        "\"hil_active\":%s,\"overlay_open\":%s,"
+        "\"passive_receiver_untouched\":true,"
+        "\"radio_tx_commands\":0,\"storage_writes\":0,"
+        "\"identity_disclosed\":false}",
+        injected ? "injected" : !parsed || !knownRadio
+            ? "invalid_request" : !hilSession.active()
+                ? "hil_session_required" : !targetRadarOverlay
+                    ? "radar_required" : "identity_unavailable",
+        knownRadio ? radioName : "none", requestedRssi,
+        injected ? "true" : "false",
+        hilSession.active() ? "true" : "false",
+        targetRadarOverlay ? "true" : "false");
+    reply.println(line);
+}
+
 void emitCompanionWebState(Stream& reply) {
     namespace companion = leshy1::services::companion;
     char line[1536] = {};
@@ -38399,6 +38481,10 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitTargetsState(reply);
     } else if (std::strcmp(command, "targets.radar") == 0) {
         emitTargetRadarState(reply);
+    } else if (std::strncmp(
+                   command, "targets.radar.hil-observe ",
+                   sizeof("targets.radar.hil-observe ") - 1U) == 0) {
+        injectTargetRadarObservationForHil(reply, command);
     } else if (std::strncmp(command, "companion.web.hil-seed ", 23) == 0) {
         armCompanionWebHilEntropy(reply, command);
     } else if (std::strcmp(command, "companion.web.hil-proof") == 0) {

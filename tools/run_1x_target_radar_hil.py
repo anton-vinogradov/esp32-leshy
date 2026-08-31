@@ -29,6 +29,7 @@ from temporary_device_lock_hil import TemporaryProtectedUiAdmissionHil
 SCHEMA = "leshy.targets_radar_hil.run.v1"
 RADAR_SCHEMA = "leshy.targets.radar.v1"
 TARGETS_SCHEMA = "leshy.targets.product.v1"
+RADAR_HIL_OBSERVATION_SCHEMA = "leshy.targets.radar_hil_observation.v1"
 CID = "FE343253440000002000000055019CB7"
 RADIO_NAMES = {1: "wifi", 2: "ble"}
 
@@ -88,7 +89,7 @@ def wait_live_or_healthy(device: PassiveSerial, radio: str,
         if source_healthy:
             healthy = last
         matched = (
-            active and last.get("signal_radio") == radio and
+            source_healthy and last.get("signal_radio") == radio and
             int(last.get("samples", 0)) >= 1 and
             int(last.get("rendered_revision", 0)) ==
                 int(last.get("revision", -1))
@@ -177,18 +178,50 @@ def run_selected_radar(device: PassiveSerial, frames: Path, radio: str,
     trace.append(started)
     require(started, f"{radio} radar open", page="targets",
             runtime_owner="targets", lease_mask=15)
-    first, live_match = wait_live_or_healthy(device, radio, 25.0)
+    first, physical_live_match = wait_live_or_healthy(device, radio, 25.0)
     require(first, f"{radio} first radar", task_active=True,
             cleanup_complete=True, passive_only=True,
             blocked_write_attempts=0, physical_write_calls=0,
             identity_disclosed=False, lease_mask=15)
+    injections: list[dict[str, Any]] = []
+    if not physical_live_match:
+        injected = query(
+            device, f"targets.radar.hil-observe {radio} -72".encode("ascii"),
+            RADAR_HIL_OBSERVATION_SCHEMA, "observation")
+        require(injected, f"{radio} deterministic observation",
+                status="injected", radio=radio, rssi_dbm=-72,
+                injected=True, hil_active=True, overlay_open=True,
+                passive_receiver_untouched=True, radio_tx_commands=0,
+                storage_writes=0, identity_disclosed=False)
+        injections.append(injected)
+        first = wait_record(
+            device, b"targets.radar", RADAR_SCHEMA,
+            lambda value: (
+                value.get("overlay_open") is True and
+                value.get("worker_control") == "running" and
+                value.get("signal_radio") == radio and
+                int(value.get("samples", 0)) >= 1 and
+                int(value.get("rendered_revision", 0)) ==
+                    int(value.get("revision", -1))
+            ), 5.0, f"{radio} injected target was not rendered")
+    live_match = physical_live_match or bool(injections)
     name = case_name or radio
-    first_name = f"target-radar-{name}-" + (
-        "first" if live_match else "waiting")
+    first_name = f"target-radar-{name}-first"
     screens[first_name] = capture(device, frames, first_name)
     second: dict[str, Any] | None = None
     pixels: dict[str, int] | None = None
     if live_match:
+        if injections:
+            injected = query(
+                device,
+                f"targets.radar.hil-observe {radio} -54".encode("ascii"),
+                RADAR_HIL_OBSERVATION_SCHEMA, "observation")
+            require(injected, f"{radio} deterministic delta",
+                    status="injected", radio=radio, rssi_dbm=-54,
+                    injected=True, hil_active=True, overlay_open=True,
+                    passive_receiver_untouched=True, radio_tx_commands=0,
+                    storage_writes=0, identity_disclosed=False)
+            injections.append(injected)
         second = wait_record(
             device, b"targets.radar", RADAR_SCHEMA,
             lambda value: (
@@ -242,6 +275,9 @@ def run_selected_radar(device: PassiveSerial, frames: Path, radio: str,
         "selected_graph_fingerprint": graph,
         "source_lifecycle_proven": True,
         "live_match": live_match,
+        "physical_live_match": physical_live_match,
+        "hil_observation_injected": bool(injections),
+        "hil_observations": injections,
         "first": first,
         "second": second,
         "after": radar_after,
@@ -352,28 +388,27 @@ def main() -> int:
                 if radio in wanted:
                     lifecycle = run_selected_radar(
                         device, frames, radio, trace, screens,
-                        heap_tolerance=2048 if radio == "ble" else 512)
+                        heap_tolerance=2048)
                     lifecycles.append(lifecycle)
-                    if radio == "ble":
-                        # NimBLE/ESP-IDF may retain a small first-use cache even
-                        # after the controller lifecycle is fully torn down.
-                        # A second Radar run on the exact same target must prove
-                        # that this is bounded warm-up rather than a repeatable
-                        # leak. No second flash is needed.
-                        detail_again = action(device, "back")
-                        trace.append(detail_again)
-                        require(detail_again, "ble warm detail", page="targets",
-                                runtime_owner="targets", lease_mask=13)
-                        repeat = run_selected_radar(
-                            device, frames, radio, trace, screens,
-                            case_name="ble-repeat", heap_tolerance=512)
-                        lifecycles.append(repeat)
-                        if repeat["heap_free_after"] + 512 < \
-                                lifecycle["heap_free_after"]:
-                            raise RuntimeError(
-                                "BLE Radar heap declined across clean repeats: "
-                                f"{lifecycle['heap_free_after']}->"
-                                f"{repeat['heap_free_after']}")
+                    # Both ESP-IDF radio stacks may retain a small first-use
+                    # cache. Repeat the exact lifecycle without a second flash:
+                    # only a stable second result proves bounded warm-up rather
+                    # than a repeatable leak.
+                    detail_again = action(device, "back")
+                    trace.append(detail_again)
+                    require(detail_again, f"{radio} warm detail",
+                            page="targets", runtime_owner="targets",
+                            lease_mask=13)
+                    repeat = run_selected_radar(
+                        device, frames, radio, trace, screens,
+                        case_name=f"{radio}-repeat", heap_tolerance=512)
+                    lifecycles.append(repeat)
+                    if repeat["heap_free_after"] + 512 < \
+                            lifecycle["heap_free_after"]:
+                        raise RuntimeError(
+                            f"{radio} Radar heap declined across clean repeats: "
+                            f"{lifecycle['heap_free_after']}->"
+                            f"{repeat['heap_free_after']}")
                     wanted.remove(radio)
                     # Radar restores the exact Actions view. Return through
                     # Detail to List before selecting the next stable row.
@@ -386,16 +421,23 @@ def main() -> int:
             if wanted:
                 raise RuntimeError(
                     f"persisted Targets pair has no live candidates for {wanted}")
-            if not any(item["live_match"] for item in lifecycles):
-                raise RuntimeError(
-                    "Radar receiver lifecycles passed, but neither persisted "
-                    "target was present; atomic live delta remains unproven")
+            if not all(item["live_match"] for item in lifecycles):
+                raise RuntimeError("Radar atomic live delta remains unproven")
 
             home = action(device, "back")
             trace.append(home)
             require(home, "Targets final cleanup", page="home",
                     runtime_owner="none", lease_mask=0)
             admission.close()
+            hil_observation_negative = query(
+                device, b"targets.radar.hil-observe wifi -40",
+                RADAR_HIL_OBSERVATION_SCHEMA, "observation")
+            require(
+                hil_observation_negative, "closed HIL observation fixture",
+                status="hil_session_required", radio="wifi", rssi_dbm=-40,
+                injected=False, hil_active=False, overlay_open=False,
+                passive_receiver_untouched=True, radio_tx_commands=0,
+                storage_writes=0, identity_disclosed=False)
             recovery_after = query(
                 device, b"storage.product.boot-recovery",
                 "leshy.storage.product_boot_recovery.v1", "state")
@@ -433,6 +475,9 @@ def main() -> int:
             "flash_count": 1 if args.flash else 0,
             "radio_tx_commands": 0,
             "active_probe_commands": 0,
+            "deterministic_observation_injections": sum(
+                len(item["hil_observations"]) for item in lifecycles),
+            "hil_observation_negative": hil_observation_negative,
             "ambient_frames_retained_by_firmware": False,
         })
         write_json(args.output / "run.json", record)
