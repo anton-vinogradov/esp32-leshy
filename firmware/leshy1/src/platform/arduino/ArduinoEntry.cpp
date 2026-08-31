@@ -5541,10 +5541,10 @@ bool releaseProductSurveyQueuesForAirspaceGuard() {
     // Airspace Guard, so releasing them cannot race a Survey operation and
     // gives repeated Wi-Fi driver initialization a contiguous internal-RAM
     // block without adding a second network path here.
-    vQueueDelete(productSurveyWorkerEvents);
     vQueueDelete(productSurveyObservations);
-    productSurveyWorkerEvents = nullptr;
     productSurveyObservations = nullptr;
+    vQueueDelete(productSurveyWorkerEvents);
+    productSurveyWorkerEvents = nullptr;
     vTaskDelay(1);
     airspaceGuardHeapFreeAfterQueueRelease =
         static_cast<std::uint32_t>(
@@ -5562,11 +5562,11 @@ bool restoreProductSurveyQueuesAfterAirspaceGuard() {
         airspaceGuardSurveyQueueRestorePending = false;
         return true;
     }
+    QueueHandle_t observations = xQueueCreate(
+        kProductSurveyObservationCapacity, sizeof(Observation));
     QueueHandle_t events = xQueueCreate(
         kProductSurveyWorkerEventCapacity,
         sizeof(ProductSurveyWorkerEvent));
-    QueueHandle_t observations = xQueueCreate(
-        kProductSurveyObservationCapacity, sizeof(Observation));
     if (events == nullptr || observations == nullptr) {
         if (events != nullptr) vQueueDelete(events);
         if (observations != nullptr) vQueueDelete(observations);
@@ -5587,7 +5587,7 @@ bool restoreProductSurveyQueuesAfterAirspaceGuard() {
 
 bool suspendProductSurveyWorkerForWebCompanion() {
     if (webCompanionSurveyWorkerSuspended) return true;
-    if (!productSurveyWorkerReady || airspaceGuardSurveyQueuesReleased ||
+    if (!productSurveyWorkerReady ||
         productSurveyControl() != ProductSurveyWorkerControl::Idle ||
         airspaceGuardBleControl() != AirspaceGuardBleWorkerControl::Idle ||
         productSurveyWorkerTaskHandle == nullptr) {
@@ -5611,6 +5611,10 @@ bool suspendProductSurveyWorkerForWebCompanion() {
         vQueueDelete(airspaceGuardBleWorkerEvents);
         airspaceGuardBleWorkerEvents = nullptr;
     }
+    // Radar and Airspace Guard can already have released the payload queues.
+    // The complete worker suspension subsumes that narrower lifecycle.
+    airspaceGuardSurveyQueuesReleased = false;
+    airspaceGuardSurveyQueueRestorePending = false;
     productSurveyScanStartGate = nullptr;
     // A task deleted by another task is reclaimed by the idle task. Yield once
     // before measuring or asking the Wi-Fi driver for contiguous internal RAM.
@@ -8011,9 +8015,14 @@ void releaseTargetsProduct() {
     usbCompanionMutation = {};
     delete targetsProductRuntime;
     targetsProductRuntime = nullptr;
-    if (!targetRadarRestoreInProgress &&
-        !restoreProductSurveyWorkerAfterWebCompanion()) {
-        lastRuntimeEvent = "companion_web_survey_worker_restore_failed";
+    if (!targetRadarRestoreInProgress) {
+        const bool queuesRestored =
+            restoreProductSurveyQueuesAfterAirspaceGuard();
+        const bool workerRestored =
+            restoreProductSurveyWorkerAfterWebCompanion();
+        if (!queuesRestored || !workerRestored) {
+            lastRuntimeEvent = "targets_survey_worker_restore_failed";
+        }
     }
     targetsHeapFreeAfter = static_cast<std::uint32_t>(
         heap_caps_get_free_size(MALLOC_CAP_8BIT));
@@ -9294,11 +9303,11 @@ bool startTargetRadar() {
         lastRuntimeEvent = "target_radar_suspend_failed";
         return true;
     }
-    // A completed Wi-Fi Radar visit may deliberately leave the Survey worker
-    // unloaded while the large Targets graph is open.  Recreate it only after
-    // that graph has been released; this preserves repeat Radar without asking
-    // the fragmented post-Wi-Fi heap to hold both large lifecycles at once.
+    // A completed Wi-Fi Radar visit may deliberately leave only the large
+    // Survey payload queues unloaded while the Targets graph is open. Restore
+    // them after that graph has been released and before notifying the worker.
     if (!restoreProductSurveyWorkerAfterWebCompanion() ||
+        !restoreProductSurveyQueuesAfterAirspaceGuard() ||
         !productSurveyWorkerReady || productSurveyWorkerTaskHandle == nullptr) {
         targetRadarRestoreInProgress = true;
         restoreTargetsAfterRadar();
@@ -9391,19 +9400,18 @@ bool serviceTargetRadar() {
     if (wifiRestore) vTaskDelay(1U);
     // A passive Wi-Fi lifecycle returns all of its bytes but leaves the heap
     // split into blocks too small for the three fixed-capacity Target state
-    // objects.  The sleeping Survey worker and queues are lifecycle-exclusive
-    // with the open Targets graph. Keep them unloaded until the user starts a
-    // new Radar visit or leaves Targets; either boundary first frees the graph
-    // and can recreate the worker in contiguous space.
-    const bool workerSuspended = !wifiRestore ||
-        suspendProductSurveyWorkerForWebCompanion();
+    // objects. The idle task itself stays alive; only its payload queues are
+    // lifecycle-exclusive with the open Targets graph. This avoids task-stack
+    // churn and preserves a deterministic restore path for the next feature.
+    const bool queuesReleased = !wifiRestore ||
+        releaseProductSurveyQueuesForAirspaceGuard();
     targetRadarRestoreHeapFree = static_cast<std::uint32_t>(
         heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     targetRadarRestoreHeapLargest = static_cast<std::uint32_t>(
         heap_caps_get_largest_free_block(
             MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-    targetRadarRestoreInProgress = wifiRestore && workerSuspended;
-    const bool restored = workerSuspended && restoreTargetsAfterRadar();
+    targetRadarRestoreInProgress = wifiRestore && queuesReleased;
+    const bool restored = queuesReleased && restoreTargetsAfterRadar();
     targetRadarRestoreInProgress = false;
     targetsProductStatus = restored && memoryRestored
         ? "ready" : "radar_restore_failed";
