@@ -1786,6 +1786,23 @@ run exact candidate остановился на намеренно внешне�
 любой protected write, поэтому cadence остаётся 9/15, runtime heap и physical
 persistence пока не заявляются.
 
+Bound non-destructive отключения PIN `RB-M228`: exact host/build и physical
+`1.0.0-dev.331` на firmware source
+`43aa366ea57bfbdb7126c2587712b943236eb233` используют 234 784 B static RAM,
+3 595 528 B linked flash и app/factory images 3 596 032/3 661 568 B, оставляя
+598 272 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`e25b7684598308470219a1c4be24a1dbd220d0b087ebecd970e26e44d25c0427`/
+`b9708dc1c3d4898f9dd3edd068e93c6af77ea994104259979ac8d3fcc9354bbd`/
+`be18d3989c3521bf30ffbe1b3ed011e0a13d0690fd6b81a2100b3604f0a99317`/
+`542aee5b8ade84a31fb0cc30b3e9f7cd8face6cb52c3fc88c7b3627b97784a51`.
+Относительно dev.329 это +16 B static RAM, +2 648 B linked flash, +2 992 B в
+обоих app/factory images и на 2 992 B меньше OTA headroom. Delta оплачивает явные
+state/latch disabled, fail-closed переход с сохранением key, UI confirmation/status
+и поздний re-enrollment. Normal physical heap после clear — 144 020 B total,
+69 664 B free и 69 516 B minimum. Cold exact-CID reopen сохраняет storage
+generation/observations 8/54 и одну запись Библиотеки с zero physical writes;
+cleanup заканчивается Home/none/lease 0 с zero drops/TX. Cadence двигается до 10/15.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

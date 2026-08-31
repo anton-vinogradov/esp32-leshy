@@ -1798,6 +1798,23 @@ candidate's physical run stopped at the deliberately external owner Device Lock
 precondition before any protected write, so cadence remains 9/15 and no runtime-heap
 or physical persistence claim is made yet.
 
+Non-destructive PIN-disable bound `RB-M228`: exact host/build and physical
+`1.0.0-dev.331` at firmware source
+`43aa366ea57bfbdb7126c2587712b943236eb233` use 234,784 B static RAM,
+3,595,528 B linked flash and 3,596,032/3,661,568 B app/factory images, leaving
+598,272 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`e25b7684598308470219a1c4be24a1dbd220d0b087ebecd970e26e44d25c0427`/
+`b9708dc1c3d4898f9dd3edd068e93c6af77ea994104259979ac8d3fcc9354bbd`/
+`be18d3989c3521bf30ffbe1b3ed011e0a13d0690fd6b81a2100b3604f0a99317`/
+`542aee5b8ade84a31fb0cc30b3e9f7cd8face6cb52c3fc88c7b3627b97784a51`.
+Against dev.329 this is +16 B static RAM, +2,648 B linked flash, +2,992 B in
+both app/factory images and 2,992 B less OTA headroom. The delta funds an explicit
+disabled state/latch, fail-closed key-preserving transition, confirmation/status
+UI and later re-enrollment. Normal post-clear physical heap is 144,020 B total,
+69,664 B free and 69,516 B minimum. Cold exact-CID reopen preserves storage
+generation/observations 8/54 and one Library entry with zero physical writes;
+cleanup ends Home/none/lease 0 with zero drops/TX. Cadence advances to 10/15.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

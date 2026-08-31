@@ -20,13 +20,20 @@ product storage: a PIN-wrapped random data key, chunked `LENC` AES-256-GCM files
 path/header/chunk binding, ciphertext separation, exact-size validation and
 authenticated read-only cold reopen. This closes the CAP-052 implementation boundary;
 power-cut, signed-update/recovery interaction and privacy review remain release
-hardening rather than missing product functionality.
+hardening rather than missing product functionality. Exact physical
+`1.0.0-dev.331` adds and accepts an owner-visible, separately confirmed
+**Disable PIN** transition. It preserves the exact protected-data key and existing
+ciphertext, exposes the resulting state, survives cold restore and permits later
+PIN re-enrollment over the same data.
 
 ## User contract
 
 - The owner chooses a 6–12 digit local PIN. Repeated and simple ascending or
   descending sequences are rejected.
 - The raw PIN is never persisted, logged, exported or retained by Device Lock.
+- After a successful unlock, the owner can choose **Disable PIN** and confirm it on
+  a separate screen. The transition removes only the PIN credential: protected data
+  and its exact data key remain intact and accessible. A new PIN can be enrolled later.
 - Unlock is volatile: it expires after 10 minutes idle, after 30 minutes total,
   on clock rollback, reset, update/recovery or another system boundary.
 - A wrong PIN is durably counted before another attempt is admitted. Delays are
@@ -41,6 +48,7 @@ hardening rather than missing product functionality.
 | State | Meaning | Protected access |
 |---|---|---|
 | `unconfigured` | no credential has ever been published | setup required |
+| `disabled` | owner explicitly removed PIN protection; exact local data key retained | allowed without PIN |
 | `locked` | valid credential, attempt allowed | denied |
 | `retry_delay` | persistent failed attempt, timer running | denied |
 | `recovery_only` | five failed attempts | destructive recovery only |
@@ -49,7 +57,8 @@ hardening rather than missing product functionality.
 
 Status, Lock, Stop, panic, cleanup, update recovery and confirmed factory reset
 remain available in every state. Protected UI/evidence, secret reads, export,
-backup, companion and sensitive settings require `unlocked`.
+backup, companion and sensitive settings require `unlocked` or the explicit
+`disabled` mode.
 
 ## Credential and storage
 
@@ -60,8 +69,10 @@ backup, companion and sensitive settings require `unlocked`.
   failure count, wrapped data-key material, reserved-byte validation and CRC32
   transport-corruption check;
 - storage: NVS namespace `leshy1-lock`, credential `credential.v2`, bootstrap key
-  `data-key.v1` and an independent `enrolled.v1` latch;
+  `data-key.v1`, independent `enrolled.v1` latch and explicit `disabled.v1` latch;
 - publication order: credential commit, then latch commit;
+- disable order: publish disabled latch and exact bootstrap data key, then remove
+  credential and enrolled latch; every interrupted intermediate state fails closed;
 - destructive clear order: protected data, credential commit, then latch commit.
 
 The latch distinguishes a genuinely virgin device from a missing expected
@@ -97,5 +108,8 @@ virgin product state again after a final cold boot.
    without returned content (`dev.281`).
 5. `done` — authenticated-encryption key envelope, encrypted product storage,
    physical ciphertext separation and authenticated exact-CID cold reopen (`dev.283`).
-6. `planned` — destructive recovery/power-cut matrix, signed update/recovery
+6. `done` — separately confirmed physical PIN disable, exact data-key continuity,
+   cold disabled restore, exact-CID protected reopen and tested later re-enrollment
+   (`dev.331`).
+7. `planned` — destructive recovery/power-cut matrix, signed update/recovery
    interaction, privacy review and release HIL.

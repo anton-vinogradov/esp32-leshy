@@ -20,7 +20,11 @@ authenticated encrypted product storage: PIN-wrapped random data key, chunked fi
 `LENC` AES-256-GCM, binding path/header/chunk, ciphertext separation, exact-size
 validation и authenticated read-only cold reopen. Implementation boundary CAP-052
 закрыт; power-cut, взаимодействие signed update/recovery и privacy review остаются
-release hardening, а не отсутствующей product functionality.
+release hardening, а не отсутствующей product functionality. Exact physical
+`1.0.0-dev.331` добавляет и принимает видимый owner и отдельно подтверждаемый
+переход **Отключить PIN**. Он сохраняет exact data key и существующий ciphertext,
+явно показывает новое состояние, переживает cold restore и позволяет позднее
+установить новый PIN поверх тех же данных.
 
 ## Пользовательский контракт
 
@@ -28,6 +32,9 @@ release hardening, а не отсутствующей product functionality.
   убывающие последовательности отклоняются.
 - Raw PIN никогда не сохраняется, не логируется, не экспортируется и не остаётся
   внутри Device Lock.
+- После успешного unlock owner может выбрать **Отключить PIN** и подтвердить это на
+  отдельном экране. Удаляется только credential PIN: protected data и exact data key
+  сохраняются и остаются доступны. Позже можно установить новый PIN.
 - Unlock volatile: истекает через 10 минут бездействия, через 30 минут общего
   времени, при clock rollback, reset, update/recovery или другой system boundary.
 - Неверный PIN durable учитывается до допуска следующей попытки. Задержки —
@@ -41,6 +48,7 @@ release hardening, а не отсутствующей product functionality.
 | Состояние | Значение | Protected access |
 |---|---|---|
 | `unconfigured` | credential ещё никогда не был опубликован | требуется setup |
+| `disabled` | owner явно снял PIN-защиту; exact local data key сохранён | разрешён без PIN |
 | `locked` | credential валиден, попытка разрешена | запрещён |
 | `retry_delay` | persistent failed attempt, timer активен | запрещён |
 | `recovery_only` | пять неверных попыток | только destructive recovery |
@@ -49,7 +57,7 @@ release hardening, а не отсутствующей product functionality.
 
 Status, Lock, Stop, panic, cleanup, update recovery и confirmed factory reset
 доступны в любом состоянии. Protected UI/evidence, secret read, export, backup,
-companion и sensitive settings требуют `unlocked`.
+companion и sensitive settings требуют `unlocked` либо явного режима `disabled`.
 
 ## Credential и storage
 
@@ -60,8 +68,10 @@ companion и sensitive settings требуют `unlocked`.
   persistent failure count, wrapped data-key material, проверкой reserved bytes и
   CRC32;
 - storage: NVS namespace `leshy1-lock`, credential `credential.v2`, bootstrap key
-  `data-key.v1` и независимый latch `enrolled.v1`;
+  `data-key.v1`, независимые latch `enrolled.v1` и `disabled.v1`;
 - порядок публикации: commit credential, затем commit latch;
+- порядок disable: публикация latch disabled и exact bootstrap data key, затем
+  удаление credential и enrolled latch; любое прерывание остаётся fail closed;
 - destructive clear: protected data, commit удаления credential, затем commit latch.
 
 Latch отличает действительно virgin device от пропавшего expected credential. Он
@@ -97,5 +107,8 @@ explicit cleanup. Runner не читает и не копирует весь par
    UI/export без возврата content (`dev.281`).
 5. `done` — authenticated-encryption key envelope, encrypted product storage,
    physical ciphertext separation и authenticated cold reopen exact CID (`dev.283`).
-6. `planned` — destructive recovery/power-cut matrix, взаимодействие signed
+6. `done` — отдельно подтверждённое physical отключение PIN, continuity exact data
+   key, cold restore disabled, exact-CID protected reopen и протестированный
+   последующий re-enrollment (`dev.331`).
+7. `planned` — destructive recovery/power-cut matrix, взаимодействие signed
    update/recovery, privacy review и release HIL.
