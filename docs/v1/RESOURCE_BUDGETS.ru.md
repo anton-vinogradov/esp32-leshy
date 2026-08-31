@@ -1803,6 +1803,21 @@ state/latch disabled, fail-closed переход с сохранением key, 
 generation/observations 8/54 и одну запись Библиотеки с zero physical writes;
 cleanup заканчивается Home/none/lease 0 с zero drops/TX. Cadence двигается до 10/15.
 
+Bound умной перерисовки `RB-M229`: exact host/build `1.0.0-dev.332` на firmware
+source `54bc7d0bcc5a57327eed73d2964550af6a1164bf` используют 235 048 B static RAM,
+3 596 336 B linked flash и app/factory images 3 596 832/3 662 368 B, оставляя
+597 472 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`fd472945e5291ee7545c7b15598b7f83845b72246a55e130965478055d66d0b8`/
+`4902819ec0181fa61a91da1264b5b2f1dedf56dae1c6c3d9c45d172c4e94f7a5`/
+`8fc69da69d3ac52ab8fee512825818b0c08beaba3368349f67d2a1ed3f95d41a`/
+`921b07bfcc1852e987a165fb9ea7b04a4ba2d32975beac1f1f3df8815f73b7a5`.
+Относительно dev.331 это +264 B static RAM, +808 B linked flash, +800 B в обоих
+app/factory images и на 800 B меньше OTA headroom. Bounded цена — один 1-bpp
+compositor строки Bluetooth плюс явная repaint telemetry и честное состояние
+папки Automation. Clean build и guards repaint/content/language/component проходят;
+device не подключался, поэтому physical heap/TFT acceptance остаются dev.331,
+cadence — 10/15.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

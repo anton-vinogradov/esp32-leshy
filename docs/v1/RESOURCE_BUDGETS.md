@@ -1815,6 +1815,21 @@ UI and later re-enrollment. Normal post-clear physical heap is 144,020 B total,
 generation/observations 8/54 and one Library entry with zero physical writes;
 cleanup ends Home/none/lease 0 with zero drops/TX. Cadence advances to 10/15.
 
+Smart-repaint bound `RB-M229`: exact host/build `1.0.0-dev.332` at firmware
+source `54bc7d0bcc5a57327eed73d2964550af6a1164bf` uses 235,048 B static RAM,
+3,596,336 B linked flash and 3,596,832/3,662,368 B app/factory images, leaving
+597,472 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`fd472945e5291ee7545c7b15598b7f83845b72246a55e130965478055d66d0b8`/
+`4902819ec0181fa61a91da1264b5b2f1dedf56dae1c6c3d9c45d172c4e94f7a5`/
+`8fc69da69d3ac52ab8fee512825818b0c08beaba3368349f67d2a1ed3f95d41a`/
+`921b07bfcc1852e987a165fb9ea7b04a4ba2d32975beac1f1f3df8815f73b7a5`.
+Against dev.331 this is +264 B static RAM, +808 B linked flash, +800 B in both
+app/factory images and 800 B less OTA headroom. The bounded cost is one 1-bpp
+Bluetooth note compositor plus explicit repaint telemetry and the truthful
+Automation-folder state. The clean build and repaint/content/language/component
+guards pass; no device was connected, so physical heap and TFT acceptance remain
+dev.331 and cadence stays 10/15.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

@@ -427,6 +427,39 @@ needed, the recommendation. Header, scale, channel axis and footer stay untouche
 the physical two-sweep comparison records 1,074 dynamic and zero static changed
 pixels (`E-BUILD-109`/`E-AUTO-073`/`E-HIL-133`/`E-UX-028`).
 
+## Smart repaint contract
+
+Smart repaint is the default rule for every product screen, not an optimization
+owned by individual features:
+
+1. entering a different scene may clear and render its static chrome exactly once;
+2. a live tick first compares the user-visible presentation model with the last
+   rendered model; an unchanged tick is a strict no-op;
+3. a changed scalar/text field is composed off-screen and pushed atomically into
+   its bounded dirty rectangle; it may not erase its complete row or page;
+4. a graph changes only affected columns or the newest waterfall row, while axes,
+   legend, header and footer remain untouched;
+5. selection, sorting and structural catalog changes repaint only the old/new rows
+   that actually changed; selected identity is stable even when signal ordering
+   changes;
+6. every call to the shared renderer explicitly chooses scene-transition or
+   dirty-only scope. A default full-render argument is forbidden.
+
+Host guard `tools/check_live_render_contract.py` enforces the shared no-change
+tri-state, explicit renderer scope, atomic signal fields, incremental spectrum
+columns and one-row waterfalls. Exact host/build `1.0.0-dev.332` extends this to
+the Bluetooth-device list: an RSSI-only update atomically replaces only the second
+text line, and the signal glyph changes only when its quantized level changes.
+It also fixes an unrelated truthfulness defect found during the same review: a
+mounted read-only SD whose optional `/leshy/automation/v1` directory has not been
+created is an empty first-use Automation state, not `SD CARD UNAVAILABLE`.
+
+This is source/build acceptance (`E-BUILD-217`/`E-AUTO-193`), not a claim that all
+physical flicker is closed. The connected-board delta must verify the Bluetooth
+list, the Lab empty state and unchanged header/footer pixels before dev.332 becomes
+the physical UX baseline; later live screens must satisfy this same contract when
+they enter the functional-first queue.
+
 ## Gate
 
 **S1 UX direction accepted:** UX-01/UX-02 exist in low fidelity, every catalog

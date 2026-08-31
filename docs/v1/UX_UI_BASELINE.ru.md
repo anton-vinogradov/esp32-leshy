@@ -435,6 +435,38 @@ content для тринадцати подписанных столбцов ка
 остаются нетронутыми; физическое сравнение двух sweep фиксирует 1 074 dynamic и
 zero static changed pixels (`E-BUILD-109`/`E-AUTO-073`/`E-HIL-133`/`E-UX-028`).
 
+## Контракт умной перерисовки
+
+Умная перерисовка — правило по умолчанию для каждого product screen, а не
+оптимизация отдельных функций:
+
+1. вход в другую scene может ровно один раз очистить и нарисовать static chrome;
+2. live tick сначала сравнивает видимую пользователю presentation model с последней
+   отрисованной; неизменившийся tick — строгий no-op;
+3. изменившееся scalar/text field собирается вне экрана и атомарно отправляется
+   только в свой bounded dirty rectangle; стирать всю строку или страницу нельзя;
+4. graph меняет только затронутые columns или новейшую строку waterfall, не трогая
+   axes, legend, header и footer;
+5. selection, sorting и structural changes catalog перерисовывают только реально
+   изменившиеся old/new rows; выбранная identity стабильна при смене signal order;
+6. каждый вызов общего renderer явно выбирает scope scene-transition или dirty-only.
+   Default argument полного render запрещён.
+
+Host guard `tools/check_live_render_contract.py` фиксирует общий no-change tri-state,
+явный scope renderer, atomic signal fields, incremental spectrum columns и
+waterfall по одной строке. Exact host/build `1.0.0-dev.332` распространяет правило
+на список Bluetooth devices: обновление только RSSI атомарно заменяет только вторую
+строку текста, а glyph сигнала меняется лишь при переходе quantized level. В том же
+review исправлен отдельный дефект честности: смонтированная read-only SD, на которой
+ещё не создана необязательная папка `/leshy/automation/v1`, — это пустое first-use
+состояние Automation, а не `SD-КАРТА НЕДОСТУПНА`.
+
+Это source/build acceptance (`E-BUILD-217`/`E-AUTO-193`), а не заявление о полном
+физическом устранении flicker. Connected-board delta обязан проверить список
+Bluetooth, empty state Lab и неизменные pixels header/footer до принятия dev.332
+как physical UX baseline; каждый следующий live screen в functional-first очереди
+должен соблюдать тот же контракт.
+
 ## Gate
 
 **S1 UX direction accepted:** готовы UX-01/UX-02 в low-fidelity форме, все разделы
