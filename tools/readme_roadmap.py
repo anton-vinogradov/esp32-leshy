@@ -20,6 +20,7 @@ QUEUE_END_MARKER = "<!-- LESHY-DELIVERY-QUEUE:END -->"
 FUNCTIONS_START_MARKER = "<!-- LESHY-FUNCTIONS:START -->"
 FUNCTIONS_END_MARKER = "<!-- LESHY-FUNCTIONS:END -->"
 EXPECTED_STAGES = tuple(f"S{index}" for index in range(9))
+EXPECTED_FUNCTIONS = 55
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class LanguageConfig:
     heading: str
     now_label: str
     progress: str
+    functionality_progress: str
     source_note: str
     detailed_status: str
     stage_plan: str
@@ -53,6 +55,10 @@ CONFIGS = (
         heading="Development status and roadmap",
         now_label="Now",
         progress="Stage gates complete: {done} of {total}.",
+        functionality_progress=(
+            "User functionality: **{done}/{total} done** · {active} active · "
+            "{blocked} blocked · {planned} planned."
+        ),
         source_note=(
             "This front-page snapshot is generated from the authoritative 1.x "
             "documentation; CI rejects it if it drifts. The checklist is complete "
@@ -91,6 +97,11 @@ CONFIGS = (
         heading="Статус разработки и роадмап",
         now_label="Сейчас",
         progress="Закрыто этапов: {done} из {total}.",
+        functionality_progress=(
+            "Пользовательские функции: **{done}/{total} готовы** · "
+            "{active} в работе · {blocked} заблокированы · "
+            "{planned} запланированы."
+        ),
         source_note=(
             "Этот срез главной страницы генерируется из документации-точки-истины "
             "1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline "
@@ -274,6 +285,10 @@ def parse_functionality(config: LanguageConfig) -> list[tuple[str, str, str, str
         blocks[0], re.MULTILINE)
     if not rows:
         raise ValueError(f"{config.status}: functionality table is empty")
+    if len(rows) != EXPECTED_FUNCTIONS:
+        raise ValueError(
+            f"{config.status}: accepted 1.0 scope is frozen at "
+            f"{EXPECTED_FUNCTIONS} functions, got {len(rows)}")
     expected_ids = [f"FUNC-{index:02d}" for index in range(1, len(rows) + 1)]
     actual_ids = [row[0] for row in rows]
     if actual_ids != expected_ids:
@@ -305,6 +320,10 @@ def render(config: LanguageConfig) -> str:
     queue = parse_delivery_queue(config)
     functionality = sorted(
         parse_functionality(config), key=functionality_implementation_key)
+    functionality_counts = {
+        state: sum(row[3] == state for row in functionality)
+        for state in ("done", "active", "blocked", "planned")
+    }
     active_phase = next(row[0] for row in phases if row[2] == "active")
     snapshot = parse_snapshot(config, active_phase)
     done = sum(state == "done" for state in states.values())
@@ -317,6 +336,9 @@ def render(config: LanguageConfig) -> str:
         f"> **{config.now_label}: {active} — {names[active]}**",
         ">",
         f"> {config.progress.format(done=done, total=len(EXPECTED_STAGES))}",
+        ">",
+        "> " + config.functionality_progress.format(
+            total=len(functionality), **functionality_counts),
         "",
         config.source_note,
         "",

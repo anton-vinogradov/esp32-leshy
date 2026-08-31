@@ -502,11 +502,11 @@ sampled regions не показывали, что одна identity может �
 advertisement, а strongest-first catalog — переставлять rows до navigation lock.
 Поэтому `E-UX-077` остаётся open, cadence — 10/15.
 
-Exact physical candidate `1.0.0-dev.343` закрывает оба blind spot в implementation.
-После первого complete scan видимый список lock-ит порядок identities до выхода со
-страницы и принимает для них только RSSI deltas; карточка выбранного устройства
-фиксирует всю static presentation и до выхода обновляет только Radar. Усиленный HIL
-двух lifecycle наблюдает zero full-row repaint за live-окно списка 2 639 ms, zero
-changes static/chrome карточки за два scan cycle, invariant warm heap 74 348 B и final
-Home/none/lease 0. Это machine-verified candidate, а не заявление о закрытом visible
-flicker: прямое наблюдение владельца остаётся acceptance gate.
+Exact physical `1.0.0-dev.343` закрывает оба blind spot. После первого complete scan
+видимый список публикует стабильный snapshot identities и принимает для них только
+RSSI deltas; карточка выбранного устройства фиксирует всю static presentation и до
+выхода обновляет только Radar. Усиленный HIL двух lifecycle наблюдает zero full-row
+repaint за live-окно списка 2 639 ms, zero changes static/chrome карточки за два scan
+cycle, invariant warm heap 74 348 B и final Home/none/lease 0. Затем владелец прямо
+подтвердил отсутствие flicker списка и карточки. `E-UX-077` принят, focused cadence
+продвигается до 11/15.

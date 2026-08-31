@@ -1903,7 +1903,8 @@ Stable presentation rows/card добавляет 40 B static RAM и 784 B linked
 dev.341. Exact HIL двух lifecycle сохраняет 74 348 B warm free heap, начинает
 re-entry при 74 348 B free и largest block 29 684 B, выполняет zero storage
 writes/RF TX/final leases и не наблюдает live full-row repaint. Resource и
-implementation bound принимаются; visual acceptance и продвижение cadence pending.
+implementation bound, а также прямой visual acceptance владельца приняты как
+`E-UX-077`; focused cadence продвигается до 11/15.
 
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как

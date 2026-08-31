@@ -18,7 +18,8 @@
   "evidence_ids": [
     "E-BUILD-222",
     "E-AUTO-198",
-    "E-HIL-226"
+    "E-HIL-226",
+    "E-UX-077"
   ],
   "exact_cid": "FE343253440000002000000055019CB7",
   "schema": "leshy.ble_scan_window_hil.acceptance.v1",
@@ -36,7 +37,7 @@
     "final_lease_mask": 0,
     "final_page": "home",
     "final_runtime_owner": "none",
-    "human_visual_acceptance": false,
+    "human_visual_acceptance": true,
     "list_full_row_repaints": 0,
     "list_signal_delta_repaints": 1,
     "list_window_content_clears": 0,

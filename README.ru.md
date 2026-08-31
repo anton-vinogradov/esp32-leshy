@@ -11,13 +11,15 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 > **Сейчас: S6 — Продуктовые отличия: Targets, compare и companion**
 >
 > Закрыто этапов: 5 из 9.
+>
+> Пользовательские функции: **26/55 готовы** · 11 в работе · 6 заблокированы · 12 запланированы.
 
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline из 55 capabilities; аудит принял восемь additions и явно отложил Peer Link до версии после 1.0 в [пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
 - **Проверенный checkpoint:** `E-BUILD-216`/`E-AUTO-192`/`E-HIL-224`/`E-UX-076`/`E-STORAGE-070`/`RB-M228` принимают exact physical `1.0.0-dev.331`. Owner-only **Отключить PIN** остаётся выключенным после cold boot, protected data exact CID открываются read-only, physical writes и RF TX равны zero, cleanup заканчивается Home/none/lease 0. Exact dev.302 остаётся periodic full anchor.
-- **Следующий gate:** `FF-2` остаётся активен. Exact physical candidate `1.0.0-dev.343` (`E-BUILD-222`/`E-AUTO-198`/`E-HIL-226`/`RB-M234`) добавляет недостающий stable snapshot по принципу 0.x: после первого complete scan список Bluetooth сохраняет порядок identities и меняет только RSSI, открытая карточка меняет только Radar. Усиленный exact HIL проходит два lifecycle с zero live full-row repaint и zero changes static/chrome карточки. Наблюдение владельца, что dev.341 всё ещё мерцает, является решающим и переводит прежний результат в diagnostic-only; `E-UX-077` остаётся open до прямой проверки dev.343. Затем остаются Protocol Workbench, честное empty state Lab и workflow screenshot → protected Library → USB export → cold reopen того же generation. RF TX запрещён.
+- **Следующий gate:** `FF-2` остаётся активен. Exact physical `1.0.0-dev.343` (`E-BUILD-222`/`E-AUTO-198`/`E-HIL-226`/`E-UX-077`/`RB-M234`) теперь принят владельцем: список Bluetooth и открытая карточка больше не мерцают, а усиленный HIL сохраняет zero live full-row repaint, zero changes static/chrome карточки и два чистых lifecycle. Текущий delta `1.0.0-dev.344` унифицирует initial focus на первой/сильнейшей строке до первого действия пользователя, не останавливая live-сортировку сигнала. Затем остаются Protocol Workbench, честное empty state Lab и workflow screenshot → protected Library → USB export → cold reopen того же generation. RF TX запрещён.
 
 ### Functional-first очередь поставки
 

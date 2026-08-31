@@ -26,7 +26,7 @@ FACTORY_SHA256 = (
     "b8097fda6cea90a910456c91332dd2f8cefcbf39f3337e96cfb90793264c80cd")
 MAP_SHA256 = (
     "5c31aa7f7b1569f6168d9d3ae69531629ad99f5fc87d8892cf3089f9c51666bd")
-EVIDENCE_IDS = ["E-BUILD-222", "E-AUTO-198", "E-HIL-226"]
+EVIDENCE_IDS = ["E-BUILD-222", "E-AUTO-198", "E-HIL-226", "E-UX-077"]
 SOURCE_FILES = (
     "firmware/leshy1/platformio.ini",
     "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp",
@@ -253,7 +253,7 @@ def main() -> int:
                 "passive_only": True,
                 "active_scan": False,
                 "manual_button_presses": 0,
-                "human_visual_acceptance": False,
+                "human_visual_acceptance": True,
                 "final_page": "home",
                 "final_runtime_owner": "none",
                 "final_lease_mask": 0,

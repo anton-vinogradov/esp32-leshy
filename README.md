@@ -11,13 +11,15 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 > **Now: S6 — Product differentiation: Targets, comparison, companion**
 >
 > Stage gates complete: 5 of 9.
+>
+> User functionality: **26/55 done** · 11 active · 6 blocked · 12 planned.
 
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts. The checklist is complete for the accepted 55-capability 1.x baseline; the audit accepted eight additions and explicitly defers Peer Link until after 1.0 in the [feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
 - **Verified checkpoint:** `E-BUILD-216`/`E-AUTO-192`/`E-HIL-224`/`E-UX-076`/`E-STORAGE-070`/`RB-M228` accept exact physical `1.0.0-dev.331`. Owner-only **Disable PIN** remains disabled after cold boot, exact-CID protected data reopens read-only, physical writes and RF TX remain zero, and cleanup ends Home/none/lease 0. Exact dev.302 remains the periodic full anchor.
-- **Next gate:** `FF-2` remains active. Exact physical candidate `1.0.0-dev.343` (`E-BUILD-222`/`E-AUTO-198`/`E-HIL-226`/`RB-M234`) adds the missing 0.x-style stable snapshot: after the first complete scan the Bluetooth list keeps identity order fixed, changes only RSSI, and the open card changes only Radar. Strengthened exact HIL passes two lifecycles with zero live full-row repaints and zero static/chrome card changes. The owner's observation that dev.341 still flickered is authoritative and marks that earlier result diagnostic-only; `E-UX-077` remains open pending direct dev.343 observation. Protocol Workbench, truthful Lab empty state and the byte-identical screenshot → protected Library → USB export → same-generation cold reopen remain next. RF TX stays forbidden.
+- **Next gate:** `FF-2` remains active. Exact physical `1.0.0-dev.343` (`E-BUILD-222`/`E-AUTO-198`/`E-HIL-226`/`E-UX-077`/`RB-M234`) is now owner-accepted: the Bluetooth list and open card no longer flicker, while strengthened HIL retains zero live full-row repaints, zero static/chrome card changes and two clean lifecycles. The current `1.0.0-dev.344` delta makes initial focus consistently follow the first/strongest row until user input, without stopping live signal sorting. Protocol Workbench, truthful Lab empty state and the byte-identical screenshot → protected Library → USB export → same-generation cold reopen remain next. RF TX stays forbidden.
 
 ### Functional-first delivery queue
 

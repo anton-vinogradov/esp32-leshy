@@ -493,12 +493,12 @@ the sampled regions did not expose that one identity could alternate advertiseme
 metadata or that the strongest-first catalog could reorder rows before navigation
 was locked. `E-UX-077` therefore remains open and cadence stays 10/15.
 
-Exact physical candidate `1.0.0-dev.343` closes both blind spots in the
-implementation. Once the first complete scan is available, the visible list locks
-identity order for the lifetime of the page and accepts only RSSI deltas for those
-identities; the selected-device card freezes all static presentation and updates
-only Radar until exit. Its strengthened two-lifecycle HIL observes zero full-row
-repaints in the 2,639 ms live list window, zero card static/chrome changes over two
-scan cycles, invariant 74,348 B warm heap and final Home/none/lease 0. This is a
-machine-verified candidate, not a claim that the visible flicker is closed: direct
-owner observation is still the acceptance gate.
+Exact physical `1.0.0-dev.343` closes both blind spots. Once the first complete
+scan is available, the visible list publishes a stable identity snapshot and
+accepts only RSSI deltas for those identities; the selected-device card freezes all
+static presentation and updates only Radar until exit. Its strengthened
+two-lifecycle HIL observes zero full-row repaints in the 2,639 ms live list window,
+zero card static/chrome changes over two scan cycles, invariant 74,348 B warm heap
+and final Home/none/lease 0. The owner then directly confirmed that the list and
+card no longer flicker. `E-UX-077` is accepted and focused cadence advances to
+11/15.

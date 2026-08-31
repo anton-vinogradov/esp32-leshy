@@ -1915,7 +1915,8 @@ The stable row/card presentation adds 40 B static RAM and 784 B linked flash ove
 dev.341. Exact two-lifecycle HIL retains 74,348 B warm free heap, starts re-entry
 with 74,348 B free and a 29,684 B largest block, performs zero storage writes/RF
 TX/final leases, and observes no live full-row repaint. The resource/implementation
-bound is accepted; visual acceptance and cadence advancement remain pending.
+bound and direct owner visual acceptance are accepted as `E-UX-077`; focused
+cadence advances to 11/15.
 
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while

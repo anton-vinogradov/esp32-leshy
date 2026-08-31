@@ -162,6 +162,7 @@
 #include "ui/Pcf8574ButtonInput.h"
 #include "ui/TouchTargets.h"
 #include "ui/InterfaceSettingsController.h"
+#include "ui/RankedListFocus.h"
 #include "ui/AntennaStatusController.h"
 #include "ui/AirspaceGuardPresenter.h"
 #include "ui/LanguageController.h"
@@ -1904,6 +1905,7 @@ void resetAirspaceGuardWifiReport() {
 bool airspaceGuardResultNeedsContentClear = false;
 WifiNetworkCatalog wifiNetworkCatalog;
 WifiNetworkNavigationOrder wifiNetworkNavigationOrder;
+leshy1::ui::RankedListFocus wifiNetworkFocus;
 std::size_t wifiNetworkSelection = 0;
 Observation wifiNetworkDetail;
 Observation wifiNetworkRenderedDetail;
@@ -1932,6 +1934,7 @@ const WifiNetworkSignalStats* liveWifiNetworkSignal() {
 }
 WifiDeviceCatalog wifiDeviceCatalog;
 WifiDeviceNavigationOrder wifiDeviceNavigationOrder;
+leshy1::ui::RankedListFocus wifiDeviceFocus;
 WifiOuiDatabase wifiOuiDatabase(
     wifiOuiAssetStart,
     static_cast<std::size_t>(wifiOuiAssetEnd - wifiOuiAssetStart));
@@ -1994,6 +1997,7 @@ const char* bleProductViewName(BleProductView view) {
 BleProductView bleProductView = BleProductView::None;
 BleDeviceCatalog bleDeviceCatalog;
 BleDeviceNavigationOrder bleDeviceNavigationOrder;
+leshy1::ui::RankedListFocus bleDeviceFocus;
 BleCompanyDatabase bleCompanyDatabase(
     bleCompanyAssetStart,
     static_cast<std::size_t>(bleCompanyAssetEnd - bleCompanyAssetStart));
@@ -6295,37 +6299,46 @@ bool drainProductSurveyWorkerObservations() {
     bool changed = false;
     Observation observation;
     while (xQueueReceive(productSurveyObservations, &observation, 0) == pdTRUE) {
-        const Observation* selectedWifi = wifiNetworkAt(wifiNetworkSelection);
+        const Observation* selectedWifi =
+            wifiNetworkFocus.userOwned()
+                ? wifiNetworkAt(wifiNetworkSelection) : nullptr;
         const Observation wifiSelectionAnchor = selectedWifi == nullptr
             ? Observation{} : *selectedWifi;
         const bool wifiSelectionAnchored = selectedWifi != nullptr;
         const bool wifiCatalogChanged =
             (wifiProductView == WifiProductView::Networks ||
              wifiProductView == WifiProductView::NetworkDetail) &&
-            wifiNetworkCatalog.upsert(
-                observation, !wifiNetworkNavigationOrder.locked());
-        if (wifiCatalogChanged && wifiSelectionAnchored &&
-            !wifiNetworkNavigationOrder.locked()) {
-            const std::size_t anchored =
-                wifiNetworkCatalog.indexOfIdentity(wifiSelectionAnchor);
-            wifiNetworkSelection = anchored < wifiNetworkCatalog.size()
-                ? anchored : wifiNetworkCatalog.size() - 1U;
+            wifiNetworkCatalog.upsert(observation, true);
+        if (wifiCatalogChanged) {
+            wifiNetworkFocus.reconcile(
+                wifiNetworkCatalog.size(), &wifiNetworkSelection);
+            if (wifiSelectionAnchored) {
+                const std::size_t anchored =
+                    wifiNetworkCatalog.indexOfIdentity(wifiSelectionAnchor);
+                wifiNetworkSelection = anchored < wifiNetworkCatalog.size()
+                    ? anchored : wifiNetworkSelection;
+            }
         }
-        const Observation* selectedBle = bleDeviceAt(bleDeviceSelection);
+        const Observation* selectedBle =
+            bleDeviceFocus.userOwned()
+                ? bleDeviceAt(bleDeviceSelection) : nullptr;
         const Observation bleSelectionAnchor = selectedBle == nullptr
             ? Observation{} : *selectedBle;
         const bool bleSelectionAnchored = selectedBle != nullptr;
         const bool bleCatalogChanged =
             (bleProductView == BleProductView::Devices ||
              bleProductView == BleProductView::DeviceDetail) &&
-            bleDeviceCatalog.upsert(
-                observation, !bleDeviceNavigationOrder.locked());
-        if (bleCatalogChanged && bleSelectionAnchored &&
-            !bleDeviceNavigationOrder.locked()) {
-            const std::size_t anchored =
-                bleDeviceCatalog.indexOfIdentity(bleSelectionAnchor);
-            bleDeviceSelection = anchored < bleDeviceCatalog.size()
-                ? anchored : bleDeviceCatalog.size() - 1U;
+            bleDeviceCatalog.upsert(observation, true);
+        if (bleCatalogChanged) {
+            bleDeviceFocus.reconcile(
+                bleDeviceCatalog.size(), &bleDeviceSelection);
+            if (bleSelectionAnchored &&
+                !bleDeviceNavigationOrder.locked()) {
+                const std::size_t anchored =
+                    bleDeviceCatalog.indexOfIdentity(bleSelectionAnchor);
+                bleDeviceSelection = anchored < bleDeviceCatalog.size()
+                    ? anchored : bleDeviceSelection;
+            }
         }
         const SurveyPipelineStatus queued = surveyPipeline.enqueue(observation);
         const bool accepted = queued == SurveyPipelineStatus::Queued;
@@ -7580,17 +7593,30 @@ void serviceProductSurveyWorker() {
         } else if (event.kind == ProductSurveyWorkerEventKind::Scan) {
             if (closeProductSurveyScanWindow(event)) {
                 if (event.source == RadioKind::Ble &&
-                    event.sourceScanCycles >= 1U &&
                     (bleProductView == BleProductView::Devices ||
                      bleProductView == BleProductView::DeviceDetail) &&
-                    !bleDeviceNavigationOrder.locked() &&
                     bleDeviceCatalog.size() != 0U) {
-                    // Publish the first completed passive scan as a stable
-                    // strongest-first snapshot. This is the non-blocking 1.x
-                    // equivalent of the 0.x completed-scan list: later RSSI
-                    // samples update the same identities in place instead of
-                    // reshuffling four visible rows without user input.
-                    bleDeviceNavigationOrder.lock(bleDeviceCatalog);
+                    const Observation* selected =
+                        bleDeviceFocus.userOwned()
+                            ? bleDeviceAt(bleDeviceSelection) : nullptr;
+                    const Observation anchor = selected == nullptr
+                        ? Observation{} : *selected;
+                    const bool anchored = selected != nullptr;
+                    // Publish one strongest-first identity snapshot per
+                    // completed passive scan. The catalog keeps sorting in the
+                    // background, but rows cannot reshuffle mid-window and the
+                    // user's selected identity survives the next snapshot.
+                    bleDeviceNavigationOrder.reset();
+                    (void)bleDeviceNavigationOrder.lock(bleDeviceCatalog);
+                    bleDeviceFocus.reconcile(
+                        bleDeviceCatalog.size(), &bleDeviceSelection);
+                    if (anchored) {
+                        const std::size_t index =
+                            bleDeviceCatalog.indexOfIdentity(anchor);
+                        if (index < bleDeviceCatalog.size()) {
+                            bleDeviceSelection = index;
+                        }
+                    }
                 }
                 productSurveyRuntime.status =
                     event.report.unavailableSourceMask == 0
@@ -25431,10 +25457,12 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"wifi_product_selection\":%u,"
                       "\"ble_product_view\":\"%s\","
                       "\"ble_device_selection\":%u,"
+                      "\"ble_device_focus_user_owned\":%s,"
                       "\"ble_devices_unique\":%u,"
                       "\"ble_devices_strongest_first\":%s,"
                       "\"ble_device_catalog_revision\":%lu,"
                       "\"wifi_network_selection\":%u,"
+                      "\"wifi_network_focus_user_owned\":%s,"
                       "\"wifi_network_visible_size\":%u,"
                       "\"wifi_network_navigation_locked\":%s,"
                       "\"wifi_network_order_hash\":%lu,"
@@ -25443,6 +25471,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"wifi_networks_strongest_first\":%s,"
                       "\"wifi_network_catalog_revision\":%lu,"
                       "\"wifi_device_selection\":%u,"
+                      "\"wifi_device_focus_user_owned\":%s,"
                       "\"wifi_device_visible_size\":%u,"
                       "\"wifi_device_navigation_locked\":%s,"
                       "\"wifi_device_order_hash\":%lu,"
@@ -25717,10 +25746,12 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       static_cast<unsigned>(wifiProductSelection),
                       bleProductViewName(bleProductView),
                       static_cast<unsigned>(bleDeviceSelection),
+                      bleDeviceFocus.userOwned() ? "true" : "false",
                       static_cast<unsigned>(bleDeviceCatalog.size()),
                       bleDeviceCatalog.strongestFirst() ? "true" : "false",
                       static_cast<unsigned long>(bleDeviceCatalog.revision()),
                       static_cast<unsigned>(wifiNetworkSelection),
+                      wifiNetworkFocus.userOwned() ? "true" : "false",
                       static_cast<unsigned>(wifiNetworkVisibleSize()),
                       wifiNetworkNavigationOrder.locked() ? "true" : "false",
                       static_cast<unsigned long>(
@@ -25734,6 +25765,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       static_cast<unsigned long>(
                           wifiNetworkCatalog.revision()),
                       static_cast<unsigned>(wifiDeviceSelection),
+                      wifiDeviceFocus.userOwned() ? "true" : "false",
                       static_cast<unsigned>(wifiDeviceVisibleSize()),
                       wifiDeviceNavigationOrder.locked() ? "true" : "false",
                       static_cast<unsigned long>(
@@ -27638,6 +27670,7 @@ bool startWifiNetworksProduct() {
     closeProductSurveyBackend();
     wifiNetworkCatalog.reset();
     wifiNetworkNavigationOrder.reset();
+    wifiNetworkFocus.reset();
     wifiNetworkSelection = 0;
     wifiNetworkDetail = {};
     wifiNetworkRenderedDetail = {};
@@ -27670,6 +27703,7 @@ bool startBleDevicesProduct() {
     closeProductSurveyBackend();
     bleDeviceCatalog.reset();
     bleDeviceNavigationOrder.reset();
+    bleDeviceFocus.reset();
     bleDeviceSelection = 0;
     bleDeviceDetail = {};
     bleDeviceRenderedDetail = {};
@@ -27929,6 +27963,7 @@ bool startWifiDevicesProduct() {
     wifiFrameCapture.reset();
     wifiDeviceCatalog.reset();
     wifiDeviceNavigationOrder.reset();
+    wifiDeviceFocus.reset();
     wifiDeviceSelection = 0;
     wifiDeviceDetail = {};
     wifiDeviceRenderedDetail = {};
@@ -27969,7 +28004,9 @@ void serviceWifiDevicesProduct() {
     if (nowUs == 0U) nowUs = 1U;
     wifiFrameCapture.service(nowUs);
     bool changed = false;
-    const WifiDeviceRecord* selected = wifiDeviceAt(wifiDeviceSelection);
+    const WifiDeviceRecord* selected =
+        wifiDeviceFocus.userOwned()
+            ? wifiDeviceAt(wifiDeviceSelection) : nullptr;
     const std::array<std::uint8_t, 6> selectionAnchor = selected == nullptr
         ? std::array<std::uint8_t, 6>{} : selected->address;
     const bool selectionAnchored = selected != nullptr;
@@ -28003,12 +28040,15 @@ void serviceWifiDevicesProduct() {
         changed = wifiDeviceCatalog.upsert(observation) || changed;
         observation = {};
     }
-    if (changed && selectionAnchored &&
-        !wifiDeviceNavigationOrder.locked()) {
-        const std::size_t anchored =
-            wifiDeviceCatalog.indexOfAddress(selectionAnchor);
-        wifiDeviceSelection = anchored < wifiDeviceCatalog.size()
-            ? anchored : wifiDeviceCatalog.size() - 1U;
+    if (changed) {
+        wifiDeviceFocus.reconcile(
+            wifiDeviceCatalog.size(), &wifiDeviceSelection);
+        if (selectionAnchored) {
+            const std::size_t anchored =
+                wifiDeviceCatalog.indexOfAddress(selectionAnchor);
+            wifiDeviceSelection = anchored < wifiDeviceCatalog.size()
+                ? anchored : wifiDeviceSelection;
+        }
     }
     if (changed &&
         wifiProductView == WifiProductView::DeviceDetail) {
@@ -28806,7 +28846,7 @@ bool applyUiAction(UiAction action, bool render = true) {
             handled = true;
             if (action == UiAction::Up || action == UiAction::Down ||
                 action == UiAction::Select || action == UiAction::Right) {
-                bleDeviceNavigationOrder.lock(bleDeviceCatalog);
+                bleDeviceFocus.claimByUser();
             }
             if (action == UiAction::Up && bleDeviceSelection > 0U) {
                 --bleDeviceSelection;
@@ -29328,7 +29368,7 @@ bool applyUiAction(UiAction action, bool render = true) {
             handled = true;
             if (action == UiAction::Up || action == UiAction::Down ||
                 action == UiAction::Select || action == UiAction::Right) {
-                wifiDeviceNavigationOrder.lock(wifiDeviceCatalog);
+                wifiDeviceFocus.claimByUser();
             }
             if (action == UiAction::Up && wifiDeviceSelection > 0U) {
                 --wifiDeviceSelection;
@@ -29369,7 +29409,7 @@ bool applyUiAction(UiAction action, bool render = true) {
             handled = true;
             if (action == UiAction::Up || action == UiAction::Down ||
                 action == UiAction::Select || action == UiAction::Right) {
-                wifiNetworkNavigationOrder.lock(wifiNetworkCatalog);
+                wifiNetworkFocus.claimByUser();
             }
             if (action == UiAction::Up && wifiNetworkSelection > 0) {
                 --wifiNetworkSelection;
@@ -38133,6 +38173,7 @@ void selectWifiNetworkForHil(Stream& reply, std::uint64_t requestedHash) {
         selected < wifiNetworkCatalog.size();
     if (found) {
         wifiNetworkSelection = selected;
+        wifiNetworkFocus.claimByUser();
         lastRuntimeEvent = "wifi_network_hil_selected";
         renderInteractiveScreen(false);
     }
@@ -38190,12 +38231,12 @@ void selectBleDeviceForHil(Stream& reply, std::uint64_t requestedHash) {
         std::strcmp(appRuntime.activeApp(), "ble") == 0 &&
         resourceBroker.ownerOf(Resource::EspRf) ==
             AppRuntime::kForegroundOwner;
-    const bool unlocked = !bleDeviceNavigationOrder.locked();
+    const bool automaticFocus = !bleDeviceFocus.userOwned();
     const Observation* current = bleDeviceAt(bleDeviceSelection);
-    const bool alreadySelected = !unlocked && current != nullptr &&
+    const bool alreadySelected = !automaticFocus && current != nullptr &&
         BleDeviceNavigationOrder::labelHash(*current) == requestedHash;
     const bool admissible = hilSession.active() && correctView &&
-        correctRuntime && (unlocked || alreadySelected);
+        correctRuntime && (automaticFocus || alreadySelected);
     std::size_t matches = 0U;
     std::size_t selected = bleDeviceCatalog.size();
     if (alreadySelected) {
@@ -38206,14 +38247,14 @@ void selectBleDeviceForHil(Stream& reply, std::uint64_t requestedHash) {
             bleDeviceCatalog, requestedHash, &matches);
     }
     const Observation* observation =
-        selected < bleDeviceCatalog.size() ? bleDeviceCatalog.at(selected)
-                                           : nullptr;
+        selected < bleDeviceVisibleSize() ? bleDeviceAt(selected) : nullptr;
     const bool found = admissible && matches != 0U && observation != nullptr;
     const bool connectable = found &&
         observation->bleAdvertisement.present &&
         observation->bleAdvertisement.connectable;
     if (found) {
         bleDeviceSelection = selected;
+        bleDeviceFocus.claimByUser();
         bleDeviceNavigationOrder.lock(bleDeviceCatalog);
         lastRuntimeEvent = "ble_device_hil_selected";
         renderInteractiveScreen(false);
@@ -38224,9 +38265,9 @@ void selectBleDeviceForHil(Stream& reply, std::uint64_t requestedHash) {
             ? "wrong_view"
             : !correctRuntime
                 ? "runtime_not_ready"
-                : !unlocked
+                : !automaticFocus
                     ? alreadySelected ? "already_selected"
-                                      : "navigation_locked"
+                                      : "selection_claimed"
                     : found ? "selected" : "not_found";
     char line[512] = {};
     std::snprintf(

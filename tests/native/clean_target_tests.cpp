@@ -78,6 +78,7 @@
 #include "ui/TouchInput.h"
 #include "ui/TouchTargets.h"
 #include "ui/InterfaceSettingsController.h"
+#include "ui/RankedListFocus.h"
 #include "ui/AntennaStatusController.h"
 #include "ui/LanguageController.h"
 #include "ui/UiController.h"
@@ -2771,6 +2772,33 @@ void testWifiNetworkCatalogKeepsStrongestUniqueRows() {
     CHECK(catalog.size() == 0);
     CHECK(catalog.at(0) == nullptr);
     CHECK(catalog.signalAt(0) == nullptr);
+}
+
+void testRankedListFocusStartsAtStrongestAndYieldsToUser() {
+    leshy1::ui::RankedListFocus focus;
+    std::size_t selection = 3U;
+
+    // No records and every live strongest-first reorder keep automatic focus
+    // at row zero until the first explicit navigation action.
+    focus.reconcile(0U, &selection);
+    CHECK(selection == 0U);
+    selection = 2U;
+    focus.reconcile(4U, &selection);
+    CHECK(selection == 0U);
+    CHECK(!focus.userOwned());
+
+    focus.claimByUser();
+    CHECK(focus.userOwned());
+    selection = 2U;
+    focus.reconcile(4U, &selection);
+    CHECK(selection == 2U);
+    focus.reconcile(2U, &selection);
+    CHECK(selection == 1U);
+
+    focus.reset();
+    focus.reconcile(3U, &selection);
+    CHECK(!focus.userOwned());
+    CHECK(selection == 0U);
 }
 
 void testWifiNetworkNavigationLocksIdentityOrder() {
@@ -6665,6 +6693,7 @@ int main() {
     testRuntimeAcquiresAtomicallyAndBackReleasesEverything();
     testWifiIngressIsPassiveOnlyAndNormalizesObservations();
     testWifiNetworkCatalogKeepsStrongestUniqueRows();
+    testRankedListFocusStartsAtStrongestAndYieldsToUser();
     testWifiNetworkCatalogResolvesHiddenSsidMonotonically();
     testWifiNetworkNavigationLocksIdentityOrder();
     testWifiNetworkNavigationFindsStrongestExactLabelHash();
