@@ -855,8 +855,11 @@ def main() -> int:
             "const bool bleReady = bleScanner.begin();",
             "if (bleReady)",
             "? wifiScanner.end()",
-            ": bleScanner.end();",
-            "No radio stack survives into the other source's",
+            "const bool retainBleController =",
+            "retainBleController ? true : bleScanner.end()",
+            "const bool bleCleanup = bleScanner.end();",
+            "Mixed-source sessions therefore keep",
+            "Terminal cleanup still tears it down",
         )
         if (
             any(marker not in product_worker_body
@@ -866,8 +869,8 @@ def main() -> int:
                 in product_worker_body
         ):
             errors.append(
-                "product Survey must serialize complete Wi-Fi and NimBLE "
-                "lifecycles in disjoint scan windows and release both before "
+                "product Survey must serialize mixed Wi-Fi/NimBLE windows, "
+                "retain only the BLE-only observer, and release both before "
                 "the terminal storage boundary"
             )
 

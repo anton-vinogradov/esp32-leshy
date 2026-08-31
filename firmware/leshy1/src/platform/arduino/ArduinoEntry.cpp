@@ -5167,11 +5167,12 @@ void runProductSurveyWorker(void*) {
         std::uint32_t bleScanCycles = 0;
         bool scanFailed = false;
         // Wi-Fi, NimBLE and FAT all compete for scarce DMA-capable internal
-        // heap on the no-PSRAM DIV. Each radio therefore owns a disjoint scan
-        // window: Wi-Fi is initialized/scanned/deinitialized first, then the
-        // complete NimBLE host/controller lifecycle is initialized, scanned
-        // and deinitialized. No radio stack survives into the other source's
-        // window or into the terminal FAT reopen.
+        // heap on the no-PSRAM DIV. Mixed-source sessions therefore keep
+        // disjoint radio windows. A BLE-only product may retain its passive
+        // observer between consecutive windows: repeatedly rebuilding the
+        // same host/controller fragments heap and eventually loses the live
+        // detail stream. Terminal cleanup still tears it down before FAT or
+        // another foreground owner can run.
         bool pendingScanWindow = false;
         RadioKind pendingScanSource = RadioKind::Wifi;
         std::uint64_t pendingScanStartedUs = 0;
@@ -5291,17 +5292,24 @@ void runProductSurveyWorker(void*) {
                     ? wifiScanner.end() : true;
                 const bool wifiCaptureCleanup = source == RadioKind::Wifi
                     ? wifiFrameCapture.stop(sourceCleanupUs) : true;
+                const bool bleOnlySession =
+                    (report.activeSourceMask &
+                     leshy1::services::survey::sourceMask(
+                         RadioKind::Wifi)) == 0U;
+                const bool retainBleController =
+                    source == RadioKind::Ble && bleScan.valid() &&
+                    bleOnlySession && !productSurveyStopRequested();
                 const bool sourceCleanup = source == RadioKind::Wifi
                     ? (wifiScannerCleanup && wifiCaptureCleanup &&
                        wifiFrameCapture.cleanupComplete())
-                    : bleScanner.end();
+                    : (retainBleController ? true : bleScanner.end());
                 if (source == RadioKind::Ble) {
                     publishProductSurveyBleBeginDiagnostic(
                         bleScanner.beginDiagnostic());
                 }
                 report.scannerCleanupComplete = sourceCleanup &&
                     wifiScanner.cleanupComplete() &&
-                    bleScanner.cleanupComplete();
+                    (retainBleController || bleScanner.cleanupComplete());
                 heartbeatProductSurveyWorker();
                 std::uint64_t scanEndedUs =
                     static_cast<std::uint64_t>(esp_timer_get_time());
