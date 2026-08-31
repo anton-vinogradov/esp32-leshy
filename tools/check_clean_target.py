@@ -724,7 +724,7 @@ def main() -> int:
         '\\"survey_product_filesystem_heap_free_before_vfs\\"',
         '\\"survey_product_filesystem_heap_largest_before_vfs\\"',
         '\\"survey_product_filesystem_drive_available_before_vfs\\"',
-        "char line[8192]",
+        "char line[7680]",
         '\\"error\\":\\"state_overflow\\"',
         "startProductSurvey()",
         "closeProductSurveyBackend()",

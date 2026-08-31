@@ -3114,12 +3114,11 @@ std::uint32_t uiDeltaRepaints = 0U;
 std::uint32_t uiNoChangeRepaintsSuppressed = 0U;
 
 struct SdPhysicalEvidenceWorkspace final {
-    // UI state is intentionally a single reusable static workspace.  The
-    // network/device passports and mount diagnostics pushed the bounded schema
-    // past 7 KiB; a running exact-CID passive workflow also adds its bounded
-    // identity and live counters. Retaining 8 KiB here avoids both truncation
-    // and the historical loop-task stack panic without allocating per command.
-    char line[8192] = {};
+    // UI state reuses this static workspace instead of the loop-task stack.
+    // Its compact header is assembled in summaryA/summaryB and the larger
+    // diagnostic suffix in line, then all three are emitted as one JSON line.
+    // Keeping the suffix at 7.5 KiB preserves NimBLE's no-PSRAM heap reserve.
+    char line[7680] = {};
     char summaryA[512] = {};
     char summaryB[512] = {};
     char summaryC[512] = {};
@@ -25088,7 +25087,11 @@ void serviceInfraredCapture() {
 
 void emitUiState(Stream& reply, UiAction action, bool changed) {
     auto& line = diagnosticJson;
+    auto& headerA = sdPhysicalEvidence.summaryA;
+    auto& headerB = sdPhysicalEvidence.summaryB;
     line[0] = '\0';
+    headerA[0] = '\0';
+    headerB[0] = '\0';
     const ProductSurveyMountTotals productSurveyMountTotals =
         productSurveyMountTotalsSnapshot();
     const ProductSurveyPreparationSnapshot preparation =
@@ -25103,13 +25106,28 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
             ? 0 : (preparationNowUs - preparation.stageStartedUs) / 1000ULL;
     const AppMenuItem* selected = appCatalog.get(uiController.selection());
     const LibraryEntry* selectedLibrary = libraryController.selected();
-    std::snprintf(line, sizeof(line),
+    const int headerALength = std::snprintf(
+                  headerA, sizeof(headerA),
                   "{\"schema\":\"leshy.ui.v1\",\"kind\":\"state\","
                   "\"action\":\"%s\",\"changed\":%s,\"page\":\"%s\","
                   "\"parent_page\":\"%s\",\"device_selection\":%u,"
                   "\"selection\":%u,\"selected_id\":\"%s\","
                   "\"selected_enabled\":%s,\"reason\":\"%s\","
-                  "\"language\":\"%s\",\"language_selection\":%u,"
+                  "\"language\":\"%s\",",
+                  leshy1::ui::uiActionName(action), changed ? "true" : "false",
+                  safetySupervisor.latched()
+                      ? "safe_mode"
+                      : leshy1::ui::probePageName(uiController.page()),
+                  leshy1::ui::probePageName(uiController.parentPage()),
+                  static_cast<unsigned>(deviceSelection),
+                  static_cast<unsigned>(uiController.selection()),
+                  selected == nullptr ? "none" : selected->id,
+                  selected != nullptr && selected->enabled ? "true" : "false",
+                  selected == nullptr ? "missing selection" : selected->reason,
+                  leshy1::ui::uiLanguageName(languageController.active()));
+    const int headerBLength = std::snprintf(
+                  headerB, sizeof(headerB),
+                  "\"language_selection\":%u,"
                   "\"settings_selection\":%u,\"brightness_percent\":%u,"
                   "\"brightness_duty\":%u,"
                   "\"antenna_led_brightness_raw\":%u,"
@@ -25121,18 +25139,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   "\"safety_clear_pending\":%s,\"render_mode\":\"%s\","
                   "\"render_us\":%llu,\"render_outcome\":\"%s\","
                   "\"ui_full_repaints\":%lu,\"ui_delta_repaints\":%lu,"
-                  "\"ui_no_change_suppressed\":%lu}",
-                  leshy1::ui::uiActionName(action), changed ? "true" : "false",
-                  safetySupervisor.latched()
-                      ? "safe_mode"
-                      : leshy1::ui::probePageName(uiController.page()),
-                  leshy1::ui::probePageName(uiController.parentPage()),
-                  static_cast<unsigned>(deviceSelection),
-                  static_cast<unsigned>(uiController.selection()),
-                  selected == nullptr ? "none" : selected->id,
-                  selected != nullptr && selected->enabled ? "true" : "false",
-                  selected == nullptr ? "missing selection" : selected->reason,
-                  leshy1::ui::uiLanguageName(languageController.active()),
+                  "\"ui_no_change_suppressed\":%lu",
                   static_cast<unsigned>(languageController.selection()),
                   static_cast<unsigned>(interfaceSettingsController.selection()),
                   static_cast<unsigned>(
@@ -25161,8 +25168,10 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   static_cast<unsigned long>(uiFullRepaints),
                   static_cast<unsigned long>(uiDeltaRepaints),
                   static_cast<unsigned long>(uiNoChangeRepaintsSuppressed));
-    const std::size_t length = std::strlen(line);
-    if (length > 0 && length < sizeof(line)) {
+    bool stateValid = headerALength >= 0 && headerBLength >= 0 &&
+        static_cast<std::size_t>(headerALength) < sizeof(headerA) &&
+        static_cast<std::size_t>(headerBLength) < sizeof(headerB);
+    if (stateValid) {
         const SurveyPipelineProgress pipelineProgress = surveyPipeline.progress();
         const auto* wifiTimeline =
             productSurveyTimeline.source(RadioKind::Wifi);
@@ -25184,10 +25193,8 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
         const auto wifiDeviceStats = wifiFrameCapture.deviceMonitorStats();
         const auto wifiChannelStats = wifiFrameCapture.channelMonitorStats();
         const auto wifiChannelSnapshot = wifiFrameCapture.channelLoadSnapshot();
-        line[length - 1] = '\0';
-        const std::size_t detailCapacity = sizeof(line) - length + 1;
         const int detailLength = std::snprintf(
-                      line + length - 1, detailCapacity,
+                      line, sizeof(line),
                       ",\"runtime_event\":\"%s\",\"runtime_owner\":\"%s\","
                       "\"lease_mask\":%lu,\"survey_simulated\":%s,"
                       "\"survey_view\":\"%s\",\"survey_workflow_state\":\"%s\","
@@ -25739,13 +25746,20 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       static_cast<unsigned>(
                           fullGuidedArtifactState.pcapFrames));
         if (detailLength < 0 ||
-            static_cast<std::size_t>(detailLength) >= detailCapacity) {
-            std::snprintf(
-                line, sizeof(line),
-                "{\"schema\":\"leshy.ui.v1\",\"kind\":\"error\","
-                "\"error\":\"state_overflow\"}");
+            static_cast<std::size_t>(detailLength) >= sizeof(line)) {
+            stateValid = false;
         }
     }
+    if (!stateValid) {
+        std::snprintf(
+            line, sizeof(line),
+            "{\"schema\":\"leshy.ui.v1\",\"kind\":\"error\","
+            "\"error\":\"state_overflow\"}");
+        reply.println(line);
+        return;
+    }
+    reply.print(headerA);
+    reply.print(headerB);
     reply.println(line);
 }
 
