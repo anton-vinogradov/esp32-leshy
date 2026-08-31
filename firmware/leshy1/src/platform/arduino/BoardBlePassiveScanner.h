@@ -93,6 +93,14 @@ public:
     static constexpr std::uint32_t kCompletionGraceMs = 1000U;
     static constexpr std::uint32_t kRetryDelayMs = 100U;
     static constexpr std::uint32_t kHostShutdownTimeoutMs = 2000U;
+    // The ESP32-S3 BLE controller contains a fatal low-memory assertion in
+    // its private bootstrap. Reject the lifecycle before nimble_port_init()
+    // unless physical no-PSRAM HIL has proved both total and contiguous
+    // internal-RAM reserves sufficient for that bootstrap.
+    static constexpr std::uint32_t kMinimumInternalFreeHeapBeforeBegin =
+        73000U;
+    static constexpr std::uint32_t kMinimumInternalLargestHeapBeforeBegin =
+        28000U;
 
     static constexpr std::uint64_t worstCaseScanDurationUs(
         const drivers::ble::BleScanPlan& plan) {

@@ -16,6 +16,12 @@ def require(failures: list[str], condition: bool, message: str) -> None:
 def main() -> int:
     failures: list[str] = []
     entry = (ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp").read_text()
+    ble_scanner = (
+        ROOT / "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.cpp"
+    ).read_text()
+    ble_scanner_header = (
+        ROOT / "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.h"
+    ).read_text()
     catalog = (ROOT / "firmware/leshy1/src/domain/apps/AppCatalog.cpp").read_text()
     strings = (ROOT / "firmware/leshy1/src/ui/UiStrings.def").read_text()
     controller = (ROOT / "firmware/leshy1/src/apps/targets/TargetsController.cpp").read_text()
@@ -104,6 +110,18 @@ def main() -> int:
             "delete targetsProductRuntime" in entry and
             "TargetsWorkspace targets" not in entry,
             "Targets workspace must have foreground-only bounded lifetime")
+    require(failures,
+            "runTargetRadarWorker();" in entry and
+            "targetRadarTaskHandle = productSurveyWorkerTaskHandle;" in entry and
+            "xTaskNotifyGive(productSurveyWorkerTaskHandle);" in entry and
+            '"leshy-target-radar"' not in entry and
+            "prepareBleProductSurveyMemory()" in entry and
+            "kMinimumInternalFreeHeapBeforeBegin" in ble_scanner_header and
+            "kMinimumInternalLargestHeapBeforeBegin" in ble_scanner_header and
+            "MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT" in ble_scanner and
+            "ESP_ERR_NO_MEM" in ble_scanner,
+            "BLE Radar must reuse the boot-time Survey worker and reject "
+            "NimBLE admission before its fatal private low-memory assertion")
     load_start = entry.index("bool loadTargetsProduct")
     load_end = entry.index("bool rebuildTargetsProductFromCatalog")
     load_product = entry[load_start:load_end]

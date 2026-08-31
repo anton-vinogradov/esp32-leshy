@@ -2878,6 +2878,10 @@ constexpr UBaseType_t kBleProductSurveyObservationCapacity = 32;
 // session without treating normal allocator placement as a radio failure.
 constexpr std::uint32_t kBleProductMinimumFreeHeapBeforeBegin = 73000U;
 constexpr std::uint32_t kBleProductMinimumLargestHeapBeforeBegin = 28000U;
+static_assert(kBleProductMinimumFreeHeapBeforeBegin ==
+              BoardBlePassiveScanner::kMinimumInternalFreeHeapBeforeBegin);
+static_assert(kBleProductMinimumLargestHeapBeforeBegin ==
+              BoardBlePassiveScanner::kMinimumInternalLargestHeapBeforeBegin);
 static_assert(kBleProductSurveyObservationCapacity >= 32U);
 constexpr std::uint32_t kProductSurveyScanIntervalMs = 1000;
 constexpr std::uint16_t kFieldSurveyStationChannelDwellMs = 120U;
@@ -2999,6 +3003,8 @@ bool targetsStoreDeadlineCancelRequested = false;
 
 void renderInteractiveScreen(bool clearContent = true);
 void renderTargetRadarLive(const TargetRadarSnapshot& snapshot, bool force);
+TargetRadarWorkerControl targetRadarControl();
+void runTargetRadarWorker();
 void broadcast(const char* line);
 bool boundedSleepReady();
 bool performBoundedLightSleep(std::uint64_t requestedUs);
@@ -4920,6 +4926,12 @@ void runAirspaceGuardBleWorker() {
 void runProductSurveyWorker(void*) {
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        const TargetRadarWorkerControl radarControl = targetRadarControl();
+        if (radarControl == TargetRadarWorkerControl::Running ||
+            radarControl == TargetRadarWorkerControl::CancelRequested) {
+            runTargetRadarWorker();
+            continue;
+        }
         const AirspaceGuardBleWorkerControl guardControl =
             airspaceGuardBleControl();
         if (guardControl == AirspaceGuardBleWorkerControl::Requested ||
@@ -5458,9 +5470,10 @@ bool prepareBleProductSurveyMemory() {
     }
     bleProductSurveyMemoryCompact = true;
     const std::uint32_t freeHeap = static_cast<std::uint32_t>(
-        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+        heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     const std::uint32_t largestHeap = static_cast<std::uint32_t>(
-        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+        heap_caps_get_largest_free_block(
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     if (freeHeap < kBleProductMinimumFreeHeapBeforeBegin ||
         largestHeap < kBleProductMinimumLargestHeapBeforeBegin) {
         (void)restoreBleProductSurveyMemory();
@@ -8992,7 +9005,7 @@ bool targetRadarHasRadio(const TargetRadarSnapshot& snapshot,
     return false;
 }
 
-void runTargetRadarWorker(void*) {
+void runTargetRadarWorker() {
     const TargetRadarSnapshot initial = targetRadarSnapshot();
     const bool listenWifi = targetRadarHasRadio(initial, RadioKind::Wifi);
     const bool listenBle = targetRadarHasRadio(initial, RadioKind::Ble);
@@ -9072,7 +9085,6 @@ void runTargetRadarWorker(void*) {
     targetRadarTaskHandle = nullptr;
     targetRadarWorkerFinished = true;
     portEXIT_CRITICAL(&targetRadarMux);
-    vTaskDelete(nullptr);
 }
 
 void requestTargetRadarStop() {
@@ -9093,6 +9105,9 @@ bool startTargetRadar() {
         targetsProductRuntime->controller.selectedAction() !=
             TargetActionItem::Radar ||
         targetRadarTaskHandle != nullptr || targetRadarTracker != nullptr ||
+        !productSurveyWorkerReady || productSurveyWorkerTaskHandle == nullptr ||
+        productSurveyControl() != ProductSurveyWorkerControl::Idle ||
+        airspaceGuardBleControl() != AirspaceGuardBleWorkerControl::Idle ||
         safetySupervisor.latched()) {
         return false;
     }
@@ -9134,11 +9149,13 @@ bool startTargetRadar() {
         lastRuntimeEvent = "target_radar_suspend_failed";
         return true;
     }
-    if (!suspendProductSurveyWorkerForWebCompanion()) {
+    const TargetRadarSnapshot prepared = tracker->snapshot();
+    const bool listenBle = targetRadarHasRadio(prepared, RadioKind::Ble);
+    if (listenBle && !prepareBleProductSurveyMemory()) {
         restoreTargetsAfterWebCompanion();
         resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
         delete tracker;
-        lastRuntimeEvent = "target_radar_worker_suspend_failed";
+        lastRuntimeEvent = "target_radar_ble_memory_unavailable";
         return true;
     }
 
@@ -9153,22 +9170,13 @@ bool startTargetRadar() {
     targetRadarRenderedRevision = 0U;
     targetRadarNextUiRefreshUs = 0U;
     targetRadarOverlay = true;
+    // Radar reuses the persistent Survey worker allocated at boot. Creating a
+    // second 8-KiB task after the Targets graph has fragmented internal RAM
+    // can leave NimBLE below its contiguous bootstrap reserve and trigger the
+    // controller's fatal low-memory assertion instead of a recoverable error.
+    targetRadarTaskHandle = productSurveyWorkerTaskHandle;
     portEXIT_CRITICAL(&targetRadarMux);
-    const bool started = xTaskCreatePinnedToCore(
-        runTargetRadarWorker, "leshy-target-radar", 8192, nullptr, 1,
-        &targetRadarTaskHandle, 0) == pdPASS;
-    if (!started) {
-        portENTER_CRITICAL(&targetRadarMux);
-        targetRadarWorkerControl = TargetRadarWorkerControl::Idle;
-        targetRadarOverlay = false;
-        targetRadarTracker = nullptr;
-        portEXIT_CRITICAL(&targetRadarMux);
-        delete tracker;
-        restoreTargetsAfterWebCompanion();
-        resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
-        lastRuntimeEvent = "target_radar_worker_unavailable";
-        return true;
-    }
+    xTaskNotifyGive(productSurveyWorkerTaskHandle);
     lastRuntimeEvent = "target_radar_started";
     return true;
 }
@@ -9199,6 +9207,10 @@ bool serviceTargetRadar() {
     const auto espRf =
         leshy1::kernel::runtime::resourceMask(Resource::EspRf);
     resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
+    // Restore the ordinary queue while the heavy Targets graph is still
+    // detached, returning to the exact memory topology that existed before
+    // Radar admission.
+    const bool memoryRestored = restoreBleProductSurveyMemory();
     const bool restored = restoreTargetsAfterWebCompanion();
     portENTER_CRITICAL(&targetRadarMux);
     TargetRadar* tracker = targetRadarTracker;
@@ -9206,9 +9218,10 @@ bool serviceTargetRadar() {
     targetRadarOverlay = false;
     portEXIT_CRITICAL(&targetRadarMux);
     delete tracker;
-    targetsProductStatus = restored ? "ready" : "radar_restore_failed";
-    lastRuntimeEvent = restored ? "target_radar_stopped"
-                                : "target_radar_restore_failed";
+    targetsProductStatus = restored && memoryRestored
+        ? "ready" : "radar_restore_failed";
+    lastRuntimeEvent = restored && memoryRestored
+        ? "target_radar_stopped" : "target_radar_restore_failed";
     return true;
 }
 

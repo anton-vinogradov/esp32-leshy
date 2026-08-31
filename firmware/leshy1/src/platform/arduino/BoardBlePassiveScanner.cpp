@@ -803,6 +803,19 @@ bool BoardBlePassiveScanner::begin() {
         beginDiagnostic_.cleanupComplete = false;
         return true;
     }
+    if (beginDiagnostic_.heapFreeBefore <
+            kMinimumInternalFreeHeapBeforeBegin ||
+        beginDiagnostic_.heapLargestBefore <
+            kMinimumInternalLargestHeapBeforeBegin) {
+        beginDiagnostic_.stage = BoardBleBeginStage::ControllerInit;
+        beginDiagnostic_.error = ESP_ERR_NO_MEM;
+        beginDiagnostic_.heapFreeAfter = beginDiagnostic_.heapFreeBefore;
+        beginDiagnostic_.heapLargestAfter =
+            beginDiagnostic_.heapLargestBefore;
+        beginDiagnostic_.cleanupComplete = true;
+        cleanupComplete_ = true;
+        return false;
+    }
     cancelRequested_.store(false, std::memory_order_release);
     cleanupComplete_ = false;
     passiveOnly_ = true;
