@@ -453,7 +453,8 @@ def main() -> int:
             home = action(device, "back")
             trace.append(home)
             require(home, "Targets final cleanup", page="home",
-                    runtime_owner="none", lease_mask=0)
+                    runtime_owner="none", lease_mask=0,
+                    survey_product_worker_ready=True)
             admission.close()
             hil_observation_negative = query(
                 device, b"targets.radar.hil-observe wifi -40",
@@ -483,6 +484,10 @@ def main() -> int:
             cleanup = best_effort_cleanup(device)
             if not cleanup.get("complete"):
                 raise RuntimeError("terminal cleanup is not proven")
+            require(cleanup.get("final_state", {}),
+                    "terminal Survey worker", page="home",
+                    runtime_owner="none", lease_mask=0,
+                    survey_product_worker_ready=True)
 
         record.update({
             "status": "pass",
