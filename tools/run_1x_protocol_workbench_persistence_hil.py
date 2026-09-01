@@ -193,6 +193,8 @@ def validate_args(parser: argparse.ArgumentParser,
         parser.error("--source-commit must be a full Git commit ID")
     if args.signal_window < 8.0 or args.signal_window > 30.0:
         parser.error("--signal-window must be between 8 and 30 seconds")
+    if args.signal_attempts < 1 or args.signal_attempts > 12:
+        parser.error("--signal-attempts must be between 1 and 12")
     if args.flash == args.reuse_exact_flash:
         parser.error("choose exactly one of --flash or --reuse-exact-flash")
 
@@ -208,7 +210,8 @@ def main() -> int:
     parser.add_argument("--flash", action="store_true")
     parser.add_argument("--reuse-exact-flash", action="store_true")
     parser.add_argument("--flash-baud", type=int, default=460800)
-    parser.add_argument("--signal-window", type=float, default=11.0)
+    parser.add_argument("--signal-window", type=float, default=10.25)
+    parser.add_argument("--signal-attempts", type=int, default=6)
     args = parser.parse_args()
     validate_args(parser, args)
 
@@ -244,6 +247,7 @@ def main() -> int:
     annotation_generation = 0
     decode_generation = 0
     cleanup: dict[str, Any] = {"complete": False}
+    signal_attempt = 0
 
     try:
         if args.flash:
@@ -285,10 +289,29 @@ def main() -> int:
                 "rx_only": True, "application_tx_calls": 0,
                 "storage_written": False,
             }, "IR waiting")
-            print("IR_SIGNAL_WINDOW_OPEN press_one_remote_button_now", flush=True)
-            time.sleep(args.signal_window)
-            records["ir_complete"] = query(
-                device, b"capture.ir.state", IR_SCHEMA, "state")
+            for signal_attempt in range(1, args.signal_attempts + 1):
+                print(
+                    f"IR_SIGNAL_WINDOW_OPEN attempt={signal_attempt}/"
+                    f"{args.signal_attempts} press_one_remote_button_now",
+                    flush=True)
+                time.sleep(args.signal_window)
+                terminal = query(
+                    device, b"capture.ir.state", IR_SCHEMA, "state")
+                if terminal.get("state") == "complete":
+                    records["ir_complete"] = terminal
+                    break
+                if (terminal.get("state") != "timed_out" or
+                        signal_attempt == args.signal_attempts):
+                    records["ir_complete"] = terminal
+                    break
+                trace.append(action(device, "right"))
+                waiting = query(
+                    device, b"capture.ir.state", IR_SCHEMA, "state")
+                require(waiting, {
+                    "state": "waiting", "passive_only": True,
+                    "rx_only": True, "application_tx_calls": 0,
+                    "storage_written": False,
+                }, f"IR waiting retry {signal_attempt + 1}")
             require(records["ir_complete"], {
                 "state": "complete", "passive_only": True,
                 "rx_only": True, "application_tx_calls": 0,
@@ -439,6 +462,7 @@ def main() -> int:
         "proof": {
             "real_physical_ir_capture": records.get("ir_complete", {}).get(
                 "state") == "complete",
+            "signal_attempt": signal_attempt,
             "capture_generation": saved_generation,
             "source_fingerprint": source_fingerprint,
             "annotation_store_generation": annotation_generation,
