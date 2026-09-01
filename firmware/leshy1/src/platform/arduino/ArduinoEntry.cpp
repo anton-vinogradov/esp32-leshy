@@ -37,6 +37,10 @@
 #include "apps/library/SessionCatalog.h"
 #include "apps/protocol/ProtocolWorkbench.h"
 #include "apps/protocol/ProtocolAnnotationController.h"
+#include "apps/protocol/ProtocolCaptureSnapshot.h"
+#include "apps/protocol/ProtocolComparison.h"
+#include "apps/protocol/ProtocolDerivedDecode.h"
+#include "apps/protocol/ProtocolWorkbenchTaskController.h"
 #include "apps/automation/AutomationInspectorController.h"
 #include "apps/guard/AirspaceGuardController.h"
 #include "apps/auth/WifiAuthenticationCaptureController.h"
@@ -146,6 +150,7 @@
 #include "storage/MountPolicy.h"
 #include "storage/ProductStorePolicy.h"
 #include "storage/ProtocolAnnotationStore.h"
+#include "storage/ProtocolDerivedDecodeStore.h"
 #include "storage/ProductBootRetry.h"
 #include "storage/ProductStartRetry.h"
 #include "storage/SdReadOnlyProtocol.h"
@@ -204,6 +209,16 @@ using leshy1::apps::protocol::ProtocolAnnotationSet;
 using leshy1::apps::protocol::ProtocolAnnotationSource;
 using leshy1::apps::protocol::ProtocolAnnotationStatus;
 using leshy1::apps::protocol::ProtocolAnnotationView;
+using leshy1::apps::protocol::ProtocolCaptureSnapshot;
+using leshy1::apps::protocol::ProtocolCaptureSnapshotStatus;
+using leshy1::apps::protocol::ProtocolComparisonOutcome;
+using leshy1::apps::protocol::ProtocolComparisonResult;
+using leshy1::apps::protocol::ProtocolDerivedDecode;
+using leshy1::apps::protocol::ProtocolDerivedDecodeOutcome;
+using leshy1::apps::protocol::ProtocolDerivedFieldStatus;
+using leshy1::apps::protocol::ProtocolWorkbenchTaskActivation;
+using leshy1::apps::protocol::ProtocolWorkbenchTaskController;
+using leshy1::apps::protocol::ProtocolWorkbenchTaskView;
 using leshy1::apps::automation::AutomationInspectorController;
 using leshy1::apps::automation::AutomationInspectorModel;
 using leshy1::apps::automation::AutomationInspectorSourceStatus;
@@ -640,6 +655,30 @@ private:
 };
 
 ProtocolWorkbenchHilSource protocolWorkbenchHilSource;
+
+class ProtocolWorkbenchHilPreviousSource final
+    : public leshy1::domain::captures::InfraredRawSource {
+public:
+    std::size_t pulseCount() const override {
+        return kProtocolWorkbenchHilNecDurations.size();
+    }
+    bool pulseView(
+        std::size_t index,
+        leshy1::domain::captures::InfraredRawPulseView* output) const override {
+        if (output == nullptr ||
+            index >= kProtocolWorkbenchHilNecDurations.size()) {
+            return false;
+        }
+        output->durationUs = kProtocolWorkbenchHilNecDurations[index];
+        if (index == 35U) {
+            output->durationUs = static_cast<std::uint16_t>(
+                output->durationUs + 1100U);
+        }
+        return true;
+    }
+};
+
+ProtocolWorkbenchHilPreviousSource protocolWorkbenchHilPreviousSource;
 ProtocolWorkbenchWorkspace protocolWorkbenchWorkspace;
 ProtocolWorkbenchAnalysis protocolWorkbenchAnalysis;
 ProtocolAnnotationController protocolAnnotationController;
@@ -647,6 +686,15 @@ leshy1::storage::ProtocolAnnotationStoreWorkspace
     protocolAnnotationStoreWorkspace;
 ProtocolAnnotationSet protocolAnnotationRecoveryScratch;
 const char* protocolAnnotationStorageStatus = "not_loaded";
+ProtocolWorkbenchTaskController protocolWorkbenchTaskController;
+ProtocolComparisonResult protocolComparisonResult;
+const char* protocolComparisonStorageStatus = "not_loaded";
+ProtocolDerivedDecode protocolDerivedDecode;
+ProtocolDerivedDecode protocolDerivedDecodeRecoveryScratch;
+leshy1::storage::ProtocolDerivedDecodeStoreWorkspace
+    protocolDerivedDecodeStoreWorkspace;
+std::uint32_t protocolDerivedDecodeStoreGeneration = 0U;
+const char* protocolDerivedDecodeStorageStatus = "not_loaded";
 leshy1::storage::ScreenshotStoreWorkspace screenshotStoreWorkspace;
 leshy1::storage::ScreenshotMetadata latestScreenshotMetadata;
 bool latestScreenshotAvailable = false;
@@ -13521,6 +13569,24 @@ NavigationFooter navigationFooterForCurrentState() {
                 {NavigationKey::RightAndSelect, UiTextId::NavDetails}};
     }
     if (uiController.page() == kProtocolWorkbenchPage) {
+        const ProtocolWorkbenchTaskView taskView =
+            protocolWorkbenchTaskController.view();
+        if (taskView == ProtocolWorkbenchTaskView::Tasks ||
+            taskView == ProtocolWorkbenchTaskView::Explain) {
+            return {{NavigationKey::Left, UiTextId::NavBack}, choose,
+                    {NavigationKey::RightAndSelect, UiTextId::NavEnter}};
+        }
+        if (taskView == ProtocolWorkbenchTaskView::Comparison ||
+                    taskView == ProtocolWorkbenchTaskView::Decode) {
+            return {{NavigationKey::Left, UiTextId::NavBack},
+                    protocolWorkbenchTaskController.resultCount() > 1U
+                        ? choose : NavigationCell{}, {}};
+        }
+        if (taskView == ProtocolWorkbenchTaskView::Waveform) {
+            return {{NavigationKey::Left, UiTextId::NavBack},
+                    {NavigationKey::UpDown, UiTextId::NavPulse},
+                    {NavigationKey::RightAndSelect, UiTextId::NavActions}};
+        }
         switch (protocolAnnotationController.view()) {
             case ProtocolAnnotationView::Waveform:
                 return {{NavigationKey::Left, UiTextId::NavBack},
@@ -20557,6 +20623,9 @@ void renderLibraryPage(bool clearContent) {
 
 bool recoverProtocolWorkbenchAnnotations();
 bool persistProtocolWorkbenchAnnotations();
+bool prepareProtocolWorkbenchComparison();
+bool prepareProtocolWorkbenchDecode();
+bool persistProtocolWorkbenchDecode();
 
 ProtocolAnnotationSource protocolWorkbenchAnnotationSource() {
     if (!protocolWorkbenchAnalysis.valid()) return {};
@@ -20576,6 +20645,14 @@ void resetProtocolWorkbenchAnnotations() {
     protocolAnnotationRecoveryScratch.clear();
     protocolAnnotationStoreWorkspace = {};
     protocolAnnotationStorageStatus = "not_loaded";
+    protocolWorkbenchTaskController.enter();
+    protocolComparisonResult = {};
+    protocolComparisonStorageStatus = "not_loaded";
+    protocolDerivedDecode = {};
+    protocolDerivedDecodeRecoveryScratch = {};
+    protocolDerivedDecodeStoreWorkspace = {};
+    protocolDerivedDecodeStoreGeneration = 0U;
+    protocolDerivedDecodeStorageStatus = "not_loaded";
 }
 
 bool openSelectedProtocolWorkbench() {
@@ -20615,6 +20692,7 @@ bool openSelectedProtocolWorkbench() {
     } else {
         recoverProtocolWorkbenchAnnotations();
     }
+    protocolWorkbenchTaskController.enter();
     return uiController.openChild(kProtocolWorkbenchPage);
 }
 
@@ -21000,23 +21078,220 @@ void renderProtocolWorkbenchAnnotationStatus() {
                         229);
 }
 
+void renderProtocolTaskRow(std::size_t index) {
+    if (index >= ProtocolWorkbenchTaskController::kTaskCount) return;
+    constexpr std::array<UiTextId,
+                         ProtocolWorkbenchTaskController::kTaskCount> labels = {{
+        UiTextId::ProtocolTaskInspect,
+        UiTextId::ProtocolTaskExplain,
+        UiTextId::ProtocolTaskCompare,
+    }};
+    constexpr std::array<UiTextId,
+                         ProtocolWorkbenchTaskController::kTaskCount> notes = {{
+        UiTextId::ProtocolTaskInspectNote,
+        UiTextId::ProtocolTaskExplainNote,
+        UiTextId::ProtocolTaskCompareNote,
+    }};
+    renderMenuRow(
+        Components::choiceRow(static_cast<std::uint8_t>(index)),
+        tr(labels[index]), tr(notes[index]),
+        protocolWorkbenchTaskController.selection() == index, true,
+        Tone::Positive);
+}
+
+void renderProtocolTasks(bool clearContent) {
+    renderHeader(tr(UiTextId::ProtocolTasksTitle), clearContent);
+    for (std::size_t index = 0U;
+         index < ProtocolWorkbenchTaskController::kTaskCount; ++index) {
+        renderProtocolTaskRow(index);
+    }
+}
+
+void renderProtocolExplainRow(std::size_t index) {
+    if (index >= ProtocolWorkbenchTaskController::kExplainTaskCount) return;
+    const bool mark = index == 0U;
+    renderMenuRow(
+        Components::choiceRow(static_cast<std::uint8_t>(index)),
+        tr(mark ? UiTextId::ProtocolExplainMark
+                : UiTextId::ProtocolExplainRead),
+        tr(mark ? UiTextId::ProtocolExplainMarkNote
+                : UiTextId::ProtocolExplainReadNote),
+        protocolWorkbenchTaskController.selection() == index, true,
+        Tone::Positive);
+}
+
+void renderProtocolExplainTasks(bool clearContent) {
+    renderHeader(tr(UiTextId::ProtocolExplainTitle), clearContent);
+    for (std::size_t index = 0U;
+         index < ProtocolWorkbenchTaskController::kExplainTaskCount; ++index) {
+        renderProtocolExplainRow(index);
+    }
+}
+
+UiTextId protocolComparisonOutcomeText(ProtocolComparisonOutcome outcome) {
+    switch (outcome) {
+        case ProtocolComparisonOutcome::Identical:
+            return UiTextId::ProtocolCompareIdentical;
+        case ProtocolComparisonOutcome::TimingVariation:
+            return UiTextId::ProtocolCompareTiming;
+        case ProtocolComparisonOutcome::ValueChanged:
+            return UiTextId::ProtocolCompareValue;
+        case ProtocolComparisonOutcome::StructureChanged:
+            return UiTextId::ProtocolCompareStructure;
+    }
+    return UiTextId::ProtocolCompareUnavailable;
+}
+
+void renderProtocolComparison(bool clearContent) {
+    renderHeader(tr(UiTextId::ProtocolCompareTitle), clearContent);
+    if (!protocolComparisonResult.valid()) {
+        renderMetric(0, tr(UiTextId::ProtocolCompareUnavailable),
+                     Tone::Warning);
+        renderMetric(2, tr(UiTextId::ProtocolCompareSaveTwoHint));
+        return;
+    }
+    renderMetric(
+        0, tr(protocolComparisonOutcomeText(protocolComparisonResult.outcome)),
+        protocolComparisonResult.outcome ==
+                ProtocolComparisonOutcome::Identical
+            ? Tone::Positive : Tone::Warning);
+    char line[96] = {};
+    std::snprintf(
+        line, sizeof(line), tr(UiTextId::ProtocolComparePulseFormat),
+        static_cast<unsigned>(protocolComparisonResult.comparedPulses));
+    renderMetric(1, line);
+    std::snprintf(
+        line, sizeof(line), tr(UiTextId::ProtocolCompareChangedFormat),
+        static_cast<unsigned>(protocolComparisonResult.valueChangedPulses));
+    renderMetric(2, line);
+    if (protocolComparisonResult.regionCount != 0U) {
+        const std::size_t selected =
+            protocolWorkbenchTaskController.selection();
+        const auto& region = protocolComparisonResult.regions[selected];
+        std::snprintf(
+            line, sizeof(line), tr(UiTextId::ProtocolCompareRegionFormat),
+            static_cast<unsigned>(selected + 1U),
+            static_cast<unsigned>(protocolComparisonResult.regionCount),
+            static_cast<unsigned>(region.firstPulse + 1U),
+            static_cast<unsigned>(region.lastPulse + 1U));
+        renderMetric(3, line);
+    }
+    std::snprintf(
+        line, sizeof(line), tr(UiTextId::ProtocolCompareDurationFormat),
+        static_cast<long>(protocolComparisonResult.durationDeltaUs));
+    renderMetric(4, line);
+}
+
+void renderProtocolDecode(bool clearContent) {
+    renderHeader(tr(UiTextId::ProtocolDecodeTitle), clearContent);
+    if (!protocolDerivedDecode.valid()) {
+        const UiTextId text =
+            std::strcmp(protocolDerivedDecodeStorageStatus,
+                        "marks_not_saved") == 0
+                ? UiTextId::ProtocolDecodeSaveFirst
+                : std::strcmp(protocolDerivedDecodeStorageStatus,
+                              "no_marks") == 0
+                    ? UiTextId::ProtocolDecodeNoMarks
+                    : UiTextId::ProtocolDecodeUnavailable;
+        renderMetric(0, tr(text), Tone::Warning);
+        return;
+    }
+    renderMetric(
+        0,
+        tr(protocolDerivedDecode.outcome ==
+                   ProtocolDerivedDecodeOutcome::Complete
+               ? UiTextId::ProtocolDecodeComplete
+               : UiTextId::ProtocolDecodePartial),
+        protocolDerivedDecode.outcome ==
+                ProtocolDerivedDecodeOutcome::Complete
+            ? Tone::Positive : Tone::Warning);
+    char line[96] = {};
+    const std::uint16_t valueFields = static_cast<std::uint16_t>(
+        protocolDerivedDecode.observedBitFields +
+        protocolDerivedDecode.inconclusiveFields);
+    std::snprintf(
+        line, sizeof(line), tr(UiTextId::ProtocolDecodeCountFormat),
+        static_cast<unsigned>(protocolDerivedDecode.observedBitFields),
+        static_cast<unsigned>(valueFields));
+    renderMetric(1, line);
+    if (protocolDerivedDecode.fieldCount != 0U) {
+        const std::size_t selected =
+            protocolWorkbenchTaskController.selection();
+        const auto& field = protocolDerivedDecode.fields[selected];
+        std::snprintf(
+            line, sizeof(line), tr(UiTextId::ProtocolDecodeFieldFormat),
+            tr(protocolAnnotationKindText(field.kind)),
+            static_cast<unsigned>(selected + 1U),
+            static_cast<unsigned>(protocolDerivedDecode.fieldCount));
+        renderMetric(2, line);
+        if (field.status == ProtocolDerivedFieldStatus::BitsObserved) {
+            std::snprintf(
+                line, sizeof(line), tr(UiTextId::ProtocolDecodeBitsFormat),
+                static_cast<unsigned>(field.bitCount),
+                static_cast<unsigned long>(field.observedBits));
+            renderMetric(3, line, Tone::Positive);
+        } else if (field.status ==
+                   ProtocolDerivedFieldStatus::DurationOnly) {
+            std::snprintf(
+                line, sizeof(line),
+                tr(UiTextId::ProtocolDecodeDurationFormat),
+                static_cast<unsigned long>(field.durationUs));
+            renderMetric(3, line);
+        } else {
+            renderMetric(3, tr(UiTextId::ProtocolDecodeUncertain),
+                         Tone::Warning);
+        }
+    }
+    if (protocolDerivedDecodeStoreGeneration != 0U) {
+        std::snprintf(
+            line, sizeof(line), tr(UiTextId::ProtocolDecodeStoredFormat),
+            static_cast<unsigned long>(
+                protocolDerivedDecodeStoreGeneration));
+        renderMetric(4, line, Tone::Positive);
+    } else {
+        renderMetric(4, tr(UiTextId::ProtocolDecodeOrderNote));
+    }
+}
+
 void renderProtocolWorkbenchPage(bool clearContent) {
+    const ProtocolWorkbenchTaskView taskView =
+        protocolWorkbenchTaskController.view();
+    if (taskView == ProtocolWorkbenchTaskView::Tasks) {
+        renderProtocolTasks(clearContent);
+        return;
+    }
+    if (taskView == ProtocolWorkbenchTaskView::Explain) {
+        renderProtocolExplainTasks(clearContent);
+        return;
+    }
+    if (taskView == ProtocolWorkbenchTaskView::Comparison) {
+        renderProtocolComparison(clearContent);
+        return;
+    }
+    if (taskView == ProtocolWorkbenchTaskView::Decode) {
+        renderProtocolDecode(clearContent);
+        return;
+    }
     const ProtocolAnnotationView view = protocolAnnotationController.view();
-    if (view == ProtocolAnnotationView::Actions) {
+    if (taskView == ProtocolWorkbenchTaskView::Annotate &&
+        view == ProtocolAnnotationView::Actions) {
         renderProtocolAnnotationActions(clearContent);
         return;
     }
-    if (view == ProtocolAnnotationView::ChooseStart ||
-        view == ProtocolAnnotationView::ChooseEnd) {
+    if (taskView == ProtocolWorkbenchTaskView::Annotate &&
+        (view == ProtocolAnnotationView::ChooseStart ||
+         view == ProtocolAnnotationView::ChooseEnd)) {
         renderProtocolAnnotationRangeStep(
             clearContent, view == ProtocolAnnotationView::ChooseStart);
         return;
     }
-    if (view == ProtocolAnnotationView::ChooseKind) {
+    if (taskView == ProtocolWorkbenchTaskView::Annotate &&
+        view == ProtocolAnnotationView::ChooseKind) {
         renderProtocolAnnotationKindStep(clearContent);
         return;
     }
-    if (view == ProtocolAnnotationView::Result) {
+    if (taskView == ProtocolWorkbenchTaskView::Annotate &&
+        view == ProtocolAnnotationView::Result) {
         renderProtocolAnnotationResult(clearContent);
         return;
     }
@@ -22285,6 +22560,9 @@ struct UiRenderSnapshot final {
     std::size_t librarySelection = 0;
     std::size_t librarySize = 0;
     std::uint8_t libraryDetailActionSelection = 0U;
+    std::uint8_t protocolTaskView = 0U;
+    std::size_t protocolTaskSelection = 0U;
+    std::size_t protocolTaskResultCount = 0U;
     std::uint8_t protocolAnnotationView = 0U;
     std::uint8_t protocolAnnotationOutcome = 0U;
     std::uint8_t protocolAnnotationKind = 0U;
@@ -22378,6 +22656,9 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         libraryController.selection(),
         libraryController.size(),
         libraryDetailActionSelection,
+        static_cast<std::uint8_t>(protocolWorkbenchTaskController.view()),
+        protocolWorkbenchTaskController.selection(),
+        protocolWorkbenchTaskController.resultCount(),
         static_cast<std::uint8_t>(protocolAnnotationController.view()),
         static_cast<std::uint8_t>(protocolAnnotationController.outcome()),
         static_cast<std::uint8_t>(
@@ -23130,6 +23411,55 @@ UiDeltaRenderResult renderSelectionDelta() {
     }
 
     if (uiController.page() == kProtocolWorkbenchPage) {
+        const ProtocolWorkbenchTaskView taskView =
+            protocolWorkbenchTaskController.view();
+        if (renderedUi.protocolTaskView !=
+                static_cast<std::uint8_t>(taskView) ||
+            renderedUi.protocolTaskResultCount !=
+                protocolWorkbenchTaskController.resultCount()) {
+            return UiDeltaRenderResult::RequiresFull;
+        }
+        if (taskView == ProtocolWorkbenchTaskView::Tasks ||
+            taskView == ProtocolWorkbenchTaskView::Explain) {
+            const std::size_t current =
+                protocolWorkbenchTaskController.selection();
+            if (renderedUi.protocolTaskSelection == current) {
+                return UiDeltaRenderResult::NoChange;
+            }
+            if (taskView == ProtocolWorkbenchTaskView::Tasks) {
+                renderProtocolTaskRow(renderedUi.protocolTaskSelection);
+                renderProtocolTaskRow(current);
+            } else {
+                renderProtocolExplainRow(renderedUi.protocolTaskSelection);
+                renderProtocolExplainRow(current);
+            }
+            renderNavigationFooter();
+            return UiDeltaRenderResult::Rendered;
+        }
+        if (taskView == ProtocolWorkbenchTaskView::Comparison ||
+            taskView == ProtocolWorkbenchTaskView::Decode) {
+            const std::size_t current =
+                protocolWorkbenchTaskController.selection();
+            if (renderedUi.protocolTaskSelection == current) {
+                return UiDeltaRenderResult::NoChange;
+            }
+            const std::uint8_t firstRow =
+                taskView == ProtocolWorkbenchTaskView::Comparison ? 3U : 2U;
+            const std::uint8_t lastRow =
+                taskView == ProtocolWorkbenchTaskView::Comparison ? 3U : 3U;
+            for (std::uint8_t row = firstRow; row <= lastRow; ++row) {
+                const Rect bounds = Components::metricRow(row);
+                display.fillRect(bounds.x, bounds.y - 4, bounds.width,
+                                 bounds.height + 4, Palette::Canvas);
+            }
+            if (taskView == ProtocolWorkbenchTaskView::Comparison) {
+                renderProtocolComparison(false);
+            } else {
+                renderProtocolDecode(false);
+            }
+            renderNavigationFooter();
+            return UiDeltaRenderResult::Rendered;
+        }
         const ProtocolAnnotationView view =
             protocolAnnotationController.view();
         if (renderedUi.protocolAnnotationView !=
@@ -23145,7 +23475,9 @@ UiDeltaRenderResult renderSelectionDelta() {
                 protocolAnnotationController.dirty()) {
             return UiDeltaRenderResult::RequiresFull;
         }
-        if (view == ProtocolAnnotationView::Waveform) {
+        if ((taskView == ProtocolWorkbenchTaskView::Waveform ||
+             taskView == ProtocolWorkbenchTaskView::Annotate) &&
+            view == ProtocolAnnotationView::Waveform) {
             if (renderedUi.protocolAnnotationPulseSelection ==
                 protocolAnnotationController.pulseSelection()) {
                 return UiDeltaRenderResult::NoChange;
@@ -23154,8 +23486,9 @@ UiDeltaRenderResult renderSelectionDelta() {
             renderProtocolWorkbenchAnnotationStatus();
             return UiDeltaRenderResult::Rendered;
         }
-        if (view == ProtocolAnnotationView::ChooseStart ||
-            view == ProtocolAnnotationView::ChooseEnd) {
+        if (taskView == ProtocolWorkbenchTaskView::Annotate &&
+            (view == ProtocolAnnotationView::ChooseStart ||
+             view == ProtocolAnnotationView::ChooseEnd)) {
             if (renderedUi.protocolAnnotationPulseSelection ==
                 protocolAnnotationController.pulseSelection()) {
                 return UiDeltaRenderResult::NoChange;
@@ -23165,7 +23498,8 @@ UiDeltaRenderResult renderSelectionDelta() {
                 view == ProtocolAnnotationView::ChooseStart);
             return UiDeltaRenderResult::Rendered;
         }
-        if (view == ProtocolAnnotationView::Actions) {
+        if (taskView == ProtocolWorkbenchTaskView::Annotate &&
+            view == ProtocolAnnotationView::Actions) {
             const std::size_t current =
                 protocolAnnotationController.actionSelection();
             if (renderedUi.protocolAnnotationActionSelection == current) {
@@ -23177,7 +23511,8 @@ UiDeltaRenderResult renderSelectionDelta() {
             renderNavigationFooter();
             return UiDeltaRenderResult::Rendered;
         }
-        if (view == ProtocolAnnotationView::ChooseKind) {
+        if (taskView == ProtocolWorkbenchTaskView::Annotate &&
+            view == ProtocolAnnotationView::ChooseKind) {
             if (renderedUi.protocolAnnotationKind ==
                 static_cast<std::uint8_t>(
                     protocolAnnotationController.kindSelection())) {
@@ -23186,7 +23521,8 @@ UiDeltaRenderResult renderSelectionDelta() {
             renderProtocolAnnotationKindCard();
             return UiDeltaRenderResult::Rendered;
         }
-        if (view == ProtocolAnnotationView::Result) {
+        if (taskView == ProtocolWorkbenchTaskView::Annotate &&
+            view == ProtocolAnnotationView::Result) {
             return UiDeltaRenderResult::NoChange;
         }
         return UiDeltaRenderResult::RequiresFull;
@@ -30154,39 +30490,56 @@ bool applyUiAction(UiAction action, bool render = true) {
     if (!wasRoot && uiController.page() == kProtocolWorkbenchPage) {
         bool handled = false;
         bool changed = false;
+        const ProtocolWorkbenchTaskView taskView =
+            protocolWorkbenchTaskController.view();
         if (action == UiAction::Back || action == UiAction::Left) {
             handled = true;
-            changed = protocolAnnotationController.back();
-            if (changed) {
-                uiController.recordHandledAction(action);
-                lastRuntimeEvent = "protocol_annotation_back";
+            if (taskView == ProtocolWorkbenchTaskView::Annotate) {
+                changed = protocolAnnotationController.back();
+                if (!changed) {
+                    changed = protocolWorkbenchTaskController.back();
+                }
             } else {
+                changed = protocolWorkbenchTaskController.back();
+            }
+            if (!changed) {
                 changed = uiController.apply(
                     action, static_cast<std::uint8_t>(appCatalog.size()),
                     true, kProtocolWorkbenchPage);
                 lastRuntimeEvent = changed
                     ? "protocol_workbench_library"
                     : "protocol_workbench_back_rejected";
+            } else {
+                uiController.recordHandledAction(action);
+                lastRuntimeEvent = "protocol_workbench_back";
             }
         } else if (action == UiAction::Up) {
             handled = true;
-            changed = protocolAnnotationController.previous();
+            changed =
+                taskView == ProtocolWorkbenchTaskView::Waveform ||
+                        taskView == ProtocolWorkbenchTaskView::Annotate
+                    ? protocolAnnotationController.previous()
+                    : protocolWorkbenchTaskController.previous();
             lastRuntimeEvent = changed
-                ? "protocol_annotation_previous"
-                : "protocol_annotation_at_first";
+                ? "protocol_workbench_previous"
+                : "protocol_workbench_at_first";
         } else if (action == UiAction::Down) {
             handled = true;
-            changed = protocolAnnotationController.next();
+            changed =
+                taskView == ProtocolWorkbenchTaskView::Waveform ||
+                        taskView == ProtocolWorkbenchTaskView::Annotate
+                    ? protocolAnnotationController.next()
+                    : protocolWorkbenchTaskController.next();
             lastRuntimeEvent = changed
-                ? "protocol_annotation_next"
-                : "protocol_annotation_at_last";
+                ? "protocol_workbench_next"
+                : "protocol_workbench_at_last";
         } else if (action == UiAction::Select ||
                    action == UiAction::Right) {
             handled = true;
             if (!protocolWorkbenchAnalysis.valid() ||
                 !protocolAnnotationController.source().valid()) {
                 lastRuntimeEvent = "protocol_workbench_unavailable";
-            } else {
+            } else if (taskView == ProtocolWorkbenchTaskView::Annotate) {
                 const ProtocolAnnotationActivation activation =
                     protocolAnnotationController.activate();
                 if (activation ==
@@ -30202,6 +30555,36 @@ bool applyUiAction(UiAction action, bool render = true) {
                     lastRuntimeEvent = changed
                         ? "protocol_annotation_activated"
                         : "protocol_annotation_no_action";
+                }
+            } else {
+                const ProtocolWorkbenchTaskActivation activation =
+                    protocolWorkbenchTaskController.activate();
+                if (activation ==
+                    ProtocolWorkbenchTaskActivation::CompareRequested) {
+                    prepareProtocolWorkbenchComparison();
+                    protocolWorkbenchTaskController.noteComparison(
+                        protocolComparisonResult.valid()
+                            ? protocolComparisonResult.regionCount : 0U);
+                    changed = true;
+                    lastRuntimeEvent = protocolComparisonResult.valid()
+                        ? "protocol_comparison_ready"
+                        : protocolComparisonStorageStatus;
+                } else if (activation ==
+                           ProtocolWorkbenchTaskActivation::DecodeRequested) {
+                    prepareProtocolWorkbenchDecode();
+                    protocolWorkbenchTaskController.noteDecode(
+                        protocolDerivedDecode.valid()
+                            ? protocolDerivedDecode.fieldCount : 0U);
+                    changed = true;
+                    lastRuntimeEvent = protocolDerivedDecode.valid()
+                        ? "protocol_decode_ready"
+                        : protocolDerivedDecodeStorageStatus;
+                } else {
+                    changed = activation ==
+                        ProtocolWorkbenchTaskActivation::Changed;
+                    lastRuntimeEvent = changed
+                        ? "protocol_task_opened"
+                        : "protocol_task_no_action";
                 }
             }
         }
@@ -32145,6 +32528,282 @@ ScreenshotSdIdentityResult identifyScreenshotProductMedia(
     return result;
 }
 
+bool prepareProtocolWorkbenchComparison() {
+    protocolComparisonResult = {};
+    protocolComparisonStorageStatus = "unavailable";
+    if (!protocolWorkbenchAnalysis.valid() ||
+        !protocolAnnotationController.source().valid()) {
+        protocolComparisonStorageStatus = "source_invalid";
+        return false;
+    }
+    if (protocolWorkbenchHilSource.active()) {
+        ProtocolWorkbenchAnalysis previousAnalysis;
+        if (leshy1::apps::protocol::analyzeInfraredCapture(
+                protocolWorkbenchHilPreviousSource,
+                protocolWorkbenchWorkspace, &previousAnalysis) !=
+            ProtocolWorkbenchStatus::Valid) {
+            protocolComparisonStorageStatus = "previous_invalid";
+            return false;
+        }
+        const ProtocolAnnotationSource previousIdentity{
+            UINT32_MAX - 1U, previousAnalysis.sourceFingerprint,
+            static_cast<std::uint16_t>(previousAnalysis.pulseCount)};
+        const auto compared =
+            leshy1::apps::protocol::compareInfraredCaptures(
+                protocolWorkbenchHilPreviousSource, previousAnalysis,
+                previousIdentity, false, protocolWorkbenchHilSource,
+                protocolWorkbenchAnalysis,
+                protocolWorkbenchAnnotationSource(), false,
+                &protocolComparisonResult);
+        const bool valid = compared ==
+            leshy1::apps::protocol::ProtocolComparisonStatus::Valid;
+        protocolComparisonStorageStatus = valid ? "hil_ram_only"
+                                                : "compare_failed";
+        return valid;
+    }
+
+    ProtocolCaptureSnapshot currentSnapshot;
+    if (currentSnapshot.copyFrom(protocolWorkbenchPulseSource()) !=
+        ProtocolCaptureSnapshotStatus::Valid) {
+        protocolComparisonStorageStatus = "source_read_failed";
+        return false;
+    }
+    const ProtocolWorkbenchAnalysis currentAnalysis =
+        protocolWorkbenchAnalysis;
+    const ProtocolAnnotationSource currentIdentity =
+        protocolWorkbenchAnnotationSource();
+    const bool currentStartLevel = protocolWorkbenchStartLevel();
+    bool valid = deviceLockOperationAllowed(
+        leshy1::services::security::
+            DeviceLockOperation::ProtectedEvidence);
+    const char* failure = valid ? "none" : "device_locked";
+    if (!valid) noteDeviceLockAdmissionBlocked();
+    if (valid && screenshotLiveWorkActive()) {
+        valid = false;
+        failure = "live_work_busy";
+    }
+
+    const auto requestedResources =
+        leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    const auto owner = appRuntime.running()
+        ? AppRuntime::kForegroundOwner : kProtocolAnnotationOwner;
+    const auto ownedBefore = resourceBroker.ownedBy(owner);
+    const auto acquired = requestedResources & ~ownedBefore;
+    bool resourcesAcquired = false;
+    if (valid) {
+        resourcesAcquired = resourceBroker.acquire(owner,
+                                                    requestedResources);
+        valid = resourcesAcquired;
+        if (!valid) failure = "resources_busy";
+    }
+
+    char expectedFingerprint[33] = {};
+    char observedFingerprint[33] = {};
+    ScreenshotSdIdentityResult identityRun;
+    BoardSdFilesystem filesystem;
+    bool filesystemAttempted = false;
+    ArduinoFsSessionStoreIo io(
+        sdSessionStoreIoWorkspace, screenshotStorageProgress,
+        &protectedDataCipher, &deviceLock);
+    bool ioOpened = false;
+    leshy1::storage::SessionStorePairRecoveryResult pair{};
+    bool pairCurrentReady = false;
+
+    if (valid && !loadProductFingerprint(expectedFingerprint,
+                                         sizeof(expectedFingerprint))) {
+        valid = false;
+        failure = "enrollment_missing";
+    }
+    if (valid) {
+        identityRun = identifyScreenshotProductMedia(
+            resourceBroker.ownedBy(owner), expectedFingerprint,
+            observedFingerprint, sizeof(observedFingerprint));
+        valid = identityRun.begun && identityRun.cleanupComplete &&
+            identityRun.safetyProgressComplete &&
+            identityRun.identity.status ==
+                leshy1::storage::SdTransportRunStatus::Valid &&
+            std::strcmp(expectedFingerprint, observedFingerprint) == 0;
+        if (!valid) {
+            failure = identityRun.safetyProgressComplete
+                ? "identity_failed" : "safety_latched";
+        }
+    }
+    if (valid) {
+        filesystemAttempted = true;
+        valid = filesystem.beginReadOnly() &&
+            filesystem.readOnlyGuaranteed();
+        if (!valid) failure = "readonly_mount_failed";
+    }
+    if (valid) {
+        const std::uint64_t capacity = filesystem.cardCapacityBytes();
+        leshy1::storage::MediaIdentity media;
+        media.present = capacity != 0U &&
+            capacity == identityRun.identity.identity.capacityBytes;
+        media.kind = leshy1::storage::MediaKind::Sd;
+        media.fingerprint = observedFingerprint;
+        media.capacityBytes = capacity;
+        media.freeBytes = 0U;
+        leshy1::storage::ProductStoreRequest request;
+        request.operation =
+            leshy1::storage::ProductStoreOperation::RecoverCatalog;
+        request.expectedFingerprint = expectedFingerprint;
+        request.rootPath = leshy1::storage::kProductSessionStoreRoot;
+        request.rootExists = knownProductSessionRootExists(
+            observedFingerprint);
+        request.driverReadOnlyGuaranteed =
+            filesystem.readOnlyGuaranteed();
+        request.ownedResources = resourceBroker.ownedBy(owner);
+        const auto permit = leshy1::storage::authorizeProductStore(
+            media, request);
+        valid = permit.allowed();
+        if (!valid) {
+            failure = leshy1::storage::productStoreAccessStatusName(
+                permit.status);
+        } else {
+            ioOpened = io.selectDrive(filesystem.driveNumber()) &&
+                io.openExistingReadOnly(permit);
+            valid = ioOpened;
+            if (!valid) failure = "store_open_failed";
+        }
+    }
+    if (valid) {
+        auto& workspace = sessionStoreWorkspace();
+        pair = leshy1::storage::recoverSessionPair(
+            io, workspace, &surveySession, &workspace.validationSession);
+        valid = pair.valid() &&
+            pair.currentGeneration == currentIdentity.captureGeneration &&
+            surveySession.captureMetadata().infraredRawCaptured &&
+            workspace.validationSession.captureMetadata().infraredRawCaptured;
+        if (!valid) {
+            failure = pair.valid() ? "pair_not_infrared"
+                                   : "two_records_required";
+        } else {
+            librarySession = workspace.validationSession;
+            pairCurrentReady = true;
+        }
+    }
+    if (valid) {
+        auto& workspace = sessionStoreWorkspace();
+        char baselinePath[leshy1::storage::kSessionStorePathMax] = {};
+        std::size_t baselineSize = 0U;
+        leshy1::storage::PersistedInfraredRawCaptureView baselineSource;
+        ProtocolWorkbenchAnalysis baselineAnalysis;
+        valid = leshy1::storage::formatSessionStorePath(
+                    leshy1::storage::StoreFileKind::Segment,
+                    pair.baselineGeneration, baselinePath,
+                    sizeof(baselinePath)) &&
+            io.readFile(baselinePath, workspace.segment.data(),
+                        workspace.segment.size(), &baselineSize) ==
+                leshy1::storage::SessionStoreIo::ReadStatus::Ok &&
+            leshy1::storage::openPersistedInfraredRawCapture(
+                surveySession, workspace.segment.data(), baselineSize,
+                &baselineSource) ==
+                leshy1::storage::SessionCodecStatus::Valid &&
+            leshy1::apps::protocol::analyzeInfraredCapture(
+                baselineSource, protocolWorkbenchWorkspace,
+                &baselineAnalysis) == ProtocolWorkbenchStatus::Valid;
+        if (!valid) {
+            failure = "previous_read_failed";
+        } else {
+            const ProtocolAnnotationSource baselineIdentity{
+                pair.baselineGeneration,
+                baselineAnalysis.sourceFingerprint,
+                static_cast<std::uint16_t>(baselineAnalysis.pulseCount)};
+            valid = leshy1::apps::protocol::compareInfraredCaptures(
+                        baselineSource, baselineAnalysis,
+                        baselineIdentity,
+                        surveySession.captureMetadata().infraredStartLevel,
+                        currentSnapshot, currentAnalysis, currentIdentity,
+                        currentStartLevel, &protocolComparisonResult) ==
+                leshy1::apps::protocol::ProtocolComparisonStatus::Valid;
+            if (!valid) failure = "compare_failed";
+        }
+    }
+
+    // The waveform view borrows the shared codec segment. Always restore the
+    // exact current generation before releasing storage, even after a failed
+    // baseline read/compare.
+    if (ioOpened && pairCurrentReady) {
+        auto& workspace = sessionStoreWorkspace();
+        char currentPath[leshy1::storage::kSessionStorePathMax] = {};
+        std::size_t currentSize = 0U;
+        const bool restored = leshy1::storage::formatSessionStorePath(
+                    leshy1::storage::StoreFileKind::Segment,
+                    pair.currentGeneration, currentPath,
+                    sizeof(currentPath)) &&
+            io.readFile(currentPath, workspace.segment.data(),
+                        workspace.segment.size(), &currentSize) ==
+                leshy1::storage::SessionStoreIo::ReadStatus::Ok &&
+            leshy1::storage::openPersistedInfraredRawCapture(
+                librarySession, workspace.segment.data(), currentSize,
+                &protocolWorkbenchSource) ==
+                leshy1::storage::SessionCodecStatus::Valid &&
+            leshy1::apps::protocol::analyzeInfraredCapture(
+                protocolWorkbenchSource, protocolWorkbenchWorkspace,
+                &protocolWorkbenchAnalysis) == ProtocolWorkbenchStatus::Valid &&
+            protocolWorkbenchAnalysis.sourceFingerprint ==
+                currentIdentity.captureFingerprint;
+        if (restored) {
+            workspace.segmentSize = currentSize;
+            workspace.generation = pair.currentGeneration;
+        } else {
+            protocolWorkbenchSource.reset();
+            protocolWorkbenchAnalysis = {};
+            protocolComparisonResult = {};
+            valid = false;
+            failure = "current_restore_failed";
+        }
+    }
+    surveySession.reset();
+    if (ioOpened) io.end();
+    if (filesystem.mounted()) filesystem.end();
+    const bool cleanupComplete = identityRun.cleanupComplete &&
+        (!filesystemAttempted || filesystem.cleanupComplete());
+    if (resourcesAcquired && acquired != 0U) {
+        resourceBroker.release(owner, acquired);
+    }
+    valid = valid && cleanupComplete;
+    if (!cleanupComplete) failure = "cleanup_failed";
+    protocolComparisonStorageStatus = valid ? "compared" : failure;
+    if (!valid) protocolComparisonResult = {};
+    return valid;
+}
+
+bool prepareProtocolWorkbenchDecode() {
+    protocolDerivedDecode = {};
+    protocolDerivedDecodeStoreGeneration = 0U;
+    if (protocolAnnotationController.annotations().size() == 0U) {
+        protocolDerivedDecodeStorageStatus = "no_marks";
+        return false;
+    }
+    const std::uint32_t annotationGeneration =
+        protocolWorkbenchHilSource.active()
+            ? 1U : protocolAnnotationController.storeGeneration();
+    if (annotationGeneration == 0U ||
+        (!protocolWorkbenchHilSource.active() &&
+         protocolAnnotationController.dirty())) {
+        protocolDerivedDecodeStorageStatus = "marks_not_saved";
+        return false;
+    }
+    const auto decoded = leshy1::apps::protocol::deriveProtocolDecode(
+        protocolWorkbenchPulseSource(), protocolWorkbenchAnalysis,
+        protocolWorkbenchStartLevel(),
+        protocolAnnotationController.annotations(), annotationGeneration,
+        &protocolDerivedDecode);
+    const bool valid = decoded ==
+        leshy1::apps::protocol::ProtocolDerivedDecodeStatus::Valid;
+    if (!valid) {
+        protocolDerivedDecodeStorageStatus = "decode_failed";
+        return false;
+    }
+    if (protocolWorkbenchHilSource.active()) {
+        protocolDerivedDecodeStorageStatus = "hil_ram_only";
+        return true;
+    }
+    return persistProtocolWorkbenchDecode();
+}
+
 bool sameProtocolAnnotationSet(const ProtocolAnnotationSet& left,
                                const ProtocolAnnotationSet& right) {
     if (!left.bound() || !right.bound() ||
@@ -32164,6 +32823,214 @@ bool sameProtocolAnnotationSet(const ProtocolAnnotationSet& left,
         }
     }
     return true;
+}
+
+bool sameProtocolDerivedDecode(const ProtocolDerivedDecode& left,
+                               const ProtocolDerivedDecode& right) {
+    if (!left.valid() || !right.valid() ||
+        !leshy1::apps::protocol::sameProtocolAnnotationSource(
+            left.source, right.source) ||
+        left.annotationStoreGeneration !=
+            right.annotationStoreGeneration ||
+        left.decoderVersion != right.decoderVersion ||
+        left.outcome != right.outcome ||
+        left.fieldCount != right.fieldCount ||
+        left.observedBitFields != right.observedBitFields ||
+        left.inconclusiveFields != right.inconclusiveFields) {
+        return false;
+    }
+    for (std::size_t index = 0U; index < left.fieldCount; ++index) {
+        const auto& leftField = left.fields[index];
+        const auto& rightField = right.fields[index];
+        if (leftField.kind != rightField.kind ||
+            leftField.status != rightField.status ||
+            leftField.firstPulse != rightField.firstPulse ||
+            leftField.lastPulse != rightField.lastPulse ||
+            leftField.bitCount != rightField.bitCount ||
+            leftField.observedBits != rightField.observedBits ||
+            leftField.durationUs != rightField.durationUs) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool persistProtocolWorkbenchDecode() {
+    bool valid = protocolDerivedDecode.valid() &&
+        !protocolWorkbenchHilSource.active() &&
+        protocolAnnotationController.storeGeneration() != 0U &&
+        !protocolAnnotationController.dirty();
+    const char* failure = valid ? "none" : "decode_not_ready";
+    if (valid && !deviceLockOperationAllowed(
+            leshy1::services::security::
+                DeviceLockOperation::ProtectedEvidence)) {
+        noteDeviceLockAdmissionBlocked();
+        valid = false;
+        failure = "device_locked";
+    }
+    if (valid && powerSafetyPolicy.writeDisposition() ==
+            PowerWriteDisposition::ProhibitedLowVoltage) {
+        valid = false;
+        failure = "power_unsafe";
+    }
+    if (valid && screenshotLiveWorkActive()) {
+        valid = false;
+        failure = "live_work_busy";
+    }
+
+    const auto requestedResources =
+        leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    const auto owner = appRuntime.running()
+        ? AppRuntime::kForegroundOwner : kProtocolAnnotationOwner;
+    const auto ownedBefore = resourceBroker.ownedBy(owner);
+    const auto acquired = requestedResources & ~ownedBefore;
+    bool resourcesAcquired = false;
+    if (valid) {
+        resourcesAcquired = resourceBroker.acquire(owner,
+                                                    requestedResources);
+        valid = resourcesAcquired;
+        if (!valid) failure = "resources_busy";
+    }
+
+    char expectedFingerprint[33] = {};
+    char observedFingerprint[33] = {};
+    ScreenshotSdIdentityResult identityRun;
+    BoardSdFilesystem filesystem;
+    bool filesystemAttempted = false;
+    ArduinoFsSessionStoreIo io(
+        sdSessionStoreIoWorkspace, screenshotStorageProgress,
+        &protectedDataCipher, &deviceLock);
+    bool ioOpened = false;
+    std::uint32_t durableGeneration = 0U;
+
+    if (valid && !loadProductFingerprint(expectedFingerprint,
+                                         sizeof(expectedFingerprint))) {
+        valid = false;
+        failure = "enrollment_missing";
+    }
+    if (valid) {
+        identityRun = identifyScreenshotProductMedia(
+            resourceBroker.ownedBy(owner), expectedFingerprint,
+            observedFingerprint, sizeof(observedFingerprint));
+        valid = identityRun.begun && identityRun.cleanupComplete &&
+            identityRun.safetyProgressComplete &&
+            identityRun.identity.status ==
+                leshy1::storage::SdTransportRunStatus::Valid &&
+            std::strcmp(expectedFingerprint, observedFingerprint) == 0;
+        if (!valid) {
+            failure = identityRun.safetyProgressComplete
+                ? "identity_failed" : "safety_latched";
+        }
+    }
+    if (valid) {
+        filesystemAttempted = true;
+        valid = filesystem.begin();
+        if (!valid) failure = "mount_failed";
+    }
+    if (valid) {
+        const std::uint64_t capacity = filesystem.cardCapacityBytes();
+        leshy1::storage::MediaIdentity media;
+        media.present = capacity != 0U &&
+            capacity == identityRun.identity.identity.capacityBytes;
+        media.kind = leshy1::storage::MediaKind::Sd;
+        media.fingerprint = observedFingerprint;
+        media.capacityBytes = capacity;
+        media.freeBytes = filesystem.cachedFreeBytes();
+        leshy1::storage::ProductStoreRequest request;
+        request.operation =
+            leshy1::storage::ProductStoreOperation::CommitEvidence;
+        request.explicitlySelected = true;
+        request.expectedFingerprint = expectedFingerprint;
+        request.rootPath = leshy1::storage::kProductSessionStoreRoot;
+        request.rootExists = knownProductSessionRootExists(
+            observedFingerprint);
+        request.driverWriteEnabled = true;
+        request.requiredBytes = kProductProtocolAnnotationCommitBytes;
+        request.reserveBytes = kProductSurveyReserveBytes;
+        request.ownedResources = resourceBroker.ownedBy(owner);
+        request.power = powerSafetyPolicy.writeDisposition();
+        const auto permit = leshy1::storage::authorizeProductStore(
+            media, request);
+        valid = permit.allowed();
+        if (!valid) {
+            failure = leshy1::storage::productStoreAccessStatusName(
+                permit.status);
+        } else {
+            ioOpened = io.selectDrive(filesystem.driveNumber()) &&
+                io.openExistingWritable(permit);
+            valid = ioOpened;
+            if (!valid) failure = "store_open_failed";
+        }
+    }
+    if (valid) {
+        protocolDerivedDecodeRecoveryScratch = {};
+        const auto recovered =
+            leshy1::storage::recoverProtocolDerivedDecode(
+                io, protocolDerivedDecodeStoreWorkspace,
+                protocolDerivedDecode.source,
+                protocolDerivedDecode.annotationStoreGeneration,
+                &protocolDerivedDecodeRecoveryScratch);
+        if (recovered.valid() && sameProtocolDerivedDecode(
+                protocolDerivedDecode,
+                protocolDerivedDecodeRecoveryScratch)) {
+            durableGeneration = recovered.storeGeneration;
+            protocolDerivedDecode = protocolDerivedDecodeRecoveryScratch;
+        } else if (recovered.valid() ||
+                   recovered.status == leshy1::storage::
+                       ProtocolDerivedDecodeStoreStatus::Empty) {
+            protocolDerivedDecodeRecoveryScratch = {};
+            const auto committed =
+                leshy1::storage::commitNextProtocolDerivedDecode(
+                    io, protocolDerivedDecodeStoreWorkspace,
+                    protocolDerivedDecode,
+                    protocolDerivedDecodeRecoveryScratch);
+            valid = committed.complete();
+            durableGeneration = committed.storeGeneration;
+            if (!valid) {
+                failure = leshy1::storage::
+                    protocolDerivedDecodeStoreStatusName(
+                        committed.status);
+            }
+        } else {
+            valid = false;
+            failure = leshy1::storage::
+                protocolDerivedDecodeStoreStatusName(recovered.status);
+        }
+    }
+    if (valid) {
+        protocolDerivedDecodeRecoveryScratch = {};
+        const auto reopened =
+            leshy1::storage::recoverProtocolDerivedDecode(
+                io, protocolDerivedDecodeStoreWorkspace,
+                protocolDerivedDecode.source,
+                protocolDerivedDecode.annotationStoreGeneration,
+                &protocolDerivedDecodeRecoveryScratch);
+        valid = reopened.valid() &&
+            reopened.storeGeneration == durableGeneration &&
+            sameProtocolDerivedDecode(protocolDerivedDecode,
+                                      protocolDerivedDecodeRecoveryScratch);
+        if (valid) {
+            protocolDerivedDecode = protocolDerivedDecodeRecoveryScratch;
+        } else {
+            failure = "reopen_failed";
+        }
+    }
+
+    if (ioOpened) io.end();
+    if (filesystem.mounted()) filesystem.end();
+    const bool cleanupComplete = identityRun.cleanupComplete &&
+        (!filesystemAttempted || filesystem.cleanupComplete());
+    if (resourcesAcquired && acquired != 0U) {
+        resourceBroker.release(owner, acquired);
+    }
+    valid = valid && cleanupComplete;
+    if (!cleanupComplete) failure = "cleanup_failed";
+    protocolDerivedDecodeStoreGeneration = valid
+        ? durableGeneration : 0U;
+    protocolDerivedDecodeStorageStatus = valid ? "saved" : failure;
+    if (!valid) protocolDerivedDecode = {};
+    return valid;
 }
 
 bool recoverProtocolWorkbenchAnnotations() {
@@ -37953,7 +38820,7 @@ void emitProtocolWorkbenchHilFixture(Stream& reply, const char* command) {
         ? protocolWorkbenchAnalysis.bandCount : 0U;
     const std::uint64_t reportedFingerprint = fixtureActive
         ? protocolWorkbenchAnalysis.sourceFingerprint : 0U;
-    char line[960] = {};
+    char line[1280] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.protocol_workbench.hil_fixture.v1\","
@@ -37962,9 +38829,16 @@ void emitProtocolWorkbenchHilFixture(Stream& reply, const char* command) {
         "\"ui_home\":%s,\"page\":\"%s\","
         "\"analysis_status\":\"%s\",\"protocol\":\"%s\","
         "\"pulses\":%u,\"selected_pulse\":%u,"
+        "\"task_view\":\"%s\",\"task_selection\":%u,"
+        "\"task_result_count\":%u,"
         "\"annotation_view\":%u,\"annotation_kind\":%u,"
         "\"annotation_action\":%u,\"annotations\":%u,"
         "\"annotation_dirty\":%s,\"annotation_store_generation\":%lu,"
+        "\"comparison_valid\":%s,\"comparison_outcome\":\"%s\","
+        "\"comparison_regions\":%u,\"comparison_status\":\"%s\","
+        "\"decode_valid\":%s,\"decode_outcome\":\"%s\","
+        "\"decode_fields\":%u,\"decode_store_generation\":%lu,"
+        "\"decode_status\":\"%s\","
         "\"base_unit_us\":%u,\"timing_bands\":%u,"
         "\"source_fingerprint\":\"%08lX%08lX\","
         "\"start_level\":false,\"read_only\":true,"
@@ -37985,6 +38859,12 @@ void emitProtocolWorkbenchHilFixture(Stream& reply, const char* command) {
         static_cast<unsigned>(reportedPulses),
         static_cast<unsigned>(fixtureActive
             ? protocolAnnotationController.pulseSelection() : 0U),
+        leshy1::apps::protocol::protocolWorkbenchTaskViewName(
+            protocolWorkbenchTaskController.view()),
+        static_cast<unsigned>(
+            protocolWorkbenchTaskController.selection()),
+        static_cast<unsigned>(
+            protocolWorkbenchTaskController.resultCount()),
         static_cast<unsigned>(fixtureActive
             ? protocolAnnotationController.view()
             : ProtocolAnnotationView::Waveform),
@@ -37999,6 +38879,26 @@ void emitProtocolWorkbenchHilFixture(Stream& reply, const char* command) {
             ? "true" : "false",
         static_cast<unsigned long>(fixtureActive
             ? protocolAnnotationController.storeGeneration() : 0U),
+        fixtureActive && protocolComparisonResult.valid()
+            ? "true" : "false",
+        fixtureActive && protocolComparisonResult.valid()
+            ? leshy1::apps::protocol::protocolComparisonOutcomeName(
+                  protocolComparisonResult.outcome)
+            : "unavailable",
+        static_cast<unsigned>(fixtureActive
+            ? protocolComparisonResult.regionCount : 0U),
+        fixtureActive ? protocolComparisonStorageStatus : "not_loaded",
+        fixtureActive && protocolDerivedDecode.valid()
+            ? "true" : "false",
+        fixtureActive && protocolDerivedDecode.valid()
+            ? leshy1::apps::protocol::protocolDerivedDecodeOutcomeName(
+                  protocolDerivedDecode.outcome)
+            : "unavailable",
+        static_cast<unsigned>(fixtureActive
+            ? protocolDerivedDecode.fieldCount : 0U),
+        static_cast<unsigned long>(fixtureActive
+            ? protocolDerivedDecodeStoreGeneration : 0U),
+        fixtureActive ? protocolDerivedDecodeStorageStatus : "not_loaded",
         static_cast<unsigned>(reportedBaseUnit),
         static_cast<unsigned>(reportedBands),
         static_cast<unsigned long>(

@@ -45,6 +45,9 @@ def main() -> int:
          "fixture was not RAM-only")
     need(policy.get("product_storage_writes") == 0,
          "product storage write was requested")
+    need(policy.get("task_tree_flow") ==
+         "tasks_then_contextual_children",
+         "contextual task tree was not exercised")
     need(policy.get("annotation_task_flow") == "mark_range_and_meaning",
          "annotation task flow was not exercised")
     candidate = value.get("candidate", {})
@@ -62,6 +65,9 @@ def main() -> int:
          "workbench did not open with valid analysis")
     need(opened.get("protocol") == "nec" and opened.get("pulses") == 67,
          "workbench did not analyze the retained NEC vector")
+    need(opened.get("task_view") == "tasks" and
+         opened.get("task_selection") == 0,
+         "workbench did not open at the novice task root")
     need(opened.get("read_only") is True and
          opened.get("radio_touched") is False and
          opened.get("application_tx_calls") == 0 and
@@ -102,6 +108,37 @@ def main() -> int:
          records.get("ui_1", {}).get("ui_delta_repaints", 0),
          "pulse navigation did not increment delta repaint count")
 
+    task_frames = {
+        "frame_tasks": "task-root-00",
+        "frame_tasks_1": "task-root-01",
+        "frame_explain": "explain-tasks",
+        "frame_decode": "derived-decode",
+        "frame_compare": "comparison-result",
+    }
+    for record_name, file_name in task_frames.items():
+        frame = records.get(record_name, {})
+        need(frame.get("bytes") == 153600, f"{record_name} size invalid")
+        sha = frame.get("sha256")
+        raw_path = root / "frames" / f"{file_name}.rgb565"
+        need(raw_path.is_file(), f"{raw_path.name} missing")
+        if raw_path.is_file():
+            need(digest(raw_path) == sha, f"{raw_path.name} hash mismatch")
+        need((root / "frames" / f"{file_name}.png").is_file(),
+             f"{file_name}.png missing")
+    task_delta = records.get("delta_tasks_0_1", {})
+    need(isinstance(task_delta.get("changed_pixels"), int) and
+         task_delta.get("changed_pixels") > 0,
+         "task focus move changed nothing")
+    need(task_delta.get("outside_allowed_regions") == 0,
+         "task focus move repainted static pixels")
+    need(records.get("ui_task_1", {}).get("ui_full_repaints") ==
+         records.get("ui_task_0", {}).get("ui_full_repaints"),
+         "task focus movement performed a full repaint")
+    need(records.get("state_waveform", {}).get("task_view") == "waveform" and
+         records.get("state_explain", {}).get("task_view") == "explain" and
+         records.get("state_annotate", {}).get("task_view") == "annotate",
+         "contextual task path did not reach signal/explain/mark children")
+
     annotation_frames = {
         "frame_actions": "annotation-actions",
         "frame_end_before": "annotation-end-before",
@@ -126,7 +163,8 @@ def main() -> int:
          records.get("state_mark", {}).get("annotation_view") == 5,
          "annotation task views were not traversed")
     marked = records.get("state_marked_waveform", {})
-    need(marked.get("annotation_view") == 0 and
+    need(marked.get("task_view") == "annotate" and
+         marked.get("annotation_view") == 0 and
          marked.get("annotations") == 1 and
          marked.get("annotation_dirty") is True and
          marked.get("annotation_store_generation") == 0,
@@ -143,6 +181,31 @@ def main() -> int:
     need(records.get("ui_end_move", {}).get("ui_delta_repaints", 0) >
          records.get("ui_end", {}).get("ui_delta_repaints", 0),
          "annotation range move did not increment delta repaint count")
+
+    decoded = records.get("state_decode", {})
+    need(decoded.get("task_view") == "decode" and
+         decoded.get("decode_valid") is True and
+         decoded.get("decode_outcome") == "complete" and
+         decoded.get("decode_fields") == 1 and
+         decoded.get("decode_store_generation") == 0 and
+         decoded.get("decode_status") == "hil_ram_only",
+         "RAM-only marked-parts result was not truthful and complete")
+    compared = records.get("state_compare", {})
+    need(compared.get("task_view") == "comparison" and
+         compared.get("comparison_valid") is True and
+         compared.get("comparison_outcome") == "value_changed" and
+         compared.get("comparison_regions") == 1 and
+         compared.get("comparison_status") == "hil_ram_only",
+         "bounded previous/current comparison result was not exposed")
+    for name, value_field in (("state_decode", "decode_valid"),
+                              ("state_compare", "comparison_valid")):
+        state = records.get(name, {})
+        need(state.get(value_field) is True and
+             state.get("storage_mounted") is False and
+             state.get("storage_written") is False and
+             state.get("radio_touched") is False and
+             state.get("application_tx_calls") == 0,
+             f"{name} crossed RAM-only/receive-only boundaries")
 
     before = records.get("recovery_before", {})
     after = records.get("recovery_after", {})
@@ -173,7 +236,8 @@ def main() -> int:
     if failures:
         print(json.dumps({"passed": False, "failures": failures}, sort_keys=True))
         return 1
-    print("Protocol Workbench HIL accepted: exact TFT dirty regions, RAM-only NEC analysis, zero TX/writes")
+    print("Protocol Workbench HIL accepted: contextual task tree, exact TFT "
+          "dirty regions, RAM-only compare/decode, zero TX/writes")
     return 0
 
 

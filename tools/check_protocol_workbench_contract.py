@@ -20,6 +20,10 @@ DERIVED_DECODE_CODEC = ROOT / \
     "firmware/leshy1/src/storage/ProtocolDerivedDecodeCodec.cpp"
 DERIVED_DECODE_STORE = ROOT / \
     "firmware/leshy1/src/storage/ProtocolDerivedDecodeStore.cpp"
+TASK_CONTROLLER = ROOT / \
+    "firmware/leshy1/src/apps/protocol/ProtocolWorkbenchTaskController.cpp"
+CAPTURE_SNAPSHOT = ROOT / \
+    "firmware/leshy1/src/apps/protocol/ProtocolCaptureSnapshot.cpp"
 ANNOTATION_CODEC = ROOT / "firmware/leshy1/src/storage/ProtocolAnnotationCodec.cpp"
 ANNOTATION_STORE = ROOT / "firmware/leshy1/src/storage/ProtocolAnnotationStore.cpp"
 ENTRY = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
@@ -39,6 +43,8 @@ def main() -> int:
         DERIVED_DECODE_SOURCE.read_text(encoding="utf-8") + \
         DERIVED_DECODE_CODEC.read_text(encoding="utf-8") + \
         DERIVED_DECODE_STORE.read_text(encoding="utf-8")
+    task_source = TASK_CONTROLLER.read_text(encoding="utf-8")
+    snapshot_source = CAPTURE_SNAPSHOT.read_text(encoding="utf-8")
     entry = ENTRY.read_text(encoding="utf-8")
     combined = header + source
     failures: list[str] = []
@@ -134,6 +140,24 @@ def main() -> int:
             failures.append(
                 f"derived decode path contains output marker: {marker}")
 
+    task_required = (
+        "ProtocolWorkbenchTaskView::Tasks",
+        "ProtocolWorkbenchTaskView::Waveform",
+        "ProtocolWorkbenchTaskView::Explain",
+        "ProtocolWorkbenchTaskView::Annotate",
+        "ProtocolWorkbenchTaskView::Comparison",
+        "ProtocolWorkbenchTaskView::Decode",
+        "ProtocolWorkbenchTaskActivation::CompareRequested",
+        "ProtocolWorkbenchTaskActivation::DecodeRequested",
+    )
+    for marker in task_required:
+        if marker not in task_source:
+            failures.append(f"missing contextual task-tree marker: {marker}")
+    for marker in forbidden:
+        if marker in task_source or marker in snapshot_source:
+            failures.append(
+                f"task/snapshot path contains output marker: {marker}")
+
     ui_required = (
         "selected->generation != sessionStoreWorkspace().generation",
         "openPersistedInfraredRawCapture(",
@@ -152,6 +176,17 @@ def main() -> int:
         "commitNextProtocolAnnotations(",
         "sameProtocolAnnotationSet(",
         "protocolAnnotationController.noteSaved(",
+        "protocolWorkbenchTaskController.activate()",
+        "prepareProtocolWorkbenchComparison()",
+        "prepareProtocolWorkbenchDecode()",
+        "ProtocolCaptureSnapshot currentSnapshot",
+        "recoverSessionPair(",
+        "pair.currentGeneration == currentIdentity.captureGeneration",
+        "persistProtocolWorkbenchDecode()",
+        "commitNextProtocolDerivedDecode(",
+        "sameProtocolDerivedDecode(",
+        "openExistingReadOnly(permit)",
+        "openExistingWritable(permit)",
         "protocol.workbench.hil-fixture open-nec",
         "protocol.workbench.hil-fixture clear",
         "if (!hilSession.active())",

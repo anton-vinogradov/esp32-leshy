@@ -145,6 +145,14 @@ def annotation_range_delta(before: bytes, after: bytes) -> dict[str, Any]:
     ])
 
 
+def task_cursor_delta(before: bytes, after: bytes) -> dict[str, Any]:
+    return frame_delta(before, after, [
+        {"x": 8, "y": 42, "width": 224, "height": 52},
+        {"x": 8, "y": 100, "width": 224, "height": 52},
+        {"x": 0, "y": 294, "width": 240, "height": 26},
+    ])
+
+
 def validate_args(parser: argparse.ArgumentParser,
                   args: argparse.Namespace) -> None:
     if args.port == FORBIDDEN_CLONE_PORT or args.port != BOARD_PORT:
@@ -236,6 +244,7 @@ def main() -> int:
             "fixture_active": True, "page": "protocol_workbench",
             "analysis_status": "valid", "protocol": "nec",
             "pulses": 67, "selected_pulse": 0,
+            "task_view": "tasks", "task_selection": 0,
             "read_only": True, "radio_touched": False,
             "application_tx_calls": 0, "storage_mounted": False,
             "storage_written": False, "runtime_owner": "none",
@@ -244,6 +253,31 @@ def main() -> int:
         if int(opened.get("base_unit_us", 0)) <= 0 or \
                 int(opened.get("timing_bands", 0)) < 2:
             raise RuntimeError("fixture analysis is not useful")
+        records["frame_tasks"], frame_tasks = capture_frame(
+            device, frames, "task-root-00")
+        records["ui_task_1"] = action(device, "down")
+        state_task_1 = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_task_1"] = state_task_1
+        require(state_task_1, {"task_view": "tasks",
+                               "task_selection": 1}, "task root focus")
+        records["frame_tasks_1"], frame_tasks_1 = capture_frame(
+            device, frames, "task-root-01")
+        records["delta_tasks_0_1"] = task_cursor_delta(
+            frame_tasks, frame_tasks_1)
+        task_delta = records["delta_tasks_0_1"]
+        if task_delta["changed_pixels"] <= 0 or \
+                task_delta["outside_allowed_regions"] != 0:
+            raise RuntimeError(f"task dirty-region violation: {task_delta!r}")
+        records["ui_task_0"] = action(device, "up")
+        records["ui_waveform"] = action(device, "right")
+        state_waveform = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_waveform"] = state_waveform
+        require(state_waveform, {"task_view": "waveform",
+                                 "selected_pulse": 0}, "view signal")
         records["frame_0"], frame_0 = capture_frame(
             device, frames, "pulse-00")
 
@@ -282,13 +316,33 @@ def main() -> int:
                 int(ui_1.get("ui_delta_repaints", 0)):
             raise RuntimeError("second pulse navigation was not a delta repaint")
 
+        records["ui_explain"] = action(device, "right")
+        state_explain = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_explain"] = state_explain
+        require(state_explain, {"task_view": "explain",
+                                "task_selection": 0}, "explain tasks")
+        records["frame_explain"], _ = capture_frame(
+            device, frames, "explain-tasks")
+
+        records["ui_annotate"] = action(device, "right")
+        state_annotate = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_annotate"] = state_annotate
+        require(state_annotate, {"task_view": "annotate",
+                                 "annotation_view": 0,
+                                 "selected_pulse": 2}, "mark parts")
+
         records["ui_actions"] = action(device, "right")
         state_actions = read_only(
             device, b"protocol.workbench.hil-fixture state",
             FIXTURE_SCHEMA, "state")
         records["state_actions"] = state_actions
         require(state_actions, {
-            "status": "active", "annotation_view": 1,
+            "status": "active", "task_view": "annotate",
+            "annotation_view": 1,
             "selected_pulse": 2, "annotations": 0,
             "annotation_dirty": False,
         }, "annotation actions")
@@ -382,6 +436,49 @@ def main() -> int:
         records["frame_marked_waveform"], _ = capture_frame(
             device, frames, "annotation-marked-waveform")
 
+        records["ui_decode_parent"] = action(device, "left")
+        state_decode_parent = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_decode_parent"] = state_decode_parent
+        require(state_decode_parent, {"task_view": "explain",
+                                      "task_selection": 0,
+                                      "annotations": 1}, "decode parent")
+        records["ui_decode_select"] = action(device, "down")
+        records["ui_decode"] = action(device, "right")
+        state_decode = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_decode"] = state_decode
+        require(state_decode, {
+            "task_view": "decode", "decode_valid": True,
+            "decode_outcome": "complete", "decode_fields": 1,
+            "decode_store_generation": 0,
+            "decode_status": "hil_ram_only",
+            "storage_mounted": False, "storage_written": False,
+        }, "read marked parts")
+        records["frame_decode"], _ = capture_frame(
+            device, frames, "derived-decode")
+
+        records["ui_compare_explain"] = action(device, "left")
+        records["ui_compare_tasks"] = action(device, "left")
+        records["ui_compare_select_1"] = action(device, "down")
+        records["ui_compare_select_2"] = action(device, "down")
+        records["ui_compare"] = action(device, "right")
+        state_compare = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_compare"] = state_compare
+        require(state_compare, {
+            "task_view": "comparison", "comparison_valid": True,
+            "comparison_outcome": "value_changed",
+            "comparison_regions": 1,
+            "comparison_status": "hil_ram_only",
+            "storage_mounted": False, "storage_written": False,
+        }, "compare with previous")
+        records["frame_compare"], _ = capture_frame(
+            device, frames, "comparison-result")
+
         records["clear"] = read_only(
             device, b"protocol.workbench.hil-fixture clear",
             FIXTURE_SCHEMA, "state")
@@ -460,6 +557,7 @@ def main() -> int:
             "fixture_source": "retained_physical_nec_0.129",
             "fixture_storage": "bounded_ram",
             "product_storage_writes": 0,
+            "task_tree_flow": "tasks_then_contextual_children",
             "annotation_task_flow": "mark_range_and_meaning",
             "exact_tft_bytes_required": True,
         },

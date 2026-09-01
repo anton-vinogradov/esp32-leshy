@@ -305,17 +305,32 @@ retained source из 67 pulses; движение конца меняет тол�
 local regions. HIL-only fixture остаётся RAM-only, поэтому protected save/reopen на
 real Capture честно остаётся открытым.
 
-Host/build dev.354 задаёт semantics следующего task-first пути до подключения
-pixels. Пользователь выбирает **Сравнить записи**, отмечает эталон и второй immutable
-Capture, затем получает один понятный outcome: тот же сигнал, отличается timing,
-отличается значение или отличается структура. Сохраняются максимум шестнадцать
-exact ranges изменённых pulses, дополнительные regions считаются явно.
-**Понять отмеченные поля** использует только текущую exact generation annotations:
+Host/build dev.354 задаёт semantics сравнения и truthful decode. Dev.355 подключает
+их одним деревом задач под **Анализом**, не заставляя пользователя выбирать между
+разрозненными техническими терминами:
+
+```text
+Что нужно узнать?
+├── Посмотреть сигнал
+├── Понять его части
+│   ├── Отметить назначение частей
+│   └── Прочитать отмеченные части
+└── Сравнить с предыдущим
+```
+
+**Сравнить с предыдущим** открывает соседний immutable IR Capture и показывает один
+понятный outcome: тот же сигнал, отличается timing, отличается значение или
+отличается структура. Сохраняются максимум шестнадцать exact ranges изменённых
+pulses, дополнительные regions считаются явно. Текущий source удерживается только
+в короткоживущем bounded snapshot 1 КиБ, пока shared Session buffer открывает
+эталон; постоянная копия raw Capture не создаётся. **Прочитать отмеченные части**
+использует только текущую exact сохранённую generation annotations:
 Заголовок/Пауза остаются durations, однозначные mark/space pairs становятся bits в
 наблюдаемом порядке эфира, uncertain fields честно говорят, что данных недостаточно.
 Byte order и имя protocol не угадываются. Derived results живут в отдельном atomic
-journal и не содержат копию raw pulses. Product screens выбора/result и physical
-protected save/reopen пока открыты, поэтому host foundation не завершает FUNC-37.
+journal и не содержат копию raw pulses. Навигация по результату перерисовывает только
+изменившиеся строки. Physical TFT acceptance и protected save/reopen на real Capture
+пока открыты, поэтому одно product wiring ещё не завершает FUNC-37.
 
 ## Acceptance UX-01
 

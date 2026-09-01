@@ -119,7 +119,7 @@ def main() -> int:
             "The exact\n    // read-only state is reconstructed from the bound SD" in
                 entry and
             "restoreTargetsAfterRadar()" in entry and
-            "prepareBleProductSurveyMemory()" in entry and
+            "prepareBleProductSurveyMemory(" in entry and
             "plan.durationMs = 1000U;" in entry and
             "boardBleScanStatusName(bleScan.status)" in entry and
             '\\"ble_scan_status\\":' in entry and

@@ -172,7 +172,10 @@ def main() -> int:
     ):
         require(protected_envelope + product_io, marker, label, failures)
 
-    if entry.count("&protectedDataCipher, &deviceLock") != 7:
+    # Product recovery, capture, comparison, annotation, derived-result,
+    # screenshot and export paths share the same volatile key gate. Dedicated
+    # disposable HIL scratch adapters intentionally remain outside this count.
+    if entry.count("&protectedDataCipher, &deviceLock") != 11:
         failures.append(
             "every product SD adapter must share the protected cipher/key gate")
 

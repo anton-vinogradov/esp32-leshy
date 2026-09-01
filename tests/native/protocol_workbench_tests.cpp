@@ -11,14 +11,72 @@
 #include "apps/protocol/ProtocolAnnotations.h"
 #include "apps/protocol/ProtocolAnnotationController.h"
 #include "apps/protocol/ProtocolComparison.h"
+#include "apps/protocol/ProtocolCaptureSnapshot.h"
 #include "apps/protocol/ProtocolDerivedDecode.h"
 #include "apps/protocol/ProtocolWorkbench.h"
+#include "apps/protocol/ProtocolWorkbenchTaskController.h"
 #include "storage/ProtocolAnnotationCodec.h"
 #include "storage/ProtocolAnnotationStore.h"
 #include "storage/ProtocolDerivedDecodeCodec.h"
 #include "storage/ProtocolDerivedDecodeStore.h"
 
 namespace {
+
+void testProtocolWorkbenchTaskTree() {
+    using namespace leshy1::apps::protocol;
+
+    ProtocolWorkbenchTaskController controller;
+    controller.enter();
+    assert(controller.view() == ProtocolWorkbenchTaskView::Tasks);
+    assert(std::strcmp(protocolWorkbenchTaskViewName(controller.view()),
+                       "tasks") == 0);
+    assert(controller.selection() == 0U);
+    assert(!controller.previous());
+    assert(controller.next());
+    assert(controller.selection() == 1U);
+    assert(controller.activate() ==
+           ProtocolWorkbenchTaskActivation::Changed);
+    assert(controller.view() == ProtocolWorkbenchTaskView::Explain);
+    assert(controller.selection() == 0U);
+
+    assert(controller.activate() ==
+           ProtocolWorkbenchTaskActivation::Changed);
+    assert(controller.view() == ProtocolWorkbenchTaskView::Annotate);
+    assert(controller.back());
+    assert(controller.view() == ProtocolWorkbenchTaskView::Explain);
+    assert(controller.next());
+    assert(controller.activate() ==
+           ProtocolWorkbenchTaskActivation::DecodeRequested);
+    controller.noteDecode(6U);
+    assert(controller.view() == ProtocolWorkbenchTaskView::Decode);
+    for (std::size_t index = 1U; index < 6U; ++index) {
+        assert(controller.next());
+    }
+    assert(!controller.next());
+    assert(controller.back());
+    assert(controller.view() == ProtocolWorkbenchTaskView::Explain);
+
+    assert(controller.back());
+    assert(controller.view() == ProtocolWorkbenchTaskView::Tasks);
+    assert(controller.next());
+    assert(controller.next());
+    assert(controller.activate() ==
+           ProtocolWorkbenchTaskActivation::CompareRequested);
+    controller.noteComparison(2U);
+    assert(controller.view() == ProtocolWorkbenchTaskView::Comparison);
+    assert(controller.next());
+    assert(!controller.next());
+    assert(controller.back());
+    assert(controller.view() == ProtocolWorkbenchTaskView::Tasks);
+
+    controller.enter();
+    assert(controller.activate() ==
+           ProtocolWorkbenchTaskActivation::Changed);
+    assert(controller.view() == ProtocolWorkbenchTaskView::Waveform);
+    assert(controller.activate() ==
+           ProtocolWorkbenchTaskActivation::Changed);
+    assert(controller.view() == ProtocolWorkbenchTaskView::Explain);
+}
 
 class FixtureSource final
     : public leshy1::domain::captures::InfraredRawSource {
@@ -53,6 +111,29 @@ FixtureSource necFixture() {
     }
     source.pulses[source.count++] = 560U;
     return source;
+}
+
+void testProtocolCaptureSnapshot() {
+    using namespace leshy1::apps::protocol;
+
+    FixtureSource source = necFixture();
+    ProtocolCaptureSnapshot snapshot;
+    assert(snapshot.copyFrom(source) ==
+           ProtocolCaptureSnapshotStatus::Valid);
+    assert(snapshot.pulseCount() == source.pulseCount());
+    leshy1::domain::captures::InfraredRawPulseView sourcePulse;
+    leshy1::domain::captures::InfraredRawPulseView copiedPulse;
+    assert(source.pulseView(12U, &sourcePulse));
+    assert(snapshot.pulseView(12U, &copiedPulse));
+    assert(copiedPulse.durationUs == sourcePulse.durationUs);
+
+    source.pulses[12U] = 1U;
+    assert(snapshot.pulseView(12U, &copiedPulse));
+    assert(copiedPulse.durationUs != source.pulses[12U]);
+    source.failedIndex = 5U;
+    assert(snapshot.copyFrom(source) ==
+           ProtocolCaptureSnapshotStatus::SourceReadFailed);
+    assert(snapshot.pulseCount() == 0U);
 }
 
 class MemoryStoreIo final : public leshy1::storage::SessionStoreIo {
@@ -584,6 +665,8 @@ int main() {
     testProtocolAnnotationsModelAndCodec();
     testProtocolAnnotationAtomicStore();
     testProtocolAnnotationTaskFlow();
+    testProtocolWorkbenchTaskTree();
+    testProtocolCaptureSnapshot();
     testProtocolComparison();
     testProtocolDerivedDecode();
     testProtocolDerivedDecodeAtomicStore();

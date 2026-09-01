@@ -22,7 +22,7 @@ def main() -> int:
     display = setup.index("display.init()")
     input_probe = setup.index("probeInputAtBoot(")
     recovery = setup.index("recoverProductCatalogAtBoot()")
-    interactive = setup.index("renderInteractiveScreen()")
+    interactive = setup.index("renderInteractiveScreen(true)")
     require(arm < display < input_probe < recovery < interactive,
             "runtime WDT must cover display, input, recovery and render")
     require(setup.count("armRuntimeSafetyWatchdog()") == 1,

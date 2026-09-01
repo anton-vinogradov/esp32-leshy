@@ -85,9 +85,10 @@ def main() -> int:
             "tr(homeNote(*item))" in renderer,
             "disabled Home item must retain a textual reason")
     require(failures,
-            'std::strcmp(item->id, "lab") == 0' in renderer and
-            "lab ? Tone::Danger" in renderer,
-            "direct Lab entry must retain a non-text danger treatment")
+            "item->presentation == AppPresentation::Controlled" in renderer and
+            renderer.count("? Tone::Danger") >= 2,
+            "every controlled entry, including direct Lab, must retain "
+            "a non-text danger treatment")
     require(failures,
             'LESHY_UI_TEXT(NoteLabReady, Meta, 196, '
             '"CONTROLLED ZONE / REVIEW FIRST", '

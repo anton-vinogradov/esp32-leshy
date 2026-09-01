@@ -35,8 +35,9 @@ def main() -> int:
         "wifi_device_monitor_active",
         "wifi_devices_strongest_first",
         "wifi_device_clients_dropped",
-        "wifiDeviceNavigationOrder.lock(wifiDeviceCatalog)",
-        "wifiDeviceNavigationOrder.locked()",
+        "wifiDeviceFocus.claimByUser()",
+        "wifiDeviceFocus.reconcile(",
+        "indexOfAddress(selectionAnchor)",
         "nextWifiDeviceUiRefreshUs = nowUs + 250000ULL",
         "renderRadioSignalCard(",
         "renderRadioSignalCardDelta(",
@@ -171,13 +172,18 @@ def main() -> int:
             'return "device_radar"'):
         if token in renderer:
             failures.append(f"separate device-radar route remains: {token}")
+    if "wifiDeviceNavigationOrder.lock(wifiDeviceCatalog)" in renderer:
+        failures.append(
+            "Wi-Fi device order must remain continuously strongest-first; "
+            "user focus is anchored by identity instead of freezing rows")
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}")
         return 1
     print(
         "Wi-Fi devices contract passed: passive client fingerprint, embedded "
-        "IEEE OUI lookup, identity-stable list, facts + channel-locked live "
+        "IEEE OUI lookup, continuously strongest-first identity-anchored "
+        "list, facts + channel-locked live "
         "radar in one detail screen, bounded redraw and no TX/config path"
     )
     return 0

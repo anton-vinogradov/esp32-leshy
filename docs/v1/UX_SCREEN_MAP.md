@@ -300,17 +300,31 @@ the end changes only 429 pixels in declared local regions. Its HIL-only fixture 
 RAM-only, so real-Capture protected save/reopen stays open rather than being implied
 by the accepted marking UI.
 
-Host/build dev.354 defines the next task-first semantics before wiring pixels. The
-user chooses **Compare captures**, picks a reference and a second immutable Capture,
-then receives one plain outcome: same signal, timing differs, value differs, or
-structure differs. At most sixteen exact changed pulse ranges are retained and any
-additional regions are counted explicitly. **Interpret marked fields** uses only the
-current exact annotation generation: Header/Gap remain durations, unambiguous
-mark/space pairs become bits in observed on-air order, and uncertain fields say that
-there is not enough information. No byte order or protocol name is guessed. Derived
-results live in a separate atomic journal and contain no raw pulse copy. Product
-selection/result screens and physical protected save/reopen are still open, so this
-host foundation does not complete FUNC-37.
+Host/build dev.354 defines the comparison and truthful-decode semantics. Dev.355
+wires them into one task tree beneath **Analyze** instead of exposing implementation
+terms as unrelated menu entries:
+
+```text
+What do you need?
+├── View the signal
+├── Understand its parts
+│   ├── Mark what each part is
+│   └── Read marked parts
+└── Compare with previous
+```
+
+**Compare with previous** reopens the adjacent immutable IR Capture and reports one
+plain outcome: same signal, timing differs, value differs, or structure differs. At
+most sixteen exact changed pulse ranges are retained and any additional regions are
+counted explicitly. The current source is held only in a short-lived bounded 1 KiB
+snapshot while the shared Session buffer reopens the reference; no persistent raw
+copy is created. **Read marked parts** uses only the current exact saved annotation
+generation: Header/Gap remain durations, unambiguous mark/space pairs become bits in
+observed on-air order, and uncertain fields say that there is not enough information.
+No byte order or protocol name is guessed. Derived results live in a separate atomic
+journal and contain no raw pulse copy. Result navigation redraws only its changed
+rows. Physical TFT acceptance and protected save/reopen against a real Capture are
+still open, so this product wiring does not complete FUNC-37 by itself.
 
 ## UX-01 acceptance
 
