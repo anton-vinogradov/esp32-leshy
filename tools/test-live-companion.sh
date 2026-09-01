@@ -31,4 +31,5 @@ trap 'rm -rf "$test_tmp"' EXIT
 python3 "$repo_dir/tools/test_leshy_extcap.py"
 python3 -m py_compile \
     "$repo_dir/tools/leshy_extcap.py" \
-    "$repo_dir/tools/test_leshy_extcap.py"
+    "$repo_dir/tools/test_leshy_extcap.py" \
+    "$repo_dir/tools/run_1x_live_companion_wifi_hil.py"

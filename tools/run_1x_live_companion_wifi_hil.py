@@ -46,6 +46,27 @@ def require(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
+def read_only_query(device: PassiveSerial, command: bytes, schema: str,
+                    kind: str, *, maximum_attempts: int = 3,
+                    timeout: float = 5.0) -> dict[str, Any]:
+    """Retry a lost read-only diagnostic reply without replaying UI input."""
+    errors: list[str] = []
+    for attempt in range(1, maximum_attempts + 1):
+        try:
+            record = query(device, command, schema, kind, timeout=timeout)
+            record["host_transport_attempts"] = attempt
+            record["host_transport_transient_retries"] = attempt - 1
+            record["host_transport_transient_errors"] = errors
+            return record
+        except TimeoutError as error:
+            if attempt == maximum_attempts:
+                raise
+            errors.append(str(error))
+            device.reset_input_buffer()
+            synchronize_console(device, 10.0)
+    raise RuntimeError("unreachable read-only query retry state")
+
+
 class ExistingSerialTransport:
     """Use the runner's one exclusive DUT port; never enumerate another port."""
 
@@ -293,8 +314,12 @@ def main() -> int:
                         complete["frames_dropped_capacity"] +
                         complete["frames_dropped_invalid"],
                         "extcap drop count differs from device accounting")
+                # ESP-IDF reports the FCS only when the complete frame fits in
+                # the bounded snap length.  Truncated records must therefore
+                # clear the Radiotap FCS-present bit; a real capture may
+                # legitimately contain both record classes.
                 pcap, pcap_failures = parse_pcap(
-                    raw_payload, expected_fcs_included=True)
+                    raw_payload, expected_fcs_included=None)
                 failures.extend(pcap_failures)
                 require(pcap.get("records") == complete["frames_accepted"],
                         "PCAP record count differs from accepted frames")
@@ -330,10 +355,10 @@ def main() -> int:
                 }, "scrubbed"))
                 reports["final"] = final
                 reports["scrubbed"] = scrubbed
-                reports["safe_outputs"] = query(
+                reports["safe_outputs"] = read_only_query(
                     device, b"hardware.safe-outputs",
                     "leshy.hardware.safe_outputs.v1", "state")
-                reports["input"] = query(
+                reports["input"] = read_only_query(
                     device, b"input.state", "leshy.input.v1", "state")
                 screenshots["home"] = capture(
                     device, frames, "live-companion-home")
