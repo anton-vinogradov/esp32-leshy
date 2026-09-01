@@ -62,10 +62,16 @@ class OwnedWifiPasswordHilRunnerTests(unittest.TestCase):
             "active_probe_allowed": False,
             "identity_hash": 1, "channel": 6,
         }
+        intro_ui = {
+            "wifi_product_view": "password_check_intro",
+            "runtime_event": "wifi_password_check_intro",
+            "survey_workflow_state": "running",
+            "runtime_owner": "wifi", "lease_mask": 15,
+        }
         diagnostics = {}
         with mock.patch.object(
                 runner.authentication, "action",
-                side_effect=(preparing, detail_ui)), \
+                side_effect=(preparing, detail_ui, intro_ui)) as action, \
                 mock.patch.object(
                     runner.authentication, "wait_ui_state",
                     return_value=live), \
@@ -83,6 +89,7 @@ class OwnedWifiPasswordHilRunnerTests(unittest.TestCase):
         self.assertIs(detail, selected_detail)
         self.assertFalse(selected_ui["wifi_network_navigation_locked"])
         self.assertTrue(selected_ui["wifi_network_focus_user_owned"])
+        self.assertEqual(3, action.call_count)
         self.assertEqual("volatile_list_mount_on_save_only",
                          diagnostics["current"]["policy"])
 

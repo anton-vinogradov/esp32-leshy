@@ -31,12 +31,13 @@ def current_network_detail(
         allowed_label_hash: str,
         mount_diagnostics: dict[str, Any] | None = None,
         ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    """Open a live network using the current volatile-list contract.
+    """Open a live network and traverse the current task-first intro.
 
     Wi-Fi Nearby intentionally stopped mounting product storage before a user
     asks to save anything.  The historical persistence runner still expects
-    the old eager-remount telemetry; this adapter preserves every radio and
-    selection assertion while accepting the current zero-write boundary.
+    the old eager-remount telemetry and a direct technical-capture transition;
+    this adapter preserves every radio/selection assertion while accepting the
+    current zero-write boundary and explicit user-facing password-check step.
     """
     preparing = authentication.action(device, "right")
     trace.append(preparing)
@@ -107,6 +108,14 @@ def current_network_detail(
             not isinstance(detail.get("channel"), int) or
             not 1 <= detail["channel"] <= 13):
         raise RuntimeError(f"{label}: selected network has no fixed channel")
+    intro_ui = authentication.action(device, "right")
+    trace.append(intro_ui)
+    authentication.require_exact(intro_ui, {
+        "wifi_product_view": "password_check_intro",
+        "runtime_event": "wifi_password_check_intro",
+        "survey_workflow_state": "running",
+        "runtime_owner": "wifi", "lease_mask": 15,
+    }, f"{label}_password_check_intro")
     return network_list, detail_ui, detail
 
 

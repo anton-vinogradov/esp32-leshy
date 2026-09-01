@@ -82,6 +82,8 @@ def main() -> int:
         'volatile_list_mount_on_save_only',
         '"wifi_network_navigation_locked": False',
         '"wifi_network_focus_user_owned": True',
+        '"wifi_product_view": "password_check_intro"',
+        '"runtime_event": "wifi_password_check_intro"',
         '"fresh_flash": False',
         '"raw_export_retained": False',
         '"candidate_plaintext_retained": False',
