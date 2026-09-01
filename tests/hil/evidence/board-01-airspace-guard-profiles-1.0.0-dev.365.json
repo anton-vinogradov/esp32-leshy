@@ -1,0 +1,107 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "accepted_delta_reused_exact_flash": true,
+    "app_elf_sha256": "e4665f1f54fa18659a504467733c6676a1ea5476dbfdc10026276ba48781b64f",
+    "app_image_bytes": 3647792,
+    "cid": "FE343253440000002000000055019CB7",
+    "factory_image_bytes": 3713328,
+    "factory_sha256": "09d3ae54169e586b24c2a722e513bbe5d718d16f110d68dcfea9b3b8307f24bb",
+    "firmware_sha256": "88bc40c9f6eff99b6b688427442f5490bdb0fe5ee5272e839d92b6e2d279ade6",
+    "firmware_source_commit": "3e966f167b4f9e2facb3a57836f7ced1b2d46765",
+    "fresh_flashes": 1,
+    "map_sha256": "a4cada9ad2f94388fe4d640ba694a4729f51f84aaac0fa438cd1ba502b7b9a3d",
+    "runner_source_sha256": "4b3dc6b87dfbb64de1a5553274b33742f8bf35ee829e5f26ab793a44508ca5e1",
+    "version": "1.0.0-dev.365"
+  },
+  "evidence_ids": [
+    "E-BUILD-237",
+    "E-AUTO-215",
+    "E-HIL-233",
+    "E-UX-088",
+    "RB-M249"
+  ],
+  "precursor": {
+    "accepted": false,
+    "application_connect_calls": 0,
+    "application_raw_tx_calls": 0,
+    "failure": "two lifecycle gate has no conclusive lifecycle",
+    "first_exact_malformed_wifi_frames": 6,
+    "reason": "the existing full release gate correctly remained fail-closed because ambient malformed Wi-Fi ingress made both conclusions incomplete; WF-13 is accepted only by the narrower profile delta",
+    "run_sha256": "b8ed8347ef3afd6d98b304acbdfe88ea45314151b8d073904e7c8333ca14f873",
+    "second_exact_capacity_drops": 887,
+    "status": "failed_full_gate"
+  },
+  "privacy": {
+    "ambient_bssid_retained": false,
+    "ambient_ssid_retained": false,
+    "ambient_vendor_retained": false,
+    "raw_run_retained": false,
+    "screen_hashes_only": true
+  },
+  "schema": "leshy.airspace_guard_profiles_hil.acceptance.v1",
+  "status": "pass_airspace_guard_profiles",
+  "verified": {
+    "application_connect_calls": 0,
+    "application_raw_tx_calls": 0,
+    "cleanup_complete": true,
+    "fault_injection_armed_after_clear": false,
+    "final_hil_session_active": false,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "full_airspace_guard_release_gate_claimed": false,
+    "host_wifi_control_calls": 0,
+    "manual_button_presses": 0,
+    "passive_receive_only": true,
+    "physical_storage_write_calls": 0,
+    "profile_policies": {
+      "busy_place": {
+        "ble_tracker_threshold": 5,
+        "churn_threshold": 6,
+        "disconnect_threshold": 6,
+        "noise_floor_dbm": -70,
+        "noise_threshold": 6,
+        "selection": 2
+      },
+      "everyday": {
+        "ble_tracker_threshold": 3,
+        "churn_threshold": 4,
+        "disconnect_threshold": 4,
+        "noise_floor_dbm": -75,
+        "noise_threshold": 4,
+        "selection": 0
+      },
+      "quiet_place": {
+        "ble_tracker_threshold": 3,
+        "churn_threshold": 3,
+        "disconnect_threshold": 3,
+        "noise_floor_dbm": -80,
+        "noise_threshold": 3,
+        "selection": 1
+      }
+    },
+    "profile_repaint_bounds": {
+      "bottom": 156,
+      "left": 12,
+      "right": 227,
+      "top": 32
+    },
+    "profile_repaint_changed_pixels": 24543,
+    "profile_repaint_static_pixels": 0,
+    "profile_starts_checked": 3,
+    "profiles_checked": 3,
+    "run_sha256": "bbd460660a41e7423aa5c1d0995e5b18644f22dccda5de82b418c2b33f18c592",
+    "screen_hashes": {
+      "busy_place_png": "bfca4b437e50c6767886cc3ca9a9b69cd79c25afc6e6d2266071d1933f3e7f19",
+      "busy_place_rgb565": "3a4dd5e57c64969bc585c892a8b46fe495a8186e1991ab3b51914697854a945a",
+      "everyday_png": "86c9218da5e2720c225ab6c584cecbe2dadbf603921c76d4e12777b7830b777c",
+      "everyday_rgb565": "534a9b2e2bcd7a575815a89b62c39d8a4275b4ad33222accce7f088b7d1623d7",
+      "quiet_place_png": "dca1446b2dc79971b5dd81cb5be9e7bc904beaf63faba85f6a588e8f7a731dc6",
+      "quiet_place_rgb565": "933f62e3e72c15a4fee141ca437d83470696918a6878f1a9c605dd5f9fbf6f42"
+    },
+    "three_profile_cancels_checked": true,
+    "three_profile_starts_checked": true,
+    "visual_plain_language_review_passed": true
+  }
+}
