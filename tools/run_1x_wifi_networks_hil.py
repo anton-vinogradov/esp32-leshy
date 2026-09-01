@@ -103,6 +103,7 @@ def main() -> int:
     parser.add_argument("--reuse-exact-flash", action="store_true")
     parser.add_argument("--network-intelligence", action="store_true")
     parser.add_argument("--network-live-radar", action="store_true")
+    parser.add_argument("--security-advisor", action="store_true")
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
     if not args.firmware.is_file():
@@ -151,6 +152,7 @@ def main() -> int:
     detail_facts_second: dict[str, Any] = {}
     detail_outside_signal_pixels = 0
     detail_outside_radar_pixels = 0
+    security_pixel_changes: dict[str, int] = {}
 
     try:
         if args.flash:
@@ -200,15 +202,17 @@ def main() -> int:
                         int(state.get("survey_product_wifi_scan_cycles", 0)) >= 1
                     ), 45.0, "nearby Wi-Fi networks did not appear")
                 trace.append(live_first)
-                require_exact(live_first, {
+                live_expected = {
                     "runtime_owner": "wifi", "lease_mask": 15,
                     "survey_product_status": "running",
                     "survey_product_active_source_mask": 1,
                     "survey_scan_status": "valid",
                     "survey_scan_dropped": 0,
-                    "survey_product_store_open_attempted": True,
                     "survey_product_store_bytes_written": 0,
-                }, "wifi_networks_live")
+                }
+                if not args.security_advisor:
+                    live_expected["survey_product_store_open_attempted"] = True
+                require_exact(live_first, live_expected, "wifi_networks_live")
                 screens["wifi_networks_first"] = capture(
                     device, frames, "wifi-networks-first")
                 first_revision = int(live_first["wifi_network_catalog_revision"])
@@ -452,6 +456,43 @@ def main() -> int:
                     raise RuntimeError(
                         f"stable detail screen changed: {detail_pixel_changes}")
 
+                if args.security_advisor:
+                    security_first = action(device, "right")
+                    trace.append(security_first)
+                    require_exact(security_first, {
+                        "wifi_product_view": "password_check_intro",
+                        "runtime_owner": "wifi", "lease_mask": 15,
+                        "survey_workflow_state": "running",
+                    }, "wifi_security_advisor")
+                    screens["wifi_security_advisor_first"] = capture(
+                        device, frames, "wifi-security-advisor-first")
+                    time.sleep(1.0)
+                    security_second = query(
+                        device, b"ui.state", "leshy.ui.v1", "state")
+                    trace.append(security_second)
+                    require_exact(security_second, {
+                        "wifi_product_view": "password_check_intro",
+                        "runtime_owner": "wifi", "lease_mask": 15,
+                        "survey_workflow_state": "running",
+                    }, "wifi_security_advisor_stable")
+                    screens["wifi_security_advisor_second"] = capture(
+                        device, frames, "wifi-security-advisor-second")
+                    security_pixel_changes = changed_pixels(
+                        frames, "wifi-security-advisor-first",
+                        "wifi-security-advisor-second")
+                    if security_pixel_changes != {
+                            "content_changed_pixels": 0,
+                            "chrome_changed_pixels": 0}:
+                        raise RuntimeError(
+                            "security advisor changed while idle: "
+                            f"{security_pixel_changes}")
+                    detail_again = action(device, "left")
+                    trace.append(detail_again)
+                    require_exact(detail_again, {
+                        "wifi_product_view": "network_detail",
+                        "runtime_owner": "wifi", "lease_mask": 15,
+                    }, "wifi_security_advisor_back")
+
                 back_to_list = action(device, "left")
                 trace.append(back_to_list)
                 require_exact(back_to_list, {
@@ -597,6 +638,8 @@ def main() -> int:
         "detail_pixel_changes": detail_pixel_changes,
         "detail_outside_signal_pixels": detail_outside_signal_pixels,
         "detail_outside_radar_pixels": detail_outside_radar_pixels,
+        "security_pixel_changes": (
+            security_pixel_changes if args.security_advisor else {}),
         "screens": screens,
         "trace": trace,
         "cleanup_before": cleanup_before,
@@ -614,6 +657,12 @@ def main() -> int:
             "network_vendor_lookup": args.network_intelligence,
             "network_driver_facts": args.network_intelligence,
             "network_live_radar": args.network_live_radar,
+            "security_advisor": args.security_advisor,
+            "security_advisor_stable": (
+                args.security_advisor and security_pixel_changes == {
+                    "content_changed_pixels": 0,
+                    "chrome_changed_pixels": 0,
+                }),
             "detail_live_rssi_line_only": (
                 args.network_intelligence and not args.network_live_radar),
             "detail_live_radar_only": args.network_live_radar,

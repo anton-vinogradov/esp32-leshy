@@ -19,11 +19,27 @@ import serial
 class PassiveSerial(serial.Serial):
     """Serial port that never toggles ESP32-S3 reset/boot control lines."""
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        # A disconnected/stalled native-USB endpoint must fail closed instead
+        # of parking an unattended HIL runner forever inside write(2).
+        kwargs.setdefault("write_timeout", 1.0)
+        super().__init__(*args, **kwargs)
+
     def _update_dtr_state(self) -> None:
         pass
 
     def _update_rts_state(self) -> None:
         pass
+
+    def flush(self) -> None:
+        """Do not call pyserial's unbounded POSIX tcdrain() for native USB.
+
+        Diagnostic commands are short, and Serial.write() has already queued
+        their bytes in order before the response read begins.  macOS can keep
+        tcdrain() blocked forever when the ESP32-S3 USB endpoint stalls, which
+        bypasses every workflow timeout and prevents fail-closed evidence.
+        """
+        return None
 
 
 def read_json(device: serial.Serial, schema: str, kind: str, timeout: float = 5.0) -> dict[str, Any]:
