@@ -234,10 +234,10 @@ def main() -> int:
                     raise RuntimeError(
                         f"live list redraw escaped data rows: {list_pixel_changes}")
 
-                # Exercise real navigation before opening detail. The first
-                # Navigate action must freeze visible BSSID order; subsequent
-                # scans may update RSSI in place but cannot move rows or replace
-                # the object under the cursor.
+                # Exercise real navigation before opening detail. The list must
+                # keep sorting by current signal, but once the user has acted
+                # the cursor must stay at its chosen row index instead of being
+                # pulled back to the first item on every scan.
                 navigation_first = query(
                     device, b"ui.state", "leshy.ui.v1", "state")
                 for _ in range(8):
@@ -251,9 +251,14 @@ def main() -> int:
                 trace.append(navigation_first)
                 require_exact(navigation_first, {
                     "wifi_product_view": "networks",
-                    "wifi_network_navigation_locked": True,
+                    "wifi_network_focus_user_owned": True,
+                    "wifi_network_navigation_locked": False,
+                    "wifi_networks_strongest_first": True,
                     "runtime_owner": "wifi", "lease_mask": 15,
-                }, "wifi_network_navigation_locked")
+                }, "wifi_network_navigation_owned")
+                if int(navigation_first.get("wifi_network_selection", 0)) <= 0:
+                    raise RuntimeError(
+                        "Wi-Fi cursor did not leave the automatic first row")
                 locked_cycle = int(
                     navigation_first["survey_product_wifi_scan_cycles"])
                 locked_revision = int(
@@ -262,25 +267,31 @@ def main() -> int:
                     device,
                     lambda state: (
                         state.get("wifi_product_view") == "networks" and
-                        state.get("wifi_network_navigation_locked") is True and
+                        state.get("wifi_network_focus_user_owned") is True and
+                        state.get("wifi_network_navigation_locked") is False and
+                        state.get("wifi_networks_strongest_first") is True and
                         int(state.get("survey_product_wifi_scan_cycles", 0)) >=
                             locked_cycle + 2 and
                         int(state.get("wifi_network_catalog_revision", 0)) >
                             locked_revision
-                    ), 60.0, "locked Wi-Fi navigation did not survive live scans")
+                    ), 60.0, "user-owned Wi-Fi cursor did not survive live scans")
                 trace.append(navigation_second)
-                for field in (
-                        "wifi_network_selection", "wifi_network_visible_size",
-                        "wifi_network_order_hash",
-                        "wifi_network_selected_identity_hash"):
-                    if navigation_second.get(field) != navigation_first.get(field):
-                        raise RuntimeError(
-                            f"navigation field moved after lock: {field} "
-                            f"{navigation_first.get(field)!r} -> "
-                            f"{navigation_second.get(field)!r}")
                 if int(navigation_first.get(
                         "wifi_network_selected_identity_hash", 0)) == 0:
-                    raise RuntimeError("locked selection identity hash is empty")
+                    raise RuntimeError("selected Wi-Fi identity hash is empty")
+                if navigation_second.get(
+                        "wifi_network_selected_identity_hash") != \
+                        navigation_first.get(
+                            "wifi_network_selected_identity_hash"):
+                    raise RuntimeError(
+                        "Wi-Fi live sort replaced the selected network: "
+                        f"{navigation_first.get('wifi_network_selected_identity_hash')!r} -> "
+                        f"{navigation_second.get('wifi_network_selected_identity_hash')!r}")
+                if int(navigation_second.get("wifi_network_visible_size", 0)) <= \
+                        int(navigation_second.get("wifi_network_selection", 0)):
+                    raise RuntimeError("Wi-Fi cursor escaped the live list")
+                if int(navigation_second.get("wifi_network_selection", 0)) <= 0:
+                    raise RuntimeError("Wi-Fi cursor was reset to the first row")
 
                 if args.network_intelligence:
                     # Start at the strongest locked BSSID and, if necessary,
@@ -428,7 +439,7 @@ def main() -> int:
                     "wifi-network-detail-second")
                 detail_outside_signal_pixels = changed_outside_region(
                     frames, "wifi-network-detail-first",
-                    "wifi-network-detail-second", CONTENT_X0, 270,
+                    "wifi-network-detail-second", CONTENT_X0, 222,
                     CONTENT_X1, 290)
                 detail_outside_radar_pixels = changed_outside_region(
                     frames, "wifi-network-detail-first",
@@ -663,13 +674,22 @@ def main() -> int:
                     "content_changed_pixels": 0,
                     "chrome_changed_pixels": 0,
                 }),
-            "detail_live_rssi_line_only": (
+            "detail_live_signal_card_only": (
                 args.network_intelligence and not args.network_live_radar),
             "detail_live_radar_only": args.network_live_radar,
             "two_complete_wifi_lifecycles": True,
             "navigation_press_count": navigation_press_count,
-            "identity_order_locked_during_navigation": True,
-            "live_rssi_updates_in_place": True,
+            "live_order_remains_strongest_first": True,
+            "cursor_not_reset_after_user_navigation": (
+                int(navigation_second.get("wifi_network_selection", 0)) > 0
+            ),
+            "selected_identity_preserved_during_live_sort": (
+                int(navigation_first.get(
+                    "wifi_network_selected_identity_hash", 0)) != 0 and
+                navigation_second.get(
+                    "wifi_network_selected_identity_hash") ==
+                navigation_first.get("wifi_network_selected_identity_hash")
+            ),
             "bounded_one_time_heap_warmup_bytes": (
                 boot.get("heap_free", 0) -
                 metrics_after_first.get("heap_free", 0)

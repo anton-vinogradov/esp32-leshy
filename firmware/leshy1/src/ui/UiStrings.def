@@ -627,7 +627,7 @@ LESHY_UI_TEXT(WifiPasswordCheckTask, Body, 212, "CHECK FOR A WEAK PASSWORD", u8"
 LESHY_UI_TEXT(WifiPasswordCheckListen, Body, 212, "RECORD LOGIN PROOF", u8"ЗАПИСАТЬ ДАННЫЕ ВХОДА")
 LESHY_UI_TEXT(WifiPasswordCheckComputer, Body, 212, "COMPARE ON YOUR COMPUTER", u8"СРАВНИТЬ НА КОМПЬЮТЕРЕ")
 LESHY_UI_TEXT(WifiPasswordCheckNoPassword, Meta, 212, "PASSWORD IS NEVER SHOWN OR SENT", u8"ПАРОЛЬ НЕ ЧИТАЕТСЯ И НЕ УХОДИТ")
-LESHY_UI_TEXT(WifiPasswordCheckPermission, Meta, 212, "YOUR NETWORK OR PERMISSION ONLY", u8"ТОЛЬКО СВОЯ СЕТЬ ИЛИ РАЗРЕШЕНИЕ")
+LESHY_UI_TEXT(WifiPasswordCheckPermission, Meta, 212, "OWN NETWORK / AUTHORIZED ONLY", u8"СВОЯ СЕТЬ / ЕСТЬ РАЗРЕШЕНИЕ")
 LESHY_UI_TEXT(WifiSecurityCheckTitle, Meta, 206, "WI-FI / SECURITY CHECK", u8"WI-FI / ПРОВЕРКА ЗАЩИТЫ")
 LESHY_UI_TEXT(WifiSecurityUnknown, Body, 212, "PROTECTION: UNKNOWN", u8"ЗАЩИТА: НЕТ ДАННЫХ")
 LESHY_UI_TEXT(WifiSecurityOpen, Body, 212, "PROTECTION: OPEN NETWORK", u8"ЗАЩИТА: СЕТЬ ОТКРЫТА")
