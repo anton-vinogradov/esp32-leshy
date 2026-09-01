@@ -34,14 +34,17 @@ if [[ $# -gt 0 ]]; then
         if [[ "$2" == "screenshot-store" ]]; then
             exec "$(cd "$(dirname "$0")" && pwd)/test-screenshot-store.sh"
         fi
+        if [[ "$2" == "live-companion" ]]; then
+            exec "$(cd "$(dirname "$0")" && pwd)/test-live-companion.sh"
+        fi
         if [[ "$2" == "clean-target" ]]; then
             only_clean_target=true
         else
-            echo "usage: $0 [--only automation-hid|clean-target|device-lock|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar|wifi-security]" >&2
+            echo "usage: $0 [--only automation-hid|clean-target|device-lock|live-companion|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar|wifi-security]" >&2
             exit 2
         fi
     else
-        echo "usage: $0 [--only automation-hid|clean-target|device-lock|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar|wifi-security]" >&2
+        echo "usage: $0 [--only automation-hid|clean-target|device-lock|live-companion|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar|wifi-security]" >&2
         exit 2
     fi
 fi
@@ -475,6 +478,8 @@ python3 "$repo_dir/tools/check_field_survey_trusted_context_acceptance.py"
     "$repo_dir/tests/native/companion_read_adapter_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/services/companion/CompanionProtocol.cpp" \
     "$repo_dir/firmware/leshy1/src/services/companion/CompanionReadAdapter.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/capture/RadiotapPcap.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/capture/WifiFrameCapture.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SurveySession.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SourceTimeline.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
@@ -896,6 +901,7 @@ python3 "$repo_dir/tools/test_wifi_authentication_transition_contract.py"
 python3 "$repo_dir/tools/test_retain_1x_wifi_authentication_capture_hil.py"
 python3 "$repo_dir/tools/test_targets_merge_split_hil_runner.py"
 python3 "$repo_dir/tools/test_companion_offline.py"
+python3 "$repo_dir/tools/test_leshy_extcap.py"
 python3 "$repo_dir/tools/test_companion_usb_delta_runner.py"
 python3 "$repo_dir/tools/test_companion_web_delta_runner.py"
 python3 "$repo_dir/tools/test_companion_web_http_hil.py"

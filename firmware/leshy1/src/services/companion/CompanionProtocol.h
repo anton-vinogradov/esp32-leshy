@@ -23,6 +23,7 @@ enum class CompanionScope : CompanionScopeMask {
     TargetMutate = 1U << 3U,
     Export = 1U << 4U,
     Connectivity = 1U << 5U,
+    CaptureLiveRead = 1U << 6U,
 };
 
 constexpr CompanionScopeMask companionScopeMask(CompanionScope scope) {
@@ -35,7 +36,11 @@ constexpr CompanionScopeMask kCompanionKnownScopes =
     companionScopeMask(CompanionScope::TargetCompare) |
     companionScopeMask(CompanionScope::TargetMutate) |
     companionScopeMask(CompanionScope::Export) |
-    companionScopeMask(CompanionScope::Connectivity);
+    companionScopeMask(CompanionScope::Connectivity) |
+    companionScopeMask(CompanionScope::CaptureLiveRead);
+
+constexpr CompanionScopeMask kCompanionLiveReadScopes =
+    companionScopeMask(CompanionScope::CaptureLiveRead);
 
 constexpr CompanionScopeMask kCompanionS65ReadScopes =
     companionScopeMask(CompanionScope::SessionRead) |
@@ -124,6 +129,7 @@ enum class CompanionCapability : CompanionCapabilityMask {
     TargetNotesSet = 1U << 7U,
     TargetTagAdd = 1U << 8U,
     TargetTagRemove = 1U << 9U,
+    CaptureLiveWifi = 1U << 10U,
 };
 
 constexpr CompanionCapabilityMask companionCapabilityMask(
@@ -141,7 +147,8 @@ constexpr CompanionCapabilityMask kCompanionKnownCapabilities =
     companionCapabilityMask(CompanionCapability::TargetNameSet) |
     companionCapabilityMask(CompanionCapability::TargetNotesSet) |
     companionCapabilityMask(CompanionCapability::TargetTagAdd) |
-    companionCapabilityMask(CompanionCapability::TargetTagRemove);
+    companionCapabilityMask(CompanionCapability::TargetTagRemove) |
+    companionCapabilityMask(CompanionCapability::CaptureLiveWifi);
 
 constexpr CompanionCapabilityMask kCompanionReadCapabilities =
     companionCapabilityMask(CompanionCapability::SessionList) |
@@ -149,6 +156,9 @@ constexpr CompanionCapabilityMask kCompanionReadCapabilities =
     companionCapabilityMask(CompanionCapability::TargetList) |
     companionCapabilityMask(CompanionCapability::TargetDetail) |
     companionCapabilityMask(CompanionCapability::TargetCompare);
+
+constexpr CompanionCapabilityMask kCompanionLiveReadCapabilities =
+    companionCapabilityMask(CompanionCapability::CaptureLiveWifi);
 
 constexpr CompanionCapabilityMask kCompanionTargetMutationCapabilities =
     companionCapabilityMask(CompanionCapability::TargetFavoriteSet) |

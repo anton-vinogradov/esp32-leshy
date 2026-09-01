@@ -183,7 +183,7 @@ void testScopesNeverExceedTheBoundDeviceSession() {
 }
 
 void testCapabilitiesAreTruthfulAndActionBound() {
-    CHECK(companionCapabilityCount() == 10);
+    CHECK(companionCapabilityCount() == 11);
     const CompanionCapabilityDescriptor* compare = nullptr;
     std::size_t readOnlyCount = 0;
     std::size_t mutationCount = 0;
@@ -207,7 +207,7 @@ void testCapabilitiesAreTruthfulAndActionBound() {
         }
     }
     CHECK(companionCapability(companionCapabilityCount()) == nullptr);
-    CHECK(readOnlyCount == 5);
+    CHECK(readOnlyCount == 6);
     CHECK(mutationCount == 5);
     CHECK(compare != nullptr);
     CHECK(std::strcmp(compare->actionId, "target.compare") == 0);

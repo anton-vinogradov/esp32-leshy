@@ -6,11 +6,14 @@
 #include <utility>
 #include <vector>
 
+#include "apps/capture/WifiFrameCapture.h"
 #include "services/companion/CompanionReadAdapter.h"
 
 using namespace leshy1::domain::targets;
 using namespace leshy1::services::companion;
 using namespace leshy1::services::survey;
+using leshy1::apps::capture::WifiFrameCapture;
+using leshy1::apps::capture::WifiFrameCapturePlan;
 
 namespace {
 
@@ -171,6 +174,12 @@ void testExactFieldSetsAndOrderIndependentParser() {
     CHECK(compare.kind == CompanionReadKind::TargetCompare);
     CHECK(compare.baseline.generation == 11);
     CHECK(compare.current.generation == 12);
+
+    const CompanionReadRequest live = parse(
+        "{\"schema\":\"leshy.companion.request.v1\",\"kind\":"
+        "\"capture.live.read\",\"request_id\":\"live\",\"offset\":4096}");
+    CHECK(live.kind == CompanionReadKind::CaptureLiveRead);
+    CHECK(live.offset == 4096U);
 }
 
 void testMalformedFramesFailWithoutPublishingPartialRequest() {
@@ -253,6 +262,95 @@ void testCapabilitiesReflectOnlyTheCurrentSharedSnapshot() {
     targets.comparison = nullptr;
     CHECK((companionReadCapabilities(targets) &
            companionCapabilityMask(CompanionCapability::TargetCompare)) == 0);
+
+    WifiFrameCapture liveCapture{};
+    WifiFrameCapturePlan plan{};
+    plan.snapLength = 64;
+    plan.maximumFrames = 2;
+    CHECK(liveCapture.begin(plan, 1000));
+    CompanionReadContext live{};
+    live.liveWifiCapture = &liveCapture;
+    CHECK(companionReadCapabilities(live) == kCompanionLiveReadCapabilities);
+}
+
+void testLiveWifiPcapProjectionIsBoundedAndFollowable() {
+    WifiFrameCapture capture{};
+    WifiFrameCapturePlan plan{};
+    plan.durationMs = 1000;
+    plan.snapLength = 64;
+    plan.maximumFrames = 2;
+    CHECK(capture.begin(plan, 1000));
+    const std::array<std::uint8_t, 4> first{{0x80, 0x00, 0x12, 0x34}};
+    const std::array<std::uint8_t, 6> second{{
+        0x08, 0x01, 0xAA, 0xBB, 0xCC, 0xDD}};
+    CHECK(capture.append(first.data(), first.size(), 2000, -42, 1,
+                         leshy1::domain::captures::WifiFrameKind::Management,
+                         false));
+    CHECK(capture.append(second.data(), second.size(), 3000, -55, 11,
+                         leshy1::domain::captures::WifiFrameKind::Data,
+                         false));
+
+    CompanionReadContext context{};
+    context.liveWifiCapture = &capture;
+    context.liveWifiDropped = 3;
+    CompanionConnectRequest connect{};
+    connect.protocolVersion = 1;
+    std::memcpy(connect.requestId.data(), "live-connect", 12);
+    connect.requestIdLength = 12;
+    connect.requestedScopes = kCompanionLiveReadScopes;
+    CompanionConnectionPolicy policy{};
+    policy.deviceSessionScopes = kCompanionLiveReadScopes;
+    policy.availableScopes = kCompanionLiveReadScopes;
+    policy.availableCapabilities = companionReadCapabilities(context);
+    const CompanionConnection connection =
+        negotiateCompanionConnection(connect, policy);
+    CHECK(connection.ready());
+    CHECK(connection.grantedCapabilities == kCompanionLiveReadCapabilities);
+
+    const auto responseAt = [&](std::uint32_t offset) {
+        const CompanionReadRequest request = parse(
+            std::string("{\"schema\":\"leshy.companion.request.v1\","
+                        "\"kind\":\"capture.live.read\","
+                        "\"request_id\":\"live-read\",\"offset\":") +
+            std::to_string(offset) + "}");
+        std::array<char, kCompanionMaxFrameBytes + 1U> output{};
+        std::size_t length = 0;
+        CHECK(encodeCompanionReadResponse(
+            connection, context, request, output.data(), output.size(),
+            &length));
+        CHECK(length <= kCompanionMaxFrameBytes);
+        return std::string(output.data(), length);
+    };
+
+    const std::string firstChunk = responseAt(0);
+    CHECK(firstChunk.find("\"link_type\":127") != std::string::npos);
+    CHECK(firstChunk.find("\"next_offset\":80") != std::string::npos);
+    CHECK(firstChunk.find("\"available_bytes\":96") != std::string::npos);
+    CHECK(firstChunk.find("\"frames\":2") != std::string::npos);
+    CHECK(firstChunk.find("\"dropped\":3") != std::string::npos);
+    CHECK(firstChunk.find("\"terminal\":false") != std::string::npos);
+    CHECK(firstChunk.find("\"data_hex\":\"D4C3B2A1") !=
+          std::string::npos);
+
+    const std::string tailWhileRunning = responseAt(80);
+    CHECK(tailWhileRunning.find("\"next_offset\":96") !=
+          std::string::npos);
+    const std::string waitWhileRunning = responseAt(96);
+    CHECK(waitWhileRunning.find("\"next_offset\":96") !=
+          std::string::npos);
+    CHECK(waitWhileRunning.find("\"data_hex\":\"\"") !=
+          std::string::npos);
+
+    context.liveWifiTerminal = true;
+    context.liveWifiCleanupComplete = true;
+    const std::string terminalTail = responseAt(80);
+    CHECK(terminalTail.find("\"next_offset\":null") != std::string::npos);
+    CHECK(terminalTail.find("\"terminal\":true") != std::string::npos);
+    CHECK(terminalTail.find("\"cleanup_complete\":true") !=
+          std::string::npos);
+    const std::string outOfRange = responseAt(97);
+    CHECK(outOfRange.find("\"reason\":\"offset_out_of_range\"") !=
+          std::string::npos);
 }
 
 void testAllReadOnlyProjectionsStayBounded() {
@@ -401,6 +499,7 @@ int main() {
     testMalformedFramesFailWithoutPublishingPartialRequest();
     testEveryTruncatedFrameIsRejected();
     testCapabilitiesReflectOnlyTheCurrentSharedSnapshot();
+    testLiveWifiPcapProjectionIsBoundedAndFollowable();
     testAllReadOnlyProjectionsStayBounded();
     testAuthorizationAndExactCoordinatesFailClosed();
     testAllOrNothingEncodingAndParseErrors();

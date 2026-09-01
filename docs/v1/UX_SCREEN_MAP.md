@@ -202,6 +202,17 @@ ordinary Back traverses the stack.
 | Device → Settings | PR-011, NFR-010 | EN/RU switch; immediate application and persistent selection |
 | Device → Self-Test | CAP-001…CAP-062 as applicable, PR-009 | Quick/Full use the same versioned checks as release HIL; report→Diagnostics/remedy/export |
 
+## UX-S32 View a Wi-Fi recording on the computer
+
+There is no new technical Home item. The user follows the existing task tree:
+`Home → Capture → Wi-Fi → Start`. Setup and Running show the compact note
+`USB: VIEW ON COMPUTER`; Wireshark then exposes one source named
+`Leshy: Wi-Fi air over USB`. The device remains the only place that starts/stops
+reception. Wireshark receives a read-only live radiotap PCAP, can stop its own view
+independently, and never changes the Mac network or device tuning. Leaving the
+Capture screen revokes the stream. Only the live data region changes; title, footer
+and explanatory note use the normal smart-repaint rule and must not flicker.
+
 ## UX-S31 Offline Field Survey baseline
 
 The user starts this job to answer three questions: what is present here, what is

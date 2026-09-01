@@ -148,6 +148,9 @@ CompanionScopeMask scopeForToken(const StringToken& token) {
     if (tokenEquals(token, "connectivity.manage")) {
         return companionScopeMask(CompanionScope::Connectivity);
     }
+    if (tokenEquals(token, "capture.live.read")) {
+        return companionScopeMask(CompanionScope::CaptureLiveRead);
+    }
     return 0;
 }
 
@@ -159,6 +162,7 @@ const char* scopeName(CompanionScope scope) {
         case CompanionScope::TargetMutate: return "target.mutate";
         case CompanionScope::Export: return "library.export";
         case CompanionScope::Connectivity: return "connectivity.manage";
+        case CompanionScope::CaptureLiveRead: return "capture.live.read";
     }
     return nullptr;
 }
@@ -196,7 +200,7 @@ constexpr CompanionScopeMask kTargetMutationScopes =
     companionScopeMask(CompanionScope::TargetRead) |
     companionScopeMask(CompanionScope::TargetMutate);
 
-constexpr std::array<CompanionCapabilityDescriptor, 10> kCapabilities{{
+constexpr std::array<CompanionCapabilityDescriptor, 11> kCapabilities{{
     {"session.list", CompanionCapability::SessionList,
      companionScopeMask(CompanionScope::SessionRead),
      nullptr, 0, 0, true},
@@ -224,6 +228,9 @@ constexpr std::array<CompanionCapabilityDescriptor, 10> kCapabilities{{
      kTargetMutationScopes, "target.tag.add", 1, 1, false},
     {"target.tag.remove", CompanionCapability::TargetTagRemove,
      kTargetMutationScopes, "target.tag.remove", 1, 1, false},
+    {"capture.live.wifi", CompanionCapability::CaptureLiveWifi,
+     companionScopeMask(CompanionScope::CaptureLiveRead),
+     nullptr, 0, 0, true},
 }};
 
 class BufferWriter final {
@@ -504,13 +511,14 @@ bool encodeCompanionConnectResponse(
                       : "local_web_json");
     writer.append("\",\"scopes\":[");
     bool first = true;
-    constexpr std::array<CompanionScope, 6> scopes{{
+    constexpr std::array<CompanionScope, 7> scopes{{
         CompanionScope::SessionRead,
         CompanionScope::TargetRead,
         CompanionScope::TargetCompare,
         CompanionScope::TargetMutate,
         CompanionScope::Export,
         CompanionScope::Connectivity,
+        CompanionScope::CaptureLiveRead,
     }};
     if (connection.ready()) {
         for (const CompanionScope scope : scopes) {

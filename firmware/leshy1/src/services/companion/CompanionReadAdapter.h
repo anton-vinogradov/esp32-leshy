@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "domain/captures/WifiFrame.h"
 #include "domain/targets/TargetCatalog.h"
 #include "domain/targets/TargetComparison.h"
 #include "services/companion/CompanionProtocol.h"
@@ -20,6 +21,7 @@ enum class CompanionReadKind : std::uint8_t {
     TargetList,
     TargetDetail,
     TargetCompare,
+    CaptureLiveRead,
 };
 
 enum class CompanionTargetDetailSection : std::uint8_t {
@@ -54,7 +56,7 @@ struct CompanionReadRequest final {
     CompanionReadKind kind = CompanionReadKind::SessionList;
     std::array<char, kCompanionRequestIdCapacity + 1U> requestId{};
     std::uint8_t requestIdLength = 0;
-    std::uint8_t offset = 0;
+    std::uint32_t offset = 0;
     domain::targets::TargetId targetId{};
     domain::targets::TargetComparisonSource source{};
     domain::targets::TargetComparisonSource baseline{};
@@ -82,6 +84,10 @@ struct CompanionReadContext final {
     std::uint8_t sessionCount = 0;
     const domain::targets::TargetCatalog* targets = nullptr;
     const domain::targets::TargetComparisonResult* comparison = nullptr;
+    const domain::captures::WifiFrameSource* liveWifiCapture = nullptr;
+    std::uint32_t liveWifiDropped = 0;
+    bool liveWifiTerminal = false;
+    bool liveWifiCleanupComplete = false;
 };
 
 CompanionCapabilityMask companionReadCapabilities(

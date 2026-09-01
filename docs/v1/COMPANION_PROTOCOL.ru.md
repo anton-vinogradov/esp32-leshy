@@ -42,6 +42,7 @@ non-ASCII envelope strings, oversized/truncated/trailing input, другая sch
 | `target.read` | list/open projections Target и evidence | доступен только из того же live catalog Targets |
 | `target.compare` | invoke/read `target.compare` над exact bindings Session | доступен только для уже вычисленной exact пары; также требует оба read scope |
 | `target.mutate` | typed mutations metadata Target | доступен вместе с `target.read` для Favorite, Name, Notes и add/remove tag при ready Targets; correlation/merge пока недоступны |
+| `capture.live.read` | чтение уже запущенного volatile Capture как bounded byte stream | только native USB и только пока on-device задача `Захват → Wi-Fi` выполняется или показывает результат |
 | `library.export` | device-side Action export | остаётся недоступным; первый offline export companion собирает из выданных read projections |
 | `connectivity.manage` | lifecycle local connectivity/secrets | известен, недоступен до slice connectivity |
 
@@ -63,6 +64,7 @@ Catalog capabilities детерминирован; entry попадает в res
 | `target.favorite.set` | `target.read` + `target.mutate` | существующий Action `target.favorite.set` schema v1 |
 | `target.name.set` / `target.notes.set` | `target.read` + `target.mutate` | существующие metadata Actions schema v1 |
 | `target.tag.add` / `target.tag.remove` | `target.read` + `target.mutate` | существующие Actions tags schema v1 |
+| `capture.live.wifi` | `capture.live.read` | read-only projection radiotap PCAP без Actions start, stop, tune или radio |
 
 Navigation не становится Action только потому, что её отображает remote view. Само
 сравнение уже проходит через общую typed Action boundary. Последующие mutations
@@ -158,6 +160,37 @@ storage, не перечитывает catalog, не пересчитывает 
 Targets обязателен новый connect. Физически принят только runtime transport native
 USB CDC. `Serial0` остаётся legacy diagnostic console и не может согласовать этот
 protocol.
+
+## Live projection захвата Wi-Fi v1
+
+Lifecycle radio принадлежит пользователю. Он открывает на устройстве
+`Захват → Wi-Fi` и нажимает Старт; только после этого Wireshark может подключиться к
+extcap-интерфейсу **Леший: эфир Wi-Fi по USB**. Companion не может открыть этот
+экран, запустить/остановить Capture, сменить канал, выбрать антенну, подключить
+компьютер к сети или запросить TX permission. Выход из Capture отзывает grant и
+стирает volatile source. Capability намеренно USB-only; Local Web её не рекламирует.
+
+После connect только со scope `capture.live.read` client продвигает один монотонный
+32-bit byte offset:
+
+```json
+{"schema":"leshy.companion.request.v1","kind":"capture.live.read","request_id":"live-1","offset":0}
+```
+
+Response сообщает source `wifi`, link type PCAP 127, текущее число доступных bytes,
+счётчики captured/dropped frames, lifecycle flags и не более 80 bytes canonical
+uppercase hex в `data_hex`. `next_offset` равен requested offset плюс returned bytes.
+Пока Capture выполняется, пустой chunk на текущем хвосте означает **подождать**, а
+не конец. `next_offset:null` допустим только после чтения последнего byte и при
+одновременных `terminal:true` и `cleanup_complete:true`. Offset за текущей projection
+возвращает `offset_out_of_range`.
+
+Device создаёт global header PCAP и каждую radiotap/802.11 record непосредственно из
+bounded in-memory `WifiFrameCapture`; второй файл не выделяется, storage не mount-ится,
+host evidence не сохраняется. Host проверяет header и каждый переход counters/offset
+до записи bytes в FIFO Wireshark. Reference adapter — `tools/leshy_extcap.py`;
+`tools/install_leshy_extcap.sh` устанавливает или удаляет один executable в personal
+extcap directory Wireshark. Service, launch agent и network interface не создаются.
 
 ## Offline snapshot и локальный поиск v1
 

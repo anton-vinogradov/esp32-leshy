@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <cstring>
 
+#include "apps/capture/RadiotapPcap.h"
+
 namespace leshy1::services::companion {
 namespace {
 
@@ -175,6 +177,8 @@ bool parseKind(const StringToken& token, CompanionReadKind* output) {
         *output = CompanionReadKind::TargetDetail;
     } else if (tokenEquals(token, "target.compare")) {
         *output = CompanionReadKind::TargetCompare;
+    } else if (tokenEquals(token, "capture.live.read")) {
+        *output = CompanionReadKind::CaptureLiveRead;
     } else {
         return false;
     }
@@ -188,6 +192,7 @@ const char* kindName(CompanionReadKind kind) {
         case CompanionReadKind::TargetList: return "target.list";
         case CompanionReadKind::TargetDetail: return "target.detail";
         case CompanionReadKind::TargetCompare: return "target.compare";
+        case CompanionReadKind::CaptureLiveRead: return "capture.live.read";
     }
     return "error";
 }
@@ -226,6 +231,7 @@ std::uint16_t requiredFields(CompanionReadKind kind) {
     switch (kind) {
         case CompanionReadKind::SessionList:
         case CompanionReadKind::TargetList:
+        case CompanionReadKind::CaptureLiveRead:
             return kCommonFields | OffsetField;
         case CompanionReadKind::SessionDetail:
             return kCommonFields | SourceIdField | GenerationField;
@@ -338,6 +344,8 @@ CompanionCapability capabilityForKind(CompanionReadKind kind) {
             return CompanionCapability::TargetDetail;
         case CompanionReadKind::TargetCompare:
             return CompanionCapability::TargetCompare;
+        case CompanionReadKind::CaptureLiveRead:
+            return CompanionCapability::CaptureLiveWifi;
     }
     return CompanionCapability::SessionList;
 }
@@ -691,6 +699,51 @@ bool encodeTargetCompare(BufferWriter* writer,
     return writer->append("]}\n");
 }
 
+bool encodeCaptureLiveRead(BufferWriter* writer,
+                           const CompanionReadContext& context,
+                           const CompanionReadRequest& request) {
+    if (context.liveWifiCapture == nullptr) {
+        return encodeError(writer, request,
+                           CompanionReadStatus::SourceUnavailable);
+    }
+    std::array<std::uint8_t,
+               apps::capture::kRadiotapPcapChunkCapacity> bytes{};
+    const apps::capture::PcapStreamChunk chunk =
+        apps::capture::readRadiotapPcapChunk(
+            *context.liveWifiCapture, request.offset, bytes.data(),
+            bytes.size());
+    if (!chunk.valid) {
+        return encodeError(writer, request,
+                           CompanionReadStatus::OffsetOutOfRange);
+    }
+    const std::size_t next = chunk.offset + chunk.bytesRead;
+    if (!appendResponseStart(writer, request.kind, request,
+                             CompanionReadStatus::Ok) ||
+        !writer->append(",\"source\":\"wifi\",\"link_type\":127,") ||
+        !writer->append("\"offset\":") ||
+        !writer->appendUnsigned(chunk.offset) ||
+        !writer->append(",\"next_offset\":") ||
+        !(context.liveWifiTerminal && next >= chunk.availableBytes
+              ? writer->append("null")
+              : writer->appendUnsigned(next)) ||
+        !writer->append(",\"available_bytes\":") ||
+        !writer->appendUnsigned(chunk.availableBytes) ||
+        !writer->append(",\"frames\":") ||
+        !writer->appendUnsigned(chunk.frameCount) ||
+        !writer->append(",\"dropped\":") ||
+        !writer->appendUnsigned(context.liveWifiDropped) ||
+        !writer->append(",\"terminal\":") ||
+        !writer->append(context.liveWifiTerminal ? "true" : "false") ||
+        !writer->append(",\"cleanup_complete\":") ||
+        !writer->append(context.liveWifiCleanupComplete ? "true" : "false") ||
+        !writer->append(",\"encoding\":\"hex\",\"data_hex\":\"") ||
+        !writer->appendHex(bytes.data(), chunk.bytesRead) ||
+        !writer->append("\"}\n")) {
+        return false;
+    }
+    return true;
+}
+
 bool publishScratch(const std::array<char, kCompanionMaxFrameBytes + 1U>& scratch,
                     std::size_t size, char* output, std::size_t capacity,
                     std::size_t* outputLength) {
@@ -773,10 +826,10 @@ CompanionReadParseStatus parseCompanionReadRequest(
         } else if (tokenEquals(field, "offset")) {
             bit = OffsetField;
             std::uint32_t value = 0;
-            if (!cursor.parseUnsigned(&value) || value > UINT8_MAX) {
+            if (!cursor.parseUnsigned(&value)) {
                 return CompanionReadParseStatus::InvalidNumber;
             }
-            candidate.offset = static_cast<std::uint8_t>(value);
+            candidate.offset = value;
         } else if (tokenEquals(field, "target_id")) {
             bit = TargetIdField;
             StringToken value{};
@@ -858,6 +911,10 @@ CompanionReadParseStatus parseCompanionReadRequest(
     if ((fields & ~required) != 0) {
         return CompanionReadParseStatus::FieldNotAllowed;
     }
+    if (candidate.kind != CompanionReadKind::CaptureLiveRead &&
+        candidate.offset > UINT8_MAX) {
+        return CompanionReadParseStatus::InvalidNumber;
+    }
     if (candidate.kind == CompanionReadKind::TargetDetail &&
         !parseSection(section, &candidate.section)) {
         return CompanionReadParseStatus::InvalidSection;
@@ -896,6 +953,11 @@ CompanionCapabilityMask companionReadCapabilities(
         sameSource(context.comparison->baseline, context.sessions[0].source) &&
         sameSource(context.comparison->current, context.sessions[1].source)) {
         result |= companionCapabilityMask(CompanionCapability::TargetCompare);
+    }
+    if (context.liveWifiCapture != nullptr &&
+        context.liveWifiCapture->snapLength() != 0U) {
+        result |= companionCapabilityMask(
+            CompanionCapability::CaptureLiveWifi);
     }
     return result;
 }
@@ -958,6 +1020,9 @@ bool encodeCompanionReadResponse(
                 break;
             case CompanionReadKind::TargetCompare:
                 encoded = encodeTargetCompare(&writer, context, request);
+                break;
+            case CompanionReadKind::CaptureLiveRead:
+                encoded = encodeCaptureLiveRead(&writer, context, request);
                 break;
         }
     }

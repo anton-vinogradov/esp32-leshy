@@ -415,6 +415,7 @@ LESHY_UI_TEXT(CaptureWifiPurpose, Body, 212, "RECORD WI-FI PACKETS", u8"ЗАПИ
 LESHY_UI_TEXT(CaptureDurationUser, Body, 212, "UP TO 10 SECONDS", u8"ДО 10 СЕКУНД")
 LESHY_UI_TEXT(CaptureAutoChannelsUser, Body, 212, "CHANNELS: AUTOMATIC", u8"КАНАЛЫ: АВТО")
 LESHY_UI_TEXT(CaptureRecordingUser, Body, 212, "RECORDING PACKETS...", u8"ИДЕТ ЗАПИСЬ ПАКЕТОВ...")
+LESHY_UI_TEXT(CaptureComputerViewUser, Body, 212, "USB: VIEW ON COMPUTER", u8"USB: МОЖНО СМОТРЕТЬ НА ПК")
 LESHY_UI_TEXT(CapturePacketsFormat, Body, 212, "PACKETS RECEIVED: %lu", u8"ПРИНЯТО ПАКЕТОВ: %lu")
 LESHY_UI_TEXT(CaptureNoPackets, Body, 212, "NO PACKETS RECEIVED", u8"ПАКЕТЫ НЕ ОБНАРУЖЕНЫ")
 LESHY_UI_TEXT(CapturePcapReadyUser, Body, 212, "PCAP FILE IS READY", u8"ФАЙЛ PCAP ГОТОВ")

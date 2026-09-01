@@ -16047,6 +16047,7 @@ void renderWifiCapturePage(bool clearContent) {
         renderMetric(0, tr(UiTextId::CaptureWifiPurpose), Tone::Positive);
         renderMetric(1, tr(UiTextId::CaptureDurationUser));
         renderMetric(2, tr(UiTextId::CaptureAutoChannelsUser));
+        renderMetric(3, tr(UiTextId::CaptureComputerViewUser));
         return;
     }
 
@@ -16113,6 +16114,8 @@ void renderWifiCapturePage(bool clearContent) {
                       tr(UiTextId::CaptureLossWarningFormat),
                       static_cast<unsigned long>(dropped));
         renderMetric(3, line, Tone::Warning);
+    } else {
+        renderMetric(3, tr(UiTextId::CaptureComputerViewUser));
     }
     if (stats.state == WifiFrameCaptureState::Running) {
         wifiCaptureRenderedFrames = stats.framesAccepted;
@@ -16155,6 +16158,8 @@ void renderWifiCaptureLiveData() {
                           tr(UiTextId::CaptureLossWarningFormat),
                           static_cast<unsigned long>(dropped));
             renderMetric(3, line, Tone::Warning);
+        } else {
+            renderMetric(3, tr(UiTextId::CaptureComputerViewUser));
         }
         wifiCaptureRenderedDrops = dropped;
     }
@@ -26073,6 +26078,10 @@ void releaseWifiFrameCaptureRfLease() {
 }
 
 bool startWifiFrameCapture() {
+    // A live USB grant is bound to one exact capture instance. Starting a new
+    // recording requires a fresh read-only connect from the computer.
+    usbCompanionConnection = {};
+    usbCompanionMutation = {};
     wifiFrameCapture.reset();
     capturePersistState = CapturePersistState::Result;
     capturePersistStatus = "volatile";
@@ -31289,6 +31298,8 @@ bool applyUiAction(UiAction action, bool render = true) {
                 stopWifiFrameCapture();
             }
             wifiFrameCapture.reset();
+            usbCompanionConnection = {};
+            usbCompanionMutation = {};
             capturePersistState = CapturePersistState::Result;
             capturePersistStatus = "volatile";
             capturePersistGeneration = 0;
@@ -41674,6 +41685,19 @@ void addCompanionSessionBinding(
 
 leshy1::services::companion::CompanionReadContext companionReadContext() {
     leshy1::services::companion::CompanionReadContext context{};
+    if (uiController.page() == 4 && captureView == CaptureView::Wifi) {
+        const auto stats = wifiFrameCapture.stats();
+        if (stats.state == WifiFrameCaptureState::Running ||
+            stats.state == WifiFrameCaptureState::Complete) {
+            context.liveWifiCapture = &wifiFrameCapture.capture();
+            context.liveWifiDropped = stats.framesDroppedCapacity +
+                stats.framesDroppedInvalid;
+            context.liveWifiTerminal =
+                stats.state == WifiFrameCaptureState::Complete;
+            context.liveWifiCleanupComplete =
+                context.liveWifiTerminal && wifiFrameCapture.cleanupComplete();
+        }
+    }
     const bool runtimeReady = targetsProductRuntime != nullptr &&
         std::strcmp(targetsProductStatus, "ready") == 0;
     const bool webReady = webCompanionTargetsSuspended() &&
@@ -41727,6 +41751,10 @@ leshy1::services::companion::CompanionScopeMask companionAvailableScopes(
         leshy1::services::companion::
             kCompanionTargetMutationCapabilities) {
         scopes |= companionScopeMask(CompanionScope::TargetMutate);
+    }
+    if ((capabilities &
+         companionCapabilityMask(CompanionCapability::CaptureLiveWifi)) != 0) {
+        scopes |= companionScopeMask(CompanionScope::CaptureLiveRead);
     }
     return scopes;
 }
@@ -41984,13 +42012,19 @@ void handleCompanionFrame(
         const companion::CompanionReadContext context = companionReadContext();
         const bool hilReadOnly =
             deviceLockProtectedReadHilActive && hilSession.active();
-        const companion::CompanionCapabilityMask capabilities =
+        companion::CompanionCapabilityMask capabilities =
             companion::companionReadCapabilities(context) |
             (hilReadOnly
                  ? 0U
                  : companion::companionMutationCapabilities(context.targets));
+        if (webRequest) {
+            capabilities &= ~companion::kCompanionLiveReadCapabilities;
+        }
         companion::CompanionConnectionPolicy policy{};
         policy.deviceSessionScopes = companion::kCompanionS65ReadScopes;
+        if ((capabilities & companion::kCompanionLiveReadCapabilities) != 0) {
+            policy.deviceSessionScopes |= companion::kCompanionLiveReadScopes;
+        }
         if (!hilReadOnly) {
             policy.deviceSessionScopes |= companion::companionScopeMask(
                 companion::CompanionScope::TargetMutate);
