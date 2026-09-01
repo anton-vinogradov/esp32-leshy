@@ -10,10 +10,14 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import os
 import re
+import select
 import struct
 import sys
+import termios
 import time
+import tty
 from dataclasses import dataclass
 from typing import Any, BinaryIO, Callable, Protocol
 
@@ -35,39 +39,64 @@ class Transport(Protocol):
 
 
 class PassiveSerialTransport:
-    """Native-USB serial transport that does not toggle ESP reset lines."""
+    """Dependency-free native-USB transport that never controls DTR/RTS."""
 
     def __init__(self, port: str, timeout: float = 3.0) -> None:
-        import serial
-
-        class PassiveSerial(serial.Serial):
-            def _update_dtr_state(self) -> None:
-                pass
-
-            def _update_rts_state(self) -> None:
-                pass
-
-            def flush(self) -> None:
-                return None
-
-        self._serial = PassiveSerial()
-        self._serial.port = port
-        self._serial.baudrate = 115200
-        self._serial.timeout = 0.15
-        self._serial.write_timeout = 1.0
+        self._fd = os.open(
+            port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+        tty.setraw(self._fd, when=termios.TCSANOW)
+        attributes = termios.tcgetattr(self._fd)
+        attributes[4] = termios.B115200
+        attributes[5] = termios.B115200
+        termios.tcsetattr(self._fd, termios.TCSANOW, attributes)
         self._timeout = timeout
-        self._serial.open()
+        self._buffer = bytearray()
+
+    def _write(self, payload: bytes) -> None:
+        offset = 0
+        deadline = time.monotonic() + self._timeout
+        while offset < len(payload):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Leshy USB write timed out")
+            _, writable, _ = select.select([], [self._fd], [], remaining)
+            if not writable:
+                continue
+            try:
+                offset += os.write(self._fd, payload[offset:])
+            except BlockingIOError:
+                continue
+
+    def _readline(self, deadline: float) -> bytes:
+        while time.monotonic() < deadline:
+            newline = self._buffer.find(b"\n")
+            if newline >= 0:
+                line = bytes(self._buffer[:newline + 1])
+                del self._buffer[:newline + 1]
+                return line
+            remaining = deadline - time.monotonic()
+            readable, _, _ = select.select(
+                [self._fd], [], [], min(0.15, max(0.0, remaining)))
+            if not readable:
+                continue
+            try:
+                chunk = os.read(self._fd, 4096)
+            except BlockingIOError:
+                continue
+            if chunk:
+                self._buffer.extend(chunk)
+        return b""
 
     def exchange(self, request: dict[str, Any]) -> dict[str, Any]:
         payload = (json.dumps(request, separators=(",", ":"),
                               ensure_ascii=True) + "\n").encode("ascii")
         if len(payload) - 1 > MAX_FRAME_BYTES:
             raise ValueError("companion request exceeds firmware frame bound")
-        self._serial.write(payload)
+        self._write(payload)
         deadline = time.monotonic() + self._timeout
         request_id = request["request_id"]
         while time.monotonic() < deadline:
-            line = self._serial.readline()
+            line = self._readline(deadline)
             if not line:
                 continue
             try:
@@ -81,7 +110,9 @@ class PassiveSerialTransport:
         raise TimeoutError(f"Leshy did not answer request {request_id}")
 
     def close(self) -> None:
-        self._serial.close()
+        if self._fd >= 0:
+            os.close(self._fd)
+            self._fd = -1
 
 
 @dataclass(frozen=True)

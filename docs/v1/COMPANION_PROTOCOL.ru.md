@@ -190,7 +190,8 @@ bounded in-memory `WifiFrameCapture`; второй файл не выделяе�
 host evidence не сохраняется. Host проверяет header и каждый переход counters/offset
 до записи bytes в FIFO Wireshark. Reference adapter — `tools/leshy_extcap.py`;
 `tools/install_leshy_extcap.sh` устанавливает или удаляет один executable в personal
-extcap directory Wireshark. Service, launch agent и network interface не создаются.
+extcap directory Wireshark. Service, launch agent и network interface не создаются;
+третьесторонняя Python dependency также не требуется.
 
 ## Offline snapshot и локальный поиск v1
 

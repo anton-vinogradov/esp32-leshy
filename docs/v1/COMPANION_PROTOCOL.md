@@ -190,7 +190,7 @@ mount storage or retain host evidence. The host validates the header and every
 counter/offset transition before writing bytes to the Wireshark FIFO. The reference
 adapter is `tools/leshy_extcap.py`; `tools/install_leshy_extcap.sh` installs or removes
 that single executable in Wireshark's personal extcap directory. It creates no
-service, launch agent or network interface.
+service, launch agent or network interface and uses only the Python standard library.
 
 ## Offline snapshot and local search v1
 

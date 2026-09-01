@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import inspect
 import unittest
 from typing import Any
 
@@ -117,6 +118,11 @@ class LeshyExtcapTests(unittest.TestCase):
         self.assertEqual(0, extcap.main([
             "--extcap-interface=leshy-wifi", "--extcap-config",
         ]))
+
+    def test_runtime_has_no_third_party_serial_dependency(self) -> None:
+        source = inspect.getsource(extcap)
+        self.assertNotIn("import serial", source)
+        self.assertNotIn("from serial", source)
 
 
 if __name__ == "__main__":
