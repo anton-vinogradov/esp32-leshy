@@ -12,14 +12,14 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 >
 > Закрыто этапов: 5 из 9.
 >
-> Пользовательские функции: **23/62 готовы** · 16 в работе · 6 заблокированы · 17 запланированы.
+> Пользовательские функции: **24/62 готовы** · 16 в работе · 6 заблокированы · 16 запланированы.
 
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline из 62 capabilities, знаменатель зафиксирован. Повторный аудит конкурентов и product decision от 1 сентября завершены: все ценные принятые outcomes входят в знаменатель, а отложенные integrations и три жёсткие продуктовые границы явно перечислены в [пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
-- **Проверенный checkpoint:** `E-BUILD-239`/`E-AUTO-217`/`E-HIL-235`/`E-UX-090`/`E-COMPANION-011`/`RB-M251` принимают exact physical `1.0.0-dev.367`: public path Capture запускает bounded passive Wi-Fi capture, выдаёт только `capture.live.read`, потоково передаёт 16 Radiotap/PCAP records через реальный USB extcap client и byte-for-byte принимается Wireshark. Connect/raw-TX/storage-write/host-network operations равны нулю; выход возвращает Home/none/lease 0 и очищает volatile PCAP. Retained evidence содержит только hashes/counters и bounds channel/RSSI, без ambient identifiers, raw PCAP, raw runs и screenshots. Exact dev.357 остаётся periodic full anchor.
-- **Следующий gate:** progress остаётся **23/62**, отдельный фиксированный Wi-Fi track теперь **14/21 готово, 7/21 осталось**. `WF-15` физически принят; более широкий `FUNC-57` становится active, потому что BLE streaming и read-only TFT mirror остаются открыты. Следующая focused Wi-Fi delta — `WF-16`: scoped Wi-Fi/USB setup без утечки secrets и зависимости Survey/Library от сети. Verification chain `WF-11` остаётся active параллельно; physical gates второй платы и dedicated client отложены, RF TX запрещён.
+- **Проверенный checkpoint:** `E-BUILD-240`/`E-AUTO-218`/`E-HIL-236`/`E-COMPANION-012`/`RB-M252` принимают exact physical `1.0.0-dev.368`: Устройство → «Подключение» показывает USB без пароля и отдельно staged путь временного Wi-Fi. Physical journey открывает USB-инструкцию и только первое подтверждение временного Wi-Fi; SoftAP, DHCP/network core, credentials, host-network tools, изменения Wi-Fi Mac и raw radio TX остаются нулевыми. Storage exact-CID остаётся read-only, cleanup достигает Home/none/lease 0. Отклонённый первый run сохранён hash-ом из-за переполнения bounded state envelope и не повышен до pass. Exact dev.357 остаётся periodic full anchor.
+- **Следующий gate:** progress — **24/62**, отдельный фиксированный Wi-Fi track теперь **15/21 готово, 6/21 осталось**. `WF-16` закрывает `FUNC-46`; следующим active становится `WF-17`: рандомизировать только собственные STA/AP identities Лешего с явным ephemeral provenance, но никогда не identities окружающих устройств. Verification chain `WF-11` остаётся active параллельно; physical gates второй платы, dedicated-client HTTP и active RF отложены, RF TX запрещён.
 
 ### Functional-first очередь поставки
 
@@ -83,7 +83,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | Каждый вывод compare/correlation открывает точное исходное evidence | S6.3 + S6.4 | ✅ готово |
 | Scoped local USB/Web companion просматривает, ищет, сравнивает и экспортирует через общие Actions/schemas | S6.5 | 🟡 в работе |
 | Offline OUI/BLE company/services/protocol profiles обогащают факты с version/provenance, не подменяя raw evidence | S6 | ✅ готово |
-| Scoped Wi-Fi/USB setup изолирует secrets, не экспортирует их и не делает сеть условием Survey/Library | S6 + S8 | 🟡 в работе |
+| Scoped Wi-Fi/USB setup изолирует secrets, не экспортирует их и не делает сеть условием Survey/Library | S6 + S8 | ✅ готово |
 | Отдельная Лаборатория показывает разрешённый scope, source, frequency, power, duration и постоянно видимый TX state | S7 | ⬜ дальше |
 | Назад, timeout, panic, fault или потеря control/telemetry физически прекращает каждый TX path | S7 | ⬜ дальше |
 | IR replay использует selected immutable Capture или ready signed multi-button/favorite remote/TV profile после preview и confirmation | S7 | ⬜ дальше |
@@ -104,7 +104,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | nRF24 ESB Workbench захватывает/декодирует совместимые packets и пассивно обнаруживает MouseJack; injection — отдельный owned-fixture recipe | S7 | ⬜ дальше |
 | Read-only Live Companion потоково отдаёт Wi-Fi/BLE evidence в USB Wireshark/extcap и зеркалирует TFT без изменения host network | S7 | 🟡 в работе |
 | Conditional Advanced NFC/EMV даёт NDEF/ISO14443-4 emulation, erase, recovery собственной метки и redacted protocol diagnostics | S7, conditional PN532 | ⬜ дальше |
-| Privacy Identity рандомизирует STA/AP Leshy и даёт ephemeral provenance-labeled synthetic lab identities из owned Captures | S7 | ⬜ дальше |
+| Privacy Identity рандомизирует STA/AP Leshy и даёт ephemeral provenance-labeled synthetic lab identities из owned Captures | S7 | 🟡 в работе |
 | Conditional USB Host Inspector перечисляет device/class interfaces и bounded signed keyboard/HID behavior после VBUS/OTG qualification | S7, conditional hardware | ⬜ дальше |
 | Owned Evidence Verification проверяет свои Wi-Fi/NFC/Sub-GHz/fixed-code Captures с budget, pause/stop/checkpoint и provenance | S7 | 🟡 в работе |
 | Owned Network Lab даёт read-only LAN inventory и bounded captive-portal/ARP/DHCP/MITM robustness tests на selected isolated fixture | S7 | ⬜ дальше |

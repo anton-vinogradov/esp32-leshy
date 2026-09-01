@@ -1,0 +1,112 @@
+{
+  "schema": "leshy.connectivity_setup_hil.acceptance.v1",
+  "status": "pass_connectivity_setup",
+  "board": "board-01",
+  "evidence_ids": [
+    "E-BUILD-240",
+    "E-AUTO-218",
+    "E-HIL-236",
+    "E-COMPANION-012",
+    "RB-M252"
+  ],
+  "candidate": {
+    "version": "1.0.0-dev.368",
+    "cid": "FE343253440000002000000055019CB7",
+    "firmware_source_commit": "4f1d92c0c366373f9b33c4cb50c1ddfe47b1a9c4",
+    "runner_source_commit": "4f1d92c0c366373f9b33c4cb50c1ddfe47b1a9c4",
+    "firmware_sha256": "b41b12b0c17c52dbf04950dbe4c901e33a02eeb716f0621b22e9ba9a6a1f254c",
+    "factory_sha256": "6d6aa09626592a09ee975d242e0ebe380c9135b98bb4cb6f5013e956819f6e96",
+    "elf_sha256": "2337a0b27084318a7e3268b052d0706e963b52a73402a9a71628c8af15b5d50c",
+    "map_sha256": "a512d6ab5a60583cc8731803b85dea7e3dc8c9a01a4ec6f35f5e53b617873cba",
+    "firmware_bytes": 3652816,
+    "factory_bytes": 3718352,
+    "fresh_flashes": 1
+  },
+  "host_tooling": {
+    "runner_sha256": "d5ca4aa8ff9a67080c0e9938a58ff79282954951a9776694627f5cc6c792a3f4",
+    "external_serial_dependency": false,
+    "daemon_or_service_installed": false
+  },
+  "accepted_run": {
+    "run_sha256": "ddba887ae511b2982fd640d48911fd0369f39c411fa7c41e7b4b2a4876e60243",
+    "status": "pass",
+    "flash_count": 1,
+    "ports_opened": 1,
+    "clone_ports_opened": 0,
+    "cardputer_ports_opened": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "final_lease_mask": 0
+  },
+  "journey": {
+    "device_menu_connection_index": 2,
+    "connection_page": "connectivity",
+    "connection_menu_view": 0,
+    "usb_guide_view": 1,
+    "temporary_wifi_selection": 1,
+    "temporary_wifi_overlay_opened": true,
+    "temporary_wifi_authorized": false,
+    "temporary_wifi_server_active": false,
+    "temporary_wifi_network_core_ready": false,
+    "temporary_wifi_associated_stations": 0,
+    "temporary_wifi_cleanup_complete": true
+  },
+  "storage_recovery": {
+    "generation": 10,
+    "observations": 51,
+    "exact_cid_matched": true,
+    "mounted_read_only": true,
+    "physical_write_calls": 0,
+    "blocked_write_attempts": 0,
+    "cleanup_complete": true
+  },
+  "protected_ui_admission": {
+    "begun": true,
+    "ram_only": true,
+    "protected_ui_only": true,
+    "credential_written": false,
+    "whole_nvs_read_or_copied": false,
+    "product_namespace_written_or_erased": false,
+    "cleanup_proven": true,
+    "active_at_end": false
+  },
+  "policy": {
+    "usb_recommended": true,
+    "temporary_wifi_requires_second_confirmation": true,
+    "wifi_softap_started": false,
+    "credential_created": false,
+    "credential_exported": false,
+    "survey_library_network_dependency_created": false,
+    "host_network_tools_invoked": false,
+    "active_host_wifi_touched": false,
+    "raw_radio_tx_commands": 0
+  },
+  "precursor": {
+    "accepted": false,
+    "run_sha256": "cf6b1880fe4f8550500953430768e1d326a6709e48e4db15ff909486eae354be",
+    "source_commit": "e086ce2ef04878d1ffadec17dfbbcef75b57eaa4",
+    "reason": "the first diagnostic-state query exceeded its bounded serial envelope",
+    "product_navigation_started": false,
+    "wifi_softap_started": false,
+    "active_host_wifi_touched": false,
+    "raw_radio_tx_commands": 0
+  },
+  "privacy": {
+    "ambient_identifiers_retained": false,
+    "credentials_retained": false,
+    "raw_run_retained": false,
+    "screenshots_retained": false,
+    "exact_device_port_retained": false
+  },
+  "resources": {
+    "static_ram_bytes": 234976,
+    "linked_flash_bytes": 3652316,
+    "application_image_bytes": 3652816,
+    "factory_image_bytes": 3718352,
+    "free_ota_bytes": 541488,
+    "required_free_ota_bytes": 524288,
+    "boot_heap_total_bytes": 143828,
+    "boot_heap_free_bytes": 69472,
+    "boot_heap_min_free_bytes": 69324
+  }
+}

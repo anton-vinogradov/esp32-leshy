@@ -2180,3 +2180,20 @@ SHA-256 app/factory/ELF/map —
 records после cleanup. Boot heap остаётся 143 828/68 844/25 340 B
 total/free/minimum. Это закрывает focused `WF-15`, двигает cadence до 5/15,
 не сохраняет raw packets и не заявляет instrumented physical no-TX.
+
+Bound scoped «Подключение» `RB-M252`: exact physical/build `1.0.0-dev.368` на
+firmware/runner source `4f1d92c0c366373f9b33c4cb50c1ddfe47b1a9c4` использует
+234 976 B static RAM, 3 652 316 B linked flash и 3 652 816/3 718 352 B
+app/factory images, оставляя 541 488 B actual application-image headroom в OTA
+slot 4 MiB. SHA-256 app/factory/ELF/map —
+`b41b12b0c17c52dbf04950dbe4c901e33a02eeb716f0621b22e9ba9a6a1f254c`/
+`6d6aa09626592a09ee975d242e0ebe380c9135b98bb4cb6f5013e956819f6e96`/
+`2337a0b27084318a7e3268b052d0706e963b52a73402a9a71628c8af15b5d50c`/
+`a512d6ab5a60583cc8731803b85dea7e3dc8c9a01a4ec6f35f5e53b617873cba`.
+Относительно dev.367 static RAM не меняется, linked/app/factory растут на
+3 056/3 056/3 056 B, OTA headroom уменьшается на 3 056 B. Physical boot heap —
+143 828/69 472/69 324 B total/free/minimum. Accepted run не выделяет credential
+или network core и не запускает SoftAP; exact-CID storage остаётся read-only с
+zero physical writes, cleanup достигает Home/none/lease 0. Это закрывает
+`WF-16`/`FUNC-46`, двигает cadence до 6/15 и не заявляет physical HTTP payload
+parity или instrumented no-TX.

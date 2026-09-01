@@ -2190,3 +2190,20 @@ serves 4,076 PCAP bytes across 194 requests, reports 269 capacity drops, and
 scrubs all records after cleanup. Boot heap remains 143,828/68,844/25,340 B
 total/free/minimum. This closes focused `WF-15`, moves cadence to 5/15 and does
 not retain raw packets or claim instrumented physical no-TX.
+
+Scoped Connection bound `RB-M252`: exact physical/build `1.0.0-dev.368` at
+firmware/runner source `4f1d92c0c366373f9b33c4cb50c1ddfe47b1a9c4` uses
+234,976 B static RAM, 3,652,316 B linked flash and 3,652,816/3,718,352 B
+app/factory images, leaving 541,488 B of actual application-image headroom in
+the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`b41b12b0c17c52dbf04950dbe4c901e33a02eeb716f0621b22e9ba9a6a1f254c`/
+`6d6aa09626592a09ee975d242e0ebe380c9135b98bb4cb6f5013e956819f6e96`/
+`2337a0b27084318a7e3268b052d0706e963b52a73402a9a71628c8af15b5d50c`/
+`a512d6ab5a60583cc8731803b85dea7e3dc8c9a01a4ec6f35f5e53b617873cba`.
+Against dev.367, static RAM is unchanged while linked/app/factory grow
+3,056/3,056/3,056 B and OTA headroom shrinks 3,056 B. Physical boot heap is
+143,828/69,472/69,324 B total/free/minimum. The accepted run allocates no
+credential or network core and never starts SoftAP; exact-CID storage remains
+read-only with zero physical writes and cleanup reaches Home/none/lease 0. This
+closes `WF-16`/`FUNC-46`, moves cadence to 6/15 and does not claim physical HTTP
+payload parity or instrumented no-TX.

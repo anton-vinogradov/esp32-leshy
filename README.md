@@ -12,14 +12,14 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 >
 > Stage gates complete: 5 of 9.
 >
-> User functionality: **23/62 done** · 16 active · 6 blocked · 17 planned.
+> User functionality: **24/62 done** · 16 active · 6 blocked · 16 planned.
 
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts. The checklist is complete for the currently frozen 62-capability 1.x baseline. The 1 September competitor re-audit and product decision are complete: every valuable accepted outcome is inside this denominator, while deferred integrations and the three hard product boundaries remain explicit in the [feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
-- **Verified checkpoint:** `E-BUILD-239`/`E-AUTO-217`/`E-HIL-235`/`E-UX-090`/`E-COMPANION-011`/`RB-M251` accept exact physical `1.0.0-dev.367`: the public Capture path starts a bounded passive Wi-Fi capture, grants only `capture.live.read`, streams 16 Radiotap/PCAP records through the real USB extcap client, and is accepted byte-for-byte by Wireshark. It makes zero connect/raw-TX/storage-write/host-network operations and returns to Home/none/lease 0 with the volatile PCAP scrubbed. Retained evidence contains hashes/counters/channel-RSSI bounds only, not ambient identifiers, raw PCAP, raw runs or screenshots. Exact dev.357 remains the periodic full anchor.
-- **Next gate:** progress remains **23/62**, while the fixed Wi-Fi track is now **14/21 done, 7/21 remaining**. `WF-15` is physically accepted; the wider `FUNC-57` becomes active because BLE streaming and read-only TFT mirroring remain open. The next focused Wi-Fi delta is `WF-16`: scoped Wi-Fi/USB setup without secret leakage or a Survey/Library network dependency. The `WF-11` verification chain remains active in parallel; second-board and dedicated-client physical gates stay parked, and RF TX remains forbidden.
+- **Verified checkpoint:** `E-BUILD-240`/`E-AUTO-218`/`E-HIL-236`/`E-COMPANION-012`/`RB-M252` accept exact physical `1.0.0-dev.368`: Device → Connection presents USB without a password and a separately staged temporary-Wi-Fi path. The physical journey opens the USB guide and only the first temporary-Wi-Fi confirmation; SoftAP, DHCP/network core, credentials, host-network tools, Mac Wi-Fi changes and raw radio TX all remain zero. Exact-CID storage stays read-only and cleanup reaches Home/none/lease 0. The rejected first run is retained by hash for its bounded state-envelope overflow and is not promoted. Exact dev.357 remains the periodic full anchor.
+- **Next gate:** progress is **24/62**, while the fixed Wi-Fi track is now **15/21 done, 6/21 remaining**. `WF-16` closes `FUNC-46`; `WF-17` is active next: randomize only Leshy's own STA/AP identities with explicit ephemeral provenance, never ambient devices. The `WF-11` verification chain remains active in parallel; second-board, dedicated-client HTTP and active-RF physical gates stay parked, and RF TX remains forbidden.
 
 ### Functional-first delivery queue
 
@@ -83,7 +83,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | Every compare/correlation conclusion opens its exact source evidence | S6.3 + S6.4 | ✅ complete |
 | Scoped local USB/Web companion browses, searches, compares and exports through shared Actions/schemas | S6.5 | 🟡 in progress |
 | Offline OUI/BLE company/service/protocol profiles enrich facts with version/provenance without replacing raw evidence | S6 | ✅ complete |
-| Scoped Wi-Fi/USB setup isolates secrets, never exports them and never makes networking a Survey/Library prerequisite | S6 + S8 | 🟡 in progress |
+| Scoped Wi-Fi/USB setup isolates secrets, never exports them and never makes networking a Survey/Library prerequisite | S6 + S8 | ✅ complete |
 | Separate Lab exposes authorized scope, source, frequency, power, duration and permanently visible TX state | S7 | ⬜ later |
 | Back, timeout, panic, fault or loss of control/telemetry physically stops every TX path | S7 | ⬜ later |
 | IR replay uses selected immutable Capture or a ready signed multi-button/favorite remote/TV profile after preview and explicit confirmation | S7 | ⬜ later |
@@ -104,7 +104,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | nRF24 ESB Workbench captures/decodes compatible packets and passively detects MouseJack; injection is a separate owned-fixture recipe | S7 | ⬜ later |
 | Read-only Live Companion streams compatible Wi-Fi/BLE evidence to USB Wireshark/extcap and mirrors TFT without changing the host network | S7 | 🟡 in progress |
 | Conditional Advanced NFC/EMV provides NDEF/ISO14443-4 emulation, erase, owned-tag recovery and redacted protocol diagnostics | S7, conditional PN532 | ⬜ later |
-| Privacy Identity randomizes Leshy STA/AP and offers ephemeral provenance-labeled synthetic lab identities from owned Captures | S7 | ⬜ later |
+| Privacy Identity randomizes Leshy STA/AP and offers ephemeral provenance-labeled synthetic lab identities from owned Captures | S7 | 🟡 in progress |
 | Conditional USB Host Inspector enumerates device/class interfaces and bounded signed keyboard/HID behavior after VBUS/OTG qualification | S7, conditional hardware | ⬜ later |
 | Owned Evidence Verification checks owned Wi-Fi/NFC/Sub-GHz/fixed-code Captures with budget, pause/stop/checkpoint and provenance | S7 | 🟡 in progress |
 | Owned Network Lab gives read-only LAN inventory and bounded captive-portal/ARP/DHCP/MITM robustness tests on an isolated selected fixture | S7 | ⬜ later |
