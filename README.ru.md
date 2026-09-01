@@ -12,14 +12,14 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 >
 > Закрыто этапов: 5 из 9.
 >
-> Пользовательские функции: **23/62 готовы** · 14 в работе · 6 заблокированы · 19 запланированы.
+> Пользовательские функции: **23/62 готовы** · 15 в работе · 6 заблокированы · 18 запланированы.
 
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline из 62 capabilities, знаменатель зафиксирован. Повторный аудит конкурентов и product decision от 1 сентября завершены: все ценные принятые outcomes входят в знаменатель, а отложенные integrations и три жёсткие продуктовые границы явно перечислены в [пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
 - **Проверенный checkpoint:** `E-BUILD-232`/`E-AUTO-208`/`E-HIL-231`/`E-UX-085`/`E-STORAGE-076`/`RB-M244` принимают exact physical `1.0.0-dev.358`: task-first дерево Protocol Workbench и экраны comparison/derived decode. Четыре понятные задачи проходят waveform, annotation, честное чтение и сравнение с предыдущим Capture; 14 exact TFT frames не имеют clipped/orphaned glyphs, storage остаётся 8/54 с zero writes, cleanup — Home/none/lease 0. Exact dev.357 остаётся periodic full anchor.
-- **Следующий gate:** прогресс остаётся **23/62**. По решению владельца финальный gate `FF-3` — protected commit/cold reopen annotation/decode — отложен до появления второго исправного DIV; dev.359 и обе no-signal fail-closed попытки сохранены, а оригинальная плата больше не запрашивается повторно для IR input. Активен `FF-4`: host/build dev.361 добавляет двуязычную task-first навигацию local Web и воспроизводимый local preview. Tooling source `0ca71812ea6df2a9688a47d7f3b3fe56e9ed9a6f` теперь также предоставляет verifier для dedicated client и fail-closed binder parity USB без любых операций настройки сети. Physical HTTP parity всё ещё требует запуска verifier с отдельно управляемого client, уже подключённого к AP устройства; активную сеть Mac переключать нельзя. RF TX запрещён.
+- **Следующий gate:** прогресс остаётся **23/62**. Wi-Fi теперь целевой completion track, пока physical gates второй платы и dedicated client безопасно отложены. `E-AUTO-213`/`E-EVIDENCE-001` на tooling source `674420132d06b6f106d3bf68c7ddcba3a5ab2748` принимают bounded offline foundation `FUNC-61`: strict owned evidence `WPA*01`/`WPA*02`, provenance локального corpus, конечные budgets candidates/time, checkpoint/resume exact inputs и report без plaintext/raw identities. Board, host network, Cardputer и radio не затрагивались. Следующая Wi-Fi-дельта — пользовательский verification workflow companion, затем оставшиеся defensive profiles; RF TX запрещён.
 
 ### Functional-first очередь поставки
 
@@ -106,7 +106,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | Conditional Advanced NFC/EMV даёт NDEF/ISO14443-4 emulation, erase, recovery собственной метки и redacted protocol diagnostics | S7, conditional PN532 | ⬜ дальше |
 | Privacy Identity рандомизирует STA/AP Leshy и даёт ephemeral provenance-labeled synthetic lab identities из owned Captures | S7 | ⬜ дальше |
 | Conditional USB Host Inspector перечисляет device/class interfaces и bounded signed keyboard/HID behavior после VBUS/OTG qualification | S7, conditional hardware | ⬜ дальше |
-| Owned Evidence Verification проверяет свои Wi-Fi/NFC/Sub-GHz/fixed-code Captures с budget, pause/stop/checkpoint и provenance | S7 | ⬜ дальше |
+| Owned Evidence Verification проверяет свои Wi-Fi/NFC/Sub-GHz/fixed-code Captures с budget, pause/stop/checkpoint и provenance | S7 | 🟡 в работе |
 | Owned Network Lab даёт read-only LAN inventory и bounded captive-portal/ARP/DHCP/MITM robustness tests на selected isolated fixture | S7 | ⬜ дальше |
 | Browser/SD install и Устройство → Обновление: signed stable/beta OTA/SD package, rollback и recovery image | S8 | ⬜ дальше |
 | Versioned backup/restore и factory reset показывают scope/preview/checksum и не перезаписывают raw Capture без confirm | S8 | ⬜ дальше |

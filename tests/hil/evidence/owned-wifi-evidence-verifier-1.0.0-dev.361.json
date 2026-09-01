@@ -1,0 +1,49 @@
+{
+  "evidence_ids": [
+    "E-AUTO-213",
+    "E-EVIDENCE-001"
+  ],
+  "schema": "leshy.owned_wifi_evidence_verifier.host_acceptance.v1",
+  "status": "pass_host_bounded_owned_wifi_verification_foundation",
+  "tooling": {
+    "source_commit": "674420132d06b6f106d3bf68c7ddcba3a5ab2748",
+    "verifier_sha256": "8669c9f10f5ec20851da7039837a496fb38b78df7ea1ec606bbfce172cb05a31"
+  },
+  "verified": {
+    "board_flash_count": 0,
+    "candidate_budget_max": 1000000,
+    "cardputer_touched": false,
+    "checkpoint_bound_to_exact_input_hashes": true,
+    "corpus_bytes_max": 67108864,
+    "corpus_bundled": false,
+    "device_writes": 0,
+    "eapol_descriptor_versions": [
+      1,
+      2
+    ],
+    "evidence_bytes_max": 65536,
+    "hashcat_module_22000_reference_pmkid_verified": true,
+    "host_network_changed": false,
+    "network_operations": 0,
+    "plaintext_match_retained": false,
+    "radio_operations": 0,
+    "raw_evidence_retained_in_report": false,
+    "record_kinds": [
+      "WPA*01",
+      "WPA*02"
+    ],
+    "record_limit": 16,
+    "requires_explicit_owned_evidence_confirmation": true,
+    "requires_persistent_checkpoint": true,
+    "tests": [
+      "tools/test.sh --only owned-wifi-evidence",
+      "tools/test_owned_wifi_evidence_verifier.py (6 cases)",
+      "tools/check_owned_wifi_evidence_verifier_contract.py",
+      "python3 -m py_compile",
+      "git diff --check"
+    ],
+    "time_budget_seconds_max": 3600,
+    "tx_api_invoked": false,
+    "unsupported_eapol_descriptor_versions_fail_closed": true
+  }
+}

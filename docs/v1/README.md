@@ -54,6 +54,8 @@ accepted decisions change.
   and disposable-media safety
 - [Local companion protocol](COMPANION_PROTOCOL.md) — shared USB/Web envelope,
   explicit scopes/capabilities, and fail-closed parser rules
+- [Owned evidence verification](OWNED_EVIDENCE_VERIFICATION.md) — bounded offline
+  Wi-Fi evidence/corpus workflow, privacy contract and checkpointed acceptance
 
 ## Design and delivery
 

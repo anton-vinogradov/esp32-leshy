@@ -56,6 +56,8 @@
   и безопасность disposable media
 - [Протокол локального companion](COMPANION_PROTOCOL.ru.md) — общий envelope USB/Web,
   явные scopes/capabilities и правила fail-closed parser
+- [Проверка собственного evidence](OWNED_EVIDENCE_VERIFICATION.ru.md) — bounded
+  offline-сценарий Wi-Fi evidence/corpus, privacy-contract и checkpointed acceptance
 
 ## Проектирование и реализация
 

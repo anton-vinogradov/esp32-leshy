@@ -12,14 +12,14 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 >
 > Stage gates complete: 5 of 9.
 >
-> User functionality: **23/62 done** · 14 active · 6 blocked · 19 planned.
+> User functionality: **23/62 done** · 15 active · 6 blocked · 18 planned.
 
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts. The checklist is complete for the currently frozen 62-capability 1.x baseline. The 1 September competitor re-audit and product decision are complete: every valuable accepted outcome is inside this denominator, while deferred integrations and the three hard product boundaries remain explicit in the [feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
 - **Verified checkpoint:** `E-BUILD-232`/`E-AUTO-208`/`E-HIL-231`/`E-UX-085`/`E-STORAGE-076`/`RB-M244` accept the exact physical `1.0.0-dev.358` Protocol Workbench task tree and its comparison/derived-decode result screens. Four plain-language tasks traverse waveform, annotation, truthful decode and previous-Capture comparison; 14 exact TFT frames have zero clipped/orphaned result glyphs, storage remains 8/54 with zero writes, and cleanup is Home/none/lease 0. Exact dev.357 remains the periodic full anchor.
-- **Next gate:** progress remains **23/62**. By owner decision, the final `FF-3` protected annotation/decode commit and cold-reopen gate is deferred until a second working DIV is available; dev.359 and both no-signal fail-closed attempts remain retained, and the original board is not repeatedly requested for IR input. `FF-4` is active: host/build dev.361 adds bilingual task-first local Web navigation and a repeatable local preview. Tooling source `0ca71812ea6df2a9688a47d7f3b3fe56e9ed9a6f` now also provides a dedicated-client verifier and fail-closed USB parity binder without any network-configuration operation. Physical HTTP parity still requires that verifier to run from a separately managed client already joined to the DUT AP; it must not switch the active Mac network. RF TX stays forbidden.
+- **Next gate:** progress remains **23/62**. Wi-Fi is now the focused completion track while second-board and dedicated-client physical gates stay parked. `E-AUTO-213`/`E-EVIDENCE-001` at tooling source `674420132d06b6f106d3bf68c7ddcba3a5ab2748` accept the bounded offline `FUNC-61` foundation: strict owned `WPA*01`/`WPA*02` evidence, local corpus provenance, finite candidate/time budgets, exact-input checkpoint/resume and a report without plaintext or raw identities. No board, host network, Cardputer or radio was touched. The next Wi-Fi delta is the companion-facing verification workflow, followed by the remaining defensive profiles; RF TX stays forbidden.
 
 ### Functional-first delivery queue
 
@@ -106,7 +106,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | Conditional Advanced NFC/EMV provides NDEF/ISO14443-4 emulation, erase, owned-tag recovery and redacted protocol diagnostics | S7, conditional PN532 | ⬜ later |
 | Privacy Identity randomizes Leshy STA/AP and offers ephemeral provenance-labeled synthetic lab identities from owned Captures | S7 | ⬜ later |
 | Conditional USB Host Inspector enumerates device/class interfaces and bounded signed keyboard/HID behavior after VBUS/OTG qualification | S7, conditional hardware | ⬜ later |
-| Owned Evidence Verification checks owned Wi-Fi/NFC/Sub-GHz/fixed-code Captures with budget, pause/stop/checkpoint and provenance | S7 | ⬜ later |
+| Owned Evidence Verification checks owned Wi-Fi/NFC/Sub-GHz/fixed-code Captures with budget, pause/stop/checkpoint and provenance | S7 | 🟡 in progress |
 | Owned Network Lab gives read-only LAN inventory and bounded captive-portal/ARP/DHCP/MITM robustness tests on an isolated selected fixture | S7 | ⬜ later |
 | Browser/SD install and Device → Update: signed stable/beta OTA/SD package, rollback and recovery image | S8 | ⬜ later |
 | Versioned backup/restore and factory reset show scope/preview/checksum and never overwrite raw Capture without confirmation | S8 | ⬜ later |
