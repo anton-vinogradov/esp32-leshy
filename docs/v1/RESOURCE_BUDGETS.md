@@ -2100,3 +2100,21 @@ result typography and a physical left-gutter overflow oracle. The focused HIL bo
 heap is 143,828/69,472/69,324 B total/free/minimum, captures 14 exact TFT frames,
 keeps storage 8/54 with zero writes and finishes Home/none/lease 0. It advances
 focused cadence to 1/15 without accepting protected real-Capture persistence.
+
+Protocol Workbench protected-recovery bound `RB-M245`: exact host/build
+`1.0.0-dev.359` at firmware source
+`3754a91a2ee8752c684e4967467752eaf9c21796` uses 234,976 B static RAM,
+3,638,908 B linked flash and 3,639,408/3,704,944 B app/factory images, leaving
+554,896 B of actual application-image headroom in the 4 MiB OTA slot.
+App/factory/ELF/map SHA-256 values are
+`ee6db665de5869332af64f94c5b8bdb8462cdcf2e2ff16bb4e1e6474aca66f99`/
+`db9bec0463e9e6a6ff2caffa7bc3bc0ba39dd72832ecbf5c20430ecbff5f6b95`/
+`517663c996781d5a70e48c7820d995773e3039ac95deb87e6d526fa195f255c3`/
+`76c389883a700c8e6a8a4d846db708fa007ccb444514739230857a7d340c37cb`.
+Against dev.358, static RAM is unchanged; linked flash and app/factory images grow
+1,876/1,872/1,872 B and OTA headroom falls 1,872 B. The delta adds exact
+annotation-generation-scoped decode recovery, a read-only product oracle and a
+focused persistence runner/checker. Two original-board attempts observed no IR
+edges and stopped before any product write; they do not establish a physical heap,
+storage or cadence claim. Exact dev.358 therefore remains the focused physical
+baseline and cadence remains 1/15.

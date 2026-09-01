@@ -2089,3 +2089,21 @@ role-correct compact typography результатов и physical oracle overfl
 снимает 14 exact TFT frames, сохраняет storage 8/54 с zero writes и заканчивает
 Home/none/lease 0. Cadence двигается до 1/15 без принятия protected persistence
 real Capture.
+
+Bound protected recovery Protocol Workbench `RB-M245`: exact host/build
+`1.0.0-dev.359` на firmware source
+`3754a91a2ee8752c684e4967467752eaf9c21796` использует 234 976 B static RAM,
+3 638 908 B linked flash и app/factory images 3 639 408/3 704 944 B, оставляя
+554 896 B фактического headroom application image в OTA slot 4 MiB.
+SHA-256 app/factory/ELF/map:
+`ee6db665de5869332af64f94c5b8bdb8462cdcf2e2ff16bb4e1e6474aca66f99`/
+`db9bec0463e9e6a6ff2caffa7bc3bc0ba39dd72832ecbf5c20430ecbff5f6b95`/
+`517663c996781d5a70e48c7820d995773e3039ac95deb87e6d526fa195f255c3`/
+`76c389883a700c8e6a8a4d846db708fa007ccb444514739230857a7d340c37cb`.
+Относительно dev.358 static RAM не меняется; linked flash и app/factory images
+растут на 1 876/1 872/1 872 B, OTA headroom уменьшается на 1 872 B. Delta добавляет
+recovery decode, scoped к exact generation annotation, read-only product oracle и
+focused runner/checker persistence. Две попытки на оригинальной плате не увидели
+IR edges и остановились до любой product write; они не создают physical claim heap,
+storage или cadence. Поэтому exact dev.358 остаётся focused physical baseline,
+cadence — 1/15.

@@ -19,7 +19,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
 - **Проверенный checkpoint:** `E-BUILD-232`/`E-AUTO-208`/`E-HIL-231`/`E-UX-085`/`E-STORAGE-076`/`RB-M244` принимают exact physical `1.0.0-dev.358`: task-first дерево Protocol Workbench и экраны comparison/derived decode. Четыре понятные задачи проходят waveform, annotation, честное чтение и сравнение с предыдущим Capture; 14 exact TFT frames не имеют clipped/orphaned glyphs, storage остаётся 8/54 с zero writes, cleanup — Home/none/lease 0. Exact dev.357 остаётся periodic full anchor.
-- **Следующий gate:** `FF-3` остаётся активным. Следующий delta обязан взять реальный immutable IR Capture, commit-нуть его annotation и derived decode через protected store, затем cold-reopen exact generations без изменения raw Capture. RF TX запрещён.
+- **Следующий gate:** `FF-3` остаётся активным на **23/62**. Host/build dev.359 реализует cold recovery exact annotation и привязанного к её generation derived decode вместе с read-only product oracle. Focused runner на оригинальной плате дал шесть последовательных окон сигнала; две physical попытки не увидели IR edges, ничего не записали и завершились fail closed. Повторяется только этот delta при активной передаче реального пульта, затем обязательны exact protected commit/cold reopen без изменения raw Capture. RF TX запрещён.
 
 ### Functional-first очередь поставки
 

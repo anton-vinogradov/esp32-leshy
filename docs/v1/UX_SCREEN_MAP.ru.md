@@ -278,6 +278,16 @@ oracle видит zero ink в служебном левом отступе, а v
 commit/cold reopen annotation/decode на real Capture остаются открыты и FUNC-37
 ещё не завершён.
 
+Host/build dev.359 завершает отсутствующий product recovery wiring: после cold boot
+открытие exact immutable Capture сначала восстанавливает его protected annotations,
+а затем допускает только derived decode, scoped к exact generation этой annotation.
+Новый read-only oracle workbench показывает identity, generations, выбранную
+задачу/pulse, immutable raw, zero radio/TX и cleanup facts для focused HIL. Runner
+real Capture теперь даёт шесть последовательных окон сигнала и fail-closed до save,
+если не наблюдается ни одного IR edge. Две такие попытки на оригинальной плате
+закончились timeout с zero writes, поэтому это implementation/automation evidence,
+а не physical acceptance persistence; progress остаётся 23/62.
+
 Пользователь открывает один сохранённый IR Capture, чтобы сразу ответить на три
 вопроса: какую форму приняли, из каких timing families она состоит и какой exact
 pulse сейчас изучается. Поэтому detail Библиотеки сохраняет **Анализ** и **Экспорт**

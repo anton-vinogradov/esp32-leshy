@@ -273,6 +273,16 @@ review confirms no clipped or orphaned glyphs. The retained fixture is still
 RAM-only, so protected annotation/decode commit and cold reopen against a real
 Capture remain open and FUNC-37 is not yet complete.
 
+Host/build dev.359 completes the missing product recovery wiring: opening the exact
+immutable Capture after a cold boot restores its protected annotations first, then
+admits only the derived decode scoped to that exact annotation generation. A new
+read-only workbench oracle exposes the identity, generations, selected task/pulse,
+immutability, zero-radio/TX and cleanup facts used by focused HIL. The real-Capture
+runner now provides six consecutive signal windows and fails before save if no IR
+edge is observed. Two such original-board attempts timed out with zero writes, so
+this is implementation/automation evidence rather than physical persistence
+acceptance; progress remains 23/62.
+
 The user opens one saved IR Capture to answer three immediate questions: what shape
 was received, which timing families form it, and what exact pulse is under review.
 The Library detail therefore keeps **Analyze** and **Export** as separate actions;
