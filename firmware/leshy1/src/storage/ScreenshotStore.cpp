@@ -158,7 +158,7 @@ struct LoadedCandidate final {
     ScreenshotMetadata metadata{};
 };
 
-LoadedCandidate loadCandidate(
+LoadedCandidate loadCandidateEnvelope(
     ScreenshotStoreIo& io, ScreenshotStoreWorkspace& workspace,
     HeadSlot slot) {
     LoadedCandidate loaded{};
@@ -208,14 +208,30 @@ LoadedCandidate loadCandidate(
         loaded.candidate.payloadValid = false;
         return loaded;
     }
+    // Pixel validation is intentionally deferred until recoverHead selects the
+    // newest valid envelope.  Reading both full 240x320 RGB565 generations on
+    // every boot can exceed the bounded boot-recovery watchdog.  If the newest
+    // pixels fail validation, recovery marks only that candidate invalid and
+    // validates the older generation as the atomic fallback.
+    loaded.candidate.payloadValid = true;
+    return loaded;
+}
+
+bool validateCandidatePixels(ScreenshotStoreIo& io,
+                             const LoadedCandidate& loaded) {
+    if (!loaded.candidate.payloadValid) return false;
+    char path[kSessionStorePathMax] = {};
+    if (!formatScreenshotStorePath(
+            ScreenshotFileKind::Pixels, loaded.record.generation, path,
+            sizeof(path))) {
+        return false;
+    }
     CrcSinkContext crc{};
     std::size_t pixels = 0U;
-    loaded.candidate.payloadValid =
-        io.readStreamFile(path, crcSink, &crc, &pixels) ==
-            SessionStoreIo::ReadStatus::Ok &&
+    return io.readStreamFile(path, crcSink, &crc, &pixels) ==
+               SessionStoreIo::ReadStatus::Ok &&
         pixels == loaded.metadata.pixelBytes && crc.bytes == pixels &&
         ~crc.crc == loaded.metadata.pixelCrc32c;
-    return loaded;
 }
 
 }  // namespace
@@ -385,29 +401,37 @@ ScreenshotStoreResult recoverScreenshot(
     ScreenshotMetadata* output) {
     ScreenshotStoreResult result{};
     if (output == nullptr) return result;
-    const LoadedCandidate a = loadCandidate(io, workspace, HeadSlot::A);
-    const LoadedCandidate b = loadCandidate(io, workspace, HeadSlot::B);
-    const RecoveryResult recovered = recoverHead(a.candidate, b.candidate);
-    if (recovered.choice == RecoveryChoice::None) {
-        result.status = a.candidate.wireSize == 0U &&
-                                b.candidate.wireSize == 0U
-            ? ScreenshotStoreStatus::Empty
-            : ScreenshotStoreStatus::CorruptGeneration;
-        return result;
+    LoadedCandidate a = loadCandidateEnvelope(io, workspace, HeadSlot::A);
+    LoadedCandidate b = loadCandidateEnvelope(io, workspace, HeadSlot::B);
+    for (std::uint8_t attempt = 0U; attempt < 2U; ++attempt) {
+        const RecoveryResult recovered = recoverHead(
+            a.candidate, b.candidate);
+        if (recovered.choice == RecoveryChoice::None) {
+            result.status = a.candidate.wireSize == 0U &&
+                                    b.candidate.wireSize == 0U
+                ? ScreenshotStoreStatus::Empty
+                : ScreenshotStoreStatus::CorruptGeneration;
+            return result;
+        }
+        if (recovered.choice == RecoveryChoice::Conflict) {
+            result.status = ScreenshotStoreStatus::Conflict;
+            return result;
+        }
+        LoadedCandidate& selected = recovered.choice == RecoveryChoice::A
+            ? a : b;
+        if (validateCandidatePixels(io, selected)) {
+            result.status = ScreenshotStoreStatus::Valid;
+            result.generation = selected.record.generation;
+            result.publishedSlot = recovered.choice == RecoveryChoice::A
+                ? HeadSlot::A : HeadSlot::B;
+            result.stage = CommitStage::Complete;
+            workspace.metadata = selected.metadata;
+            *output = selected.metadata;
+            return result;
+        }
+        selected.candidate.payloadValid = false;
     }
-    if (recovered.choice == RecoveryChoice::Conflict) {
-        result.status = ScreenshotStoreStatus::Conflict;
-        return result;
-    }
-    const LoadedCandidate& selected = recovered.choice == RecoveryChoice::A
-        ? a : b;
-    result.status = ScreenshotStoreStatus::Valid;
-    result.generation = selected.record.generation;
-    result.publishedSlot = recovered.choice == RecoveryChoice::A
-        ? HeadSlot::A : HeadSlot::B;
-    result.stage = CommitStage::Complete;
-    workspace.metadata = selected.metadata;
-    *output = selected.metadata;
+    result.status = ScreenshotStoreStatus::CorruptGeneration;
     return result;
 }
 

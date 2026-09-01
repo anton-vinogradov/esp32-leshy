@@ -71,6 +71,8 @@ public:
         }
         const auto found = files_.find(path);
         if (found == files_.end()) return ReadStatus::NotFound;
+        ++streamReadCalls_;
+        streamReadBytes_ += found->second.size();
         for (std::size_t offset = 0U; offset < found->second.size();) {
             const std::size_t chunk = found->second.size() - offset < 256U
                 ? found->second.size() - offset : 256U;
@@ -97,6 +99,14 @@ public:
 
     void failNextSync(const char* path) { failSyncPath_ = path; }
 
+    void resetStreamReadStats() {
+        streamReadCalls_ = 0U;
+        streamReadBytes_ = 0U;
+    }
+
+    std::size_t streamReadCalls() const { return streamReadCalls_; }
+    std::size_t streamReadBytes() const { return streamReadBytes_; }
+
     void flip(const char* path, std::size_t offset) {
         auto& bytes = files_.at(path);
         CHECK(offset < bytes.size());
@@ -107,6 +117,8 @@ private:
     std::map<std::string, std::vector<std::uint8_t>> files_{};
     std::string pending_{};
     std::string failSyncPath_{};
+    std::size_t streamReadCalls_ = 0U;
+    std::size_t streamReadBytes_ = 0U;
 };
 
 bool vectorSource(std::size_t offset, std::uint8_t* output,
@@ -190,14 +202,20 @@ void testAtomicCommitRecoveryAndStreaming() {
     const ScreenshotMetadata secondMetadata = metadataFor(second, 2000U, 8U);
     CHECK(commitNextScreenshot(io, workspace, secondMetadata,
                                vectorSource, &second).valid());
+    io.resetStreamReadStats();
     CHECK(recoverScreenshot(io, workspace, &recovered).valid());
     CHECK(recovered.generation == 2U);
+    CHECK(io.streamReadCalls() == 1U);
+    CHECK(io.streamReadBytes() == kScreenshotPixelBytes);
 
     io.flip("screenshot-00000002.rgb565", 700U);
+    io.resetStreamReadStats();
     const ScreenshotStoreResult fallback = recoverScreenshot(
         io, workspace, &recovered);
     CHECK(fallback.valid());
     CHECK(fallback.generation == 1U);
+    CHECK(io.streamReadCalls() == 2U);
+    CHECK(io.streamReadBytes() == kScreenshotPixelBytes * 2U);
 }
 
 void testPowerCutBeforeHeadPreservesPublishedGeneration() {
