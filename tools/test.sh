@@ -133,6 +133,7 @@ run_opaque_evidence_check() {
     "$repo_dir/firmware/leshy1/src/services/diagnostics/BootReport.cpp" \
     "$repo_dir/firmware/leshy1/src/services/diagnostics/HilSession.cpp" \
     "$repo_dir/firmware/leshy1/src/services/power/PowerSafetyPolicy.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/privacy/WifiOwnIdentityPolicy.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/IngressTiming.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/ObservationQueue.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SessionBatchPolicy.cpp" \
@@ -643,6 +644,7 @@ python3 "$repo_dir/tools/check_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_targets_product_contract.py"
 python3 "$repo_dir/tools/check_companion_protocol_contract.py"
 python3 "$repo_dir/tools/check_connectivity_setup_contract.py"
+python3 "$repo_dir/tools/check_wifi_own_identity_contract.py"
 python3 "$repo_dir/tools/check_connectivity_setup_hil_acceptance.py"
 python3 "$repo_dir/tools/check_airspace_guard_contract.py"
 python3 "$repo_dir/tools/check_wifi_authentication_capture_contract.py"

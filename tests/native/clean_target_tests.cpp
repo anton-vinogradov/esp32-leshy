@@ -79,6 +79,7 @@
 #include "ui/TouchTargets.h"
 #include "ui/ConnectivitySetupController.h"
 #include "ui/InterfaceSettingsController.h"
+#include "services/privacy/WifiOwnIdentityPolicy.h"
 #include "ui/RankedListFocus.h"
 #include "ui/AntennaStatusController.h"
 #include "ui/LanguageController.h"
@@ -2317,7 +2318,25 @@ void testConnectivitySetupStaysOfflineFirstAndSecretFree() {
     CHECK(!controller.previous());
     CHECK(controller.next());
     CHECK(controller.selection() == 1U);
-    CHECK(!controller.next());
+    CHECK(controller.next());
+    CHECK(controller.selection() == 2U);
+    CHECK(controller.activate() ==
+          ConnectivitySetupActivation::PrivacyOpened);
+    CHECK(controller.view() == ConnectivitySetupView::Privacy);
+    CHECK(controller.selection() == 0U);
+    CHECK(controller.next());
+    CHECK(controller.activate() ==
+          ConnectivitySetupActivation::HardwareIdentitySelected);
+    CHECK(controller.wifiIdentityMode() ==
+          leshy1::services::privacy::WifiOwnIdentityMode::Hardware);
+    CHECK(controller.previous());
+    CHECK(controller.activate() ==
+          ConnectivitySetupActivation::PrivatePerSessionSelected);
+    CHECK(controller.wifiIdentityMode() ==
+          leshy1::services::privacy::WifiOwnIdentityMode::PrivatePerSession);
+    CHECK(controller.back());
+    CHECK(controller.selection() == 2U);
+    CHECK(controller.previous());
     CHECK(controller.activate() ==
           ConnectivitySetupActivation::TemporaryWifiRequested);
     CHECK(controller.view() == ConnectivitySetupView::Menu);
@@ -2331,6 +2350,28 @@ void testConnectivitySetupStaysOfflineFirstAndSecretFree() {
     CHECK(controller.view() == ConnectivitySetupView::UsbGuide);
     CHECK(controller.back());
     CHECK(!controller.back());
+}
+
+void testWifiOwnIdentityPolicyProducesPrivateSessionAddress() {
+    using namespace leshy1::services::privacy;
+    const WifiMacAddress entropy = {0xffU, 0x10U, 0x20U,
+                                    0x30U, 0x40U, 0x50U};
+    const WifiMacAddress hardware = {0x24U, 0x6fU, 0x28U,
+                                     0x01U, 0x02U, 0x03U};
+    const auto station = makePrivateWifiIdentity(
+        entropy, hardware, WifiOwnInterface::Station, 7U);
+    const auto accessPoint = makePrivateWifiIdentity(
+        entropy, hardware, WifiOwnInterface::AccessPoint, 7U);
+    CHECK(station.valid());
+    CHECK(accessPoint.valid());
+    CHECK((station.address[0] & 0x03U) == 0x02U);
+    CHECK((accessPoint.address[0] & 0x03U) == 0x02U);
+    CHECK(station.address != accessPoint.address);
+    CHECK(station.address != hardware);
+    CHECK(accessPoint.address != hardware);
+    CHECK(std::strcmp(wifiOwnIdentityModeName(
+                          WifiOwnIdentityMode::PrivatePerSession),
+                      "private_per_session") == 0);
 }
 
 void testPhysicalButtonFrontendDebouncesAndMapsEveryKey() {
@@ -6726,6 +6767,7 @@ int main() {
     testHilSessionBindsOneRunToTheRunningAppIdentity();
     testPhysicalAndDiagnosticActionsShareNavigation();
     testConnectivitySetupStaysOfflineFirstAndSecretFree();
+    testWifiOwnIdentityPolicyProducesPrivateSessionAddress();
     testPhysicalButtonFrontendDebouncesAndMapsEveryKey();
     testPhysicalButtonFrontendRejectsAmbiguousPressesAndRecovers();
     testAppCatalogProjectsCapabilityStatesBeforeLaunch();

@@ -39,6 +39,14 @@ def main() -> int:
         TARGET / "src" / "platform" / "arduino" /
         "ArduinoCompanionWebService.h"
     )
+    wifi_own_identity_adapter = (
+        TARGET / "src" / "platform" / "arduino" /
+        "ArduinoWifiOwnIdentity.cpp"
+    )
+    wifi_own_identity_header = (
+        TARGET / "src" / "platform" / "arduino" /
+        "ArduinoWifiOwnIdentity.h"
+    )
     passive_ble_adapter = TARGET / "src" / "platform" / "arduino" / "BoardBlePassiveScanner.cpp"
     shield_receiver_adapter = (
         TARGET / "src" / "platform" / "arduino" / "BoardShieldReceiverProbe.cpp"
@@ -90,6 +98,8 @@ def main() -> int:
             passive_wifi_adapter,
             passive_wifi_capture_adapter,
             companion_web_adapter,
+            wifi_own_identity_adapter,
+            wifi_own_identity_header,
             shield_receiver_adapter,
             nrf24_spectrum_adapter,
             cc1101_spectrum_adapter,

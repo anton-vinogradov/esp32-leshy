@@ -25,6 +25,7 @@ enum class BoardWifiPassiveBeginFailureStage : std::uint8_t {
     WifiInit,
     SetStorage,
     SetMode,
+    SetIdentity,
     WifiStart,
     SetChannel,
     SetFilter,

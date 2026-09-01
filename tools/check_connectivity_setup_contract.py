@@ -39,8 +39,10 @@ def main() -> int:
         "ConnectivitySetupView::Menu",
         "ConnectivitySetupView::UsbGuide",
         "ConnectivitySetupView::WifiUnavailable",
+        "ConnectivitySetupView::Privacy",
         "TemporaryWifiRequested",
-        "kActionCount = 2U",
+        "PrivacyOpened",
+        "kActionCount = 3U",
     ):
         require(token in controller, f"missing bounded setup state: {token}")
 
@@ -56,7 +58,7 @@ def main() -> int:
         "ConnectivityOfflineNote",
         "SCAN AND LIBRARY NEED NO NETWORK",
         "ConnectivityPrivacyNote",
-        "SECRETS ARE NEVER EXPORTED",
+        "NEW DEVICE ID EACH SESSION",
         "NO CREDENTIAL WAS CREATED",
     ):
         require(token in strings, f"missing truthful user copy: {token}")

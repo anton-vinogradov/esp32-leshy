@@ -107,6 +107,7 @@
 #include "platform/arduino/ArduinoDeviceLockSecurity.h"
 #include "platform/arduino/ArduinoLittleFsSessionStoreIo.h"
 #include "platform/arduino/ArduinoSerialConsoleEndpoint.h"
+#include "platform/arduino/ArduinoWifiOwnIdentity.h"
 #include "platform/arduino/BoardSdFilesystem.h"
 #include "platform/arduino/BoardAutomationPackageReader.h"
 #include "platform/arduino/BoardAutomationPackageHilFixture.h"
@@ -486,6 +487,7 @@ using leshy1::services::survey::SourceWindow;
 using leshy1::services::survey::SourceWindowReason;
 using leshy1::services::survey::SourceWindowState;
 using leshy1::services::survey::SurveySession;
+using leshy1::services::privacy::WifiOwnIdentityMode;
 using leshy1::ui::UiAction;
 using leshy1::ui::AirspaceGuardUiModel;
 using leshy1::ui::AirspaceGuardUiTone;
@@ -596,6 +598,7 @@ constexpr const char* kUiLanguageKey = "lang.v1";
 constexpr const char* kUiBrightnessKey = "bright.v1";
 constexpr const char* kUiThemeKey = "theme.v1";
 constexpr const char* kStatusLedBrightnessKey = "led.v1";
+constexpr const char* kWifiOwnIdentityModeKey = "wifiid.v1";
 constexpr const char* kLegacyUiPreferencesNamespace = "leshy";
 constexpr const char* kLegacyStatusLedBrightnessKey = "led_br";
 HardwareInventory inventory;
@@ -3833,6 +3836,25 @@ bool saveUiTheme(InterfaceTheme theme) {
 bool saveStatusLedBrightnessIndex(std::uint8_t index) {
     if (index >= AntennaStatusController::kBrightnessCount) return false;
     return saveUiPreference(kStatusLedBrightnessKey, index);
+}
+
+WifiOwnIdentityMode loadWifiOwnIdentityMode() {
+    Preferences preferences;
+    if (!preferences.begin(kUiPreferencesNamespace, true)) {
+        return WifiOwnIdentityMode::PrivatePerSession;
+    }
+    const std::uint8_t stored = preferences.getUChar(
+        kWifiOwnIdentityModeKey,
+        static_cast<std::uint8_t>(WifiOwnIdentityMode::PrivatePerSession));
+    preferences.end();
+    return stored == static_cast<std::uint8_t>(WifiOwnIdentityMode::Hardware)
+        ? WifiOwnIdentityMode::Hardware
+        : WifiOwnIdentityMode::PrivatePerSession;
+}
+
+bool saveWifiOwnIdentityMode(WifiOwnIdentityMode mode) {
+    return saveUiPreference(kWifiOwnIdentityModeKey,
+                            static_cast<std::uint8_t>(mode));
 }
 
 bool closeProductSurveyBackend() {
@@ -13969,8 +13991,9 @@ NavigationFooter navigationFooterForCurrentState() {
                      ? UiTextId::NavStart : UiTextId::NavToggle}};
     }
     if (uiController.page() == kConnectivityPage) {
-        if (connectivitySetupController.view() ==
-            ConnectivitySetupView::Menu) {
+        if (connectivitySetupController.view() == ConnectivitySetupView::Menu ||
+            connectivitySetupController.view() ==
+                ConnectivitySetupView::Privacy) {
             return {back, choose, enter};
         }
         return {back, {}, {}};
@@ -14831,6 +14854,35 @@ void renderConnectivityPage(bool clearContent) {
                      Tone::Positive);
         return;
     }
+    if (view == ConnectivitySetupView::Privacy) {
+        renderHeader(tr(UiTextId::ConnectivityPrivacyTitle), clearContent);
+        const bool privatePerSession =
+            connectivitySetupController.wifiIdentityMode() ==
+            WifiOwnIdentityMode::PrivatePerSession;
+        renderMenuRow(
+            Components::homeRow(0),
+            tr(UiTextId::ConnectivityPrivacyPrivate),
+            tr(UiTextId::ConnectivityPrivacyPrivateActionNote),
+            connectivitySetupController.selection() == 0U, true,
+            privatePerSession ? Tone::Positive : Tone::Neutral);
+        renderMenuRow(
+            Components::homeRow(1),
+            tr(UiTextId::ConnectivityPrivacyHardware),
+            tr(UiTextId::ConnectivityPrivacyHardwareActionNote),
+            connectivitySetupController.selection() == 1U, true,
+            privatePerSession ? Tone::Neutral : Tone::Positive);
+        renderMenuRow(
+            Components::homeRow(2),
+            tr(UiTextId::ConnectivityPrivacyOnlyLeshy),
+            tr(UiTextId::ConnectivityPrivacyOnlyLeshyNote), false, false,
+            Tone::Muted);
+        renderMenuRow(
+            Components::homeRow(3),
+            tr(UiTextId::ConnectivityPrivacyAmbient),
+            tr(UiTextId::ConnectivityPrivacyAmbientNote), false, false,
+            Tone::Muted);
+        return;
+    }
 
     renderHeader(tr(UiTextId::ConnectivityTitle), clearContent);
     const std::uint8_t selection = connectivitySetupController.selection();
@@ -14844,18 +14896,47 @@ void renderConnectivityPage(bool clearContent) {
               true);
     renderRow(1U, UiTextId::ConnectivityWifi, UiTextId::ConnectivityWifiNote,
               true);
-    renderRow(2U, UiTextId::ConnectivityOffline,
-              UiTextId::ConnectivityOfflineNote, false);
-    renderRow(3U, UiTextId::ConnectivityPrivacy,
-              UiTextId::ConnectivityPrivacyNote, false);
+    const UiTextId privacyNote =
+        connectivitySetupController.wifiIdentityMode() ==
+                WifiOwnIdentityMode::PrivatePerSession
+            ? UiTextId::ConnectivityPrivacyNote
+            : UiTextId::ConnectivityPrivacyHardwareNote;
+    renderRow(2U, UiTextId::ConnectivityPrivacy, privacyNote, true);
 }
 
 void renderConnectivitySelectionRow(std::uint8_t index) {
-    if (index > 1U) return;
-    const UiTextId label = index == 0U
-        ? UiTextId::ConnectivityUsb : UiTextId::ConnectivityWifi;
-    const UiTextId note = index == 0U
-        ? UiTextId::ConnectivityUsbNote : UiTextId::ConnectivityWifiNote;
+    if (connectivitySetupController.view() ==
+        ConnectivitySetupView::Privacy) {
+        if (index >= ConnectivitySetupController::kPrivacyActionCount) return;
+        const bool privatePerSession =
+            connectivitySetupController.wifiIdentityMode() ==
+            WifiOwnIdentityMode::PrivatePerSession;
+        const UiTextId label = index == 0U
+            ? UiTextId::ConnectivityPrivacyPrivate
+            : UiTextId::ConnectivityPrivacyHardware;
+        const UiTextId note = index == 0U
+            ? UiTextId::ConnectivityPrivacyPrivateActionNote
+            : UiTextId::ConnectivityPrivacyHardwareActionNote;
+        renderMenuRow(
+            Components::homeRow(index), tr(label), tr(note),
+            connectivitySetupController.selection() == index, true,
+            (privatePerSession == (index == 0U))
+                ? Tone::Positive : Tone::Neutral);
+        return;
+    }
+    if (index >= ConnectivitySetupController::kActionCount) return;
+    UiTextId label = UiTextId::ConnectivityPrivacy;
+    UiTextId note = connectivitySetupController.wifiIdentityMode() ==
+            WifiOwnIdentityMode::PrivatePerSession
+        ? UiTextId::ConnectivityPrivacyNote
+        : UiTextId::ConnectivityPrivacyHardwareNote;
+    if (index == 0U) {
+        label = UiTextId::ConnectivityUsb;
+        note = UiTextId::ConnectivityUsbNote;
+    } else if (index == 1U) {
+        label = UiTextId::ConnectivityWifi;
+        note = UiTextId::ConnectivityWifiNote;
+    }
     renderMenuRow(Components::homeRow(index), tr(label), tr(note),
                   connectivitySetupController.selection() == index, true,
                   Tone::Positive);
@@ -23065,7 +23146,9 @@ UiDeltaRenderResult renderSelectionDelta() {
             return UiDeltaRenderResult::RequiresFull;
         }
         if (connectivitySetupController.view() !=
-            ConnectivitySetupView::Menu) {
+                ConnectivitySetupView::Menu &&
+            connectivitySetupController.view() !=
+                ConnectivitySetupView::Privacy) {
             return UiDeltaRenderResult::NoChange;
         }
         const std::uint8_t current = connectivitySetupController.selection();
@@ -29818,7 +29901,9 @@ bool selectionCanRepaintInPlace(UiAction action) {
     if (uiController.page() == kDevicePage) return true;
     if (uiController.page() == kConnectivityPage) {
         return connectivitySetupController.view() ==
-            ConnectivitySetupView::Menu;
+                   ConnectivitySetupView::Menu ||
+            connectivitySetupController.view() ==
+                ConnectivitySetupView::Privacy;
     }
     return uiController.page() == 6 &&
            selfTestController.view() == SelfTestView::ModeMenu;
@@ -31799,19 +31884,22 @@ bool applyUiAction(UiAction action, bool render = true) {
             handled = true;
             changed = connectivitySetupController.back();
             lastRuntimeEvent = "connectivity_menu";
-        } else if (view == ConnectivitySetupView::Menu &&
+        } else if ((view == ConnectivitySetupView::Menu ||
+                    view == ConnectivitySetupView::Privacy) &&
                    action == UiAction::Up) {
             handled = true;
             changed = connectivitySetupController.previous();
             lastRuntimeEvent = changed ? "connectivity_item_selected"
                                        : "connectivity_item_boundary";
-        } else if (view == ConnectivitySetupView::Menu &&
+        } else if ((view == ConnectivitySetupView::Menu ||
+                    view == ConnectivitySetupView::Privacy) &&
                    action == UiAction::Down) {
             handled = true;
             changed = connectivitySetupController.next();
             lastRuntimeEvent = changed ? "connectivity_item_selected"
                                        : "connectivity_item_boundary";
-        } else if (view == ConnectivitySetupView::Menu &&
+        } else if ((view == ConnectivitySetupView::Menu ||
+                    view == ConnectivitySetupView::Privacy) &&
                    (action == UiAction::Select || action == UiAction::Right)) {
             handled = true;
             const ConnectivitySetupActivation activation =
@@ -31825,6 +31913,35 @@ bool applyUiAction(UiAction action, bool render = true) {
                 changed = openTemporaryWifiFromConnectivity() ||
                     connectivitySetupController.view() !=
                         ConnectivitySetupView::Menu;
+            } else if (activation ==
+                       ConnectivitySetupActivation::PrivacyOpened) {
+                changed = true;
+                lastRuntimeEvent = "connectivity_identity_privacy";
+            } else if (
+                activation == ConnectivitySetupActivation::
+                                  PrivatePerSessionSelected ||
+                activation == ConnectivitySetupActivation::
+                                  HardwareIdentitySelected) {
+                const WifiOwnIdentityMode requested =
+                    connectivitySetupController.wifiIdentityMode();
+                const bool saved = saveWifiOwnIdentityMode(requested);
+                if (saved) {
+                    leshy1::platform::arduino::wifiOwnIdentity().setMode(
+                        requested);
+                    changed = true;
+                    lastRuntimeEvent = requested ==
+                            WifiOwnIdentityMode::PrivatePerSession
+                        ? "wifi_identity_private_per_session"
+                        : "wifi_identity_hardware";
+                } else {
+                    const WifiOwnIdentityMode restored = requested ==
+                            WifiOwnIdentityMode::PrivatePerSession
+                        ? WifiOwnIdentityMode::Hardware
+                        : WifiOwnIdentityMode::PrivatePerSession;
+                    connectivitySetupController.restoreWifiIdentityMode(
+                        restored);
+                    lastRuntimeEvent = "wifi_identity_persist_failed";
+                }
             }
         }
         if (handled) {
@@ -32558,6 +32675,16 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
             leshy1::ui::hitTouchTarget(
                 TouchTargetLayout::HomeRows, point, 0,
                 ConnectivitySetupController::kActionCount),
+            connectivitySetupController.selection(),
+        };
+    }
+    if (uiController.page() == kConnectivityPage &&
+        connectivitySetupController.view() ==
+            ConnectivitySetupView::Privacy) {
+        return {
+            leshy1::ui::hitTouchTarget(
+                TouchTargetLayout::HomeRows, point, 0,
+                ConnectivitySetupController::kPrivacyActionCount),
             connectivitySetupController.selection(),
         };
     }
@@ -41812,6 +41939,40 @@ void emitBleInspectorCaptureExport(Stream& reply) {
     reply.println(line);
 }
 
+void emitWifiOwnIdentityState(Stream& reply) {
+    const auto state =
+        leshy1::platform::arduino::wifiOwnIdentity().diagnostics();
+    const char* provenance = state.mode == WifiOwnIdentityMode::Hardware
+        ? "hardware"
+        : (state.generation == 0U ? "pending_private_session"
+                                  : "generated_private_session");
+    auto& line = diagnosticJson;
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.wifi.own_identity.v1\","
+        "\"kind\":\"state\",\"mode\":\"%s\","
+        "\"provenance\":\"%s\",\"generation\":%lu,"
+        "\"station_applications\":%lu,"
+        "\"access_point_applications\":%lu,"
+        "\"failures\":%lu,\"last_error\":%d,"
+        "\"local_admin\":%s,\"unicast\":%s,"
+        "\"differs_from_hardware\":%s,"
+        "\"raw_address_retained\":false,"
+        "\"persisted_value\":\"mode_only\","
+        "\"scope\":\"own_station_and_temporary_wifi\","
+        "\"nearby_identity_modified\":false}",
+        leshy1::services::privacy::wifiOwnIdentityModeName(state.mode),
+        provenance, static_cast<unsigned long>(state.generation),
+        static_cast<unsigned long>(state.stationApplications),
+        static_cast<unsigned long>(state.accessPointApplications),
+        static_cast<unsigned long>(state.failures),
+        static_cast<int>(state.lastError),
+        state.lastLocalAdmin ? "true" : "false",
+        state.lastUnicast ? "true" : "false",
+        state.lastDiffersFromHardware ? "true" : "false");
+    reply.println(line);
+}
+
 bool commandAllowedDuringSafetyStop(const char* command) {
     if (command == nullptr) return false;
     return std::strncmp(command, "hil.begin ", 10) == 0 ||
@@ -41830,6 +41991,7 @@ bool commandAllowedDuringSafetyStop(const char* command) {
            std::strcmp(command, "safety.restart-test confirm") == 0 ||
            std::strcmp(command, "safety.clear confirm") == 0 ||
            std::strcmp(command, "ui.state") == 0 ||
+           std::strcmp(command, "wifi.identity.state") == 0 ||
            std::strcmp(command, "survey.field-visit") == 0 ||
            std::strncmp(command, "ui.key ", 7) == 0 ||
            std::strcmp(command, "ui.capture") == 0 ||
@@ -41872,6 +42034,7 @@ bool commandAllowedWhileSessionWorkspaceBorrowed(const char* command) {
                        "action.cancel serial.console.start") == 0 ||
            std::strcmp(command, "ping") == 0 ||
            std::strcmp(command, "ui.state") == 0 ||
+           std::strcmp(command, "wifi.identity.state") == 0 ||
            std::strcmp(command, "survey.field-visit") == 0 ||
            std::strcmp(command, "ui.capture") == 0 ||
            std::strcmp(command, "input.state") == 0 ||
@@ -42738,6 +42901,8 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         broadcast("{\"schema\":\"leshy.boot.v1\",\"kind\":\"pong\"}");
     } else if (std::strcmp(command, "ui.state") == 0) {
         emitUiState(reply, UiAction::Unknown, false);
+    } else if (std::strcmp(command, "wifi.identity.state") == 0) {
+        emitWifiOwnIdentityState(reply);
     } else if (std::strcmp(command, "automation.inspector.state") == 0) {
         emitAutomationInspectorState(reply);
     } else if (std::strcmp(command, "automation.trust.state") == 0) {
@@ -43378,6 +43543,9 @@ void setup() {
     const bool automationTrustRestoreSucceeded = automationTrustStore.restore();
 
     interfaceSettingsController.restore(loadUiBrightnessIndex(), loadUiTheme());
+    const WifiOwnIdentityMode wifiIdentityMode = loadWifiOwnIdentityMode();
+    connectivitySetupController.restoreWifiIdentityMode(wifiIdentityMode);
+    leshy1::platform::arduino::wifiOwnIdentity().restore(wifiIdentityMode);
     antennaStatusController.restoreBrightness(
         loadStatusLedBrightnessIndex());
     boardAntennaStatusLeds.begin(antennaStatusController.brightnessRaw());

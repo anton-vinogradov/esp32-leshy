@@ -6,6 +6,7 @@
 #include <esp_wifi.h>
 #include <freertos/task.h>
 
+#include "platform/arduino/ArduinoWifiOwnIdentity.h"
 #include "services/guard/AirspaceGuard.h"
 
 namespace leshy1::platform::arduino {
@@ -46,6 +47,8 @@ const char* boardWifiPassiveBeginFailureStageName(
         case BoardWifiPassiveBeginFailureStage::SetStorage:
             return "set_storage";
         case BoardWifiPassiveBeginFailureStage::SetMode: return "set_mode";
+        case BoardWifiPassiveBeginFailureStage::SetIdentity:
+            return "set_identity";
         case BoardWifiPassiveBeginFailureStage::WifiStart: return "wifi_start";
         case BoardWifiPassiveBeginFailureStage::SetChannel:
             return "set_channel";
@@ -317,6 +320,11 @@ bool BoardWifiPassiveCapture::beginCapture(
             recordBeginFailure(
                 BoardWifiPassiveBeginFailureStage::SetMode, error);
         }
+        if (error == ESP_OK && !wifiOwnIdentity().apply(WIFI_IF_STA)) {
+            error = wifiOwnIdentity().diagnostics().lastError;
+            recordBeginFailure(
+                BoardWifiPassiveBeginFailureStage::SetIdentity, error);
+        }
     } else {
         recordBeginFailure(
             BoardWifiPassiveBeginFailureStage::SetStorage, error);
@@ -443,6 +451,9 @@ bool BoardWifiPassiveCapture::beginDeviceMonitor(
     error = esp_wifi_set_storage(WIFI_STORAGE_RAM);
     if (error == ESP_OK) volatileStorageOnly_ = true;
     if (error == ESP_OK) error = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (error == ESP_OK && !wifiOwnIdentity().apply(WIFI_IF_STA)) {
+        error = wifiOwnIdentity().diagnostics().lastError;
+    }
     if (error == ESP_OK) error = esp_wifi_start();
     if (error != ESP_OK) {
         lastError_ = error;
@@ -535,6 +546,9 @@ bool BoardWifiPassiveCapture::beginChannelMonitor(
     error = esp_wifi_set_storage(WIFI_STORAGE_RAM);
     if (error == ESP_OK) volatileStorageOnly_ = true;
     if (error == ESP_OK) error = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (error == ESP_OK && !wifiOwnIdentity().apply(WIFI_IF_STA)) {
+        error = wifiOwnIdentity().diagnostics().lastError;
+    }
     if (error == ESP_OK) error = esp_wifi_start();
     if (error != ESP_OK) {
         lastError_ = error;

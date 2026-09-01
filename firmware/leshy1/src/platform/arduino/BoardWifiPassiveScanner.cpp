@@ -6,6 +6,8 @@
 #include <esp_timer.h>
 #include <esp_wifi.h>
 
+#include "platform/arduino/ArduinoWifiOwnIdentity.h"
+
 namespace leshy1::platform::arduino {
 
 namespace {
@@ -153,6 +155,9 @@ bool BoardWifiPassiveScanner::begin() {
     error = esp_wifi_set_storage(WIFI_STORAGE_RAM);
     if (error == ESP_OK) volatileStorageOnly_ = true;
     if (error == ESP_OK) error = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (error == ESP_OK && !wifiOwnIdentity().apply(WIFI_IF_STA)) {
+        error = wifiOwnIdentity().diagnostics().lastError;
+    }
     if (error == ESP_OK) error = esp_wifi_start();
     if (error != ESP_OK) {
         lastError_ = error;

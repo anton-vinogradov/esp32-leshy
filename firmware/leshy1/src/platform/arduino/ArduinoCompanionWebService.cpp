@@ -11,6 +11,7 @@
 #include <esp_wifi_default.h>
 #include <lwip/sockets.h>
 
+#include "platform/arduino/ArduinoWifiOwnIdentity.h"
 #include "services/companion/CompanionWebAdapter.h"
 
 namespace leshy1::platform::arduino {
@@ -176,6 +177,10 @@ bool ArduinoCompanionWebService::begin(
     beginStage_ = BeginStage::ApMode;
     error = esp_wifi_set_mode(WIFI_MODE_AP);
     if (error != ESP_OK) return failBegin(BeginStage::ApMode, error);
+    if (!wifiOwnIdentity().apply(WIFI_IF_AP)) {
+        return failBegin(BeginStage::ApMode,
+                         wifiOwnIdentity().diagnostics().lastError);
+    }
 
     wifi_config_t config{};
     const std::size_t ssidLength = std::strlen(credentials.ssid.data());
