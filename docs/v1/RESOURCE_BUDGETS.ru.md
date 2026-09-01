@@ -1957,3 +1957,22 @@ app/factory images — на 464 B. Delta добавляет одно bounded sta
 storage I/O или radio activity не добавляются. Focused native/host checks и
 production build проходят; physical heap/TFT acceptance остаётся привязанным к
 dev.343.
+
+Physical bound protected Screenshot/Library `RB-M238`: exact physical
+`1.0.0-dev.349` на firmware source
+`0f9b755aea6d4625942fc4500ea14ef5678193c9` использует 233 600 B static RAM,
+3 603 604 B linked flash и app/factory images 3 604 112/3 669 648 B, оставляя
+590 192 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`f300636d14fdd7d5f1a9053b2388c550dfa35b56f3a732237823020a298ee353`/
+`6ed02f486322b5b03c281c9693a28cc5f8512f4d9fe6abc702b19243cb16fcd2`/
+`3b94218305bdec829ed7b734383cea07e5543b739c36f253e1c3eac4491c8969`/
+`9588b6074b5eeb82e458b0af4ba14a671d0856a7cab726cfb6e0b87e55c4e57c`.
+Относительно dev.347 static RAM не меняется, linked flash растёт на 620 B,
+app/factory images — на 960 B, OTA headroom уменьшается на 960 B. Delta добавляет
+bounded retry raw read-only SD identity для Screenshot save/export; CID mismatch и
+любые mount/filesystem/write failures остаются fail-closed и никогда не повторяются.
+Принятый export использует одну попытку и zero retries. Exact TFT capture/export
+153 600 B byte-identical, cold recovery принимает то же generation 4 read-only с
+zero physical/blocked writes, boot heap total/free/minimum —
+145 204/70 848/70 700 B. Final cleanup — Home/none/lease 0, safety armed.
+Это закрывает FF-2 и продвигает focused cadence до 12/15 без broad matrix.

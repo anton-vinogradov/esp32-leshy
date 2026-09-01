@@ -12,14 +12,14 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 >
 > Stage gates complete: 5 of 9.
 >
-> User functionality: **22/62 done** · 15 active · 6 blocked · 19 planned.
+> User functionality: **23/62 done** · 14 active · 6 blocked · 19 planned.
 
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts. The checklist is complete for the currently frozen 62-capability 1.x baseline. The 1 September competitor re-audit and product decision are complete: every valuable accepted outcome is inside this denominator, while deferred integrations and the three hard product boundaries remain explicit in the [feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
-- **Verified checkpoint:** `E-BUILD-216`/`E-AUTO-192`/`E-HIL-224`/`E-UX-076`/`E-STORAGE-070`/`RB-M228` accept exact physical `1.0.0-dev.331`. Owner-only **Disable PIN** remains disabled after cold boot, exact-CID protected data reopens read-only, physical writes and RF TX remain zero, and cleanup ends Home/none/lease 0. Exact dev.302 remains the periodic full anchor.
-- **Next gate:** `FF-2` remains active. Exact physical `1.0.0-dev.343` (`E-BUILD-222`/`E-AUTO-198`/`E-HIL-226`/`E-UX-077`/`RB-M234`) is owner-accepted: the Bluetooth list and open card no longer flicker. Host/build `1.0.0-dev.347` (`E-BUILD-225`/`E-AUTO-201`/`E-UX-080`/`RB-M237`) now gives Library the same contextual grammar: list → immutable record detail → Actions → understand the signal or export the record. No hidden Up/Down action switch remains, Back reverses one level at a time, and active HIL runners follow the product path. Stored Workbench annotations/compare, truthful Lab empty state and the byte-identical screenshot → protected Library → USB export → same-generation cold reopen remain next. RF TX stays forbidden.
+- **Verified checkpoint:** `E-BUILD-226`/`E-AUTO-202`/`E-HIL-227`/`E-UX-081`/`E-STORAGE-071`/`RB-M238` accept exact physical `1.0.0-dev.349`. One real 240×320 RGB565 TFT frame is saved through the disabled owner lock, reopened from protected Library and exported as the exact same 153,600 bytes (`SHA-256 6fa1…87af`, `CRC32C 6bd8c470`). Cold boot admits the same screenshot generation 4 read-only with exact CID, zero physical writes, and final Home/none/lease 0. Exact dev.302 remains the periodic full anchor.
+- **Next gate:** `FF-3` is active. Host/build `1.0.0-dev.333` already provides its receive-only IR Workbench slice: selected immutable Capture → Actions → understandable waveform/facts and pulse cursor, with Export remaining separate. The next delta physically reviews that path on the accepted dev.349 lineage, then adds stored annotations, comparison and derived decode without mutating the raw Capture. RF TX stays forbidden.
 
 ### Functional-first delivery queue
 
@@ -27,8 +27,8 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 |---|---|---|
 | FF-0 | Physical review build: traverse every available passive top-level workflow, retain stable screens/navigation and record only user-visible findings | ✅ complete |
 | FF-1 | Wi-Fi/BLE and Targets Radar plus the coherent cross-radio interaction review for `FUNC-17` | ✅ complete |
-| FF-2 | Deliver `FUNC-43` on-device screenshot → Library → export with build/state/time provenance | 🟡 active |
-| FF-3 | Deliver the receive-only first slice of `FUNC-37` Protocol Workbench over immutable Captures; IR source/build slice is complete and awaits physical review | ➡️ next |
+| FF-2 | Deliver `FUNC-43` on-device screenshot → Library → export with build/state/time provenance | ✅ complete |
+| FF-3 | Deliver the receive-only first slice of `FUNC-37` Protocol Workbench over immutable Captures; IR source/build slice is complete and awaits physical review | 🟡 active |
 | FF-4 | Finish `FUNC-38` local USB/Web browse, search, compare and export without making network access a device dependency | ⬜ queued |
 | FF-5 | Deliver `FUNC-34` IR replay from one selected immutable Capture with preview, confirmation and proven Stop/timeout | ⬜ queued |
 | FF-6 | Resume signed-package classification/execution for `FUNC-54`, then individually admitted Safe Lab actions; Automation/HID remains zero-output until this row becomes active | ⏸️ safely parked |
@@ -73,7 +73,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | IR receive/decode preserves original and derived data, cold-reopens in Library and exports CSV | S5.2 | ✅ complete |
 | Sub-GHz RAW/OOK/FSK Capture preserves pulses/parameters/decodes and exports Flipper-compatible `.sub` from a declared decoder inventory | S5.4 + S7 | 🔴 blocked |
 | PN532 reads tag/NDEF facts and a versioned dump only for an explicit non-conflicting assembly | S5 | 🔴 blocked |
-| User saves a real-TFT screenshot with build/state/time provenance and opens it in Library/export | S5 | 🟡 in progress |
+| User saves a real-TFT screenshot with build/state/time provenance and opens it in Library/export | S5 | ✅ complete |
 | One feedback service owns antenna LEDs and buzzer: default 2/255, quiet mode, bounded tones and non-color-only cues | S5 + S6 | ✅ complete |
 | Local logs, crash journal and exportable diagnostic bundle without a cloud dependency | S6 + S8 | 🟡 in progress |
 | A Target preserves stable identities, Observation history and links to immutable source evidence | S6.1 + S6.4 | ✅ complete |

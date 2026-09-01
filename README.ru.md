@@ -12,14 +12,14 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 >
 > Закрыто этапов: 5 из 9.
 >
-> Пользовательские функции: **22/62 готовы** · 15 в работе · 6 заблокированы · 19 запланированы.
+> Пользовательские функции: **23/62 готовы** · 14 в работе · 6 заблокированы · 19 запланированы.
 
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline из 62 capabilities, знаменатель зафиксирован. Повторный аудит конкурентов и product decision от 1 сентября завершены: все ценные принятые outcomes входят в знаменатель, а отложенные integrations и три жёсткие продуктовые границы явно перечислены в [пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
-- **Проверенный checkpoint:** `E-BUILD-216`/`E-AUTO-192`/`E-HIL-224`/`E-UX-076`/`E-STORAGE-070`/`RB-M228` принимают exact physical `1.0.0-dev.331`. Owner-only **Отключить PIN** остаётся выключенным после cold boot, protected data exact CID открываются read-only, physical writes и RF TX равны zero, cleanup заканчивается Home/none/lease 0. Exact dev.302 остаётся periodic full anchor.
-- **Следующий gate:** `FF-2` остаётся активен. Exact physical `1.0.0-dev.343` (`E-BUILD-222`/`E-AUTO-198`/`E-HIL-226`/`E-UX-077`/`RB-M234`) принят владельцем: список Bluetooth и открытая карточка больше не мерцают. Host/build `1.0.0-dev.347` (`E-BUILD-225`/`E-AUTO-201`/`E-UX-080`/`RB-M237`) даёт Библиотеке ту же контекстную грамматику: список → карточка неизменяемой записи → Действия → понять сигнал или экспортировать запись. Скрытого переключения actions через Вверх/Вниз больше нет, Назад честно поднимается на один уровень, active HIL runners проходят продуктовый маршрут. Затем остаются сохранение annotations/compare Workbench, честное empty state Lab и workflow screenshot → protected Library → USB export → cold reopen того же generation. RF TX запрещён.
+- **Проверенный checkpoint:** `E-BUILD-226`/`E-AUTO-202`/`E-HIL-227`/`E-UX-081`/`E-STORAGE-071`/`RB-M238` принимают exact physical `1.0.0-dev.349`. Один реальный кадр TFT 240×320 RGB565 сохранён при отключённом owner lock, вновь открыт из защищённой Библиотеки и экспортирован как те же exact 153 600 байт (`SHA-256 6fa1…87af`, `CRC32C 6bd8c470`). Cold boot принимает то же screenshot generation 4 read-only с exact CID, zero physical writes и final Home/none/lease 0. Exact dev.302 остаётся periodic full anchor.
+- **Следующий gate:** `FF-3` активен. Host/build `1.0.0-dev.333` уже даёт его receive-only IR slice Workbench: выбранный immutable Capture → Действия → понятные waveform/facts и pulse cursor, а Export остаётся отдельным. Следующий delta физически проверяет этот path на принятой lineage dev.349, затем добавляет сохранённые annotations, compare и derived decode без изменения raw Capture. RF TX запрещён.
 
 ### Functional-first очередь поставки
 
@@ -27,8 +27,8 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 |---|---|---|
 | FF-0 | Физическая ревью-сборка: пройти все доступные passive top-level workflows, сохранить stable screens/navigation и записать только пользовательские findings | ✅ готово |
 | FF-1 | Radar Wi-Fi/BLE и Targets плюс согласованный cross-radio interaction review `FUNC-17` | ✅ готово |
-| FF-2 | Поставить `FUNC-43` screenshot устройства → Library → export с provenance build/state/time | 🟡 в работе |
-| FF-3 | Поставить первый receive-only срез `FUNC-37` Protocol Workbench над immutable Captures; IR source/build slice завершён и ждёт physical review | ➡️ следующий |
+| FF-2 | Поставить `FUNC-43` screenshot устройства → Library → export с provenance build/state/time | ✅ готово |
+| FF-3 | Поставить первый receive-only срез `FUNC-37` Protocol Workbench над immutable Captures; IR source/build slice завершён и ждёт physical review | 🟡 в работе |
 | FF-4 | Завершить `FUNC-38` local USB/Web browse, search, compare и export, не делая сеть зависимостью устройства | ⬜ в очереди |
 | FF-5 | Поставить `FUNC-34` IR replay из одного выбранного immutable Capture с preview, confirmation и доказанным Stop/timeout | ⬜ в очереди |
 | FF-6 | Вернуться к classification/execution signed packages `FUNC-54`, затем к отдельно допускаемым действиям Safe Lab; Automation/HID остаётся zero-output до активации этой строки | ⏸️ безопасно заморожен |
@@ -73,7 +73,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | ИК receive/decode сохраняет оригинал и производные данные, cold-reopen-ит их в Библиотеке и экспортирует CSV | S5.2 | ✅ готово |
 | Sub-GHz RAW/OOK/FSK Capture сохраняет pulses/parameters/decodes и экспортирует Flipper-compatible `.sub` из declared decoder inventory | S5.4 + S7 | 🔴 заблокировано |
 | PN532 читает tag/NDEF info и versioned dump только при explicit non-conflicting assembly | S5 | 🔴 заблокировано |
-| Пользователь сохраняет screenshot реального TFT с build/state/time provenance и открывает его в Library/export | S5 | 🟡 в работе |
+| Пользователь сохраняет screenshot реального TFT с build/state/time provenance и открывает его в Library/export | S5 | ✅ готово |
 | Единый feedback service владеет status LED антенн и buzzer: default 2/255, quiet mode, bounded tones и доступные без цвета cues | S5 + S6 | ✅ готово |
 | Локальные логи, crash journal и экспортируемый diagnostic bundle без облака | S6 + S8 | 🟡 в работе |
 | Цель хранит стабильные identities, историю Observation и ссылки на immutable source evidence | S6.1 + S6.4 | ✅ готово |

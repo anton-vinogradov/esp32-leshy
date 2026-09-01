@@ -1967,3 +1967,22 @@ images grow 464 B. The delta adds one bounded controller state and only renders
 the selected action rows; it adds no capture buffer, queue, worker, storage I/O or
 radio activity. Focused native/host checks and production build pass; physical
 heap and TFT acceptance remain bound to dev.343.
+
+Protected Screenshot/Library physical bound `RB-M238`: exact physical
+`1.0.0-dev.349` at firmware source
+`0f9b755aea6d4625942fc4500ea14ef5678193c9` uses 233,600 B static RAM,
+3,603,604 B linked flash and 3,604,112/3,669,648 B app/factory images, leaving
+590,192 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`f300636d14fdd7d5f1a9053b2388c550dfa35b56f3a732237823020a298ee353`/
+`6ed02f486322b5b03c281c9693a28cc5f8512f4d9fe6abc702b19243cb16fcd2`/
+`3b94218305bdec829ed7b734383cea07e5543b739c36f253e1c3eac4491c8969`/
+`9588b6074b5eeb82e458b0af4ba14a671d0856a7cab726cfb6e0b87e55c4e57c`.
+Against dev.347 static RAM is unchanged, linked flash grows 620 B, app/factory
+images grow 960 B and OTA headroom falls 960 B. The delta funds bounded raw
+read-only SD identity retry for Screenshot save/export; CID mismatch and every
+mount, filesystem or write failure remain fail-closed and are never retried.
+Accepted export uses one attempt and zero retries. The exact 153,600-byte TFT
+capture/export is byte-identical, cold recovery admits the same generation 4
+read-only with zero physical/blocked writes, and boot total/free/minimum heap is
+145,204/70,848/70,700 B. Final cleanup is Home/none/lease 0 with safety armed.
+This closes FF-2 and advances focused cadence to 12/15 without a broad matrix.
