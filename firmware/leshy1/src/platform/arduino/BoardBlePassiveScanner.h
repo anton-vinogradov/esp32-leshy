@@ -96,9 +96,11 @@ public:
     // The ESP32-S3 BLE controller contains a fatal low-memory assertion in
     // its private bootstrap. Reject the lifecycle before nimble_port_init()
     // unless physical no-PSRAM HIL has proved both total and contiguous
-    // internal-RAM reserves sufficient for that bootstrap.
+    // internal-RAM reserves sufficient for that bootstrap. The product
+    // preallocates its three small 1-bpp live-text compositors before this
+    // measurement so they cannot fragment the controller's released arena.
     static constexpr std::uint32_t kMinimumInternalFreeHeapBeforeBegin =
-        73000U;
+        72000U;
     static constexpr std::uint32_t kMinimumInternalLargestHeapBeforeBegin =
         28000U;
 

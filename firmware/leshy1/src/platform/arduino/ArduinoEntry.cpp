@@ -3074,10 +3074,11 @@ constexpr UBaseType_t kProductSurveyObservationCapacity =
 constexpr UBaseType_t kBleProductSurveyObservationCapacity = 32;
 // These are admission floors, not clean-boot expectations. Exact no-PSRAM
 // HIL has already completed physical BLE initialization at 73,360 B free and
-// a 28,660 B largest block (dev.261).  Keep a small fail-closed margin below
-// that accepted boundary so a completed Survey/SD lifecycle can start another
-// session without treating normal allocator placement as a radio failure.
-constexpr std::uint32_t kBleProductMinimumFreeHeapBeforeBegin = 73000U;
+// a 28,660 B largest block (dev.261). The three persistent 1-bpp compositors
+// reserve about 1.5 KiB before queue compaction and controller bootstrap so
+// they cannot split the controller arena when it is later released. The
+// admission floor therefore applies after that deliberate reservation.
+constexpr std::uint32_t kBleProductMinimumFreeHeapBeforeBegin = 72000U;
 constexpr std::uint32_t kBleProductMinimumLargestHeapBeforeBegin = 28000U;
 static_assert(kBleProductMinimumFreeHeapBeforeBegin ==
               BoardBlePassiveScanner::kMinimumInternalFreeHeapBeforeBegin);
@@ -17205,6 +17206,31 @@ constexpr std::int16_t kBleDeviceNoteWidth =
     Layout::ContentWidth - kInteractiveRowTextInset -
     kBleDeviceNoteRightInset;
 
+bool prepareBleDeviceNoteSprite() {
+    if (!bleDeviceNoteSprite.created()) {
+        bleDeviceNoteSprite.setColorDepth(1);
+        if (bleDeviceNoteSprite.createSprite(
+                kBleDeviceNoteWidth, kLiveMetaTextRowHeight) != nullptr) {
+            bleDeviceNoteSprite.setTextWrap(false, false);
+        }
+    }
+    return bleDeviceNoteSprite.created();
+}
+
+bool prepareBleUiCompositors() {
+    // Allocate every persistent UI sprite before the Survey queue is compacted
+    // and before NimBLE claims its arena. Creating one while NimBLE is alive
+    // pins a tiny block in the middle of the released controller heap and can
+    // make an otherwise healthy second BLE entry fail admission.
+    const bool bodyReady = beginLiveTextRow(
+        UiTextRole::Body, Palette::TextSecondary, Palette::Canvas);
+    const bool metaReady = beginLiveMetaTextRow(
+        Palette::TextSecondary, Palette::Canvas);
+    const bool noteReady = prepareBleDeviceNoteSprite();
+    if (!noteReady) ++liveTextRowAllocationFailures;
+    return bodyReady && metaReady && noteReady;
+}
+
 void renderBleDeviceRowNote(const BleDeviceRowVisual& visual,
                             const Rect& bounds,
                             std::uint16_t background) {
@@ -17217,14 +17243,7 @@ void renderBleDeviceRowNote(const BleDeviceRowVisual& visual,
     const std::int16_t textTop = labelTop + kRobotoCondensedBodyAscent +
                                  kRobotoCondensedBodyDescent + 1;
     constexpr std::int16_t kSpriteTextTop = 2;
-    if (!bleDeviceNoteSprite.created()) {
-        bleDeviceNoteSprite.setColorDepth(1);
-        if (bleDeviceNoteSprite.createSprite(
-                kBleDeviceNoteWidth, kLiveMetaTextRowHeight) != nullptr) {
-            bleDeviceNoteSprite.setTextWrap(false, false);
-        }
-    }
-    if (bleDeviceNoteSprite.created()) {
+    if (prepareBleDeviceNoteSprite()) {
         bleDeviceNoteSprite.fillSprite(0U);
         bleDeviceNoteSprite.setBitmapColor(tone, background);
         bleDeviceNoteSprite.setTextColor(1U, 0U);
@@ -28541,6 +28560,14 @@ bool startBleDevicesProduct() {
         productSurveyRuntime.status = "ble_workspace_busy";
         lastRuntimeEvent = productSurveyRuntime.status;
         return false;
+    }
+    if (!prepareBleUiCompositors()) {
+        productSurveyRuntime = {};
+        productSurveyRuntime.selected = true;
+        productSurveyRuntime.status = "ble_ui_memory_unavailable";
+        lastRuntimeEvent = productSurveyRuntime.status;
+        bleProductView = BleProductView::Devices;
+        return true;
     }
     std::uint32_t bleAdmissionFreeHeap = 0U;
     std::uint32_t bleAdmissionLargestHeap = 0U;
