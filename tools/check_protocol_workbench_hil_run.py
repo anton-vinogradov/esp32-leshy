@@ -50,6 +50,8 @@ def main() -> int:
          "contextual task tree was not exercised")
     need(policy.get("annotation_task_flow") == "mark_range_and_meaning",
          "annotation task flow was not exercised")
+    need(policy.get("result_left_gutter_clean") is True,
+         "result overflow oracle was not enabled")
     candidate = value.get("candidate", {})
     need(candidate.get("fresh_flash") is True, "candidate was not freshly flashed")
     for key in ("firmware_sha256", "app_elf_sha256"):
@@ -197,6 +199,10 @@ def main() -> int:
          compared.get("comparison_regions") == 1 and
          compared.get("comparison_status") == "hil_ram_only",
          "bounded previous/current comparison result was not exposed")
+    need(records.get("decode_left_gutter_ink") == 0,
+         "derived decode wrapped or clipped into the left gutter")
+    need(records.get("compare_left_gutter_ink") == 0,
+         "comparison wrapped or clipped into the left gutter")
     for name, value_field in (("state_decode", "decode_valid"),
                               ("state_compare", "comparison_valid")):
         state = records.get(name, {})

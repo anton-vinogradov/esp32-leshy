@@ -14177,10 +14177,11 @@ void renderMenuRow(Rect bounds, const char* label, const char* note,
 }
 
 void renderMetric(std::uint8_t index, const char* text,
-                  Tone tone = Tone::Neutral) {
+                  Tone tone = Tone::Neutral,
+                  UiTextRole role = UiTextRole::Body) {
     const Rect bounds = Components::metricRow(index);
     display.setTextColor(toneColor(tone), Palette::Canvas);
-    setUiCursor(UiTextRole::Body, bounds.x + 2, bounds.y - 2);
+    setUiCursor(role, bounds.x + 2, bounds.y - 2);
     display.print(text);
 }
 
@@ -21184,11 +21185,11 @@ void renderProtocolComparison(bool clearContent) {
     std::snprintf(
         line, sizeof(line), tr(UiTextId::ProtocolComparePulseFormat),
         static_cast<unsigned>(protocolComparisonResult.comparedPulses));
-    renderMetric(1, line);
+    renderMetric(1, line, Tone::Neutral, UiTextRole::Meta);
     std::snprintf(
         line, sizeof(line), tr(UiTextId::ProtocolCompareChangedFormat),
         static_cast<unsigned>(protocolComparisonResult.valueChangedPulses));
-    renderMetric(2, line);
+    renderMetric(2, line, Tone::Neutral, UiTextRole::Meta);
     if (protocolComparisonResult.regionCount != 0U) {
         const std::size_t selected =
             protocolWorkbenchTaskController.selection();
@@ -21204,7 +21205,7 @@ void renderProtocolComparison(bool clearContent) {
     std::snprintf(
         line, sizeof(line), tr(UiTextId::ProtocolCompareDurationFormat),
         static_cast<long>(protocolComparisonResult.durationDeltaUs));
-    renderMetric(4, line);
+    renderMetric(4, line, Tone::Neutral, UiTextRole::Meta);
 }
 
 void renderProtocolDecode(bool clearContent) {
@@ -21238,7 +21239,7 @@ void renderProtocolDecode(bool clearContent) {
         line, sizeof(line), tr(UiTextId::ProtocolDecodeCountFormat),
         static_cast<unsigned>(protocolDerivedDecode.observedBitFields),
         static_cast<unsigned>(valueFields));
-    renderMetric(1, line);
+    renderMetric(1, line, Tone::Neutral, UiTextRole::Meta);
     if (protocolDerivedDecode.fieldCount != 0U) {
         const std::size_t selected =
             protocolWorkbenchTaskController.selection();
@@ -21272,9 +21273,10 @@ void renderProtocolDecode(bool clearContent) {
             line, sizeof(line), tr(UiTextId::ProtocolDecodeStoredFormat),
             static_cast<unsigned long>(
                 protocolDerivedDecodeStoreGeneration));
-        renderMetric(4, line, Tone::Positive);
+        renderMetric(4, line, Tone::Positive, UiTextRole::Meta);
     } else {
-        renderMetric(4, tr(UiTextId::ProtocolDecodeOrderNote));
+        renderMetric(4, tr(UiTextId::ProtocolDecodeOrderNote),
+                     Tone::Neutral, UiTextRole::Meta);
     }
 }
 

@@ -153,6 +153,18 @@ def task_cursor_delta(before: bytes, after: bytes) -> dict[str, Any]:
     ])
 
 
+def result_left_gutter_ink(frame: bytes) -> int:
+    """Count wrapped/clipped result glyphs outside the 12 px content edge."""
+    if len(frame) != FRAME_BYTES:
+        raise RuntimeError("frame size changed")
+    canvas = frame[(50 * 240) * 2:(50 * 240) * 2 + 2]
+    return sum(
+        frame[(y * 240 + x) * 2:(y * 240 + x) * 2 + 2] != canvas
+        for y in range(42, 293)
+        for x in range(12)
+    )
+
+
 def validate_args(parser: argparse.ArgumentParser,
                   args: argparse.Namespace) -> None:
     if args.port == FORBIDDEN_CLONE_PORT or args.port != BOARD_PORT:
@@ -459,6 +471,11 @@ def main() -> int:
         }, "read marked parts")
         records["frame_decode"], _ = capture_frame(
             device, frames, "derived-decode")
+        decode_frame = (frames / "derived-decode.rgb565").read_bytes()
+        records["decode_left_gutter_ink"] = result_left_gutter_ink(
+            decode_frame)
+        if records["decode_left_gutter_ink"] != 0:
+            raise RuntimeError("derived decode text wrapped into left gutter")
 
         records["ui_compare_explain"] = action(device, "left")
         records["ui_compare_tasks"] = action(device, "left")
@@ -478,6 +495,11 @@ def main() -> int:
         }, "compare with previous")
         records["frame_compare"], _ = capture_frame(
             device, frames, "comparison-result")
+        compare_frame = (frames / "comparison-result.rgb565").read_bytes()
+        records["compare_left_gutter_ink"] = result_left_gutter_ink(
+            compare_frame)
+        if records["compare_left_gutter_ink"] != 0:
+            raise RuntimeError("comparison text wrapped into left gutter")
 
         records["clear"] = read_only(
             device, b"protocol.workbench.hil-fixture clear",
@@ -559,6 +581,7 @@ def main() -> int:
             "product_storage_writes": 0,
             "task_tree_flow": "tasks_then_contextual_children",
             "annotation_task_flow": "mark_range_and_meaning",
+            "result_left_gutter_clean": True,
             "exact_tft_bytes_required": True,
         },
         "hil_sessions": sessions,
