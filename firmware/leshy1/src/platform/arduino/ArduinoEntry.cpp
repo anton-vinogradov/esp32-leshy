@@ -2282,6 +2282,7 @@ std::uint64_t nextBleDeviceListUiRefreshUs = 0U;
 bool bleDeviceListUiRefreshPending = false;
 std::uint32_t bleDeviceListRowRepaints = 0U;
 std::uint32_t bleDeviceListRowFullRepaints = 0U;
+std::uint32_t bleDeviceListIdentityReplacements = 0U;
 std::uint32_t bleDeviceListSignalDeltaRepaints = 0U;
 std::uint32_t bleDeviceListAtomicNotePushes = 0U;
 std::uint32_t bleDeviceListContentClears = 0U;
@@ -17312,7 +17313,12 @@ bool renderBleDeviceRow(std::size_t index, std::size_t firstVisible,
         bleDeviceRenderedRows[slot] = visual;
         return true;
     }
+    const bool identityReplacement = !force &&
+        bleDeviceRenderedRowValid[slot] &&
+        bleDeviceRenderedRows[slot].present && visual.present &&
+        !bleDeviceRenderedRows[slot].sameIdentity(visual);
     ++bleDeviceListRowFullRepaints;
+    if (identityReplacement) ++bleDeviceListIdentityReplacements;
     const std::uint16_t background = visual.selected
         ? Palette::SurfaceFocus : Palette::Surface;
     display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
@@ -28569,6 +28575,7 @@ bool startBleDevicesProduct() {
     resetBleDeviceListRenderCache();
     bleDeviceListRowRepaints = 0U;
     bleDeviceListRowFullRepaints = 0U;
+    bleDeviceListIdentityReplacements = 0U;
     bleDeviceListSignalDeltaRepaints = 0U;
     bleDeviceListAtomicNotePushes = 0U;
     bleDeviceListContentClears = 0U;
@@ -40887,6 +40894,7 @@ void emitBleDeviceDetailState(Stream& reply) {
         "\"rssi_trend_db\":%d,\"catalog_revision\":%lu,"
         "\"list_row_repaints\":%lu,"
         "\"list_row_full_repaints\":%lu,"
+        "\"list_identity_replacements\":%lu,"
         "\"list_signal_delta_repaints\":%lu,"
         "\"list_atomic_note_pushes\":%lu,"
         "\"list_content_clears\":%lu,"
@@ -40937,6 +40945,7 @@ void emitBleDeviceDetailState(Stream& reply) {
         static_cast<unsigned long>(bleDeviceCatalog.revision()),
         static_cast<unsigned long>(bleDeviceListRowRepaints),
         static_cast<unsigned long>(bleDeviceListRowFullRepaints),
+        static_cast<unsigned long>(bleDeviceListIdentityReplacements),
         static_cast<unsigned long>(bleDeviceListSignalDeltaRepaints),
         static_cast<unsigned long>(bleDeviceListAtomicNotePushes),
         static_cast<unsigned long>(bleDeviceListContentClears),

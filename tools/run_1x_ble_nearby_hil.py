@@ -18,6 +18,7 @@ from ble_nearby_entry_gate import (
 )
 from ble_nearby_run_policy import (
     boot_recovery_continuity,
+    bounded_list_repaint_accounting_valid,
     bounded_pipeline_accounting_valid,
     display_signal_signature,
 )
@@ -392,30 +393,50 @@ def main() -> int:
                 full_row_repaint_delta = int(list_render_second.get(
                     "list_row_full_repaints", -1)) - int(
                         list_render_first.get("list_row_full_repaints", -1))
+                identity_replacement_delta = int(list_render_second.get(
+                    "list_identity_replacements", -1)) - int(
+                        list_render_first.get(
+                            "list_identity_replacements", -1))
+                signal_delta_repaint_delta = int(list_render_second.get(
+                    "list_signal_delta_repaints", -1)) - int(
+                        list_render_first.get(
+                            "list_signal_delta_repaints", -1))
+                atomic_note_push_delta = int(list_render_second.get(
+                    "list_atomic_note_pushes", -1)) - int(
+                        list_render_first.get(
+                            "list_atomic_note_pushes", -1))
                 static_churn_suppressed_delta = int(list_render_second.get(
                     "list_static_churn_suppressed", -1)) - int(
                         list_render_first.get(
                             "list_static_churn_suppressed", -1))
                 list_cadence_window["full_row_repaints"] = \
                     full_row_repaint_delta
+                list_cadence_window["identity_replacements"] = \
+                    identity_replacement_delta
+                list_cadence_window["signal_delta_repaints"] = \
+                    signal_delta_repaint_delta
+                list_cadence_window["atomic_note_pushes"] = \
+                    atomic_note_push_delta
                 list_cadence_window["static_churn_suppressed"] = \
                     static_churn_suppressed_delta
                 content_changed = list_pixel_changes[
                     "content_changed_pixels"]
-                bounded_rows = (content_changed == 0 and
-                                row_repaint_delta == 0) or \
-                    (content_changed > 0 and
-                     1 <= row_repaint_delta <= 8)
                 if list_pixel_changes["chrome_changed_pixels"] != 0 or \
-                        not bounded_rows or \
-                        full_row_repaint_delta != 0 or \
+                        not bounded_list_repaint_accounting_valid(
+                            list_render_first, list_render_second,
+                            content_changed) or \
                         static_churn_suppressed_delta < 0 or \
+                        list_render_second.get(
+                            "atomic_text_row_allocation_failures") != 0 or \
+                        list_render_second.get(
+                            "direct_text_row_fallbacks") != 0 or \
                         list_render_second.get("list_content_clears") != \
                         list_render_first.get("list_content_clears"):
                     raise RuntimeError(
                         "BLE live list used an unbounded repaint: "
                         f"rows={row_repaint_delta}, "
                         f"full_rows={full_row_repaint_delta}, "
+                        f"identity_replacements={identity_replacement_delta}, "
                         f"static_suppressed={static_churn_suppressed_delta}, "
                         f"first={list_render_first!r}, "
                         f"second={list_render_second!r}")

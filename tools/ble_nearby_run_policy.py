@@ -67,3 +67,43 @@ def bounded_pipeline_accounting_valid(state: Mapping[str, Any]) -> bool:
         values.append(value)
     received, forwarded, dropped, queue_depth = values
     return received == forwarded + dropped and queue_depth == 0
+
+
+def bounded_list_repaint_accounting_valid(
+        before: Mapping[str, Any], after: Mapping[str, Any],
+        content_changed_pixels: Any, maximum_row_repaints: int = 8) -> bool:
+    """Allow a complete row only when strongest-first sorting moved identity."""
+    fields = (
+        "list_row_repaints", "list_row_full_repaints",
+        "list_identity_replacements", "list_signal_delta_repaints",
+        "list_atomic_note_pushes",
+    )
+    deltas: dict[str, int] = {}
+    for field in fields:
+        old = before.get(field)
+        new = after.get(field)
+        if (not isinstance(old, int) or isinstance(old, bool) or
+                not isinstance(new, int) or isinstance(new, bool) or
+                new < old):
+            return False
+        deltas[field] = new - old
+    if (not isinstance(content_changed_pixels, int) or
+            isinstance(content_changed_pixels, bool) or
+            content_changed_pixels < 0 or maximum_row_repaints < 1):
+        return False
+    rows = deltas["list_row_repaints"]
+    full = deltas["list_row_full_repaints"]
+    replacements = deltas["list_identity_replacements"]
+    signal = deltas["list_signal_delta_repaints"]
+    atomic_notes = deltas["list_atomic_note_pushes"]
+    visible_change_matches = (
+        content_changed_pixels == 0 and rows == 0
+    ) or (
+        content_changed_pixels > 0 and 1 <= rows <= maximum_row_repaints
+    )
+    return (
+        visible_change_matches and
+        rows == full + signal and
+        full == replacements and
+        atomic_notes == rows
+    )

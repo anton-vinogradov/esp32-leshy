@@ -5,6 +5,7 @@ import unittest
 
 from ble_nearby_run_policy import (
     boot_recovery_continuity,
+    bounded_list_repaint_accounting_valid,
     bounded_pipeline_accounting_valid,
     display_signal_signature,
     storage_measurement_scope_valid,
@@ -12,6 +13,51 @@ from ble_nearby_run_policy import (
 
 
 class BleNearbyRunPolicyTest(unittest.TestCase):
+    def test_bounded_list_accepts_signal_and_identity_moves(self) -> None:
+        before = {
+            "list_row_repaints": 20,
+            "list_row_full_repaints": 8,
+            "list_identity_replacements": 6,
+            "list_signal_delta_repaints": 12,
+            "list_atomic_note_pushes": 20,
+        }
+        after = {
+            "list_row_repaints": 24,
+            "list_row_full_repaints": 11,
+            "list_identity_replacements": 9,
+            "list_signal_delta_repaints": 13,
+            "list_atomic_note_pushes": 24,
+        }
+        self.assertTrue(bounded_list_repaint_accounting_valid(
+            before, after, 2083))
+
+    def test_bounded_list_rejects_unnecessary_full_or_non_atomic_row(self) -> None:
+        before = {
+            "list_row_repaints": 20,
+            "list_row_full_repaints": 8,
+            "list_identity_replacements": 6,
+            "list_signal_delta_repaints": 12,
+            "list_atomic_note_pushes": 20,
+        }
+        unnecessary_full = {
+            "list_row_repaints": 21,
+            "list_row_full_repaints": 9,
+            "list_identity_replacements": 6,
+            "list_signal_delta_repaints": 12,
+            "list_atomic_note_pushes": 21,
+        }
+        non_atomic = {
+            "list_row_repaints": 21,
+            "list_row_full_repaints": 8,
+            "list_identity_replacements": 6,
+            "list_signal_delta_repaints": 13,
+            "list_atomic_note_pushes": 20,
+        }
+        self.assertFalse(bounded_list_repaint_accounting_valid(
+            before, unnecessary_full, 100))
+        self.assertFalse(bounded_list_repaint_accounting_valid(
+            before, non_atomic, 100))
+
     def test_bounded_pipeline_requires_exact_explicit_accounting(self) -> None:
         valid = {
             "survey_received": 146,
