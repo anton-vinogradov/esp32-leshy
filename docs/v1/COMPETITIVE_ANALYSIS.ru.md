@@ -248,7 +248,7 @@ integrations и три непересматриваемые safety/privacy гр�
 | RA-11 | Signed offline update с SD вдобавок к browser/OTA/recovery | FUNC-07 | `Refine CAP-007` |
 | RA-12 | Per-satellite GPS diagnostics и field POI/notes во время Survey | FUNC-14/50 | `Refine CAP-050` |
 | RA-13 | Privacy MAC randomization собственного STA/AP Leshy без клонирования чужой identity | FUNC-46 этого не обещает | `Accepted CAP-059/PR-031`; synthetic identity ephemeral/provenanced |
-| RA-14 | Offline wordlist verification собственного Wi-Fi authentication Capture | FUNC-49 заканчивается на classification/export | `Accepted CAP-061/PR-033`; bounded owned-evidence verification, без leaked corpora |
+| RA-14 | Offline wordlist verification собственного Wi-Fi authentication Capture | FUNC-49 заканчивается на classification/export | `Accepted CAP-061/PR-033`; Leshy экспортирует validated canonical `hc22000`, компьютерный companion проверяет curated corpus распространённых/слабых паролей и vendor-default patterns, plaintext match на Leshy не возвращается |
 | RA-15 | Отдельно принятые iBeacon, MouseJack fixture injection и targeted handshake-assist recipes | FUNC-55 требует именованных recipes, но не называет их | `Refine CAP-055/056`; target, containment, expiry и Stop обязательны |
 | RA-16 | Physical USB-host BadUSB enumeration и optional keyboard-host/relay | FUNC-54 инспектирует packages, а не подключённый USB device | `Accepted CAP-060/PR-032` после VBUS/OTG/current-limit/cleanup qualification |
 | RA-17 | Протокол внешних модулей с discovery, heartbeat, checksum, RPC и negotiated transport | base outcome отсутствует | `Post-1.0`; полезно для Leshy2/expansion modules |

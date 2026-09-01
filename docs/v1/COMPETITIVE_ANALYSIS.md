@@ -212,7 +212,7 @@ does not silently expand the fixed 62-row release boundary.
 | RA-11 | Signed offline firmware update from SD in addition to browser/OTA/recovery | FUNC-07 | `Refine CAP-007` |
 | RA-12 | Per-satellite GPS diagnostics and field POI/notes during Survey | FUNC-14/50 | `Refine CAP-050` |
 | RA-13 | Privacy MAC randomization for Leshy's own STA/AP without cloning another identity | FUNC-46 does not promise it | `Accepted CAP-059/PR-031`; synthetic lab identity is ephemeral/provenanced |
-| RA-14 | Offline wordlist verification of the owner's own captured Wi-Fi authentication evidence | FUNC-49 ends at classification/export | `Accepted CAP-061/PR-033`; bounded owned-evidence verification, no leaked corpora |
+| RA-14 | Offline wordlist verification of the owner's own captured Wi-Fi authentication evidence | FUNC-49 ends at classification/export | `Accepted CAP-061/PR-033`; Leshy exports validated canonical `hc22000`, the computer companion runs the curated common/weak and vendor-default corpus, and no plaintext match returns to Leshy |
 | RA-15 | Individually admitted iBeacon, MouseJack fixture injection and targeted handshake-assist recipes | FUNC-55 requires named recipes but names none | `Refine CAP-055/056`; named recipes require target, containment, expiry and Stop |
 | RA-16 | Physical USB-host BadUSB enumeration and optional keyboard-host/relay | FUNC-54 inspects packages, not a connected USB device | `Accepted CAP-060/PR-032`, conditional on VBUS/OTG/current-limit/cleanup qualification |
 | RA-17 | External-module protocol with discovery, heartbeat, checksum, RPC and negotiated transport | no base outcome | `Post-1.0`; useful for Leshy2/expansion modules |
