@@ -174,6 +174,42 @@ def open_home_item(device: PassiveSerial, item_id: str,
     raise RuntimeError(f"Home item {item_id!r} was not found")
 
 
+def open_library_export_ready(
+        device: PassiveSerial, generation: int) -> dict[str, dict[str, Any]]:
+    """Traverse every current user-visible Library export step."""
+    states = {
+        "list": open_home_item(device, "library", "library"),
+        "detail": action(device, "right"),
+        "actions": action(device, "right"),
+        "export_ready": action(device, "right"),
+    }
+    expected_views = {
+        "list": "list",
+        "detail": "detail",
+        "actions": "actions",
+        "export_ready": "export_ready",
+    }
+    summary: dict[str, dict[str, Any]] = {}
+    for stage, state in states.items():
+        require_exact(state, {
+            "page": "library",
+            "library_view": expected_views[stage],
+            "library_generation": generation,
+            "library_selected_kind": "session",
+            "library_persistent": True,
+            "runtime_owner": "library", "lease_mask": 5,
+        }, f"library_{stage}")
+        summary[stage] = {
+            "view": state.get("library_view"),
+            "generation": state.get("library_generation"),
+            "selected_kind": state.get("library_selected_kind"),
+            "persistent": state.get("library_persistent"),
+            "runtime_owner": state.get("runtime_owner"),
+            "lease_mask": state.get("lease_mask"),
+        }
+    return summary
+
+
 def source_state_failure(requested: str, head: str,
                          tracked_dirty: bool) -> str | None:
     if requested.lower() != head.lower():
@@ -264,6 +300,7 @@ def main() -> int:
     hc_begin: dict[str, Any] = {}
     hc_end: dict[str, Any] = {}
     hc_summary: dict[str, Any] = {}
+    library_navigation: dict[str, dict[str, Any]] = {}
     final: dict[str, Any] = {}
     cleanup_after: dict[str, Any] = {"attempted": False}
     generation = 0
@@ -465,9 +502,8 @@ def main() -> int:
 
                     # Resolve Library by stable identity; product menu order is
                     # intentionally free to evolve.
-                    open_home_item(device, "library", "library")
-                    action(device, "right")
-                    action(device, "right")
+                    library_navigation = open_library_export_ready(
+                        device, generation)
                     metadata = query(
                         device, b"library.capture", METADATA_SCHEMA,
                         "capture")
@@ -583,6 +619,7 @@ def main() -> int:
             "ready": boot_after, "recovery": recovery_after,
         },
         "library": {
+            "navigation": library_navigation,
             "metadata": metadata,
             "pcap": {
                 "begin": pcap_begin, "end": pcap_end,

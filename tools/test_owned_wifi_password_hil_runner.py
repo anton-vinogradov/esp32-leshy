@@ -100,6 +100,30 @@ class OwnedWifiPasswordHilRunnerTests(unittest.TestCase):
         self.assertFalse(report["privacy"]["plaintext_retained"])
         self.assertEqual(0, report["side_effects"]["network_operations"])
 
+    def test_cold_library_export_traverses_explicit_ready_step(self) -> None:
+        generation = 11
+
+        def state(view: str) -> dict[str, object]:
+            return {
+                "page": "library", "library_view": view,
+                "library_generation": generation,
+                "library_selected_kind": "session",
+                "library_persistent": True,
+                "runtime_owner": "library", "lease_mask": 5,
+            }
+
+        with mock.patch.object(
+                runner.persistence, "open_home_item",
+                return_value=state("list")), mock.patch.object(
+                    runner.persistence, "action",
+                    side_effect=(state("detail"), state("actions"),
+                                 state("export_ready"))) as action:
+            navigation = runner.persistence.open_library_export_ready(
+                object(), generation)
+        self.assertEqual(3, action.call_count)
+        self.assertEqual("export_ready",
+                         navigation["export_ready"]["view"])
+
 
 if __name__ == "__main__":
     unittest.main()

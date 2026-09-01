@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "tools/owned_wifi_evidence_verifier.py"
 JOURNEY = ROOT / "tools/check_my_wifi_password.py"
 HIL_RUNNER = ROOT / "tools/run_1x_owned_wifi_password_check_hil.py"
+PERSISTENCE_RUNNER = ROOT / \
+    "tools/run_1x_wifi_authentication_persistence_hil.py"
 
 
 def imported_modules(path: Path) -> set[str]:
@@ -95,6 +97,19 @@ def main() -> int:
     if missing:
         raise SystemExit(
             "owned Wi-Fi physical-chain contract is incomplete: " +
+            ", ".join(missing))
+    persistence = PERSISTENCE_RUNNER.read_text(encoding="utf-8")
+    persistence_required = (
+        'def open_library_export_ready(',
+        '"export_ready": action(device, "right")',
+        '"library_view": expected_views[stage]',
+        'library_navigation = open_library_export_ready(',
+    )
+    missing = [fragment for fragment in persistence_required
+               if fragment not in persistence]
+    if missing:
+        raise SystemExit(
+            "owned Wi-Fi cold-export contract is incomplete: " +
             ", ".join(missing))
     print("owned Wi-Fi evidence verifier contract: PASS")
     return 0
