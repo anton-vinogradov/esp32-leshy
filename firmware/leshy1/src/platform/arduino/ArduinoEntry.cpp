@@ -13259,14 +13259,14 @@ NavigationFooter navigationFooterForCurrentState() {
             const BleInspectorCaptureSummary summary =
                 bleInspectorCaptureSnapshot();
             return {
-                {NavigationKey::Left, UiTextId::NavInfo}, {},
+                {NavigationKey::Left, UiTextId::NavActions}, {},
                 {NavigationKey::RightAndSelect,
                  summary.state == BleInspectorCaptureState::Running
                      ? UiTextId::NavFreeze : UiTextId::NavAgain}};
         }
         if (bleProductView == BleProductView::DeviceDetail) {
             return {{NavigationKey::Left, UiTextId::NavList}, {},
-                    {NavigationKey::RightAndSelect, UiTextId::NavModes}};
+                    {NavigationKey::RightAndSelect, UiTextId::NavActions}};
         }
         if (bleProductView == BleProductView::Devices) {
             return {back, choose, enter};

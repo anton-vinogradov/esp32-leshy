@@ -118,8 +118,38 @@ PRIMARY_TASK_IDS = {
     "BleInspectorRawModeNote",
     "BleInspectorGattMode",
     "BleInspectorGattModeNote",
+    "BleInspectorReceiving",
+    "BleInspectorFrozen",
+    "BleInspectorCountFormat",
+    "BleGattTitle",
+    "BleGattPermissionScope",
+    "BleGattPermissionNoData",
+    "BleGattDiscovering",
+    "BleGattReady",
+    "BleGattFailed",
+    "BleGattCountFormat",
+    "BleGattActiveSafety",
     "SpectrumNrf24",
     "SpectrumCc1101",
+    "Nrf24Modes",
+    "Nrf24Overview",
+    "Nrf24Finder",
+    "SpectrumRunning",
+    "SpectrumPaused",
+    "SpectrumFault",
+    "CcSpectrumBands",
+    "CcSpectrumBandChoiceFormat",
+    "CcSpectrumRunning",
+    "CcSpectrumPaused",
+    "SubGhzModes",
+    "SubGhzSpectrum",
+    "SubGhzRaw",
+    "CcFinder",
+    "SubGhzRawTypes",
+    "SubGhzRawOok",
+    "SubGhzRawFsk",
+    "LibraryActionAnalyze",
+    "LibraryActionExport",
     "ProtocolWorkbenchTitle",
     "WifiPasswordCheckTitle",
     "WifiPasswordCheckTask",
@@ -190,6 +220,44 @@ def main() -> int:
         failures.append(
             "network detail starts password evidence recording before its intro"
         )
+
+    ble_detail_branch = re.search(
+        r"} else if \(bleProductView == BleProductView::DeviceDetail\) \{.*?"
+        r"} else if \(bleProductView == BleProductView::Devices\)",
+        renderer,
+        re.DOTALL,
+    )
+    if ble_detail_branch is None or \
+            "bleProductView = BleProductView::InspectorMenu" not in \
+            ble_detail_branch.group(0):
+        failures.append(
+            "Bluetooth detail must open contextual actions before a task"
+        )
+    elif "requestBleGattFromDetail" in ble_detail_branch.group(0):
+        failures.append(
+            "Bluetooth detail starts an active connection before task choice"
+        )
+
+    ble_actions_branch = re.search(
+        r"} else if \(bleProductView == BleProductView::InspectorMenu\) \{.*?"
+        r"} else if \(bleProductView == BleProductView::InspectorRaw\)",
+        renderer,
+        re.DOTALL,
+    )
+    if ble_actions_branch is None or \
+            "bleProductView = BleProductView::DeviceDetail" not in \
+            ble_actions_branch.group(0):
+        failures.append(
+            "Bluetooth contextual actions must return to the selected device"
+        )
+
+    for required in (
+        "UiTextId::NavActions", "RfSpectrumView::Nrf24Menu",
+        "RfSpectrumView::SubGhzMenu",
+        "RfSpectrumView::SubGhzCaptureModeMenu",
+    ):
+        if required not in renderer:
+            failures.append(f"missing contextual task-tree route: {required}")
 
     for identifier in sorted(REQUIRED_OUTCOME_IDS):
         if f"LESHY_UI_TEXT({identifier}," not in strings:
