@@ -359,7 +359,7 @@ def main() -> int:
                     device, b"hardware.safe-outputs",
                     "leshy.hardware.safe-outputs.v1", "state")
                 reports["input"] = read_only_query(
-                    device, b"input.state", "leshy.input.v1", "state")
+                    device, b"input.state", "leshy.input.frontend.v1", "state")
                 screenshots["home"] = capture(
                     device, frames, "live-companion-home")
             finally:

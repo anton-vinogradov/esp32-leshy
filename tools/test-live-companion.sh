@@ -36,8 +36,15 @@ python3 -m py_compile \
 
 grep -Fq '"leshy.hardware.safe-outputs.v1"' \
     "$repo_dir/tools/run_1x_live_companion_wifi_hil.py"
+grep -Fq '"leshy.input.frontend.v1"' \
+    "$repo_dir/tools/run_1x_live_companion_wifi_hil.py"
 if grep -Fq '"leshy.hardware.safe_outputs.v1"' \
         "$repo_dir/tools/run_1x_live_companion_wifi_hil.py"; then
     echo "live companion runner uses a non-existent safe-output schema" >&2
+    exit 1
+fi
+if grep -Fq '"leshy.input.v1"' \
+        "$repo_dir/tools/run_1x_live_companion_wifi_hil.py"; then
+    echo "live companion runner uses a non-existent input schema" >&2
     exit 1
 fi
