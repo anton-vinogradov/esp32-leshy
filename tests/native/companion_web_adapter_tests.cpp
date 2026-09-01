@@ -211,6 +211,13 @@ void testOfflinePageUsesOnlyTheSharedContract() {
     CHECK(complete.find("snapshot_integrity_unavailable") != std::string::npos);
     CHECK(complete.find("esc(JSON.stringify") != std::string::npos);
     CHECK(complete.find("&amp;") != std::string::npos);
+    CHECK(page.find("data-copy=\"sessions\"") != std::string::npos);
+    CHECK(page.find("Recorded sessions") != std::string::npos);
+    CHECK(page.find(u8"Записи") != std::string::npos);
+    CHECK(page.find(u8"Найти цель") != std::string::npos);
+    CHECK(complete.find("navigator.language") != std::string::npos);
+    CHECK(complete.find("applyLanguage") != std::string::npos);
+    CHECK(complete.find("humanReason") != std::string::npos);
     CHECK(complete.find("http://") == std::string::npos);
     CHECK(complete.find("https://") == std::string::npos);
     CHECK(page.find("<script src=\"http") == std::string::npos);

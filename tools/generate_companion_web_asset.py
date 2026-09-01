@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import binascii
 import gzip
+import json
+import re
 import struct
 import zlib
 from pathlib import Path
@@ -43,6 +45,44 @@ def deterministic_gzip(payload: bytes) -> bytes:
     return encoded
 
 
+def validate_index_copy(payload: bytes) -> None:
+    page = payload.decode("utf-8")
+    matches = re.findall(
+        r'<script id="copy" type="application/json">(.*?)</script>',
+        page, re.DOTALL)
+    if len(matches) != 1:
+        raise RuntimeError("companion Web index must contain one copy catalog")
+    catalog = json.loads(matches[0])
+    if set(catalog) != {"en", "ru"}:
+        raise RuntimeError("companion Web copy catalog must contain EN and RU")
+    if not all(isinstance(catalog[language], dict) for language in catalog):
+        raise RuntimeError("companion Web language catalog is not an object")
+    if set(catalog["en"]) != set(catalog["ru"]):
+        raise RuntimeError("companion Web EN/RU copy keys differ")
+    if any(not isinstance(value, str) or not value
+           for language in catalog.values() for value in language.values()):
+        raise RuntimeError("companion Web copy contains an empty/non-text value")
+    static_keys = set(re.findall(r'data-copy="([a-z_]+)"', page))
+    missing = static_keys - set(catalog["en"])
+    if missing:
+        raise RuntimeError(
+            f"companion Web static copy keys are missing: {sorted(missing)}")
+    required = {
+        "brand", "sessions", "targets", "compare", "search", "export",
+        "opening", "connecting", "ready", "collecting", "details",
+        "favorite", "unfavorite", "no_targets", "no_sessions", "summary",
+        "technical_evidence", "confirm_add", "confirm_remove", "building",
+        "saved", "unavailable", "error_comparison_requires_two_sessions",
+        "error_target_not_found", "error_mutation_timeout",
+    }
+    missing = required - set(catalog["en"])
+    if missing:
+        raise RuntimeError(
+            f"companion Web task copy is missing: {sorted(missing)}")
+    if catalog["en"]["sessions"] == catalog["ru"]["sessions"]:
+        raise RuntimeError("companion Web Russian copy was not localized")
+
+
 def render(encoded: bytes, symbol: str) -> str:
     lines = [f"constexpr std::uint8_t {symbol}[] = {{"]
     for offset in range(0, len(encoded), 12):
@@ -61,6 +101,8 @@ def main() -> int:
     results: list[str] = []
     for name, open_marker, close_marker, output, symbol in ASSETS:
         payload = asset_bytes(open_marker, close_marker)
+        if name == "index":
+            validate_index_copy(payload)
         encoded = deterministic_gzip(payload)
         if len(encoded) >= 4096:
             raise RuntimeError(
