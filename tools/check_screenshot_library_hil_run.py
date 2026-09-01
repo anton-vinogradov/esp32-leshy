@@ -57,6 +57,15 @@ def main() -> int:
          "stored screenshot differs from exact TFT reference")
     need(exported.get("frame_end", {}).get("status") == "valid",
          "export did not end validly after cleanup")
+    export_begin = exported.get("frame_begin", {})
+    identity_attempts = export_begin.get("identity_attempts")
+    identity_retries = export_begin.get("identity_transient_retries")
+    need(isinstance(identity_attempts, int) and
+         1 <= identity_attempts <= 8,
+         "export identity attempt count invalid")
+    need(isinstance(identity_retries, int) and
+         identity_retries == identity_attempts - 1,
+         "export identity retry count invalid")
     generation = records.get("generation")
     need(isinstance(generation, int) and generation > 0, "generation invalid")
     cold = records.get("cold_recovery", {})

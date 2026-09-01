@@ -31602,6 +31602,80 @@ bool screenshotLiveWorkActive() {
         arduinoCompanionWebService.active();
 }
 
+struct ScreenshotSdIdentityResult final {
+    leshy1::storage::SdTransportRunResult identity{};
+    bool begun = false;
+    bool cleanupComplete = true;
+    bool safetyProgressComplete = true;
+    std::uint8_t attempts = 0U;
+    std::uint8_t transientRetries = 0U;
+};
+
+ScreenshotSdIdentityResult identifyScreenshotProductMedia(
+    std::uint32_t ownedResources, const char* expectedFingerprint,
+    char* observedFingerprint, std::size_t observedCapacity) {
+    ScreenshotSdIdentityResult result;
+    if (observedFingerprint == nullptr || observedCapacity < 33U) {
+        result.cleanupComplete = false;
+        return result;
+    }
+    observedFingerprint[0] = '\0';
+    const auto required =
+        leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    for (std::uint8_t attempt = 1U;
+         attempt <= leshy1::storage::kProductStartMaximumIdentityAttempts;
+         ++attempt) {
+        BoardSdSpiTransport transport;
+        result.begun = transport.begin();
+        result.identity = {};
+        if (result.begun) {
+            leshy1::storage::SdTransportRunPolicy policy;
+            policy.allowPhysical = true;
+            policy.explicitlySelected = true;
+            policy.identificationOnly = true;
+            policy.ownedResources = ownedResources;
+            result.identity = leshy1::storage::runSdIdentificationStateMachine(
+                leshy1::storage::defaultSdIdentificationPlan(), transport,
+                policy);
+            transport.end();
+        }
+        result.attempts = attempt;
+        result.transientRetries = static_cast<std::uint8_t>(attempt - 1U);
+        result.cleanupComplete = transport.cleanupComplete();
+        formatCidFingerprint(result.identity.identity, observedFingerprint,
+                             observedCapacity);
+        result.safetyProgressComplete = screenshotStorageProgress();
+        if (!result.safetyProgressComplete ||
+            (result.cleanupComplete &&
+             result.identity.status ==
+                 leshy1::storage::SdTransportRunStatus::Valid)) {
+            break;
+        }
+        const leshy1::storage::ProductStartIdentityRetryEvidence evidence{
+            true,
+            true,
+            exactCidFingerprint(expectedFingerprint),
+            (ownedResources & required) == required,
+            transport.physicalSpiStarted(),
+            result.identity.status,
+            std::strcmp(observedFingerprint,
+                        "00000000000000000000000000000000") == 0,
+            result.cleanupComplete,
+            false,
+        };
+        if (!leshy1::storage::shouldRetryProductStartIdentity(
+                evidence, attempt)) {
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(
+            leshy1::storage::productStartIdentityRetryDelayMs(attempt)));
+        result.safetyProgressComplete = screenshotStorageProgress();
+        if (!result.safetyProgressComplete) break;
+    }
+    return result;
+}
+
 bool captureAndPersistScreenshot() {
     screenshotFeedback = ScreenshotFeedback::None;
     screenshotStatus = "preflight";
@@ -31649,7 +31723,7 @@ bool captureAndPersistScreenshot() {
 
     char expectedFingerprint[33] = {};
     char observedFingerprint[33] = {};
-    leshy1::storage::SdTransportRunResult identity;
+    ScreenshotSdIdentityResult identityRun;
     bool identityCleanup = true;
     BoardSdFilesystem filesystem;
     bool filesystemAttempted = false;
@@ -31667,27 +31741,19 @@ bool captureAndPersistScreenshot() {
         failure = "enrollment_missing";
     }
     if (valid) {
-        BoardSdSpiTransport transport;
-        const bool begun = transport.begin();
-        if (begun) {
-            leshy1::storage::SdTransportRunPolicy policy;
-            policy.allowPhysical = true;
-            policy.explicitlySelected = true;
-            policy.identificationOnly = true;
-            policy.ownedResources = resourceBroker.ownedBy(owner);
-            identity = leshy1::storage::runSdIdentificationStateMachine(
-                leshy1::storage::defaultSdIdentificationPlan(), transport,
-                policy);
-            transport.end();
-        }
-        identityCleanup = transport.cleanupComplete();
-        formatCidFingerprint(identity.identity, observedFingerprint,
-                             sizeof(observedFingerprint));
-        valid = begun && identityCleanup &&
-            identity.status ==
+        identityRun = identifyScreenshotProductMedia(
+            resourceBroker.ownedBy(owner), expectedFingerprint,
+            observedFingerprint, sizeof(observedFingerprint));
+        identityCleanup = identityRun.cleanupComplete;
+        valid = identityRun.begun && identityCleanup &&
+            identityRun.safetyProgressComplete &&
+            identityRun.identity.status ==
                 leshy1::storage::SdTransportRunStatus::Valid &&
             std::strcmp(expectedFingerprint, observedFingerprint) == 0;
-        if (!valid) failure = "identity_failed";
+        if (!valid) {
+            failure = identityRun.safetyProgressComplete
+                ? "identity_failed" : "safety_latched";
+        }
     }
     if (valid) {
         filesystemAttempted = true;
@@ -31700,7 +31766,7 @@ bool captureAndPersistScreenshot() {
             leshy1::storage::kProductSessionStoreRoot);
         leshy1::storage::MediaIdentity media;
         media.present = capacity != 0U &&
-            capacity == identity.identity.capacityBytes;
+            capacity == identityRun.identity.identity.capacityBytes;
         media.kind = leshy1::storage::MediaKind::Sd;
         media.fingerprint = observedFingerprint;
         media.capacityBytes = capacity;
@@ -36224,13 +36290,19 @@ bool writeScreenshotUsbChunk(std::size_t offset,
     return screenshotStorageProgress();
 }
 
-void emitLibraryScreenshotExportError(Stream& reply, const char* reason) {
+void emitLibraryScreenshotExportError(
+    Stream& reply, const char* reason, std::uint8_t identityAttempts = 0U,
+    std::uint8_t identityTransientRetries = 0U) {
     char line[256] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.screenshot.export.v1\",\"kind\":\"error\","
-        "\"reason\":\"%s\",\"protected\":true,\"radio_touched\":false}",
-        reason == nullptr ? "unknown" : reason);
+        "\"reason\":\"%s\",\"protected\":true,"
+        "\"identity_attempts\":%u,\"identity_transient_retries\":%u,"
+        "\"radio_touched\":false}",
+        reason == nullptr ? "unknown" : reason,
+        static_cast<unsigned>(identityAttempts),
+        static_cast<unsigned>(identityTransientRetries));
     reply.println(line);
 }
 
@@ -36263,7 +36335,7 @@ void emitLibraryScreenshotExport(Stream& reply) {
     const char* failure = "none";
     char expectedFingerprint[33] = {};
     char observedFingerprint[33] = {};
-    leshy1::storage::SdTransportRunResult identity;
+    ScreenshotSdIdentityResult identityRun;
     bool identityCleanup = true;
     BoardSdFilesystem filesystem;
     bool filesystemAttempted = false;
@@ -36279,27 +36351,19 @@ void emitLibraryScreenshotExport(Stream& reply) {
         failure = "enrollment_missing";
     }
     if (valid) {
-        BoardSdSpiTransport transport;
-        const bool begun = transport.begin();
-        if (begun) {
-            leshy1::storage::SdTransportRunPolicy policy;
-            policy.allowPhysical = true;
-            policy.explicitlySelected = true;
-            policy.identificationOnly = true;
-            policy.ownedResources = resourceBroker.ownedBy(owner);
-            identity = leshy1::storage::runSdIdentificationStateMachine(
-                leshy1::storage::defaultSdIdentificationPlan(), transport,
-                policy);
-            transport.end();
-        }
-        identityCleanup = transport.cleanupComplete();
-        formatCidFingerprint(identity.identity, observedFingerprint,
-                             sizeof(observedFingerprint));
-        valid = begun && identityCleanup &&
-            identity.status ==
+        identityRun = identifyScreenshotProductMedia(
+            resourceBroker.ownedBy(owner), expectedFingerprint,
+            observedFingerprint, sizeof(observedFingerprint));
+        identityCleanup = identityRun.cleanupComplete;
+        valid = identityRun.begun && identityCleanup &&
+            identityRun.safetyProgressComplete &&
+            identityRun.identity.status ==
                 leshy1::storage::SdTransportRunStatus::Valid &&
             std::strcmp(expectedFingerprint, observedFingerprint) == 0;
-        if (!valid) failure = "identity_failed";
+        if (!valid) {
+            failure = identityRun.safetyProgressComplete
+                ? "identity_failed" : "safety_latched";
+        }
     }
     if (valid) {
         filesystemAttempted = true;
@@ -36311,7 +36375,7 @@ void emitLibraryScreenshotExport(Stream& reply) {
         const std::uint64_t capacity = filesystem.cardCapacityBytes();
         leshy1::storage::MediaIdentity media;
         media.present = capacity != 0U &&
-            capacity == identity.identity.capacityBytes;
+            capacity == identityRun.identity.identity.capacityBytes;
         media.kind = leshy1::storage::MediaKind::Sd;
         media.fingerprint = observedFingerprint;
         media.capacityBytes = capacity;
@@ -36360,7 +36424,11 @@ void emitLibraryScreenshotExport(Stream& reply) {
             "\"kind\":\"frame_begin\",\"bytes\":");
         reply.print(static_cast<unsigned long>(
             recoveredMetadata.pixelBytes));
-        reply.print(",\"protected\":true,\"metadata\":");
+        reply.print(",\"protected\":true,\"identity_attempts\":");
+        reply.print(static_cast<unsigned>(identityRun.attempts));
+        reply.print(",\"identity_transient_retries\":");
+        reply.print(static_cast<unsigned>(identityRun.transientRetries));
+        reply.print(",\"metadata\":");
         reply.print(diagnosticJson);
         reply.println('}');
         reply.flush();
@@ -36392,7 +36460,9 @@ void emitLibraryScreenshotExport(Stream& reply) {
         reply.println(line);
         reply.flush();
     } else {
-        emitLibraryScreenshotExportError(reply, failure);
+        emitLibraryScreenshotExportError(
+            reply, failure, identityRun.attempts,
+            identityRun.transientRetries);
     }
 }
 
