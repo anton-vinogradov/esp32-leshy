@@ -124,6 +124,27 @@ class OwnedWifiPasswordHilRunnerTests(unittest.TestCase):
         self.assertEqual("export_ready",
                          navigation["export_ready"]["view"])
 
+    def test_cold_library_exit_traverses_all_four_levels(self) -> None:
+        generation = 11
+
+        def library(view: str) -> dict[str, object]:
+            return {
+                "page": "library", "library_view": view,
+                "library_generation": generation,
+                "library_selected_kind": "session",
+                "runtime_owner": "library", "lease_mask": 5,
+            }
+
+        home = {"page": "home", "runtime_owner": "none", "lease_mask": 0}
+        with mock.patch.object(
+                runner.persistence, "action",
+                side_effect=(library("actions"), library("detail"),
+                             library("list"), home)) as action:
+            navigation = runner.persistence.close_library_export_to_home(
+                object(), generation)
+        self.assertEqual(4, action.call_count)
+        self.assertEqual("home", navigation["home"]["page"])
+
 
 if __name__ == "__main__":
     unittest.main()

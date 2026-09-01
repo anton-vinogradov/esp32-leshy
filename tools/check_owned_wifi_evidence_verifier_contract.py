@@ -104,6 +104,9 @@ def main() -> int:
         '"export_ready": action(device, "right")',
         '"library_view": expected_views[stage]',
         'library_navigation = open_library_export_ready(',
+        'def close_library_export_to_home(',
+        '"home": action(device, "left")',
+        'library_exit = close_library_export_to_home(',
     )
     missing = [fragment for fragment in persistence_required
                if fragment not in persistence]

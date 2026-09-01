@@ -210,6 +210,44 @@ def open_library_export_ready(
     return summary
 
 
+def close_library_export_to_home(
+        device: PassiveSerial, generation: int) -> dict[str, dict[str, Any]]:
+    """Leave ExportReady through Actions, Detail and List to Home."""
+    states = {
+        "actions": action(device, "left"),
+        "detail": action(device, "left"),
+        "list": action(device, "left"),
+        "home": action(device, "left"),
+    }
+    expected_views = {
+        "actions": "actions", "detail": "detail", "list": "list",
+    }
+    summary: dict[str, dict[str, Any]] = {}
+    for stage, view in expected_views.items():
+        state = states[stage]
+        require_exact(state, {
+            "page": "library", "library_view": view,
+            "library_generation": generation,
+            "library_selected_kind": "session",
+            "runtime_owner": "library", "lease_mask": 5,
+        }, f"library_close_{stage}")
+        summary[stage] = {
+            "page": state.get("page"), "view": state.get("library_view"),
+            "generation": state.get("library_generation"),
+            "runtime_owner": state.get("runtime_owner"),
+            "lease_mask": state.get("lease_mask"),
+        }
+    home = states["home"]
+    require_exact(home, {
+        "page": "home", "runtime_owner": "none", "lease_mask": 0,
+    }, "library_close_home")
+    summary["home"] = {
+        "page": home.get("page"), "runtime_owner": home.get("runtime_owner"),
+        "lease_mask": home.get("lease_mask"),
+    }
+    return summary
+
+
 def source_state_failure(requested: str, head: str,
                          tracked_dirty: bool) -> str | None:
     if requested.lower() != head.lower():
@@ -301,6 +339,7 @@ def main() -> int:
     hc_end: dict[str, Any] = {}
     hc_summary: dict[str, Any] = {}
     library_navigation: dict[str, dict[str, Any]] = {}
+    library_exit: dict[str, dict[str, Any]] = {}
     final: dict[str, Any] = {}
     cleanup_after: dict[str, Any] = {"attempted": False}
     generation = 0
@@ -566,9 +605,8 @@ def main() -> int:
                     hc_summary, hc_failures = hc22000_summary(hc_payload)
                     failures.extend(hc_failures)
 
-                    action(device, "left")
-                    action(device, "left")
-                    action(device, "left")
+                    library_exit = close_library_export_to_home(
+                        device, generation)
                     final = query(device, b"ui.state", UI_SCHEMA, "state")
                     require_exact(final, {
                         "page": "home", "runtime_owner": "none",
@@ -619,7 +657,10 @@ def main() -> int:
             "ready": boot_after, "recovery": recovery_after,
         },
         "library": {
-            "navigation": library_navigation,
+            "navigation": {
+                "open": library_navigation,
+                "close": library_exit,
+            },
             "metadata": metadata,
             "pcap": {
                 "begin": pcap_begin, "end": pcap_end,
