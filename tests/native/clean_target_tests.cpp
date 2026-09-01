@@ -77,6 +77,7 @@
 #include "ui/Pcf8574ButtonInput.h"
 #include "ui/TouchInput.h"
 #include "ui/TouchTargets.h"
+#include "ui/ConnectivitySetupController.h"
 #include "ui/InterfaceSettingsController.h"
 #include "ui/RankedListFocus.h"
 #include "ui/AntennaStatusController.h"
@@ -2301,6 +2302,35 @@ void testPhysicalAndDiagnosticActionsShareNavigation() {
     CHECK(nested.parentPage() == UiController::kRootPage);
     CHECK(nested.apply(UiAction::Back, 1, true));
     CHECK(nested.isRoot());
+
+    CHECK(nested.openRootPage(17));
+    CHECK(nested.page() == 17);
+    CHECK(nested.parentPage() == UiController::kRootPage);
+    CHECK(std::strcmp(probePageName(nested.page()), "connectivity") == 0);
+}
+
+void testConnectivitySetupStaysOfflineFirstAndSecretFree() {
+    ConnectivitySetupController controller;
+    controller.enter();
+    CHECK(controller.view() == ConnectivitySetupView::Menu);
+    CHECK(controller.selection() == 0U);
+    CHECK(!controller.previous());
+    CHECK(controller.next());
+    CHECK(controller.selection() == 1U);
+    CHECK(!controller.next());
+    CHECK(controller.activate() ==
+          ConnectivitySetupActivation::TemporaryWifiRequested);
+    CHECK(controller.view() == ConnectivitySetupView::Menu);
+    CHECK(controller.showWifiUnavailable());
+    CHECK(controller.view() == ConnectivitySetupView::WifiUnavailable);
+    CHECK(controller.back());
+    CHECK(controller.view() == ConnectivitySetupView::Menu);
+    CHECK(controller.previous());
+    CHECK(controller.activate() ==
+          ConnectivitySetupActivation::UsbGuideOpened);
+    CHECK(controller.view() == ConnectivitySetupView::UsbGuide);
+    CHECK(controller.back());
+    CHECK(!controller.back());
 }
 
 void testPhysicalButtonFrontendDebouncesAndMapsEveryKey() {
@@ -6695,6 +6725,7 @@ int main() {
     testBootReportIsBoundedAndMachineReadable();
     testHilSessionBindsOneRunToTheRunningAppIdentity();
     testPhysicalAndDiagnosticActionsShareNavigation();
+    testConnectivitySetupStaysOfflineFirstAndSecretFree();
     testPhysicalButtonFrontendDebouncesAndMapsEveryKey();
     testPhysicalButtonFrontendRejectsAmbiguousPressesAndRecovers();
     testAppCatalogProjectsCapabilityStatesBeforeLaunch();

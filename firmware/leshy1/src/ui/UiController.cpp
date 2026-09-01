@@ -40,6 +40,14 @@ bool UiController::openChild(std::uint8_t page) {
     return true;
 }
 
+bool UiController::openRootPage(std::uint8_t page) {
+    if (page == kRootPage) return false;
+    page_ = page;
+    parentPage_ = kRootPage;
+    ++revision_;
+    return true;
+}
+
 bool UiController::returnToRoot() {
     if (isRoot() && parentPage_ == kRootPage) return false;
     page_ = kRootPage;
@@ -95,6 +103,7 @@ const char* probePageName(std::uint8_t page) {
         case 14: return "automation_inspector";
         case 15: return "automation_trust";
         case 16: return "protocol_workbench";
+        case 17: return "connectivity";
         default: return "unknown";
     }
 }

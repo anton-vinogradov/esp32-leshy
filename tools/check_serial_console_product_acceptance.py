@@ -28,8 +28,11 @@ def main() -> int:
             "shared Actions CLI route")
     require(entry, "serviceSerialConsoleAction();", "bounded loop service")
     require(entry, "kSerialConsolePage = 13", "product page")
-    require(entry, "kPowerPage, 5, kDeviceLockPage, kSerialConsolePage,",
+    require(entry,
+            "kPowerPage, 5, kConnectivityPage, kDeviceLockPage,",
             "Device menu route")
+    require(entry, "kSerialConsolePage, kAboutPage,",
+            "Serial Console Device route")
     require(entry, "serialConsoleActionDispatcher.invoke(",
             "typed dispatcher execution")
     require(entry, "serialConsoleEndpoint.cancel();", "cleanup path")

@@ -160,6 +160,7 @@ run_opaque_evidence_check() {
     "$repo_dir/firmware/leshy1/src/ui/Pcf8574ButtonInput.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/TouchInput.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/TouchTargets.cpp" \
+    "$repo_dir/firmware/leshy1/src/ui/ConnectivitySetupController.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/InterfaceSettingsController.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/AntennaStatusController.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/LanguageController.cpp" \
@@ -641,6 +642,7 @@ python3 "$repo_dir/tools/check_visual_system_acceptance.py"
 python3 "$repo_dir/tools/check_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_targets_product_contract.py"
 python3 "$repo_dir/tools/check_companion_protocol_contract.py"
+python3 "$repo_dir/tools/check_connectivity_setup_contract.py"
 python3 "$repo_dir/tools/check_airspace_guard_contract.py"
 python3 "$repo_dir/tools/check_wifi_authentication_capture_contract.py"
 python3 "$repo_dir/tools/check_wifi_authentication_capture_presenter_contract.py"

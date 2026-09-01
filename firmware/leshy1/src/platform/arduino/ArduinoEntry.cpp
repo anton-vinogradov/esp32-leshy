@@ -169,6 +169,7 @@
 #include "storage/TargetStateStore.h"
 #include "ui/Pcf8574ButtonInput.h"
 #include "ui/TouchTargets.h"
+#include "ui/ConnectivitySetupController.h"
 #include "ui/InterfaceSettingsController.h"
 #include "ui/RankedListFocus.h"
 #include "ui/AntennaStatusController.h"
@@ -489,6 +490,9 @@ using leshy1::ui::UiAction;
 using leshy1::ui::AirspaceGuardUiModel;
 using leshy1::ui::AirspaceGuardUiTone;
 using leshy1::ui::UiController;
+using leshy1::ui::ConnectivitySetupActivation;
+using leshy1::ui::ConnectivitySetupController;
+using leshy1::ui::ConnectivitySetupView;
 using leshy1::ui::UiLanguage;
 using leshy1::ui::InterfaceSetting;
 using leshy1::ui::InterfaceSettingsController;
@@ -1240,6 +1244,7 @@ bool touchCalibrationSucceededAtBoot = false;
 UiController uiController;
 LanguageController languageController;
 InterfaceSettingsController interfaceSettingsController;
+ConnectivitySetupController connectivitySetupController;
 AntennaStatusController antennaStatusController;
 BoardAntennaStatusLeds boardAntennaStatusLeds;
 SelfTestController selfTestController;
@@ -1251,8 +1256,9 @@ constexpr std::uint8_t kSerialConsolePage = 13;
 constexpr std::uint8_t kAutomationInspectorPage = 14;
 constexpr std::uint8_t kAutomationTrustPage = 15;
 constexpr std::uint8_t kProtocolWorkbenchPage = 16;
+constexpr std::uint8_t kConnectivityPage = 17;
 constexpr std::uint16_t kAutomationActionApiVersion = 1U;
-constexpr std::uint8_t kDeviceItemCount = 8;
+constexpr std::uint8_t kDeviceItemCount = 9;
 std::uint8_t deviceSelection = 0;
 enum class AutomationTrustUiView : std::uint8_t {
     List,
@@ -9244,6 +9250,67 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     return true;
 }
 
+const AppMenuItem* catalogItemById(const char* id) {
+    if (id == nullptr) return nullptr;
+    for (std::size_t index = 0; index < appCatalog.size(); ++index) {
+        const AppMenuItem* candidate = appCatalog.get(index);
+        if (candidate != nullptr && candidate->id != nullptr &&
+            std::strcmp(candidate->id, id) == 0) {
+            return candidate;
+        }
+    }
+    return nullptr;
+}
+
+bool openTemporaryWifiFromConnectivity() {
+    if (!deviceLockOperationAllowed(
+            leshy1::services::security::DeviceLockOperation::ProtectedUi)) {
+        connectivitySetupController.showWifiUnavailable();
+        noteDeviceLockAdmissionBlocked();
+        return false;
+    }
+    const AppMenuItem* targetsItem = catalogItemById("targets");
+    if (targetsItem == nullptr || !targetsItem->enabled) {
+        connectivitySetupController.showWifiUnavailable();
+        lastRuntimeEvent = "connectivity_wifi_data_unavailable";
+        return false;
+    }
+
+    // Move from the Device foreground to the already accepted Targets local
+    // Web path. Merely opening this page never starts Wi-Fi and never creates
+    // credentials; the existing second explicit confirmation remains the only
+    // admission point for the temporary AP.
+    if (!appRuntime.stop()) {
+        connectivitySetupController.showWifiUnavailable();
+        lastRuntimeEvent = "connectivity_wifi_device_stop_failed";
+        return false;
+    }
+    const LaunchStatus launched = appRuntime.launch(
+        targetsItem->id, targetsItem->enabled, targetsItem->resources);
+    const bool loaded = launched == LaunchStatus::Started &&
+        loadTargetsProduct(*targetsItem) && targetsProductRuntime != nullptr &&
+        std::strcmp(targetsProductStatus, "ready") == 0;
+    if (!loaded) {
+        releaseTargetsProduct();
+        appRuntime.stop();
+        appRuntime.launch(
+            "device", true,
+            leshy1::kernel::runtime::resourceMask(Resource::UiForeground));
+        connectivitySetupController.showWifiUnavailable();
+        lastRuntimeEvent = "connectivity_wifi_data_unavailable";
+        return false;
+    }
+
+    uiController.openRootPage(7U);
+    clearWebCompanionHilEntropy();
+    targetRadarOverlay = false;
+    webCompanionOverlay = true;
+    webCompanionConnection = {};
+    webCompanionMutation = {};
+    lastRuntimeEvent = "companion_web_ready";
+    return true;
+}
+
 bool rebuildTargetsProductFromCatalog(TargetCatalog*& persisted,
                                       CorrelationDecisionLog*& decisions,
                                       TargetMergeHistory*& merges,
@@ -13901,6 +13968,13 @@ NavigationFooter navigationFooterForCurrentState() {
                  serialConsoleUiSelection == 3U
                      ? UiTextId::NavStart : UiTextId::NavToggle}};
     }
+    if (uiController.page() == kConnectivityPage) {
+        if (connectivitySetupController.view() ==
+            ConnectivitySetupView::Menu) {
+            return {back, choose, enter};
+        }
+        return {back, {}, {}};
+    }
     if (uiController.page() == kDevicePage) return {back, choose, enter};
     return {back, {}, {}};
 }
@@ -14669,11 +14743,12 @@ UiTextId deviceLabel(std::uint8_t index) {
     switch (index) {
         case 0: return UiTextId::DevicePower;
         case 1: return UiTextId::DeviceSettings;
-        case 2: return UiTextId::DeviceLockMenu;
-        case 3: return UiTextId::DeviceSerialConsole;
-        case 4: return UiTextId::DeviceAbout;
-        case 5: return UiTextId::AppDiagnostics;
-        case 6: return UiTextId::AppSelfTest;
+        case 2: return UiTextId::DeviceConnectivity;
+        case 3: return UiTextId::DeviceLockMenu;
+        case 4: return UiTextId::DeviceSerialConsole;
+        case 5: return UiTextId::DeviceAbout;
+        case 6: return UiTextId::AppDiagnostics;
+        case 7: return UiTextId::AppSelfTest;
         default: return UiTextId::AutomationTrustDeviceItem;
     }
 }
@@ -14700,14 +14775,15 @@ UiTextId deviceNote(std::uint8_t index) {
     switch (index) {
         case 0: return UiTextId::DevicePowerNote;
         case 1: return UiTextId::DeviceSettingsNote;
-        case 2: return deviceLockMenuNote();
-        case 3:
+        case 2: return UiTextId::DeviceConnectivityNote;
+        case 3: return deviceLockMenuNote();
+        case 4:
             return BoardProfile::kRfShieldDeclared
                 ? UiTextId::DeviceSerialConsoleConflict
                 : UiTextId::DeviceSerialConsoleReady;
-        case 4: return UiTextId::DeviceAboutNote;
-        case 5: return UiTextId::DeviceDiagnosticsNote;
-        case 6: return UiTextId::NoteSelfTest;
+        case 5: return UiTextId::DeviceAboutNote;
+        case 6: return UiTextId::DeviceDiagnosticsNote;
+        case 7: return UiTextId::NoteSelfTest;
         default: return UiTextId::AutomationTrustDeviceNote;
     }
 }
@@ -14731,6 +14807,58 @@ void renderDevicePage(bool clearContent) {
     for (std::uint8_t index = first; index < end; ++index) {
         renderDeviceRow(index, first);
     }
+}
+
+void renderConnectivityPage(bool clearContent) {
+    const ConnectivitySetupView view = connectivitySetupController.view();
+    if (view == ConnectivitySetupView::UsbGuide) {
+        renderHeader(tr(UiTextId::ConnectivityUsbTitle), clearContent);
+        renderMetric(0, tr(UiTextId::ConnectivityUsbStep1), Tone::Positive);
+        renderMetric(1, tr(UiTextId::ConnectivityUsbStep2), Tone::Neutral);
+        renderMetric(2, tr(UiTextId::ConnectivityUsbStep3), Tone::Neutral);
+        renderMetric(3, tr(UiTextId::ConnectivityUsbPrivate), Tone::Positive);
+        renderMetric(4, tr(UiTextId::ConnectivityUsbOffline), Tone::Muted);
+        return;
+    }
+    if (view == ConnectivitySetupView::WifiUnavailable) {
+        renderHeader(tr(UiTextId::ConnectivityUnavailableTitle), clearContent);
+        renderMetric(0, tr(UiTextId::ConnectivityUnavailable), Tone::Warning);
+        renderMetric(1, tr(UiTextId::ConnectivityUnavailableNext),
+                     Tone::Neutral);
+        renderMetric(3, tr(UiTextId::ConnectivityUnavailableOffline),
+                     Tone::Positive);
+        renderMetric(4, tr(UiTextId::ConnectivityUnavailableSecret),
+                     Tone::Positive);
+        return;
+    }
+
+    renderHeader(tr(UiTextId::ConnectivityTitle), clearContent);
+    const std::uint8_t selection = connectivitySetupController.selection();
+    const auto renderRow = [selection](std::uint8_t index, UiTextId label,
+                                       UiTextId note, bool enabled) {
+        renderMenuRow(Components::homeRow(index), tr(label), tr(note),
+                      enabled && selection == index, enabled,
+                      enabled ? Tone::Positive : Tone::Muted);
+    };
+    renderRow(0U, UiTextId::ConnectivityUsb, UiTextId::ConnectivityUsbNote,
+              true);
+    renderRow(1U, UiTextId::ConnectivityWifi, UiTextId::ConnectivityWifiNote,
+              true);
+    renderRow(2U, UiTextId::ConnectivityOffline,
+              UiTextId::ConnectivityOfflineNote, false);
+    renderRow(3U, UiTextId::ConnectivityPrivacy,
+              UiTextId::ConnectivityPrivacyNote, false);
+}
+
+void renderConnectivitySelectionRow(std::uint8_t index) {
+    if (index > 1U) return;
+    const UiTextId label = index == 0U
+        ? UiTextId::ConnectivityUsb : UiTextId::ConnectivityWifi;
+    const UiTextId note = index == 0U
+        ? UiTextId::ConnectivityUsbNote : UiTextId::ConnectivityWifiNote;
+    renderMenuRow(Components::homeRow(index), tr(label), tr(note),
+                  connectivitySetupController.selection() == index, true,
+                  Tone::Positive);
 }
 
 UiTextId deviceLockStateText(
@@ -22690,6 +22818,8 @@ struct UiRenderSnapshot final {
     std::uint8_t page = 0;
     std::uint8_t rootSelection = 0;
     std::uint8_t deviceSelection = 0;
+    std::uint8_t connectivityView = 0;
+    std::uint8_t connectivitySelection = 0;
     std::uint8_t settingsSelection = 0;
     std::uint8_t settingsBrightnessIndex = 0;
     std::uint8_t settingsAntennaLedBrightnessIndex = 0;
@@ -22786,6 +22916,8 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         uiController.page(),
         uiController.selection(),
         deviceSelection,
+        static_cast<std::uint8_t>(connectivitySetupController.view()),
+        connectivitySetupController.selection(),
         interfaceSettingsController.selection(),
         interfaceSettingsController.brightnessIndex(),
         antennaStatusController.brightnessIndex(),
@@ -22924,6 +23056,24 @@ UiDeltaRenderResult renderSelectionDelta() {
         }
         renderDeviceRow(renderedUi.deviceSelection, currentFirst);
         renderDeviceRow(deviceSelection, currentFirst);
+        return UiDeltaRenderResult::Rendered;
+    }
+
+    if (uiController.page() == kConnectivityPage) {
+        if (renderedUi.connectivityView !=
+            static_cast<std::uint8_t>(connectivitySetupController.view())) {
+            return UiDeltaRenderResult::RequiresFull;
+        }
+        if (connectivitySetupController.view() !=
+            ConnectivitySetupView::Menu) {
+            return UiDeltaRenderResult::NoChange;
+        }
+        const std::uint8_t current = connectivitySetupController.selection();
+        if (renderedUi.connectivitySelection == current) {
+            return UiDeltaRenderResult::NoChange;
+        }
+        renderConnectivitySelectionRow(renderedUi.connectivitySelection);
+        renderConnectivitySelectionRow(current);
         return UiDeltaRenderResult::Rendered;
     }
 
@@ -23851,6 +24001,8 @@ void renderInteractiveScreen(bool clearContent) {
             renderProtocolWorkbenchPage(clearContent);
         } else if (uiController.page() == kDevicePage) {
             renderDevicePage(clearContent);
+        } else if (uiController.page() == kConnectivityPage) {
+            renderConnectivityPage(clearContent);
         } else if (uiController.page() == kPowerPage) {
             renderPowerPage(clearContent);
         } else if (uiController.page() == kDeviceLockPage) {
@@ -26284,7 +26436,10 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
     const int headerBLength = std::snprintf(
                   headerB, sizeof(headerB),
                   "\"language_selection\":%u,"
-                  "\"settings_selection\":%u,\"brightness_percent\":%u,"
+                  "\"settings_selection\":%u,"
+                  "\"connectivity_view\":%u,"
+                  "\"connectivity_selection\":%u,"
+                  "\"brightness_percent\":%u,"
                   "\"brightness_duty\":%u,"
                   "\"antenna_led_brightness_raw\":%u,"
                   "\"antenna_led_receive_mask\":%u,"
@@ -26298,6 +26453,8 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   "\"ui_no_change_suppressed\":%lu",
                   static_cast<unsigned>(languageController.selection()),
                   static_cast<unsigned>(interfaceSettingsController.selection()),
+                  static_cast<unsigned>(connectivitySetupController.view()),
+                  static_cast<unsigned>(connectivitySetupController.selection()),
                   static_cast<unsigned>(
                       interfaceSettingsController.brightnessPercent()),
                   static_cast<unsigned>(
@@ -29658,6 +29815,10 @@ bool selectionCanRepaintInPlace(UiAction action) {
         return captureView == CaptureView::SourceMenu;
     }
     if (uiController.page() == kDevicePage) return true;
+    if (uiController.page() == kConnectivityPage) {
+        return connectivitySetupController.view() ==
+            ConnectivitySetupView::Menu;
+    }
     return uiController.page() == 6 &&
            selfTestController.view() == SelfTestView::ModeMenu;
 }
@@ -31628,6 +31789,48 @@ bool applyUiAction(UiAction action, bool render = true) {
             return finish(changed);
         }
     }
+    if (!wasRoot && uiController.page() == kConnectivityPage) {
+        bool handled = false;
+        bool changed = false;
+        const ConnectivitySetupView view = connectivitySetupController.view();
+        if ((action == UiAction::Back || action == UiAction::Left) &&
+            view != ConnectivitySetupView::Menu) {
+            handled = true;
+            changed = connectivitySetupController.back();
+            lastRuntimeEvent = "connectivity_menu";
+        } else if (view == ConnectivitySetupView::Menu &&
+                   action == UiAction::Up) {
+            handled = true;
+            changed = connectivitySetupController.previous();
+            lastRuntimeEvent = changed ? "connectivity_item_selected"
+                                       : "connectivity_item_boundary";
+        } else if (view == ConnectivitySetupView::Menu &&
+                   action == UiAction::Down) {
+            handled = true;
+            changed = connectivitySetupController.next();
+            lastRuntimeEvent = changed ? "connectivity_item_selected"
+                                       : "connectivity_item_boundary";
+        } else if (view == ConnectivitySetupView::Menu &&
+                   (action == UiAction::Select || action == UiAction::Right)) {
+            handled = true;
+            const ConnectivitySetupActivation activation =
+                connectivitySetupController.activate();
+            if (activation ==
+                ConnectivitySetupActivation::UsbGuideOpened) {
+                changed = true;
+                lastRuntimeEvent = "connectivity_usb_guide";
+            } else if (activation ==
+                       ConnectivitySetupActivation::TemporaryWifiRequested) {
+                changed = openTemporaryWifiFromConnectivity() ||
+                    connectivitySetupController.view() !=
+                        ConnectivitySetupView::Menu;
+            }
+        }
+        if (handled) {
+            uiController.recordHandledAction(action);
+            return finish(changed);
+        }
+    }
     if (!wasRoot && uiController.page() == kDevicePage) {
         bool handled = false;
         bool changed = false;
@@ -31643,11 +31846,12 @@ bool applyUiAction(UiAction action, bool render = true) {
         } else if (action == UiAction::Select || action == UiAction::Right) {
             handled = true;
             constexpr std::uint8_t pages[kDeviceItemCount] = {
-                kPowerPage, 5, kDeviceLockPage, kSerialConsolePage,
-                kAboutPage, 1, 6, kAutomationTrustPage,
+                kPowerPage, 5, kConnectivityPage, kDeviceLockPage,
+                kSerialConsolePage, kAboutPage, 1, 6,
+                kAutomationTrustPage,
             };
             const bool sensitiveItem = deviceSelection == 1U ||
-                deviceSelection == 7U;
+                deviceSelection == 8U;
             const bool settingsAllowed = !sensitiveItem ||
                 deviceLockOperationAllowed(
                     leshy1::services::security::
@@ -31659,14 +31863,17 @@ bool applyUiAction(UiAction action, bool render = true) {
                 interfaceSettingsController.enter();
             }
             if (changed && deviceSelection == 2) {
+                connectivitySetupController.enter();
+            }
+            if (changed && deviceSelection == 3) {
                 const std::uint64_t nowUs =
                     static_cast<std::uint64_t>(esp_timer_get_time());
                 deviceLockController.enter(deviceLock.audit(nowUs));
             }
-            if (changed && deviceSelection == 3) {
+            if (changed && deviceSelection == 4) {
                 enterSerialConsoleUi();
             }
-            if (changed && deviceSelection == 7) {
+            if (changed && deviceSelection == 8) {
                 resetAutomationTrustUi();
             }
             if (settingsAllowed) {
@@ -32342,6 +32549,15 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
             leshy1::ui::hitTouchTarget(
                 TouchTargetLayout::HomeRows, point, first, kDeviceItemCount),
             deviceSelection,
+        };
+    }
+    if (uiController.page() == kConnectivityPage &&
+        connectivitySetupController.view() == ConnectivitySetupView::Menu) {
+        return {
+            leshy1::ui::hitTouchTarget(
+                TouchTargetLayout::HomeRows, point, 0,
+                ConnectivitySetupController::kActionCount),
+            connectivitySetupController.selection(),
         };
     }
     if (uiController.page() == kAutomationTrustPage &&
