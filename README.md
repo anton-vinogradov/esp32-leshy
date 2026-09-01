@@ -19,7 +19,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
 - **Verified checkpoint:** `E-BUILD-232`/`E-AUTO-208`/`E-HIL-231`/`E-UX-085`/`E-STORAGE-076`/`RB-M244` accept the exact physical `1.0.0-dev.358` Protocol Workbench task tree and its comparison/derived-decode result screens. Four plain-language tasks traverse waveform, annotation, truthful decode and previous-Capture comparison; 14 exact TFT frames have zero clipped/orphaned result glyphs, storage remains 8/54 with zero writes, and cleanup is Home/none/lease 0. Exact dev.357 remains the periodic full anchor.
-- **Next gate:** `FF-3` remains active at **23/62**. Host/build dev.359 implements exact annotation plus generation-scoped derived-decode cold recovery and its read-only product oracle. The focused original-board runner offered six consecutive signal windows; two physical attempts observed no IR edges, performed no product write and failed closed. Repeat only this delta while a real remote is transmitting, then require exact protected commit/cold reopen without raw-Capture mutation. RF TX stays forbidden.
+- **Next gate:** `FF-3` remains active at **23/62**. Host/build dev.359 implements exact annotation plus generation-scoped derived-decode cold recovery and its read-only product oracle. The focused original-board runner offered six consecutive signal windows; two physical attempts observed no IR edges, performed no product write and failed closed. Repeat only this delta while a real remote is transmitting, then require exact protected commit/cold reopen without raw-Capture mutation. In parallel, host/build dev.360 closes the user-facing search/export gap in `FF-4`; physical HTTP parity still requires a dedicated client and must not switch the active Mac network. RF TX stays forbidden.
 
 ### Functional-first delivery queue
 
@@ -29,7 +29,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | FF-1 | Wi-Fi/BLE and Targets Radar plus the coherent cross-radio interaction review for `FUNC-17` | ✅ complete |
 | FF-2 | Deliver `FUNC-43` on-device screenshot → Library → export with build/state/time provenance | ✅ complete |
 | FF-3 | Complete `FUNC-37` Protocol Workbench over immutable Captures; waveform, task-first marking, comparison and truthful derived-decode screens are physically accepted, while protected commit/cold reopen against a real Capture remains | 🟡 active |
-| FF-4 | Finish `FUNC-38` local USB/Web browse, search, compare and export without making network access a device dependency | ⬜ queued |
+| FF-4 | Finish `FUNC-38` local USB/Web browse, search, compare and export without making network access a device dependency; dev.360 completes host/build search/export, dedicated-client HTTP parity remains | ⬜ queued |
 | FF-5 | Deliver `FUNC-34` IR replay from one selected immutable Capture with preview, confirmation and proven Stop/timeout | ⬜ queued |
 | FF-6 | Resume signed-package classification/execution for `FUNC-54`, then individually admitted Safe Lab actions; Automation/HID remains zero-output until this row becomes active | ⏸️ safely parked |
 

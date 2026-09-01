@@ -187,8 +187,9 @@ retains only hashes, counts, searched field classes and Boolean match results.
 
 ## Local Web presentation and runtime lifecycle
 
-The Web adapter serves a self-contained offline page at exact
-`GET /` and accepts the shared request body only at exact
+The Web adapter serves one self-contained same-origin application as independently
+bounded immutable gzip assets at exact `GET /` and `GET /app.js`, and accepts the
+shared request body only at exact
 `POST /api/v1/companion`. The API requires exact `Content-Type: application/json`, a
 known non-zero `Content-Length` no greater than 512 bytes and an explicitly authorized
 device session. Chunked bodies, GET bodies, unknown routes, wrong methods or media
@@ -196,12 +197,17 @@ types, empty/mismatched/oversized bodies and an unavailable session fail closed 
 the companion parser sees a byte. Transport errors use bounded schema-v1 JSON and
 never publish a partial request.
 
-The responsive page loads no external scripts, fonts, images or network resources. It
-renders Sessions, Targets, Compare and Target details from the same paged projections;
-Favorite alone is exposed as a first mutation and still performs
-preview -> explicit browser confirmation -> one-time confirm -> status. All device
-text is escaped before HTML insertion. The presentation adapter owns no Wi-Fi,
-credential, storage, driver or radio API.
+The responsive page loads no external origin, font, image or network resource. It
+renders Sessions, Targets, Compare and Target details from the same paged projections.
+Search matches decoded name, note and tag plus identity kind/value with normalized
+radio-ID punctuation; useful details keep raw protocol evidence behind an optional
+disclosure. Export assembles the exact canonical offline-v1 shape above, reports
+`source_transport:local_web_json`, self-tests its browser SHA-256 implementation
+against a known answer and binds every exported field into `snapshot_id`. Favorite
+alone is exposed as a first mutation and still performs preview -> explicit browser
+confirmation -> one-time confirm -> status. All device text is escaped before HTML
+insertion. The presentation adapter owns no Wi-Fi, credential, storage, driver or
+radio API.
 
 Exact 0.181 runtime activation is intentionally separate. In ready Targets, the user
 opens Detail -> Actions -> Local Web. The first Right opens a consent overlay and does
@@ -325,3 +331,13 @@ codec and 11,272-byte admission scratch. It reopens 16 Targets and 7 comparison 
 reproduces the accepted 11,521-byte snapshot, restores the worker and finishes
 Home/none/lease 0. Physical HTTP payload parity remains deferred to a dedicated
 client; active Mac Wi-Fi is prohibited.
+
+Exact host/build `1.0.0-dev.360` at source
+`db952ecf45eff4e719c9f15b3bcb86ca017d561f` adds that user-facing Web search/detail/
+export slice. The immutable index/application sources compress from 2,431/10,079 B
+to 1,174/3,885 B, so each response stays below one 4 KiB transport window. Native
+route/asset tests, canonical Web-transport round-trip and tamper rejection, the
+executable SHA-256 known-answer self-test, 30 focused companion tests, the full host
+suite and production build pass. This is `E-COMPANION-008`; it changes no host
+network and makes no physical HTTP claim, which remains deferred to a dedicated
+client.

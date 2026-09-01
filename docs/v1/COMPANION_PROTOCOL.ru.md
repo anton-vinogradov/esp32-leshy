@@ -188,8 +188,9 @@ Boolean результаты совпадений.
 
 ## Presentation local Web и runtime lifecycle
 
-Web adapter отдаёт self-contained offline page по exact
-`GET /` и принимает общий request body только по exact
+Web adapter отдаёт одно self-contained same-origin application как независимо
+bounded immutable gzip assets по exact `GET /` и `GET /app.js`, а общий request body
+принимает только по exact
 `POST /api/v1/companion`. API требует exact `Content-Type: application/json`, известный
 ненулевой `Content-Length` не больше 512 bytes и явно авторизованную device session.
 Chunked body, body у GET, неизвестный route, неверные method/media type,
@@ -197,12 +198,17 @@ empty/mismatched/oversized body и недоступная session fail-close-я�
 байта companion parser. Ошибки transport используют bounded JSON schema v1 и не
 публикуют partial request.
 
-Responsive page не загружает внешние scripts, fonts, images или network resources.
-Она показывает Sessions, Targets, Compare и detail Target из тех же paged projections;
-первой mutation доступно только Favorite, всё ещё через
-preview -> явное browser confirmation -> одноразовый confirm -> status. Все данные
-device экранируются до вставки в HTML. Presentation adapter не владеет Wi-Fi,
-credentials, storage, drivers или radio API.
+Responsive page не загружает external origin, fonts, images или network resources.
+Она показывает Sessions, Targets, Compare и detail Target из тех же paged projections.
+Search сопоставляет декодированные имя, заметку и тег плюс identity kind/value с
+нормализованной пунктуацией radio ID; полезные details скрывают raw protocol evidence
+за optional disclosure. Export собирает точную canonical offline-v1 shape выше,
+сообщает `source_transport:local_web_json`, self-test-ит browser implementation
+SHA-256 известным ответом и связывает каждое экспортированное поле в `snapshot_id`.
+Первой mutation доступно только Favorite, всё ещё через preview -> явное browser
+confirmation -> одноразовый confirm -> status. Все данные device экранируются до
+вставки в HTML. Presentation adapter не владеет Wi-Fi, credentials, storage, drivers
+или radio API.
 
 Runtime activation exact 0.181 намеренно отделена. В ready Targets пользователь
 открывает Detail -> Actions -> Local Web. Первое Right показывает consent overlay и
@@ -328,3 +334,12 @@ process-lifetime. После Web Targets приостанавливает idle S
 comparison items, воспроизводит принятый snapshot 11 521 byte, восстанавливает worker
 и завершает Home/none/lease 0. Physical HTTP payload parity остаётся отложенной до
 отдельного client; активный Wi-Fi Mac запрещён.
+
+Exact host/build `1.0.0-dev.360` на source
+`db952ecf45eff4e719c9f15b3bcb86ca017d561f` добавляет этот пользовательский Web slice
+search/detail/export. Immutable sources index/application сжимаются с 2 431/10 079 B
+до 1 174/3 885 B, поэтому каждый response остаётся меньше одного transport window
+4 KiB. Проходят native tests routes/assets, canonical Web-transport round-trip и
+tamper rejection, executable known-answer self-test SHA-256, 30 focused companion
+tests, full host suite и production build. Это `E-COMPANION-008`; host network не
+меняется, physical HTTP claim не создаётся и остаётся отложенным до dedicated client.

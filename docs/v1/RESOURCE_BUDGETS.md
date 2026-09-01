@@ -2118,3 +2118,20 @@ focused persistence runner/checker. Two original-board attempts observed no IR
 edges and stopped before any product write; they do not establish a physical heap,
 storage or cadence claim. Exact dev.358 therefore remains the focused physical
 baseline and cadence remains 1/15.
+
+Local Web search/export bound `RB-M246`: exact host/build `1.0.0-dev.360` at
+firmware source `db952ecf45eff4e719c9f15b3bcb86ca017d561f` uses 234,976 B
+static RAM, 3,641,328 B linked flash and 3,641,824/3,707,360 B app/factory
+images, leaving 552,480 B of actual application-image headroom in the 4 MiB OTA
+slot. App/factory/ELF/map SHA-256 values are
+`9983f6f466e13466a7341624802669d4bd07f4ea7e4f476ae6f8d41bbddb39bf`/
+`b32aae33b236e45f33b5cd6d4435631f4e83c81a77311e5aa6606c4b74e2219c`/
+`46d73f9e68c9c23c0576c4cc54e0e88a346660e463f8fc827b42d1614c3ad545`/
+`317888d837cc482e65f3e6f8d739a31f0d10795aa0bbbb39491dae2eba9eaa67`.
+Against dev.359, static RAM is unchanged; linked flash and app/factory images
+grow 2,420/2,416/2,416 B and OTA headroom falls 2,416 B. The immutable local
+Web index and application compress from 2,431/10,079 B to 1,174/3,885 B, each
+below one 4 KiB response window. The delta adds bounded Target search, useful
+detail and canonical SHA-256-bound offline export without an external asset,
+board flash or host-network change. Physical HTTP parity, progress and cadence
+remain open/unchanged.

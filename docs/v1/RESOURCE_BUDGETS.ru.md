@@ -2107,3 +2107,20 @@ focused runner/checker persistence. Две попытки на оригинал�
 IR edges и остановились до любой product write; они не создают physical claim heap,
 storage или cadence. Поэтому exact dev.358 остаётся focused physical baseline,
 cadence — 1/15.
+
+Bound local Web search/export `RB-M246`: exact host/build `1.0.0-dev.360` на
+firmware source `db952ecf45eff4e719c9f15b3bcb86ca017d561f` использует 234 976 B
+static RAM, 3 641 328 B linked flash и app/factory images 3 641 824/3 707 360 B,
+оставляя 552 480 B фактического headroom application image в OTA slot 4 MiB.
+SHA-256 app/factory/ELF/map:
+`9983f6f466e13466a7341624802669d4bd07f4ea7e4f476ae6f8d41bbddb39bf`/
+`b32aae33b236e45f33b5cd6d4435631f4e83c81a77311e5aa6606c4b74e2219c`/
+`46d73f9e68c9c23c0576c4cc54e0e88a346660e463f8fc827b42d1614c3ad545`/
+`317888d837cc482e65f3e6f8d739a31f0d10795aa0bbbb39491dae2eba9eaa67`.
+Относительно dev.359 static RAM не меняется; linked flash и app/factory images
+растут на 2 420/2 416/2 416 B, OTA headroom уменьшается на 2 416 B. Immutable
+local Web index и application сжимаются с 2 431/10 079 B до 1 174/3 885 B,
+каждый меньше одного response window 4 KiB. Delta добавляет bounded Target search,
+полезные detail и canonical offline export с SHA-256 binding без external asset,
+прошивки платы или изменения host network. Physical HTTP parity, progress и
+cadence остаются открытыми/неизменными.
