@@ -1995,3 +1995,19 @@ Boot heap total/free/minimum остаётся 145 204/70 848/70 700 B, storage �
 read-only generation 8/54 observations с zero physical writes, final cleanup —
 Home/none/lease 0, safety armed. Это продвигает focused cadence до 13/15 без broad
 matrix; annotations, comparison и derived decode остаются внутри FF-3.
+
+Bound основы неизменяемых annotations Protocol Workbench `RB-M240`: exact
+host/build `1.0.0-dev.352` на firmware source
+`3f37150d140e6c4c531a55a59d52738f1e2f2d14` использует 233 600 Б static RAM,
+3 605 932 Б linked flash и app/factory images 3 606 432/3 671 968 Б, оставляя
+588 372 Б в OTA slot 4 MiB. SHA-256 app/factory/ELF/map:
+`c2088eb43d94b4a8fe0acb4e102faefbb4311e85b16f3bdbcc8be7436d5ad76f`/
+`a6712b11309061a005c962994ddb2a32a121c984bf39707b39170cf1c25804af`/
+`3aeb6357832cd87f7ec602ee101dd52160c8f624f284a895b6f52bc15d57405f`/
+`ed5898f9e29ab9272c41843266e655d45d38d83a9ee841f05f32459d5349808c`.
+Относительно dev.351 static RAM не меняется, linked flash и app/factory растут на
+672 Б. Bounded working set — один codec payload 88 Б, manifest 16 Б, две heads по
+24 Б и двенадцать semantic ranges по 5 Б; копии raw Capture, heap allocation,
+worker, queue, radio lease и output path нет. Host fault injection принимает atomic
+fallback и отказ при source mismatch. Железо не затрагивалось; physical heap/TFT/SD
+acceptance остаётся за dev.351.

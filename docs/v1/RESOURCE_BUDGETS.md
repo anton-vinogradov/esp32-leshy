@@ -2006,3 +2006,19 @@ read-only at generation 8/54 observations with zero physical writes, and final
 cleanup is Home/none/lease 0 with safety armed. This advances focused cadence to
 13/15 without a broad matrix; annotations, comparison and derived decode remain
 inside FF-3.
+
+Immutable Protocol Workbench annotation foundation bound `RB-M240`: exact
+host/build `1.0.0-dev.352` at firmware source
+`3f37150d140e6c4c531a55a59d52738f1e2f2d14` uses 233,600 B static RAM,
+3,605,932 B linked flash and 3,606,432/3,671,968 B app/factory images, leaving
+588,372 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`c2088eb43d94b4a8fe0acb4e102faefbb4311e85b16f3bdbcc8be7436d5ad76f`/
+`a6712b11309061a005c962994ddb2a32a121c984bf39707b39170cf1c25804af`/
+`3aeb6357832cd87f7ec602ee101dd52160c8f624f284a895b6f52bc15d57405f`/
+`ed5898f9e29ab9272c41843266e655d45d38d83a9ee841f05f32459d5349808c`.
+Against dev.351, static RAM is unchanged, linked flash grows 672 B and app/factory
+images grow 672 B. The bounded working set is one 88-byte codec payload, one
+16-byte manifest, two 24-byte heads and twelve five-byte semantic ranges; it has
+no raw Capture copy, heap allocation, worker, queue, radio lease or output path.
+Host fault injection accepts atomic fallback and source mismatch rejection. No
+hardware was touched; physical heap/TFT/SD acceptance remains dev.351.

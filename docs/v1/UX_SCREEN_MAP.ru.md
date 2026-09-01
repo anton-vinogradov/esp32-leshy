@@ -291,6 +291,15 @@ cursor/fact rows, storage остаётся read-only, cleanup — Home/none/leas
 двух Captures, annotations полей и сохранение derived decode остаются открытыми,
 поэтому FUNC-37 ещё не завершён.
 
+Host/build dev.352 добавляет безопасную основу annotations, пока без заявления о
+готовом экране: до двенадцати непересекающихся диапазонов Заголовок/Адрес/Команда/
+Данные/Контроль/Пауза сортируются и жёстко связываются с exact generation,
+fingerprint и числом импульсов Capture. Компактная запись максимум 88 байт имеет
+CRC32C и отдельный двухголовый атомарный журнал на Capture; оборванная запись или
+повреждённая новая generation откатывается, чужой source отклоняется fail closed.
+Следующий product slice добавляет task-first UI разметки, явный допуск сохранения и
+физические TFT/SD evidence.
+
 ## Acceptance UX-01
 
 - Каждая `CAP-001…CAP-062` имеет один primary owner и измеримый путь

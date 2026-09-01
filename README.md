@@ -18,8 +18,8 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
-- **Verified checkpoint:** `E-BUILD-227`/`E-AUTO-203`/`E-HIL-228`/`E-UX-082`/`RB-M239` accept exact physical `1.0.0-dev.351` on original board-01. The receive-only IR Protocol Workbench renders a retained physical 67-pulse NEC vector on the real 240×320 TFT; two pulse moves change only 492/426 pixels in the cursor/fact rows, zero pixels outside them and zero full frames. Storage remains generation 8/54 observations with zero writes, radio/TX remain untouched, and cleanup ends Home/none/lease 0. Exact dev.302 remains the periodic full anchor.
-- **Next gate:** `FF-3` remains active. Its first receive-only IR waveform/facts/pulse-cursor slice is now source-, build- and physical-TFT-accepted on dev.351. The next deltas add immutable-source annotations, comparison of two Captures and a separately stored derived decode without changing either raw Capture. RF TX stays forbidden.
+- **Verified checkpoint:** `E-BUILD-228`/`E-AUTO-204`/`E-STORAGE-072`/`RB-M240` accept exact host/build `1.0.0-dev.352`: its bounded annotation model and 88-byte maximum codec bind every semantic pulse range to exact Capture generation/fingerprint/count, reject overlaps and foreign sources, and recover atomically after interrupted/corrupt writes. Exact physical dev.351 remains the real-TFT receive-only Protocol Workbench baseline; exact dev.302 remains the periodic full anchor.
+- **Next gate:** `FF-3` remains active. The next delta connects dev.352 annotations to a task-first on-device marking/save path and proves the exact-CID protected SD/TFT workflow without changing raw Capture. Comparison of two Captures and a separately stored derived decode follow. RF TX stays forbidden.
 
 ### Functional-first delivery queue
 

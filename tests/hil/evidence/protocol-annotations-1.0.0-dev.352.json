@@ -1,0 +1,44 @@
+{
+  "candidate": {
+    "app_elf_sha256": "3aeb6357832cd87f7ec602ee101dd52160c8f624f284a895b6f52bc15d57405f",
+    "app_image_bytes": 3606432,
+    "factory_image_bytes": 3671968,
+    "factory_sha256": "a6712b11309061a005c962994ddb2a32a121c984bf39707b39170cf1c25804af",
+    "firmware_sha256": "c2088eb43d94b4a8fe0acb4e102faefbb4311e85b16f3bdbcc8be7436d5ad76f",
+    "linked_flash_bytes": 3605932,
+    "map_sha256": "ed5898f9e29ab9272c41843266e655d45d38d83a9ee841f05f32459d5349808c",
+    "ota_headroom_bytes": 588372,
+    "source_commit": "3f37150d140e6c4c531a55a59d52738f1e2f2d14",
+    "static_ram_bytes": 233600,
+    "version": "1.0.0-dev.352"
+  },
+  "evidence_ids": ["E-BUILD-228", "E-AUTO-204", "E-STORAGE-072"],
+  "resource_bound": "RB-M240",
+  "schema": "leshy.protocol_annotations.host_acceptance.v1",
+  "status": "pass_host_immutable_annotation_foundation",
+  "verified": {
+    "annotation_capacity": 12,
+    "annotation_kinds": ["header", "address", "command", "data", "checksum", "gap"],
+    "atomic_two_head_store": true,
+    "capture_bytes_stored_in_annotation": 0,
+    "checksum": "crc32c",
+    "codec_max_bytes": 88,
+    "corrupt_newest_falls_back": true,
+    "exact_source_fields": ["capture_generation", "capture_fingerprint", "pulse_count"],
+    "foreign_source_rejected": true,
+    "heap_allocation": false,
+    "overlap_rejected": true,
+    "power_cut_before_head_preserves_previous": true,
+    "production_build_passed": true,
+    "radio_touched": false,
+    "raw_capture_mutated": false,
+    "tests": [
+      "tools/test-protocol-workbench.sh",
+      "tools/check_protocol_workbench_contract.py",
+      "tools/check_clean_target.py",
+      "tools/build.sh",
+      "git diff --check"
+    ],
+    "tx_api_present": false
+  }
+}

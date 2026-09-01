@@ -18,8 +18,8 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
-- **Проверенный checkpoint:** `E-BUILD-227`/`E-AUTO-203`/`E-HIL-228`/`E-UX-082`/`RB-M239` принимают exact physical `1.0.0-dev.351` на original board-01. Receive-only IR Protocol Workbench рисует сохранённый physical NEC-вектор из 67 импульсов на реальном TFT 240×320; два перехода меняют только 492/426 pixels в строках cursor/facts, zero pixels снаружи и zero full frames. Storage остаётся generation 8/54 observations с zero writes, radio/TX не затронуты, cleanup заканчивается Home/none/lease 0. Exact dev.302 остаётся periodic full anchor.
-- **Следующий gate:** `FF-3` остаётся активным. Первый receive-only IR slice waveform/facts/pulse cursor теперь принят по source, build и physical TFT на dev.351. Следующие deltas добавляют annotations immutable source, сравнение двух Captures и отдельно сохранённый derived decode без изменения raw Captures. RF TX запрещён.
+- **Проверенный checkpoint:** `E-BUILD-228`/`E-AUTO-204`/`E-STORAGE-072`/`RB-M240` принимают exact host/build `1.0.0-dev.352`: bounded model annotations и codec максимум 88 байт связывают каждый semantic pulse range с exact generation/fingerprint/count Capture, отвергают пересечения и чужие sources и атомарно восстанавливаются после оборванной/повреждённой записи. Exact physical dev.351 остаётся real-TFT baseline receive-only Protocol Workbench; exact dev.302 остаётся periodic full anchor.
+- **Следующий gate:** `FF-3` остаётся активным. Следующий delta подключает annotations dev.352 к task-first on-device пути разметки/сохранения и доказывает exact-CID protected SD/TFT workflow без изменения raw Capture. Затем следуют сравнение двух Captures и отдельно сохранённый derived decode. RF TX запрещён.
 
 ### Functional-first очередь поставки
 
