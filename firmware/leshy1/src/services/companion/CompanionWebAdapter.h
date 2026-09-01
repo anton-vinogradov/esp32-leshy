@@ -8,8 +8,11 @@
 namespace leshy1::services::companion {
 
 constexpr const char* kCompanionWebIndexPath = "/";
+constexpr const char* kCompanionWebAppPath = "/app.js";
 constexpr const char* kCompanionWebApiPath = "/api/v1/companion";
 constexpr const char* kCompanionWebJsonContentType = "application/json";
+constexpr const char* kCompanionWebJavascriptContentType =
+    "text/javascript; charset=utf-8";
 constexpr const char* kCompanionWebHtmlContentType =
     "text/html; charset=utf-8";
 
@@ -22,6 +25,7 @@ enum class CompanionWebMethod : std::uint8_t {
 enum class CompanionWebRoute : std::uint8_t {
     None,
     Index,
+    App,
     CompanionApi,
 };
 
@@ -82,5 +86,10 @@ const char* companionWebIndexHtml(std::size_t* length);
 // Deterministic gzip representation used on the wire. It expands byte-for-byte
 // to companionWebIndexHtml() and remains below the two-buffer HTTP window.
 const std::uint8_t* companionWebIndexGzip(std::size_t* length);
+
+// The same-origin application is separate so both immutable gzip responses
+// stay inside one proven bounded transport window. It has no external URL.
+const char* companionWebAppJavascript(std::size_t* length);
+const std::uint8_t* companionWebAppGzip(std::size_t* length);
 
 }  // namespace leshy1::services::companion

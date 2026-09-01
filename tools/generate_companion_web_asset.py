@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the deterministic bounded gzip form of the local Web index."""
+"""Generate deterministic bounded gzip forms of the local Web UI assets."""
 
 from __future__ import annotations
 
@@ -13,15 +13,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "firmware/leshy1/src/services/companion/CompanionWebAdapter.cpp"
-OUTPUT = ROOT / "firmware/leshy1/src/services/companion/CompanionWebIndexGzip.inc"
-OPEN = 'R"LESHYHTML('
-CLOSE = ')LESHYHTML"'
+DIRECTORY = ROOT / "firmware/leshy1/src/services/companion"
+ASSETS = (
+    ("index", 'R"LESHYHTML(', ')LESHYHTML"',
+     DIRECTORY / "CompanionWebIndexGzip.inc", "kIndexHtmlGzip"),
+    ("app", 'R"LESHYJS(', ')LESHYJS"',
+     DIRECTORY / "CompanionWebAppGzip.inc", "kAppJavascriptGzip"),
+)
 
 
-def html_bytes() -> bytes:
+def asset_bytes(open_marker: str, close_marker: str) -> bytes:
     source = SOURCE.read_text(encoding="utf-8")
-    start = source.index(OPEN) + len(OPEN)
-    end = source.index(CLOSE, start)
+    start = source.index(open_marker) + len(open_marker)
+    end = source.index(close_marker, start)
     return source[start:end].encode("utf-8")
 
 
@@ -39,8 +43,8 @@ def deterministic_gzip(payload: bytes) -> bytes:
     return encoded
 
 
-def render(encoded: bytes) -> str:
-    lines = ["constexpr std::uint8_t kIndexHtmlGzip[] = {"]
+def render(encoded: bytes, symbol: str) -> str:
+    lines = [f"constexpr std::uint8_t {symbol}[] = {{"]
     for offset in range(0, len(encoded), 12):
         values = ", ".join(
             f"0x{value:02x}" for value in encoded[offset:offset + 12])
@@ -54,21 +58,24 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
-    payload = html_bytes()
-    encoded = deterministic_gzip(payload)
-    if len(encoded) >= 4096:
-        raise RuntimeError(
-            f"compressed index exceeds bounded window: {len(encoded)}")
-    expected = render(encoded)
-    if args.check:
-        if not OUTPUT.is_file() or OUTPUT.read_text(encoding="utf-8") != expected:
+    results: list[str] = []
+    for name, open_marker, close_marker, output, symbol in ASSETS:
+        payload = asset_bytes(open_marker, close_marker)
+        encoded = deterministic_gzip(payload)
+        if len(encoded) >= 4096:
             raise RuntimeError(
-                "companion Web gzip asset is stale; run "
-                "tools/generate_companion_web_asset.py")
-    else:
-        OUTPUT.write_text(expected, encoding="utf-8")
-    print(
-        f"companion Web asset passed: {len(payload)} -> {len(encoded)} bytes")
+                f"compressed {name} exceeds bounded window: {len(encoded)}")
+        expected = render(encoded, symbol)
+        if args.check:
+            if (not output.is_file() or
+                    output.read_text(encoding="utf-8") != expected):
+                raise RuntimeError(
+                    "companion Web gzip asset is stale; run "
+                    "tools/generate_companion_web_asset.py")
+        else:
+            output.write_text(expected, encoding="utf-8")
+        results.append(f"{name} {len(payload)} -> {len(encoded)} bytes")
+    print("companion Web assets passed: " + "; ".join(results))
     return 0
 
 

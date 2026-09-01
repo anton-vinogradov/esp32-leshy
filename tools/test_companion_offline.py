@@ -93,6 +93,19 @@ class CompanionOfflineTests(unittest.TestCase):
             parsed = json.loads(path.read_bytes())
             self.assertEqual(parsed["snapshot_id"], first["snapshot_id"])
 
+    def test_local_web_export_is_versioned_and_self_verifying(self) -> None:
+        usb = fixture()
+        web = offline.build_snapshot(
+            usb["sessions"], usb["targets"], usb["comparison"],
+            offline.WEB_TRANSPORT)
+        self.assertEqual(web["source_transport"], "local_web_json")
+        self.assertNotEqual(web["snapshot_id"], usb["snapshot_id"])
+        offline.validate_snapshot(web)
+        tampered = copy.deepcopy(web)
+        tampered["targets"][0]["favorite"] = not tampered["targets"][0]["favorite"]
+        with self.assertRaises(offline.SnapshotError):
+            offline.validate_snapshot(tampered)
+
     def test_search_is_unicode_casefolded_and_identity_normalized(self) -> None:
         snapshot = fixture()
         self.assertEqual(

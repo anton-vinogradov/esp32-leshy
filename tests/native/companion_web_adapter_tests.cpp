@@ -46,6 +46,13 @@ void testExactIndexAndApiRoutes() {
     CHECK(output.route == CompanionWebRoute::Index);
     CHECK(output.body == nullptr);
 
+    metadata = request(CompanionWebMethod::Get, kCompanionWebAppPath);
+    output = {};
+    CHECK(validateCompanionWebRequest(metadata, nullptr, 0, &output) ==
+          CompanionWebStatus::Ready);
+    CHECK(output.route == CompanionWebRoute::App);
+    CHECK(output.body == nullptr);
+
     const std::string body =
         "{\"schema\":\"leshy.companion.request.v1\","
         "\"kind\":\"connect\",\"request_id\":\"web-1\","
@@ -179,20 +186,34 @@ void testOfflinePageUsesOnlyTheSharedContract() {
     CHECK(length == std::strlen(html));
     CHECK(length < 16384);
     const std::string page(html, length);
-    CHECK(page.find("/api/v1/companion") != std::string::npos);
-    CHECK(page.find("leshy.companion.request.v1") != std::string::npos);
-    CHECK(page.find("session.list") != std::string::npos);
-    CHECK(page.find("target.list") != std::string::npos);
-    CHECK(page.find("target.compare") != std::string::npos);
-    CHECK(page.find("target.mutation.preview") != std::string::npos);
-    CHECK(page.find("target.mutation.confirm") != std::string::npos);
-    CHECK(page.find("target.mutation.status") != std::string::npos);
-    CHECK(page.find("target.favorite.set") != std::string::npos);
-    CHECK(page.find("esc(JSON.stringify") != std::string::npos);
-    CHECK(page.find("&amp;") != std::string::npos);
-    CHECK(page.find("http://") == std::string::npos);
-    CHECK(page.find("https://") == std::string::npos);
-    CHECK(page.find("<script src=") == std::string::npos);
+    std::size_t scriptLength = 0;
+    const char* javascript = companionWebAppJavascript(&scriptLength);
+    CHECK(javascript != nullptr);
+    CHECK(scriptLength == std::strlen(javascript));
+    CHECK(scriptLength < 16384);
+    const std::string script(javascript, scriptLength);
+    const std::string complete = page + script;
+    CHECK(page.find("<script src=\"/app.js\">") != std::string::npos);
+    CHECK(complete.find("/api/v1/companion") != std::string::npos);
+    CHECK(complete.find("leshy.companion.request.v1") != std::string::npos);
+    CHECK(complete.find("leshy.companion.offline.v1") != std::string::npos);
+    CHECK(complete.find("local_web_json") != std::string::npos);
+    CHECK(complete.find("session.list") != std::string::npos);
+    CHECK(complete.find("target.list") != std::string::npos);
+    CHECK(complete.find("target.compare") != std::string::npos);
+    CHECK(complete.find("target.mutation.preview") != std::string::npos);
+    CHECK(complete.find("target.mutation.confirm") != std::string::npos);
+    CHECK(complete.find("target.mutation.status") != std::string::npos);
+    CHECK(complete.find("target.favorite.set") != std::string::npos);
+    CHECK(complete.find("targetMatches") != std::string::npos);
+    CHECK(complete.find("exportSnapshot") != std::string::npos);
+    CHECK(complete.find("sha256") != std::string::npos);
+    CHECK(complete.find("snapshot_integrity_unavailable") != std::string::npos);
+    CHECK(complete.find("esc(JSON.stringify") != std::string::npos);
+    CHECK(complete.find("&amp;") != std::string::npos);
+    CHECK(complete.find("http://") == std::string::npos);
+    CHECK(complete.find("https://") == std::string::npos);
+    CHECK(page.find("<script src=\"http") == std::string::npos);
     CHECK(page.find("<link") == std::string::npos);
 
     std::size_t gzipLength = 0;
@@ -203,6 +224,15 @@ void testOfflinePageUsesOnlyTheSharedContract() {
     CHECK(gzip[0] == 0x1f);
     CHECK(gzip[1] == 0x8b);
     CHECK(gzip[2] == 0x08);
+
+    std::size_t appGzipLength = 0;
+    const std::uint8_t* appGzip = companionWebAppGzip(&appGzipLength);
+    CHECK(appGzip != nullptr);
+    CHECK(appGzipLength > 18);
+    CHECK(appGzipLength < 4096);
+    CHECK(appGzip[0] == 0x1f);
+    CHECK(appGzip[1] == 0x8b);
+    CHECK(appGzip[2] == 0x08);
 }
 
 }  // namespace

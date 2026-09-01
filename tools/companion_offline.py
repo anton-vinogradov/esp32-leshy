@@ -15,6 +15,8 @@ SCHEMA = "leshy.companion.offline.v1"
 KIND = "snapshot"
 PROTOCOL = 1
 TRANSPORT = "usb_serial_ndjson"
+WEB_TRANSPORT = "local_web_json"
+TRANSPORTS = {TRANSPORT, WEB_TRANSPORT}
 _TOP_LEVEL_KEYS = {
     "schema", "kind", "protocol", "source_transport", "complete",
     "snapshot_id", "counts", "sessions", "targets", "comparison",
@@ -135,7 +137,8 @@ def _normalize_target(value: dict[str, Any]) -> dict[str, Any]:
 
 def build_snapshot(sessions: list[dict[str, Any]],
                    targets: list[dict[str, Any]],
-                   comparison: dict[str, Any]) -> dict[str, Any]:
+                   comparison: dict[str, Any],
+                   source_transport: str = TRANSPORT) -> dict[str, Any]:
     """Build and validate a complete deterministic snapshot."""
     normalized_sessions = [_normalize_session(item) for item in sessions]
     normalized_targets = [_normalize_target(item) for item in targets]
@@ -149,7 +152,7 @@ def build_snapshot(sessions: list[dict[str, Any]],
         "schema": SCHEMA,
         "kind": KIND,
         "protocol": PROTOCOL,
-        "source_transport": TRANSPORT,
+        "source_transport": source_transport,
         "complete": True,
         "snapshot_id": "",
         "counts": {
@@ -172,7 +175,7 @@ def validate_snapshot(snapshot: dict[str, Any]) -> None:
     _require(root["schema"] == SCHEMA, "unsupported snapshot schema")
     _require(root["kind"] == KIND, "unsupported snapshot kind")
     _require(root["protocol"] == PROTOCOL, "unsupported protocol")
-    _require(root["source_transport"] == TRANSPORT,
+    _require(root["source_transport"] in TRANSPORTS,
              "unsupported source transport")
     _require(root["complete"] is True, "partial snapshot rejected")
     snapshot_id = _text(root["snapshot_id"], "snapshot.snapshot_id", 64)

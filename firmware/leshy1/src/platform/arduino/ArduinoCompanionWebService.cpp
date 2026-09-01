@@ -556,6 +556,17 @@ bool ArduinoCompanionWebService::processRequest(
         return true;
     }
 
+    if (webRequest.route == CompanionWebRoute::App) {
+        std::size_t scriptLength = 0;
+        const std::uint8_t* script =
+            services::companion::companionWebAppGzip(&scriptLength);
+        sendResponse(
+            200, services::companion::kCompanionWebJavascriptContentType,
+            reinterpret_cast<const char*>(script), scriptLength, true);
+        ++requestsHandled_;
+        return true;
+    }
+
     if (handler == nullptr || webRequest.bodyLength >= request_.size()) {
         resetClient();
         ++requestsRejected_;
