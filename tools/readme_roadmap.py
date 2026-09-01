@@ -265,9 +265,10 @@ def parse_delivery_queue(config: LanguageConfig) -> list[tuple[str, str, str]]:
         raise ValueError(
             f"{config.status}: expected one active delivery row, got {active}")
     active_index = actual_ids.index(active[0])
-    if any(row[2] != "done" for row in rows[:active_index]):
+    if any(row[2] not in {"done", "parked"} for row in rows[:active_index]):
         raise ValueError(
-            f"{config.status}: every delivery row before {active[0]} must be done")
+            f"{config.status}: every delivery row before {active[0]} must be "
+            "done or safely parked")
     if any(row[2] == "done" for row in rows[active_index + 1:]):
         raise ValueError(
             f"{config.status}: delivery rows after {active[0]} cannot be done")

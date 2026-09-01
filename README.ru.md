@@ -19,7 +19,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
 - **Проверенный checkpoint:** `E-BUILD-232`/`E-AUTO-208`/`E-HIL-231`/`E-UX-085`/`E-STORAGE-076`/`RB-M244` принимают exact physical `1.0.0-dev.358`: task-first дерево Protocol Workbench и экраны comparison/derived decode. Четыре понятные задачи проходят waveform, annotation, честное чтение и сравнение с предыдущим Capture; 14 exact TFT frames не имеют clipped/orphaned glyphs, storage остаётся 8/54 с zero writes, cleanup — Home/none/lease 0. Exact dev.357 остаётся periodic full anchor.
-- **Следующий gate:** `FF-3` остаётся активным на **23/62**. Host/build dev.359 реализует cold recovery exact annotation и привязанного к её generation derived decode вместе с read-only product oracle. Focused runner на оригинальной плате дал шесть последовательных окон сигнала; две physical попытки не увидели IR edges, ничего не записали и завершились fail closed. Повторяется только этот delta при активной передаче реального пульта, затем обязательны exact protected commit/cold reopen без изменения raw Capture. Параллельно host/build dev.360 закрывает пользовательский пробел search/export в `FF-4`; physical HTTP parity по-прежнему требует dedicated client и не должна переключать активную сеть Mac. RF TX запрещён.
+- **Следующий gate:** прогресс остаётся **23/62**. По решению владельца финальный gate `FF-3` — protected commit/cold reopen annotation/decode — отложен до появления второго исправного DIV; dev.359 и обе no-signal fail-closed попытки сохранены, а оригинальная плата больше не запрашивается повторно для IR input. Теперь активен `FF-4`: host/build dev.360 закрывает пользовательский пробел search/export, а physical HTTP parity по-прежнему требует dedicated client и не должна переключать активную сеть Mac. RF TX запрещён.
 
 ### Functional-first очередь поставки
 
@@ -28,8 +28,8 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | FF-0 | Физическая ревью-сборка: пройти все доступные passive top-level workflows, сохранить stable screens/navigation и записать только пользовательские findings | ✅ готово |
 | FF-1 | Radar Wi-Fi/BLE и Targets плюс согласованный cross-radio interaction review `FUNC-17` | ✅ готово |
 | FF-2 | Поставить `FUNC-43` screenshot устройства → Library → export с provenance build/state/time | ✅ готово |
-| FF-3 | Завершить `FUNC-37` Protocol Workbench над immutable Captures; waveform, task-first разметка, comparison и truthful derived-decode screens физически приняты, остаётся protected commit/cold reopen на реальном Capture | 🟡 в работе |
-| FF-4 | Завершить `FUNC-38` local USB/Web browse, search, compare и export, не делая сеть зависимостью устройства; dev.360 завершает host/build search/export, остаётся HTTP parity с dedicated client | ⬜ в очереди |
+| FF-3 | Завершить `FUNC-37` Protocol Workbench над immutable Captures; waveform, task-first разметка, comparison и truthful derived-decode screens физически приняты; protected commit/cold reopen по решению владельца отложен до появления второго исправного DIV | ⏸️ безопасно заморожен |
+| FF-4 | Завершить `FUNC-38` local USB/Web browse, search, compare и export, не делая сеть зависимостью устройства; dev.360 завершает host/build search/export, остаётся HTTP parity с dedicated client | 🟡 в работе |
 | FF-5 | Поставить `FUNC-34` IR replay из одного выбранного immutable Capture с preview, confirmation и доказанным Stop/timeout | ⬜ в очереди |
 | FF-6 | Вернуться к classification/execution signed packages `FUNC-54`, затем к отдельно допускаемым действиям Safe Lab; Automation/HID остаётся zero-output до активации этой строки | ⏸️ безопасно заморожен |
 
