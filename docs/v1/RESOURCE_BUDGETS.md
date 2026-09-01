@@ -1925,3 +1925,17 @@ the stock display bus and the OPI-enabled experiment does not reach a stable pro
 boot. Therefore the portable ledger remains 16 MiB flash / zero PSRAM; the apparent
 8 MiB must not fund buffers, caches or feature admission. The source-bound details are
 retained in [variant evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json).
+
+Contextual task-tree build bound `RB-M235`: exact host/build `1.0.0-dev.345` at
+firmware source `ba7391c` uses 233,600 B static RAM, 3,602,552 B linked flash and
+3,602,720/3,668,256 B app/factory images, leaving 591,584 B in the 4 MiB OTA slot.
+App/factory/ELF/map SHA-256 values are
+`b9400c372162d2db9c7747b178c8b227961c1669d2b216a8e8b682a5aac133a7`/
+`31e207ff5dbf96c94be6a9ecb5566f137cba75fd97d4e83cb4bf2ed40c8c8b3f`/
+`ef5c192602171d6cbc8caab9c6b8df589519f1524db287aa9a13980cc8479af4`/
+`8acf5ca920af34cc41907c82c50fd3cb0f13dfb9eeb1a55b1d37a28645fd9dc2`.
+Against dev.343, static RAM grows 8 B, linked flash 1,740 B and app/factory
+images 1,408 B. The delta adds one enum state and plain-language explanation
+screen plus strings/guards; it adds no capture buffer, queue, radio worker or
+storage allocation. Focused host checks and the production build pass; physical
+heap and TFT acceptance remain bound to dev.343.

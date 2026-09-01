@@ -1913,3 +1913,17 @@ stock display bus, а OPI-enabled experiment не достигает стаби�
 Поэтому portable ledger остаётся 16 MiB flash / zero PSRAM; кажущиеся 8 MiB нельзя
 использовать для buffers, caches или admission функций. Source-bound details
 сохранены в [variant evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json).
+
+Build bound контекстного дерева задач `RB-M235`: exact host/build
+`1.0.0-dev.345` на firmware source `ba7391c` использует 233 600 B static RAM,
+3 602 552 B linked flash и app/factory images 3 602 720/3 668 256 B, оставляя
+591 584 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`b9400c372162d2db9c7747b178c8b227961c1669d2b216a8e8b682a5aac133a7`/
+`31e207ff5dbf96c94be6a9ecb5566f137cba75fd97d4e83cb4bf2ed40c8c8b3f`/
+`ef5c192602171d6cbc8caab9c6b8df589519f1524db287aa9a13980cc8479af4`/
+`8acf5ca920af34cc41907c82c50fd3cb0f13dfb9eeb1a55b1d37a28645fd9dc2`.
+Относительно dev.343 static RAM растёт на 8 B, linked flash — на 1 740 B,
+app/factory images — на 1 408 B. Delta добавляет один enum state, понятный экран
+объяснения, strings и guards; capture buffer, queue, radio worker или storage
+allocation не добавляются. Проходят focused host checks и production build;
+physical heap/TFT acceptance остаётся привязанным к dev.343.
