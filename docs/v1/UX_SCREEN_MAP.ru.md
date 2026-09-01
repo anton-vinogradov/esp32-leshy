@@ -284,9 +284,12 @@ persisted generation. Unavailable или stale input fail closed вместо а
 Session из памяти.
 
 Host/build dev.333 реализует этот первый read-only IR slice с fixed workspace 1 KiB
-и без heap allocation, TX, replay, output API или radio lease. Physical review
-TFT/navigation, comparison двух Captures, annotations полей и сохранение derived
-decode остаются открытыми, поэтому FUNC-37 ещё не завершён.
+и без heap allocation, TX, replay, output API или radio lease. Exact physical
+dev.351 принимает его реальный TFT/navigation 240×320 через retained physical NEC
+vector 0.129 в bounded HIL-only RAM fixture: движения по pulses перерисовывают только
+cursor/fact rows, storage остаётся read-only, cleanup — Home/none/lease 0. Comparison
+двух Captures, annotations полей и сохранение derived decode остаются открытыми,
+поэтому FUNC-37 ещё не завершён.
 
 ## Acceptance UX-01
 

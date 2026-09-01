@@ -279,9 +279,12 @@ the exact selected persisted generation. Unavailable or stale input fails closed
 instead of analyzing a different in-memory Session.
 
 Host/build dev.333 implements this first read-only IR slice with a fixed 1 KiB
-workspace and no heap allocation, TX, replay, output API or radio lease. Physical
-TFT/navigation review, comparison of two Captures, field annotations and storing a
-derived decode remain open and therefore do not make FUNC-37 complete.
+workspace and no heap allocation, TX, replay, output API or radio lease. Exact
+physical dev.351 accepts its real 240×320 TFT/navigation using the retained physical
+0.129 NEC vector through a bounded HIL-only RAM fixture: pulse moves repaint only the
+cursor/fact rows, storage remains read-only and cleanup is Home/none/lease 0.
+Comparison of two Captures, field annotations and storing a derived decode remain
+open and therefore do not make FUNC-37 complete.
 
 ## UX-01 acceptance
 

@@ -1,0 +1,81 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "d17d32585d12c46f94fc5d96210c6becbf5f24ff4b16733bc551fb22f7b1cca3",
+    "app_image_bytes": 3605760,
+    "factory_image_bytes": 3671296,
+    "factory_sha256": "740ccbdf2d08c11d41e9e393969b13a8db5ce398bdf3b5d920e01f70bf087bf1",
+    "firmware_sha256": "d9ac38be505436139db61ed34c0b1db0d81af3f4125ff101063a330761137f48",
+    "linked_flash_bytes": 3605260,
+    "map_sha256": "7e58eda37ef5cd7831ea055b78730a3904611091177a6cd53059398c7657fc4a",
+    "ota_headroom_bytes": 588544,
+    "source_commit": "91badbfd0eb55e32867c548330fd2eeb1401ddd1",
+    "static_ram_bytes": 233600,
+    "version": "1.0.0-dev.351"
+  },
+  "evidence": {
+    "artifact_index_sha256": "094c6b11b7fb89da3bbea4befe1ab530fe0ce5c1f1d4583fe5d7bf7afd7faf0c",
+    "checker_sha256": "636b59066c459e3bbb453171c9c3839900c25acfb386b744c9b31406daaadba8",
+    "failed_predecessor": {
+      "reason": "HIL fixture used a child-page transition for a root page; production analysis was not entered",
+      "run": "work/outputs/protocol-workbench-1.0.0-dev.350-20260901-01/run.json",
+      "run_sha256": "a4265b63e928bc0fac8a6d5bb55083811098af49b598b3e1734e3789eca40197",
+      "status": "retained_fail_closed_not_gate_eligible"
+    },
+    "run": "work/outputs/protocol-workbench-1.0.0-dev.351-20260901-02/run.json",
+    "run_id": "cf4c48f12e34d433aff39b1c4ebdfbf3",
+    "run_sha256": "d29cb2d146389c12d3ccbdecf164750190629f6ba64664eead86bfaf860c135d",
+    "runner_sha256": "056d55a5dac91b0261e46ce50aa6e8f77cd029b6d032e5a9724113817ced5fa0"
+  },
+  "evidence_ids": [
+    "E-BUILD-227",
+    "E-AUTO-203",
+    "E-HIL-228",
+    "E-UX-082"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "resource_bound": "RB-M239",
+  "schema": "leshy.protocol_workbench_hil.acceptance.v1",
+  "status": "pass_exact_receive_only_protocol_workbench_tft_review",
+  "verified": {
+    "analysis_status": "valid",
+    "base_unit_us": 555,
+    "boot_heap_free_bytes": 70848,
+    "boot_heap_minimum_free_bytes": 70700,
+    "boot_heap_total_bytes": 145204,
+    "clone_port_touched": false,
+    "fixture_pulses": 67,
+    "fixture_source": "retained_physical_nec_0.129",
+    "fixture_storage": "bounded_ram_hil_only",
+    "frame_bytes": 153600,
+    "frame_format": "rgb565be",
+    "frame_height": 320,
+    "frame_sha256": [
+      "f896128945842e99d2dcd432317a9ee9a647a5d7e7aa0baf19e9341a29551d96",
+      "3c0f02b2d330eae266edb9c92701c3dd7ffa256d2f727c1b0993d42e3ab0dfae",
+      "b9a39d8364dd9f35df762ac0088e7d0631d47b5ce1e66d10cfc9d7d0df494a86"
+    ],
+    "frame_width": 240,
+    "full_repaints_during_navigation": 0,
+    "mac_wifi_controlled": false,
+    "navigation_changed_pixels": [492, 426],
+    "navigation_outside_allowed_regions": [0, 0],
+    "protocol": "nec",
+    "radio_touched": false,
+    "radio_tx_commands": 0,
+    "source_fingerprint": "8FF146182DB0BEA0",
+    "storage_generation_after": 8,
+    "storage_generation_before": 8,
+    "storage_observations_after": 54,
+    "storage_observations_before": 54,
+    "storage_physical_write_calls": 0,
+    "storage_written": false,
+    "timing_bands": 4,
+    "final_fixture_active": false,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "final_safety_state": "armed",
+    "final_software_quiesce_complete": true
+  }
+}

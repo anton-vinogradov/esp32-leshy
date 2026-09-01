@@ -18,8 +18,8 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
-- **Проверенный checkpoint:** `E-BUILD-226`/`E-AUTO-202`/`E-HIL-227`/`E-UX-081`/`E-STORAGE-071`/`RB-M238` принимают exact physical `1.0.0-dev.349`. Один реальный кадр TFT 240×320 RGB565 сохранён при отключённом owner lock, вновь открыт из защищённой Библиотеки и экспортирован как те же exact 153 600 байт (`SHA-256 6fa1…87af`, `CRC32C 6bd8c470`). Cold boot принимает то же screenshot generation 4 read-only с exact CID, zero physical writes и final Home/none/lease 0. Exact dev.302 остаётся periodic full anchor.
-- **Следующий gate:** `FF-3` активен. Host/build `1.0.0-dev.333` уже даёт его receive-only IR slice Workbench: выбранный immutable Capture → Действия → понятные waveform/facts и pulse cursor, а Export остаётся отдельным. Следующий delta физически проверяет этот path на принятой lineage dev.349, затем добавляет сохранённые annotations, compare и derived decode без изменения raw Capture. RF TX запрещён.
+- **Проверенный checkpoint:** `E-BUILD-227`/`E-AUTO-203`/`E-HIL-228`/`E-UX-082`/`RB-M239` принимают exact physical `1.0.0-dev.351` на original board-01. Receive-only IR Protocol Workbench рисует сохранённый physical NEC-вектор из 67 импульсов на реальном TFT 240×320; два перехода меняют только 492/426 pixels в строках cursor/facts, zero pixels снаружи и zero full frames. Storage остаётся generation 8/54 observations с zero writes, radio/TX не затронуты, cleanup заканчивается Home/none/lease 0. Exact dev.302 остаётся periodic full anchor.
+- **Следующий gate:** `FF-3` остаётся активным. Первый receive-only IR slice waveform/facts/pulse cursor теперь принят по source, build и physical TFT на dev.351. Следующие deltas добавляют annotations immutable source, сравнение двух Captures и отдельно сохранённый derived decode без изменения raw Captures. RF TX запрещён.
 
 ### Functional-first очередь поставки
 
@@ -28,7 +28,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | FF-0 | Физическая ревью-сборка: пройти все доступные passive top-level workflows, сохранить stable screens/navigation и записать только пользовательские findings | ✅ готово |
 | FF-1 | Radar Wi-Fi/BLE и Targets плюс согласованный cross-radio interaction review `FUNC-17` | ✅ готово |
 | FF-2 | Поставить `FUNC-43` screenshot устройства → Library → export с provenance build/state/time | ✅ готово |
-| FF-3 | Поставить первый receive-only срез `FUNC-37` Protocol Workbench над immutable Captures; IR source/build slice завершён и ждёт physical review | 🟡 в работе |
+| FF-3 | Завершить `FUNC-37` Protocol Workbench над immutable Captures; receive-only IR slice waveform/facts/cursor физически принят, annotations/compare/derived decode остаются | 🟡 в работе |
 | FF-4 | Завершить `FUNC-38` local USB/Web browse, search, compare и export, не делая сеть зависимостью устройства | ⬜ в очереди |
 | FF-5 | Поставить `FUNC-34` IR replay из одного выбранного immutable Capture с preview, confirmation и доказанным Stop/timeout | ⬜ в очереди |
 | FF-6 | Вернуться к classification/execution signed packages `FUNC-54`, затем к отдельно допускаемым действиям Safe Lab; Automation/HID остаётся zero-output до активации этой строки | ⏸️ безопасно заморожен |

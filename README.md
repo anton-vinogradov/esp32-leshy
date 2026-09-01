@@ -18,8 +18,8 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
-- **Verified checkpoint:** `E-BUILD-226`/`E-AUTO-202`/`E-HIL-227`/`E-UX-081`/`E-STORAGE-071`/`RB-M238` accept exact physical `1.0.0-dev.349`. One real 240×320 RGB565 TFT frame is saved through the disabled owner lock, reopened from protected Library and exported as the exact same 153,600 bytes (`SHA-256 6fa1…87af`, `CRC32C 6bd8c470`). Cold boot admits the same screenshot generation 4 read-only with exact CID, zero physical writes, and final Home/none/lease 0. Exact dev.302 remains the periodic full anchor.
-- **Next gate:** `FF-3` is active. Host/build `1.0.0-dev.333` already provides its receive-only IR Workbench slice: selected immutable Capture → Actions → understandable waveform/facts and pulse cursor, with Export remaining separate. The next delta physically reviews that path on the accepted dev.349 lineage, then adds stored annotations, comparison and derived decode without mutating the raw Capture. RF TX stays forbidden.
+- **Verified checkpoint:** `E-BUILD-227`/`E-AUTO-203`/`E-HIL-228`/`E-UX-082`/`RB-M239` accept exact physical `1.0.0-dev.351` on original board-01. The receive-only IR Protocol Workbench renders a retained physical 67-pulse NEC vector on the real 240×320 TFT; two pulse moves change only 492/426 pixels in the cursor/fact rows, zero pixels outside them and zero full frames. Storage remains generation 8/54 observations with zero writes, radio/TX remain untouched, and cleanup ends Home/none/lease 0. Exact dev.302 remains the periodic full anchor.
+- **Next gate:** `FF-3` remains active. Its first receive-only IR waveform/facts/pulse-cursor slice is now source-, build- and physical-TFT-accepted on dev.351. The next deltas add immutable-source annotations, comparison of two Captures and a separately stored derived decode without changing either raw Capture. RF TX stays forbidden.
 
 ### Functional-first delivery queue
 
@@ -28,7 +28,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | FF-0 | Physical review build: traverse every available passive top-level workflow, retain stable screens/navigation and record only user-visible findings | ✅ complete |
 | FF-1 | Wi-Fi/BLE and Targets Radar plus the coherent cross-radio interaction review for `FUNC-17` | ✅ complete |
 | FF-2 | Deliver `FUNC-43` on-device screenshot → Library → export with build/state/time provenance | ✅ complete |
-| FF-3 | Deliver the receive-only first slice of `FUNC-37` Protocol Workbench over immutable Captures; IR source/build slice is complete and awaits physical review | 🟡 active |
+| FF-3 | Complete `FUNC-37` Protocol Workbench over immutable Captures; the receive-only IR waveform/facts/cursor slice is physically accepted, annotations/compare/derived decode remain | 🟡 active |
 | FF-4 | Finish `FUNC-38` local USB/Web browse, search, compare and export without making network access a device dependency | ⬜ queued |
 | FF-5 | Deliver `FUNC-34` IR replay from one selected immutable Capture with preview, confirmation and proven Stop/timeout | ⬜ queued |
 | FF-6 | Resume signed-package classification/execution for `FUNC-54`, then individually admitted Safe Lab actions; Automation/HID remains zero-output until this row becomes active | ⏸️ safely parked |

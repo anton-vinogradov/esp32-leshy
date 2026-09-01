@@ -1976,3 +1976,22 @@ bounded retry raw read-only SD identity для Screenshot save/export; CID misma
 zero physical/blocked writes, boot heap total/free/minimum —
 145 204/70 848/70 700 B. Final cleanup — Home/none/lease 0, safety armed.
 Это закрывает FF-2 и продвигает focused cadence до 12/15 без broad matrix.
+
+Physical bound receive-only Protocol Workbench `RB-M239`: exact physical
+`1.0.0-dev.351` на firmware source
+`91badbfd0eb55e32867c548330fd2eeb1401ddd1` использует 233 600 B static RAM,
+3 605 260 B linked flash и app/factory images 3 605 760/3 671 296 B, оставляя
+588 544 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`d9ac38be505436139db61ed34c0b1db0d81af3f4125ff101063a330761137f48`/
+`740ccbdf2d08c11d41e9e393969b13a8db5ce398bdf3b5d920e01f70bf087bf1`/
+`d17d32585d12c46f94fc5d96210c6becbf5f24ff4b16733bc551fb22f7b1cca3`/
+`7e58eda37ef5cd7831ea055b78730a3904611091177a6cd53059398c7657fc4a`.
+Относительно dev.349 static RAM не меняется, linked flash растёт на 1 656 B,
+app/factory images — на 1 648 B. Production analyzer по-прежнему использует
+fixed workspace 1 KiB; retained NEC source из 67 импульсов существует только в
+bounded RAM HIL fixture и очищается вместе с HIL session. Два движения cursor дают
+zero full repaint и меняют только 492/426 pixels в двух объявленных dirty regions.
+Boot heap total/free/minimum остаётся 145 204/70 848/70 700 B, storage остаётся
+read-only generation 8/54 observations с zero physical writes, final cleanup —
+Home/none/lease 0, safety armed. Это продвигает focused cadence до 13/15 без broad
+matrix; annotations, comparison и derived decode остаются внутри FF-3.

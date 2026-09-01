@@ -1986,3 +1986,23 @@ capture/export is byte-identical, cold recovery admits the same generation 4
 read-only with zero physical/blocked writes, and boot total/free/minimum heap is
 145,204/70,848/70,700 B. Final cleanup is Home/none/lease 0 with safety armed.
 This closes FF-2 and advances focused cadence to 12/15 without a broad matrix.
+
+Receive-only Protocol Workbench physical bound `RB-M239`: exact physical
+`1.0.0-dev.351` at firmware source
+`91badbfd0eb55e32867c548330fd2eeb1401ddd1` uses 233,600 B static RAM,
+3,605,260 B linked flash and 3,605,760/3,671,296 B app/factory images, leaving
+588,544 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`d9ac38be505436139db61ed34c0b1db0d81af3f4125ff101063a330761137f48`/
+`740ccbdf2d08c11d41e9e393969b13a8db5ce398bdf3b5d920e01f70bf087bf1`/
+`d17d32585d12c46f94fc5d96210c6becbf5f24ff4b16733bc551fb22f7b1cca3`/
+`7e58eda37ef5cd7831ea055b78730a3904611091177a6cd53059398c7657fc4a`.
+Against dev.349, static RAM is unchanged, linked flash grows 1,656 B and
+app/factory images grow 1,648 B. The production analyzer still uses its fixed
+1 KiB workspace; the retained 67-pulse NEC source exists only in a bounded RAM
+HIL fixture and is cleared with the HIL session. Two cursor moves cause zero full
+repaints and change only 492/426 pixels in the two declared dirty regions.
+Boot total/free/minimum heap remains 145,204/70,848/70,700 B, storage stays
+read-only at generation 8/54 observations with zero physical writes, and final
+cleanup is Home/none/lease 0 with safety armed. This advances focused cadence to
+13/15 without a broad matrix; annotations, comparison and derived decode remain
+inside FF-3.
