@@ -357,7 +357,7 @@ def main() -> int:
                 reports["scrubbed"] = scrubbed
                 reports["safe_outputs"] = read_only_query(
                     device, b"hardware.safe-outputs",
-                    "leshy.hardware.safe_outputs.v1", "state")
+                    "leshy.hardware.safe-outputs.v1", "state")
                 reports["input"] = read_only_query(
                     device, b"input.state", "leshy.input.v1", "state")
                 screenshots["home"] = capture(
