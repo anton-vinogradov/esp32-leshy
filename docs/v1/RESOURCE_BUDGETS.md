@@ -2022,3 +2022,22 @@ images grow 672 B. The bounded working set is one 88-byte codec payload, one
 no raw Capture copy, heap allocation, worker, queue, radio lease or output path.
 Host fault injection accepts atomic fallback and source mismatch rejection. No
 hardware was touched; physical heap/TFT/SD acceptance remains dev.351.
+
+Task-first Protocol Workbench annotation bound `RB-M241`: exact physical
+`1.0.0-dev.353` at firmware source
+`9222f5f98ae3d186335a3db8ff8f0c69d3e4315a` uses 234,024 B static RAM,
+3,618,896 B linked flash and 3,619,392/3,684,928 B app/factory images, leaving
+574,912 B of actual application-image headroom in the 4 MiB OTA slot.
+App/factory/ELF/map SHA-256 values are
+`f3707c7be6d2a368e6640f9e626e5710f87dda278a8a681954969dfbb38334f9`/
+`495aa5168ef1e321024a620bdabf16a5d0f2a9f9d07f048ca30cbab82723cd36`/
+`b958ba8029e5fc25c72b580fe553cbb2312f5a31d2655884e34789f5b9b67da2`/
+`3b01167ce5266252299213a8ba44db78adb7c5f67c871fd847abf7326b0a7c7c`.
+Against dev.352, static RAM grows 424 B and linked flash plus app/factory images
+grow 12,964/12,960/12,960 B. The delta funds the allocation-free task controller,
+plain EN/RU presentation, bounded dirty-region model and production protected-store
+wiring. Physical HIL keeps the retained 67-pulse fixture in RAM only: boot
+total/free/minimum heap is 144,780/70,424/70,276 B, range navigation changes 429
+pixels and zero outside its three declared regions, product storage remains 8/54
+with zero writes, and final cleanup is Home/none/lease 0 with safety armed. This
+advances focused cadence to 14/15 without claiming physical annotation persistence.

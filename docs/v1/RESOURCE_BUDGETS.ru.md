@@ -2011,3 +2011,22 @@ host/build `1.0.0-dev.352` на firmware source
 worker, queue, radio lease и output path нет. Host fault injection принимает atomic
 fallback и отказ при source mismatch. Железо не затрагивалось; physical heap/TFT/SD
 acceptance остаётся за dev.351.
+
+Bound task-first annotations Protocol Workbench `RB-M241`: exact physical
+`1.0.0-dev.353` на firmware source
+`9222f5f98ae3d186335a3db8ff8f0c69d3e4315a` использует 234 024 Б static RAM,
+3 618 896 Б linked flash и app/factory images 3 619 392/3 684 928 Б, оставляя
+574 912 Б фактического headroom application image в OTA slot 4 MiB.
+SHA-256 app/factory/ELF/map:
+`f3707c7be6d2a368e6640f9e626e5710f87dda278a8a681954969dfbb38334f9`/
+`495aa5168ef1e321024a620bdabf16a5d0f2a9f9d07f048ca30cbab82723cd36`/
+`b958ba8029e5fc25c72b580fe553cbb2312f5a31d2655884e34789f5b9b67da2`/
+`3b01167ce5266252299213a8ba44db78adb7c5f67c871fd847abf7326b0a7c7c`.
+Относительно dev.352 static RAM растёт на 424 Б, linked flash и app/factory images —
+на 12 964/12 960/12 960 Б. Delta оплачивает allocation-free task controller,
+понятную EN/RU presentation, bounded model dirty regions и production wiring
+protected store. Physical HIL держит retained fixture из 67 pulses только в RAM:
+boot heap total/free/minimum — 144 780/70 424/70 276 Б, navigation range меняет
+429 pixels и zero снаружи трёх declared regions, product storage остаётся 8/54 с
+zero writes, final cleanup — Home/none/lease 0, safety armed. Это продвигает
+focused cadence до 14/15 без заявления physical persistence annotations.

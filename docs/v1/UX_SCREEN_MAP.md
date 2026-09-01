@@ -286,13 +286,17 @@ cursor/fact rows, storage remains read-only and cleanup is Home/none/lease 0.
 Comparison of two Captures, field annotations and storing a derived decode remain
 open and therefore do not make FUNC-37 complete.
 
-Host/build dev.352 adds the storage-safe annotation foundation without claiming a
-new screen: up to twelve non-overlapping Header/Address/Command/Data/Checksum/Gap
+Host/build dev.352 adds the storage-safe annotation foundation: up to twelve
+non-overlapping Header/Address/Command/Data/Checksum/Gap
 ranges are sorted and bound to the exact Capture generation, fingerprint and pulse
 count. The compact 88-byte maximum record has CRC32C and a per-Capture two-head
 atomic journal; a torn write or corrupt newest generation falls back, while a
-foreign source fails closed. The next product slice owns the task-first marking UI,
-explicit save admission and physical TFT/SD evidence.
+foreign source fails closed. Exact physical dev.353 accepts the task-first
+Actions → start → end → meaning → result path on the real TFT. It derives one
+separate Address annotation without mutating the retained 67-pulse source; moving
+the end changes only 429 pixels in declared local regions. Its HIL-only fixture is
+RAM-only, so real-Capture protected save/reopen, comparison and derived decode stay
+open rather than being implied by the accepted marking UI.
 
 ## UX-01 acceptance
 

@@ -18,8 +18,8 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
-- **Проверенный checkpoint:** `E-BUILD-228`/`E-AUTO-204`/`E-STORAGE-072`/`RB-M240` принимают exact host/build `1.0.0-dev.352`: bounded model annotations и codec максимум 88 байт связывают каждый semantic pulse range с exact generation/fingerprint/count Capture, отвергают пересечения и чужие sources и атомарно восстанавливаются после оборванной/повреждённой записи. Exact physical dev.351 остаётся real-TFT baseline receive-only Protocol Workbench; exact dev.302 остаётся periodic full anchor.
-- **Следующий gate:** `FF-3` остаётся активным. Следующий delta подключает annotations dev.352 к task-first on-device пути разметки/сохранения и доказывает exact-CID protected SD/TFT workflow без изменения raw Capture. Затем следуют сравнение двух Captures и отдельно сохранённый derived decode. RF TX запрещён.
+- **Проверенный checkpoint:** `E-BUILD-229`/`E-AUTO-205`/`E-HIL-229`/`E-UX-083`/`E-STORAGE-073`/`RB-M241` принимают exact physical `1.0.0-dev.353`: task-first путь **Отметить участок** проводит через начало, конец и понятный смысл, создаёт отдельную annotation Адрес поверх неизменяемых импульсов и возвращает к полезному waveform. Exact RGB565 frames визуально приняты; движение границы меняет 429 pixels только внутри трёх объявленных local regions. Retained HIL fixture намеренно RAM-only, оставляет protected storage на generation 8/54 с zero writes и поэтому не заявляет physical commit annotation. Exact dev.302 остаётся periodic full anchor.
+- **Следующий gate:** `FF-3` остаётся активным. Следующий delta сравнивает два immutable Capture и отдельно сохраняет derived decode; последующий delta с реальным Capture обязан проверить protected save/reopen annotation на exact-CID SD. RF TX запрещён.
 
 ### Functional-first очередь поставки
 
@@ -28,7 +28,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | FF-0 | Физическая ревью-сборка: пройти все доступные passive top-level workflows, сохранить stable screens/navigation и записать только пользовательские findings | ✅ готово |
 | FF-1 | Radar Wi-Fi/BLE и Targets плюс согласованный cross-radio interaction review `FUNC-17` | ✅ готово |
 | FF-2 | Поставить `FUNC-43` screenshot устройства → Library → export с provenance build/state/time | ✅ готово |
-| FF-3 | Завершить `FUNC-37` Protocol Workbench над immutable Captures; receive-only IR slice waveform/facts/cursor физически принят, annotations/compare/derived decode остаются | 🟡 в работе |
+| FF-3 | Завершить `FUNC-37` Protocol Workbench над immutable Captures; navigation waveform и task-first разметка физически приняты, остаются save/reopen annotation на real Capture, compare и derived decode | 🟡 в работе |
 | FF-4 | Завершить `FUNC-38` local USB/Web browse, search, compare и export, не делая сеть зависимостью устройства | ⬜ в очереди |
 | FF-5 | Поставить `FUNC-34` IR replay из одного выбранного immutable Capture с preview, confirmation и доказанным Stop/timeout | ⬜ в очереди |
 | FF-6 | Вернуться к classification/execution signed packages `FUNC-54`, затем к отдельно допускаемым действиям Safe Lab; Automation/HID остаётся zero-output до активации этой строки | ⏸️ безопасно заморожен |
