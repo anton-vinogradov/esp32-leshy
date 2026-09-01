@@ -195,7 +195,7 @@ def main() -> int:
                     "leshy.airspace_guard.capacity_drop_test.v1", "state")
                 failures.extend(expect(capacity_drop_clear, {
                     "status": "cleared", "armed": False,
-                    "one_shot": False, "hil_active": True,
+                    "one_shot": True, "hil_active": True,
                     "worker_idle": True, "ui_home": True,
                     "runtime_owner": "none", "lease_mask": 0,
                     "hardware_touched": False, "radio_started": False,
