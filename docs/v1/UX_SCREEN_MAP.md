@@ -120,7 +120,8 @@ UX-S01 Home
 │  ├─ Networks → network card
 │  │  ├─ understand protection and quality
 │  │  ├─ find its source by live signal
-│  │  └─ check my password → explanation → record → computer check
+│  │  └─ check my password → explanation → record → save/reopen → export
+│  │     └─ computer: choose local list → authorize → bounded check → plain result
 │  ├─ Devices → device card → identify / current intent / find nearby
 │  ├─ Channels → load / average background / recommendation
 │  ├─ Record visit → compare with a previous visit

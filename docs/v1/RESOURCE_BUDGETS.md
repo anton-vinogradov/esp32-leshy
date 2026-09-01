@@ -2226,3 +2226,14 @@ addresses are not retained, exact-CID storage stays read-only, and final cleanup
 Home/none/lease 0 with safe outputs quiescent. This closes `WF-17`, moves cadence
 to 7/15 and does not claim synthetic owned-Capture identity, SoftAP execution or
 instrumented no-TX.
+
+Owned Wi-Fi password-check no-image-delta bound `RB-M254`: the accepted `WF-11`
+journey reuses exact physical/build `1.0.0-dev.369` and therefore keeps the
+`RB-M253` firmware resources unchanged: 235,000 B static RAM, 3,656,388 B linked
+flash, 3,656,896/3,722,432 B app/factory images and 537,408 B OTA headroom. The
+device path retains at most the existing bounded authentication artifact and exports
+one 408-byte canonical `WPA*02` record; atomic save, cold reopen and final cleanup
+pass. The computer checker is separately bounded to 64 MiB corpus, 1,000,000
+candidates and 3,600 seconds, with an exact-hash checkpoint. Retained acceptance
+contains no raw export, password or network identity. This closes `WF-11`, moves
+cadence to 8/15 and introduces no firmware, heap, storage-schema or OTA delta.

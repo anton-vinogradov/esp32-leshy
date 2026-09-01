@@ -19,16 +19,32 @@ cracker and does not operate a radio, join a network, or modify the DIV.
 - no corpus ships with Leshy, especially no identity-linked leak collection;
 - EAPOL descriptor versions 1 and 2 are supported; other versions fail closed.
 
-This host foundation does not complete `FUNC-61`: user-facing companion integration,
-WPA3/key-version-3 handling, physical export-to-verification evidence, and other
-owned evidence families remain open.
+The supported WPA2 PMKID/EAPOL user journey and its physical
+export-to-verification chain complete `WF-11`. Wider `FUNC-61` remains active for
+WPA3/key-version-3 handling and other owned evidence families.
 
 ## Safe workflow
 
-1. On the DIV, select **Wi-Fi → Check my network → Capture authentication** for a
-   network you own or are authorized to test, then export the validated `hc22000`.
-2. Prepare a local, reviewed corpus. Keep it outside the repository.
-3. Preview validation without evaluating a candidate:
+1. On the DIV, select **Wi-Fi → Networks → your network → Check my password** for a
+   network you own or are authorized to test. Follow the explanation, record the
+   bounded authentication evidence, then save and export it from **Saved records**.
+2. Prepare a local, reviewed list of common or router-default passwords. Keep it
+   outside the repository.
+3. Use the primary task-first journey. It explains the authorization boundary,
+   previews the exact limits, creates the checkpoint automatically and prints a
+   plain-language result:
+
+   ```sh
+   python3 tools/check_my_wifi_password.py \
+     --evidence owned.hc22000 --corpus common.txt \
+     --list-kind common --max-candidates 10000 --max-seconds 30
+   ```
+
+   If it pauses, rerun the same command with `--resume`. Changed evidence or corpus
+   invalidates the checkpoint. `--preview-only` validates inputs without evaluating
+   any password.
+
+4. The lower-level verifier remains available for automation and advanced use:
 
    ```sh
    python3 tools/owned_wifi_evidence_verifier.py \
@@ -37,7 +53,7 @@ owned evidence families remain open.
      --corpus-class common --preview-only
    ```
 
-4. Run with explicit ownership confirmation, finite budgets and a durable checkpoint:
+5. Run it with explicit ownership confirmation, finite budgets and a durable checkpoint:
 
    ```sh
    python3 tools/owned_wifi_evidence_verifier.py \
@@ -48,16 +64,22 @@ owned evidence families remain open.
      --owned-evidence-confirmed --report verification.report.json
    ```
 
-5. If the result is `paused`, rerun the same command with `--resume`. Any changed
+6. If the result is `paused`, rerun the same command with `--resume`. Any changed
    evidence, corpus or corpus metadata invalidates the checkpoint.
 
 `weak_password_match` means only that one corpus candidate reproduces every supplied
-record. The report intentionally does not reveal it. Change the network credential
-through the router's normal administration path and recapture to verify remediation.
+record. The durable report intentionally does not reveal it. Change the network
+credential through the router's normal administration path and recapture to verify
+remediation. `complete_no_match` is not proof that the password is strong; it only
+rules out the exact finite local list that was checked.
 
 ## Acceptance
 
 The focused delta is `tools/test.sh --only owned-wifi-evidence`. It checks Leshy's
-canonical export, the official Hashcat mode-22000 PMKID reference vector, WPA*01 and
-WPA*02 positives/negatives, strict parsing, privacy-safe reporting, bounded
-checkpoint/resume and the no-network/no-device/no-radio source contract.
+canonical export, the task-first journey, the official Hashcat mode-22000 PMKID
+reference vector, WPA*01 and WPA*02 positives/negatives, strict parsing,
+privacy-safe reporting, bounded checkpoint/resume and the no-network/no-device/no-radio
+source contract. The retained [physical acceptance](../../tests/hil/evidence/board-01-owned-wifi-password-check-1.0.0-dev.369.json)
+additionally binds exact candidate hashes/CID, task-first device navigation, atomic
+save, cold reopen, canonical export, physical negative control, public positive
+control and final cleanup without retaining raw evidence or network identity.

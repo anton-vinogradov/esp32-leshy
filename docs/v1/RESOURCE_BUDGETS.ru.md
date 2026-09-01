@@ -2216,3 +2216,14 @@ SHA-256 app/factory/ELF/map —
 final cleanup — Home/none/lease 0 с quiescent safe outputs. Это закрывает `WF-17`,
 двигает cadence до 7/15 и не заявляет synthetic identity owned Capture, выполнение
 SoftAP или instrumented no-TX.
+
+No-image-delta bound проверки пароля своей Wi-Fi `RB-M254`: принятый journey
+`WF-11` повторно использует exact physical/build `1.0.0-dev.369`, поэтому firmware
+resources `RB-M253` не меняются: 235 000 B static RAM, 3 656 388 B linked flash,
+3 656 896/3 722 432 B app/factory images и 537 408 B OTA headroom. Device path
+сохраняет не больше существующего bounded authentication artifact и экспортирует
+одну canonical запись `WPA*02` размером 408 bytes; atomic save, cold reopen и final
+cleanup проходят. Computer checker отдельно ограничен corpus 64 MiB, 1 000 000
+candidates и 3 600 секундами, с checkpoint по exact hashes. Retained acceptance не
+содержит raw export, пароль или identity сети. Это закрывает `WF-11`, двигает
+cadence до 8/15 и не добавляет delta firmware, heap, storage schema или OTA.

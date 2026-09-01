@@ -23,3 +23,5 @@ python3 "$repo_dir/tools/test_owned_wifi_evidence_verifier.py"
 python3 "$repo_dir/tools/test_check_my_wifi_password.py"
 python3 "$repo_dir/tools/test_owned_wifi_password_hil_runner.py"
 python3 "$repo_dir/tools/check_owned_wifi_evidence_verifier_contract.py"
+python3 "$repo_dir/tools/check_owned_wifi_password_hil_acceptance.py" \
+    "$repo_dir/tests/hil/evidence/board-01-owned-wifi-password-check-1.0.0-dev.369.json"
