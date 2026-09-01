@@ -24,6 +24,10 @@ from run_1x_prerelease_hil import sha256_file, write_json
 RUN_SCHEMA = "leshy.owned_wifi_password_check_hil.run.v1"
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_CORPUS = b"not-the-fixture\nhashcat!\n"
+PUBLIC_POSITIVE_EVIDENCE = (
+    b"WPA*01*4d4fe7aac3a2cecab195321ceb99a7d0*fc690c158264*"
+    b"f4747f87f9f4*686173686361742d6573736964***\n"
+)
 
 
 def current_network_detail(
@@ -181,6 +185,44 @@ def run_guided_check(payload: bytes) -> dict[str, Any]:
         return report
 
 
+def private_report_contract(report: dict[str, Any]) -> bool:
+    return (
+        report.get("status") == "pass" and
+        report.get("privacy", {}).get("plaintext_retained") is False and
+        report.get("privacy", {}).get("raw_evidence_retained") is False and
+        report.get("side_effects") == {
+            "network_operations": 0,
+            "device_writes": 0,
+            "radio_operations": 0,
+        }
+    )
+
+
+def physical_export_contract(
+        report: dict[str, Any], export_sha256: str | None) -> bool:
+    """The anonymized physical fixture is a valid negative control.
+
+    Its addresses and SSID deliberately do not match the public source MIC,
+    so accepting a password would be a verifier false positive.  A positive
+    public reference vector is checked independently below.
+    """
+    return (
+        private_report_contract(report) and
+        report.get("outcome") == "complete_no_match" and
+        report.get("result", {}).get("matched_rank") is None and
+        report.get("result", {}).get("candidates_examined") == 2 and
+        report.get("evidence", {}).get("sha256") == export_sha256
+    )
+
+
+def positive_control_contract(report: dict[str, Any]) -> bool:
+    return (
+        private_report_contract(report) and
+        report.get("outcome") == "weak_password_match" and
+        report.get("result", {}).get("matched_rank") == 2
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if not args.reuse_exact_flash:
@@ -205,6 +247,7 @@ def main(argv: list[str] | None = None) -> int:
     failures: list[str] = []
     child_status = 2
     verification: dict[str, Any] = {}
+    positive_control: dict[str, Any] = {}
     try:
         authentication.enter_network_detail = current_network_detail
         persistence.read_binary_artifact = intercept_reader
@@ -216,16 +259,10 @@ def main(argv: list[str] | None = None) -> int:
             failures.append("device_export_not_observed")
         else:
             verification = run_guided_check(captured["hc22000"])
-            if (verification.get("status") != "pass" or
-                    verification.get("outcome") != "weak_password_match" or
-                    verification.get("result", {}).get("matched_rank") != 2 or
-                    verification.get("privacy", {}).get(
-                        "plaintext_retained") is not False or
-                    verification.get("side_effects") != {
-                        "network_operations": 0,
-                        "device_writes": 0,
-                        "radio_operations": 0,
-                    }):
+            positive_control = run_guided_check(PUBLIC_POSITIVE_EVIDENCE)
+            export_sha256 = hashlib.sha256(captured["hc22000"]).hexdigest()
+            if (not physical_export_contract(verification, export_sha256) or
+                    not positive_control_contract(positive_control)):
                 failures.append("guided_verification_contract_failed")
     except Exception:
         failures.append("coordinator_failed_closed")
@@ -268,7 +305,10 @@ def main(argv: list[str] | None = None) -> int:
             "final_cleanup": child_value.get("cleanup_after", {}).get(
                 "complete"),
         },
-        "computer_check": verification,
+        "computer_check": {
+            "physical_export": verification,
+            "public_positive_control": positive_control,
+        },
         "tooling": {
             "journey_sha256": sha256_file(
                 ROOT / "tools/check_my_wifi_password.py"),

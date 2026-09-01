@@ -99,6 +99,16 @@ class OwnedWifiPasswordHilRunnerTests(unittest.TestCase):
         self.assertEqual("weak_password_match", report["outcome"])
         self.assertFalse(report["privacy"]["plaintext_retained"])
         self.assertEqual(0, report["side_effects"]["network_operations"])
+        self.assertTrue(runner.positive_control_contract(report))
+
+    def test_anonymized_physical_export_is_negative_control(self) -> None:
+        payload = (fixture.wpa02() + "\n").encode("ascii")
+        report = runner.run_guided_check(payload)
+        self.assertEqual("complete_no_match", report["outcome"])
+        self.assertTrue(runner.physical_export_contract(
+            report, report["evidence"]["sha256"]))
+        self.assertFalse(runner.physical_export_contract(
+            report, "0" * 64))
 
     def test_cold_library_export_traverses_explicit_ready_step(self) -> None:
         generation = 11
