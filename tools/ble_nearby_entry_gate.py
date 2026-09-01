@@ -19,6 +19,7 @@ BLE_ENTRY_STABILITY_MINIMUM_MS = (
     BLE_ENTRY_STABILITY_MARGIN_MS
 )
 BLE_ENTRY_STABILITY_SECONDS = BLE_ENTRY_STABILITY_MINIMUM_MS / 1000.0
+BLE_ENTRY_MAXIMUM_TRANSPORT_RETRIES = 1
 
 
 def ble_entry_failure(state: dict[str, Any]) -> str | None:
@@ -56,6 +57,17 @@ def ble_entry_stability_evidence_failure(
             not isinstance(samples, int) or isinstance(samples, bool) or
             samples < 2):
         return "bounded_lifecycle_unproven"
+    transport_retries = evidence.get("transport_transient_retries", 0)
+    transport_errors = evidence.get("transport_transient_errors", [])
+    if (not isinstance(transport_retries, int) or
+            isinstance(transport_retries, bool) or
+            transport_retries < 0 or
+            transport_retries > BLE_ENTRY_MAXIMUM_TRANSPORT_RETRIES or
+            not isinstance(transport_errors, list) or
+            len(transport_errors) != transport_retries or
+            not all(isinstance(error, str) and error
+                    for error in transport_errors)):
+        return "transport_retry_budget_invalid"
     final_state = evidence.get("final_state")
     if not isinstance(final_state, dict):
         return "final_state_missing"

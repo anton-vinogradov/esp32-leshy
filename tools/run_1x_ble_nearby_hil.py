@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ble_nearby_entry_gate import (
+    BLE_ENTRY_MAXIMUM_TRANSPORT_RETRIES,
     BLE_ENTRY_STABILITY_SECONDS,
     ble_entry_failure,
 )
@@ -23,7 +24,7 @@ from ble_nearby_run_policy import (
 from capture_1x_ui import PassiveSerial, synchronize_console
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
-from run_1x_product_home_hil import stabilized_boot_metrics
+from run_1x_product_home_hil import read_only_query, stabilized_boot_metrics
 from run_1x_product_survey_hil import (
     action,
     artifact_manifest,
@@ -168,9 +169,22 @@ def wait_stable_ble_entry(
     """Observe past NimBLE's bounded sync window and fail on any route bounce."""
     started = time.monotonic()
     samples = 0
+    transport_transient_retries = 0
+    transport_transient_errors: list[str] = []
     final_state: dict[str, Any] = {}
     while True:
-        final_state = query(device, b"ui.state", "leshy.ui.v1", "state")
+        final_state = read_only_query(
+            device, b"ui.state", "leshy.ui.v1", "state")
+        query_retries = int(final_state.get(
+            "host_transport_transient_retries", 0))
+        transport_transient_retries += query_retries
+        transport_transient_errors.extend(final_state.get(
+            "host_transport_transient_errors", []))
+        if transport_transient_retries > \
+                BLE_ENTRY_MAXIMUM_TRANSPORT_RETRIES:
+            raise RuntimeError(
+                "BLE entry serial responsiveness exceeded the bounded "
+                "read-only retry budget")
         samples += 1
         failure = ble_entry_failure(final_state)
         if failure is not None:
@@ -180,6 +194,9 @@ def wait_stable_ble_entry(
             return {
                 "duration_ms": int(elapsed * 1000.0),
                 "samples": samples,
+                "transport_transient_retries":
+                    transport_transient_retries,
+                "transport_transient_errors": transport_transient_errors,
                 "final_state": final_state,
             }
         time.sleep(ENTRY_STABILITY_POLL_SECONDS)

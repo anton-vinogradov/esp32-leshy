@@ -6,6 +6,7 @@ from __future__ import annotations
 import unittest
 
 from ble_nearby_entry_gate import (
+    BLE_ENTRY_MAXIMUM_TRANSPORT_RETRIES,
     BLE_ENTRY_STABILITY_MARGIN_MS,
     BLE_ENTRY_STABILITY_MINIMUM_MS,
     BLE_ENTRY_STABILITY_SECONDS,
@@ -84,6 +85,40 @@ class BleEntryGateTests(unittest.TestCase):
             "final_state": self.stable(),
         }
         self.assertIsNone(ble_entry_stability_evidence_failure(evidence))
+
+    def test_retained_stability_accepts_one_recorded_read_retry(self) -> None:
+        evidence = {
+            "duration_ms": BLE_ENTRY_STABILITY_MINIMUM_MS,
+            "samples": 2,
+            "transport_transient_retries":
+                BLE_ENTRY_MAXIMUM_TRANSPORT_RETRIES,
+            "transport_transient_errors": [
+                "timed out waiting for leshy.ui.v1/state",
+            ],
+            "final_state": self.stable(),
+        }
+        self.assertIsNone(ble_entry_stability_evidence_failure(evidence))
+
+    def test_retained_stability_rejects_hidden_or_excess_retries(self) -> None:
+        base = {
+            "duration_ms": BLE_ENTRY_STABILITY_MINIMUM_MS,
+            "samples": 2,
+            "final_state": self.stable(),
+        }
+        self.assertEqual(
+            "transport_retry_budget_invalid",
+            ble_entry_stability_evidence_failure({
+                **base,
+                "transport_transient_retries": 1,
+                "transport_transient_errors": [],
+            }))
+        self.assertEqual(
+            "transport_retry_budget_invalid",
+            ble_entry_stability_evidence_failure({
+                **base,
+                "transport_transient_retries": 2,
+                "transport_transient_errors": ["first", "second"],
+            }))
 
 
 if __name__ == "__main__":
