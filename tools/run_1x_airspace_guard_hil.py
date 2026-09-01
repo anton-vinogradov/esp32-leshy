@@ -281,8 +281,9 @@ def home_wifi(device: PassiveSerial,
     return state
 
 
-def open_guard(device: PassiveSerial,
-               trace: list[dict[str, Any]]) -> dict[str, Any]:
+def open_guard_profile(device: PassiveSerial,
+                       trace: list[dict[str, Any]]) -> dict[str, Any]:
+    """Open the task-first profile selector without starting either radio."""
     home_wifi(device, trace)
     state = action(device, "right")
     trace.append(state)
@@ -316,6 +317,12 @@ def open_guard(device: PassiveSerial,
         "application_connect_calls": 0,
         "application_raw_tx_calls": 0,
     }, "guard_profile_state")
+    return profile
+
+
+def start_guard_from_profile(device: PassiveSerial,
+                             trace: list[dict[str, Any]]) -> dict[str, Any]:
+    """Start the currently selected profile with exactly one UI action."""
     state = action(device, "right")
     trace.append(state)
     require_exact(state, {
@@ -323,6 +330,13 @@ def open_guard(device: PassiveSerial,
         "lease_mask": 15,
     }, "guard_open")
     started = guard_state(device)
+    return started
+
+
+def open_guard(device: PassiveSerial,
+               trace: list[dict[str, Any]]) -> dict[str, Any]:
+    open_guard_profile(device, trace)
+    started = start_guard_from_profile(device, trace)
     require_exact(started, {
         "profile": "everyday", "profile_version": 1,
         "profile_selection": 0, "disconnect_threshold": 4,
