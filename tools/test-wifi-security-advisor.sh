@@ -18,3 +18,4 @@ trap 'rm -rf "$test_tmp"' EXIT
 
 python3 "$repo_dir/tools/check_wifi_security_advisor_contract.py"
 python3 "$repo_dir/tools/check_passive_serial_transport.py"
+python3 "$repo_dir/tools/check_wifi_security_advisor_hil_acceptance.py"

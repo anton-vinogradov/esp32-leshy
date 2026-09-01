@@ -1,0 +1,58 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "b1c781ca64a39b786ef79ff09b0c162dc08a640b6cce0ecea9470819bb6d7707",
+    "app_image_bytes": 3646000,
+    "cid": "FE343253440000002000000055019CB7",
+    "factory_image_bytes": 3711536,
+    "factory_sha256": "9f29341efdd19b86b46c9b6035cd12ae71b98fa5b773a21383006406ffa290ab",
+    "firmware_sha256": "c7495796a2fd5ecc6baed7c652852fdfe795a36edf2de1a8933a3ba058c8e0f8",
+    "firmware_source_commit": "175219134cb9c4643773160b98d8f7193e8984b3",
+    "fresh_flashes": 1,
+    "map_sha256": "293948c5c50290cb66ffa579dcf4442e172ec93c54a4fabcd613185fb19380e5",
+    "runner_source_sha256": "a335fd7a18aed36fe1ec68d9cdd2e82eb9c6ad9840aa543c06bbe382f3f8fa96",
+    "version": "1.0.0-dev.364"
+  },
+  "evidence_ids": [
+    "E-BUILD-236",
+    "E-AUTO-214",
+    "E-HIL-232",
+    "E-UX-087",
+    "RB-M248"
+  ],
+  "privacy": {
+    "ambient_bssid_retained": false,
+    "ambient_ssid_retained": false,
+    "ambient_vendor_retained": false,
+    "raw_run_retained": false,
+    "screen_hashes_only": true
+  },
+  "schema": "leshy.wifi_security_advisor_hil.acceptance.v1",
+  "status": "pass_wifi_security_advisor",
+  "verified": {
+    "advisor_chrome_changed_pixels": 0,
+    "advisor_content_changed_pixels": 0,
+    "advisor_png_sha256": "6dc7749cf20897adf6f90f705b323b49359333df543148413a38dacfe108492e",
+    "advisor_rgb565_sha256": "8b13c4a66b25832e61b042351f627773e2b0e05523d0130e835dd8d690ee13b4",
+    "buzzer_inactive": true,
+    "cleanup_complete": true,
+    "cursor_not_reset_after_user_navigation": true,
+    "detail_outside_signal_pixels": 0,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "heap_free_after_first_lifecycle_bytes": 68844,
+    "heap_free_after_second_lifecycle_bytes": 68844,
+    "heap_total_bytes": 143828,
+    "input_queue_drops": 0,
+    "live_order_remains_strongest_first": true,
+    "manual_button_presses": 0,
+    "passive_wifi_only": true,
+    "physical_storage_write_calls": 0,
+    "plain_language_assessment_visible": true,
+    "pmf_unknown_rendered_truthfully": true,
+    "selected_identity_preserved_during_live_sort": true,
+    "two_complete_wifi_lifecycles": true,
+    "zero_heap_drift_after_warmup": true
+  }
+}
