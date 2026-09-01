@@ -1953,3 +1953,17 @@ app/factory images fall 32 B. The delta changes strings, two navigation labels
 and host guards only; it adds no runtime allocation, buffer, queue, worker,
 storage operation or radio activity. Focused host checks and production build
 pass; physical heap and TFT acceptance remain bound to dev.343.
+
+Explicit Library Actions bound `RB-M237`: exact host/build `1.0.0-dev.347` at
+firmware source `752f1b5` uses 233,600 B static RAM, 3,602,984 B linked flash and
+3,603,152/3,668,688 B app/factory images, leaving 591,152 B in the 4 MiB OTA
+slot. App/factory/ELF/map SHA-256 values are
+`3bb3f01601636cf8d021a27494b98ea7896ea9d98407ac265d0077f2d41d5819`/
+`afa7ff73079ce85d983c77106560ad33380b2d8114c7f4c04429ce1be9e67a7e`/
+`7a921db443ec3a817f7ab0173679662d15a9eecc6c4e85db894150cd37494597`/
+`be66cd01f2da34d540f724a4882648b3442d9b9a70006143d9c8dad5783079d0`.
+Against dev.346, static RAM is unchanged, linked flash grows 456 B and app/factory
+images grow 464 B. The delta adds one bounded controller state and only renders
+the selected action rows; it adds no capture buffer, queue, worker, storage I/O or
+radio activity. Focused native/host checks and production build pass; physical
+heap and TFT acceptance remain bound to dev.343.

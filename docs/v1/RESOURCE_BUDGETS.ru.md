@@ -1942,3 +1942,18 @@ app/factory images — на 32 B. Delta меняет только strings, дв�
 и host guards; runtime allocation, buffer, queue, worker, storage operation и
 radio activity не добавляются. Focused host checks и production build проходят;
 physical heap/TFT acceptance остаётся привязанным к dev.343.
+
+Bound явного экрана Действия Библиотеки `RB-M237`: exact host/build
+`1.0.0-dev.347` на firmware source `752f1b5` использует 233 600 B static RAM,
+3 602 984 B linked flash и app/factory images 3 603 152/3 668 688 B, оставляя
+591 152 B в OTA slot 4 MiB. SHA-256 app/factory/ELF/map —
+`3bb3f01601636cf8d021a27494b98ea7896ea9d98407ac265d0077f2d41d5819`/
+`afa7ff73079ce85d983c77106560ad33380b2d8114c7f4c04429ce1be9e67a7e`/
+`7a921db443ec3a817f7ab0173679662d15a9eecc6c4e85db894150cd37494597`/
+`be66cd01f2da34d540f724a4882648b3442d9b9a70006143d9c8dad5783079d0`.
+Относительно dev.346 static RAM не меняется, linked flash растёт на 456 B,
+app/factory images — на 464 B. Delta добавляет одно bounded state controller и
+перерисовывает только выбранные action rows; capture buffer, queue, worker,
+storage I/O или radio activity не добавляются. Focused native/host checks и
+production build проходят; physical heap/TFT acceptance остаётся привязанным к
+dev.343.
