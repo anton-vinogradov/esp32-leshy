@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "tools/owned_wifi_evidence_verifier.py"
 JOURNEY = ROOT / "tools/check_my_wifi_password.py"
+HIL_RUNNER = ROOT / "tools/run_1x_owned_wifi_password_check_hil.py"
 
 
 def imported_modules(path: Path) -> set[str]:
@@ -75,6 +76,21 @@ def main() -> int:
     if missing:
         raise SystemExit(
             "task-first Wi-Fi journey contract is incomplete: " +
+            ", ".join(missing))
+    hil = HIL_RUNNER.read_text(encoding="utf-8")
+    hil_required = (
+        'volatile_list_mount_on_save_only',
+        '"fresh_flash": False',
+        '"raw_export_retained": False',
+        '"candidate_plaintext_retained": False',
+        '"private_network_identity_retained": False',
+        'authentication.enter_network_detail = current_network_detail',
+        'persistence.read_binary_artifact = intercept_reader',
+    )
+    missing = [fragment for fragment in hil_required if fragment not in hil]
+    if missing:
+        raise SystemExit(
+            "owned Wi-Fi physical-chain contract is incomplete: " +
             ", ".join(missing))
     print("owned Wi-Fi evidence verifier contract: PASS")
     return 0

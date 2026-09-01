@@ -21,4 +21,5 @@ trap 'rm -rf "$test_tmp"' EXIT
 "$test_tmp/wifi_authentication_hc22000_tests"
 python3 "$repo_dir/tools/test_owned_wifi_evidence_verifier.py"
 python3 "$repo_dir/tools/test_check_my_wifi_password.py"
+python3 "$repo_dir/tools/test_owned_wifi_password_hil_runner.py"
 python3 "$repo_dir/tools/check_owned_wifi_evidence_verifier_contract.py"
