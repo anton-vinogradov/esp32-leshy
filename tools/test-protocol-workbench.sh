@@ -27,3 +27,6 @@ trap 'rm -rf "$test_tmp"' EXIT
 
 "$test_tmp/protocol_workbench_tests"
 python3 "$repo_dir/tools/check_protocol_workbench_contract.py"
+python3 -m py_compile \
+    "$repo_dir/tools/run_1x_protocol_workbench_persistence_hil.py" \
+    "$repo_dir/tools/check_protocol_workbench_persistence_hil_run.py"

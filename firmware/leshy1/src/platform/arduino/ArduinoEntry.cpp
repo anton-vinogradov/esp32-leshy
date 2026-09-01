@@ -33192,6 +33192,37 @@ bool recoverProtocolWorkbenchAnnotations() {
                 recovered.status);
         }
     }
+    if (valid && recovered.valid()) {
+        protocolDerivedDecodeRecoveryScratch = {};
+        const auto decodeRecovered =
+            leshy1::storage::recoverProtocolDerivedDecode(
+                io, protocolDerivedDecodeStoreWorkspace,
+                protocolAnnotationController.source(),
+                recovered.storeGeneration,
+                &protocolDerivedDecodeRecoveryScratch);
+        if (decodeRecovered.valid()) {
+            protocolDerivedDecode = protocolDerivedDecodeRecoveryScratch;
+            protocolDerivedDecodeStoreGeneration =
+                decodeRecovered.storeGeneration;
+            protocolDerivedDecodeStorageStatus = "recovered";
+        } else if (decodeRecovered.status == leshy1::storage::
+                       ProtocolDerivedDecodeStoreStatus::Empty) {
+            protocolDerivedDecode = {};
+            protocolDerivedDecodeStoreGeneration = 0U;
+            protocolDerivedDecodeStorageStatus = "empty";
+        } else {
+            // A corrupt or mismatched derived record must never hide valid
+            // exact-source marks. Keep the annotations readable and fail the
+            // decode closed until a deliberate repair path is selected.
+            protocolDerivedDecode = {};
+            protocolDerivedDecodeStoreGeneration = 0U;
+            protocolDerivedDecodeStorageStatus = leshy1::storage::
+                protocolDerivedDecodeStoreStatusName(
+                    decodeRecovered.status);
+        }
+    } else if (valid) {
+        protocolDerivedDecodeStorageStatus = "no_marks";
+    }
 
     if (ioOpened) io.end();
     if (filesystem.mounted()) filesystem.end();
@@ -38948,6 +38979,95 @@ void emitProtocolWorkbenchHilFixture(Stream& reply, const char* command) {
     reply.println(line);
 }
 
+void emitProtocolWorkbenchState(Stream& reply) {
+    const bool active = uiController.page() == kProtocolWorkbenchPage &&
+        protocolWorkbenchAnalysis.valid() &&
+        protocolAnnotationController.source().valid();
+    const bool fixtureActive = protocolWorkbenchHilSource.active();
+    const ProtocolAnnotationSource source = active
+        ? protocolAnnotationController.source()
+        : ProtocolAnnotationSource{};
+    const bool cleanupComplete =
+        appRuntime.activeResources() == 0U && !screenshotLiveWorkActive();
+    char line[1280] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.protocol_workbench.state.v1\","
+        "\"kind\":\"state\",\"status\":\"%s\","
+        "\"active\":%s,\"source_kind\":\"%s\","
+        "\"page\":\"%s\",\"analysis_status\":\"%s\","
+        "\"protocol\":\"%s\",\"pulses\":%u,"
+        "\"capture_generation\":%lu,"
+        "\"source_fingerprint\":\"%08lX%08lX\","
+        "\"task_view\":\"%s\",\"task_selection\":%u,"
+        "\"task_result_count\":%u,\"selected_pulse\":%u,"
+        "\"annotation_view\":%u,\"annotation_kind\":%u,"
+        "\"annotation_action\":%u,"
+        "\"annotations\":%u,\"annotation_dirty\":%s,"
+        "\"annotation_store_generation\":%lu,"
+        "\"annotation_status\":\"%s\","
+        "\"decode_valid\":%s,\"decode_outcome\":\"%s\","
+        "\"decode_fields\":%u,\"decode_store_generation\":%lu,"
+        "\"decode_status\":\"%s\","
+        "\"read_only_analysis\":true,\"raw_capture_mutated\":false,"
+        "\"radio_touched\":false,\"application_tx_calls\":0,"
+        "\"storage_open_now\":false,\"runtime_owner\":\"%s\","
+        "\"lease_mask\":%lu,\"cleanup_complete\":%s}",
+        active ? "active" : "inactive", active ? "true" : "false",
+        !active ? "none" : fixtureActive ? "hil_fixture"
+                                        : "immutable_capture",
+        leshy1::ui::probePageName(uiController.page()),
+        leshy1::apps::protocol::protocolWorkbenchStatusName(
+            active ? protocolWorkbenchAnalysis.status
+                   : ProtocolWorkbenchStatus::InvalidArgument),
+        leshy1::domain::captures::infraredProtocolName(
+            active ? protocolWorkbenchProtocol()
+                   : leshy1::domain::captures::InfraredProtocol::Unknown),
+        static_cast<unsigned>(active
+            ? protocolWorkbenchAnalysis.pulseCount : 0U),
+        static_cast<unsigned long>(active ? source.captureGeneration : 0U),
+        static_cast<unsigned long>(
+            active ? source.captureFingerprint >> 32U : 0U),
+        static_cast<unsigned long>(
+            active ? source.captureFingerprint & 0xFFFFFFFFULL : 0U),
+        leshy1::apps::protocol::protocolWorkbenchTaskViewName(
+            active ? protocolWorkbenchTaskController.view()
+                   : ProtocolWorkbenchTaskView::Tasks),
+        static_cast<unsigned>(active
+            ? protocolWorkbenchTaskController.selection() : 0U),
+        static_cast<unsigned>(active
+            ? protocolWorkbenchTaskController.resultCount() : 0U),
+        static_cast<unsigned>(active
+            ? protocolAnnotationController.pulseSelection() : 0U),
+        static_cast<unsigned>(active
+            ? protocolAnnotationController.view()
+            : ProtocolAnnotationView::Waveform),
+        static_cast<unsigned>(active
+            ? protocolAnnotationController.kindSelection()
+            : ProtocolAnnotationKind::Header),
+        static_cast<unsigned>(active
+            ? protocolAnnotationController.actionSelection() : 0U),
+        static_cast<unsigned>(active
+            ? protocolAnnotationController.annotations().size() : 0U),
+        active && protocolAnnotationController.dirty() ? "true" : "false",
+        static_cast<unsigned long>(active
+            ? protocolAnnotationController.storeGeneration() : 0U),
+        active ? protocolAnnotationStorageStatus : "not_loaded",
+        active && protocolDerivedDecode.valid() ? "true" : "false",
+        active && protocolDerivedDecode.valid()
+            ? leshy1::apps::protocol::protocolDerivedDecodeOutcomeName(
+                  protocolDerivedDecode.outcome)
+            : "unavailable",
+        static_cast<unsigned>(active ? protocolDerivedDecode.fieldCount : 0U),
+        static_cast<unsigned long>(active
+            ? protocolDerivedDecodeStoreGeneration : 0U),
+        active ? protocolDerivedDecodeStorageStatus : "not_loaded",
+        appRuntime.activeApp(),
+        static_cast<unsigned long>(appRuntime.activeResources()),
+        cleanupComplete ? "true" : "false");
+    reply.println(line);
+}
+
 void emitHilSessionBegin(Stream& reply, const char* command) {
     constexpr const char* prefix = "hil.begin ";
     const char* arguments = command + std::strlen(prefix);
@@ -42647,6 +42767,8 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitSessionStoreFixture(reply);
     } else if (std::strcmp(command, "library.fixture") == 0) {
         emitLibraryFixture(reply);
+    } else if (std::strcmp(command, "protocol.workbench.state") == 0) {
+        emitProtocolWorkbenchState(reply);
     } else if (std::strcmp(command, "library.export") == 0) {
         emitLibraryExport(reply);
     } else if (std::strcmp(command, "library.capture") == 0) {
@@ -43123,7 +43245,8 @@ void setup() {
               "\"survey.wifi.passive-persist disposable-write <CID32> <run-id> <1..8>\","
               "\"survey.wifi.passive-ingress measure passive-only <1..32>\","
               "\"survey.contract\",\"session.fixture\",\"session.store.fixture\","
-              "\"library.fixture\",\"library.export\",\"library.capture\","
+              "\"library.fixture\",\"protocol.workbench.state\","
+              "\"library.export\",\"library.capture\","
               "\"library.export.csv\",\"library.export.pcap\","
               "\"library.export.hc22000\","
               "\"library.export.screenshot\"]}");
