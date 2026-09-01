@@ -55,6 +55,23 @@ def result(status: str = "first_visit") -> dict[str, Any]:
 
 
 class FieldSurveyHilRunnerTests(unittest.TestCase):
+    def test_library_oracle_accepts_coexisting_non_session_entries(self) -> None:
+        library = {
+            "page": "library", "library_view": "list",
+            "library_entries": 2, "library_generation": 10,
+            "library_persistent": True, "runtime_owner": "library",
+            "lease_mask": 5, "library_selected_kind": "session",
+        }
+        self.assertEqual(
+            [], RUNNER.field_survey_library_failures(library, 10))
+        library["library_entries"] = 0
+        self.assertTrue(
+            RUNNER.field_survey_library_failures(library, 10))
+        library["library_entries"] = 2
+        library["library_selected_kind"] = "screenshot"
+        self.assertTrue(
+            RUNNER.field_survey_library_failures(library, 10))
+
     def test_export_validators_require_deduplicated_truthful_rows(self) -> None:
         native_payload = (
             ",".join(RUNNER.NATIVE_COLUMNS) + "\r\n" +

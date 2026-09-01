@@ -315,6 +315,21 @@ def wigle_export_failures(begin: dict[str, Any], payload: bytes,
     }
 
 
+def field_survey_library_failures(
+        library: dict[str, Any], generation: int) -> list[str]:
+    failures = expect(library, {
+        "page": "library", "library_view": "list",
+        "library_generation": generation,
+        "library_persistent": True, "runtime_owner": "library",
+        "lease_mask": 5, "library_selected_kind": "session",
+    }, "export.library")
+    entries = library.get("library_entries")
+    if not isinstance(entries, int) or entries < 1:
+        failures.append(
+            f"export.library.library_entries: expected >= 1, got {entries!r}")
+    return failures
+
+
 def run_exports(device: Any, frames: Path, trace: list[dict[str, Any]],
                 generation: int, records: int, wifi_stations: int = 0
                 ) -> tuple[dict[str, Any], list[str]]:
@@ -322,12 +337,7 @@ def run_exports(device: Any, frames: Path, trace: list[dict[str, Any]],
 
     failures: list[str] = []
     library = open_latest_library(device, trace)
-    failures.extend(expect(library, {
-        "page": "library", "library_view": "list",
-        "library_entries": 1, "library_generation": generation,
-        "library_persistent": True, "runtime_owner": "library",
-        "lease_mask": 5,
-    }, "export.library"))
+    failures.extend(field_survey_library_failures(library, generation))
     detail = action(device, "right")
     trace.append(detail)
     failures.extend(expect(detail, {
