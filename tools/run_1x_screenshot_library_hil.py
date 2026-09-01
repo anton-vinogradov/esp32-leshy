@@ -314,11 +314,16 @@ def main() -> int:
         device = None
 
         ready, recovery, reset = reset_capture(
-            args.port, output, "cold-recovery", 30.0, maximum_attempts=2)
+            args.port, output, "cold-recovery", 30.0, maximum_attempts=2,
+            require_recovery_marker=False)
         records["cold_reset"] = reset
         records["cold_ready"] = ready
-        records["cold_recovery"] = recovery
         failures.extend(boot_ready_failures(ready, args.expected_version, app_sha))
+        device = PassiveSerial(args.port, 115200, timeout=0.25)
+        synchronize_console(device, 20.0)
+        recovery = read_only(
+            device, b"storage.product.boot-recovery", RECOVERY_SCHEMA, "state")
+        records["cold_recovery"] = recovery
         failures.extend(expect(recovery, {
             "expected_fingerprint": args.expected_cid,
             "observed_fingerprint": args.expected_cid,
@@ -327,8 +332,6 @@ def main() -> int:
             "screenshot_admitted": True,
             "screenshot_generation": generation,
         }, "cold_recovery"))
-        device = PassiveSerial(args.port, 115200, timeout=0.25)
-        synchronize_console(device, 20.0)
         records["final_ui"] = normalize_home(device)
         require(records["final_ui"], {
             "page": "home", "runtime_owner": "none", "lease_mask": 0,

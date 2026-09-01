@@ -803,6 +803,7 @@ def capture(
 def reset_capture(
         port: str, output: Path, name: str, seconds: float,
         maximum_attempts: int = 1,
+        require_recovery_marker: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     from capture_1x_boot import reset_and_capture_reconnecting
 
@@ -834,7 +835,7 @@ def reset_capture(
         missing_markers = []
         if not ready:
             missing_markers.append("ready")
-        if not recovery:
+        if require_recovery_marker and not recovery:
             missing_markers.append("recovery")
         if missing_markers:
             capture_errors.append(

@@ -336,6 +336,35 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
             reset_module.reset_and_capture_reconnecting.call_count,
         )
 
+    def test_reset_capture_can_accept_ready_then_query_recovery(self) -> None:
+        ready_only_raw = (
+            b'{"schema":"leshy.boot.v1","kind":"ready","version":"x"}\n'
+        )
+        reset_module = types.ModuleType("capture_1x_boot")
+        reset_module.reset_and_capture_reconnecting = unittest.mock.Mock(
+            return_value=(ready_only_raw, 417.5, 1, 1)
+        )
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+                sys.modules, {"capture_1x_boot": reset_module}):
+            output = Path(directory)
+            ready, recovery, timing = RUNNER.reset_capture(
+                "/dev/test", output, "cold-ready", 1.0,
+                maximum_attempts=2, require_recovery_marker=False,
+            )
+            self.assertEqual(
+                ready_only_raw, (output / "cold-ready.ndjson").read_bytes()
+            )
+        self.assertEqual("x", ready["version"])
+        self.assertEqual({}, recovery)
+        self.assertEqual(1, timing["capture_attempts"])
+        self.assertEqual(0, timing["capture_transient_retries"])
+        self.assertEqual([], timing["capture_errors"])
+        self.assertFalse(timing["recovery_present"])
+        self.assertEqual(
+            1,
+            reset_module.reset_and_capture_reconnecting.call_count,
+        )
+
     def test_cid_autodiscovery_requires_exact_admitted_enrollment(self) -> None:
         recovery = {
             "status": "admitted", "enrolled": True,
