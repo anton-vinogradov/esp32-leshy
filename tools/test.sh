@@ -25,6 +25,9 @@ if [[ $# -gt 0 ]]; then
         if [[ "$2" == "owned-wifi-evidence" ]]; then
             exec "$(cd "$(dirname "$0")" && pwd)/test-owned-wifi-evidence.sh"
         fi
+        if [[ "$2" == "wifi-security" ]]; then
+            exec "$(cd "$(dirname "$0")" && pwd)/test-wifi-security-advisor.sh"
+        fi
         if [[ "$2" == "protocol-workbench" ]]; then
             exec "$(cd "$(dirname "$0")" && pwd)/test-protocol-workbench.sh"
         fi
@@ -34,11 +37,11 @@ if [[ $# -gt 0 ]]; then
         if [[ "$2" == "clean-target" ]]; then
             only_clean_target=true
         else
-            echo "usage: $0 [--only automation-hid|clean-target|device-lock|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar]" >&2
+            echo "usage: $0 [--only automation-hid|clean-target|device-lock|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar|wifi-security]" >&2
             exit 2
         fi
     else
-        echo "usage: $0 [--only automation-hid|clean-target|device-lock|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar]" >&2
+        echo "usage: $0 [--only automation-hid|clean-target|device-lock|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar|wifi-security]" >&2
         exit 2
     fi
 fi
@@ -226,6 +229,8 @@ python3 "$repo_dir/tools/check_field_survey_trusted_context_acceptance.py"
     -o "$test_tmp/airspace_guard_tests"
 
 "$test_tmp/airspace_guard_tests"
+
+"$repo_dir/tools/test-wifi-security-advisor.sh"
 
 "${CXX:-c++}" \
     -std=c++17 \

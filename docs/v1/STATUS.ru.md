@@ -181,17 +181,35 @@
 
 ### Очередь завершения Wi-Fi
 
-Знаменателем остаётся fixed catalog из 62 функций. Эта таблица показывает только
-текущий Wi-Fi path, не создавая новые функции и не выдавая host foundations за готовые.
+Знаменателем продукта остаётся fixed catalog из 62 функций. Для целевого Wi-Fi
+трека отдельно заморожен знаменатель **21 пользовательский результат**: сейчас
+**10/21 готово, 11/21 осталось**. Частичный foundation не считается готовой
+функцией; новые идеи не меняют этот знаменатель и попадают только в backlog
+следующего релиза.
 
-| Порядок | Пользовательский результат | Scope каталога | Состояние |
+| ID | Пользовательский результат | Scope каталога | Состояние |
 |---|---|---|---|
-| W0 | Найти сети/устройства, посмотреть identity/security/vendor, использовать Radar и выбрать свободный канал без скачков selection | `FUNC-10`, `FUNC-16`, `FUNC-17`, Wi-Fi-часть `FUNC-42` | `done` |
-| W1 | Захватить evidence аутентификации своей сети, экспортировать canonical PCAP/`hc22000` и проверить локальный common/vendor-default corpus без раскрытия plaintext | `FUNC-49`, Wi-Fi-часть `FUNC-61` | `active` |
-| W2 | Объяснять defensive findings через named sensitivity profiles, состояние WPA3/PMF/SAE и exact uncertainty/evidence | Wi-Fi-часть `FUNC-48` | `next` |
-| W3 | Потоково передавать совместимый read-only evidence в Wireshark/extcap без изменения host network | Wi-Fi-часть `FUNC-57` | `queued` |
-| W4 | Провести пользователя через scoped USB/Web setup и рандомизировать только собственные identities STA/AP Leshy с truthful provenance | Wi-Fi-части `FUNC-46`, `FUNC-59` | `queued` |
-| W5 | Запускать только отдельно допущенные owned-network recipes и read-only LAN inventory внутри явно isolated fixture | Wi-Fi-части `FUNC-55`, `FUNC-62` | `queued` |
+| WF-01 | Найти точки доступа рядом | `FUNC-10` | `done` |
+| WF-02 | Найти Wi-Fi-устройства/клиентов рядом | `FUNC-16` | `done` |
+| WF-03 | Получить hidden-name, security, channel, vendor и полные passive facts | `FUNC-10`, `FUNC-16`, `FUNC-44` | `done` |
+| WF-04 | Пользоваться strongest-first списком без скачков selection и мерцания | `FUNC-16` | `done` |
+| WF-05 | Открыть Radar сети или устройства с RSSI history и честными пределами | `FUNC-17` | `done` |
+| WF-06 | Увидеть текущую/среднюю загрузку каналов 1–13 и объяснимый лучший канал | `FUNC-42` | `done` |
+| WF-07 | Смотреть packet/channel monitor и сохранить bounded PCAP с drop counters | `FUNC-42` | `done` |
+| WF-08 | Получить passive finding Защиты эфира и открыть exact evidence/uncertainty | Wi-Fi-часть `FUNC-48` | `done` |
+| WF-09 | Записать bounded evidence входа своей/разрешённой сети | `FUNC-49` | `done` |
+| WF-10 | Экспортировать immutable PCAP и canonical `hc22000` | `FUNC-49`, `FUNC-26` | `done` |
+| WF-11 | Проверить evidence по локальному common/vendor-default corpus и получить privacy-safe отчёт | Wi-Fi-часть `FUNC-61` | `active` |
+| WF-12 | Получить понятную оценку защиты WPA2/WPA3/SAE/WPS/шифров и exact «PMF не измерен» с корректным следующим шагом | Wi-Fi-часть `FUNC-48` | `active` |
+| WF-13 | Выбрать именованный профиль чувствительности Защиты эфира | Wi-Fi-часть `FUNC-48` | `queued` |
+| WF-14 | Записать offline Field Survey AP/station, сравнить revisit и экспортировать WiGLE | Wi-Fi-часть `FUNC-50` | `active` |
+| WF-15 | Потоково передать read-only evidence в Wireshark/extcap без изменения сети компьютера | Wi-Fi-часть `FUNC-57` | `queued` |
+| WF-16 | Пройти scoped Wi-Fi/USB setup без утечки secrets и зависимости Survey/Library от сети | Wi-Fi-часть `FUNC-46` | `active` |
+| WF-17 | Рандомизировать только собственные identities STA/AP Лешего с truthful provenance | Wi-Fi-часть `FUNC-59` | `queued` |
+| WF-18 | Запустить bounded targeted handshake-assist только для своей isolated fixture | Wi-Fi-часть `FUNC-55` | `queued` |
+| WF-19 | Проверить устойчивость выбранного канала с declared power/duration и physical Stop | Wi-Fi-часть `FUNC-55` | `queued` |
+| WF-20 | Провести read-only LAN inventory выбранной изолированной сети | Wi-Fi-часть `FUNC-62` | `queued` |
+| WF-21 | Запустить bounded captive-portal/ARP/DHCP/MITM robustness recipes только в isolated fixture | Wi-Fi-часть `FUNC-62` | `queued` |
 
 ### План фаз S6
 

@@ -183,17 +183,35 @@ not abandoned or claimed complete.
 
 ### Wi-Fi completion queue
 
-The fixed 62-function catalog remains the denominator. This view exposes the current
-Wi-Fi-only path without inventing new functions or claiming host foundations complete.
+The fixed 62-feature catalog remains the product denominator. The focused Wi-Fi
+track has a separately frozen denominator of **21 user outcomes**: currently
+**10/21 done, 11/21 remaining**. A partial foundation does not count as a
+finished outcome; new ideas do not change this denominator and go only to the
+next-release backlog.
 
-| Order | User outcome | Catalog scope | State |
+| ID | User outcome | Catalog scope | State |
 |---|---|---|---|
-| W0 | Find networks/devices, inspect identity/security/vendor, use Radar and select a free channel without selection jumps | `FUNC-10`, `FUNC-16`, `FUNC-17`, Wi-Fi part of `FUNC-42` | `done` |
-| W1 | Capture owned authentication evidence, export canonical PCAP/`hc22000`, and check a local common/vendor-default corpus without revealing plaintext | `FUNC-49`, Wi-Fi part of `FUNC-61` | `active` |
-| W2 | Explain defensive findings through named sensitivity profiles, WPA3/PMF/SAE state and exact uncertainty/evidence | Wi-Fi part of `FUNC-48` | `next` |
-| W3 | Stream compatible read-only evidence to Wireshark/extcap without changing the host network | Wi-Fi part of `FUNC-57` | `queued` |
-| W4 | Guide scoped USB/Web setup and randomize only Leshy's own STA/AP identities with truthful provenance | Wi-Fi parts of `FUNC-46`, `FUNC-59` | `queued` |
-| W5 | Run only individually admitted owned-network recipes and read-only LAN inventory inside an explicitly isolated fixture | Wi-Fi parts of `FUNC-55`, `FUNC-62` | `queued` |
+| WF-01 | Find nearby access points | `FUNC-10` | `done` |
+| WF-02 | Find nearby Wi-Fi devices/clients | `FUNC-16` | `done` |
+| WF-03 | Resolve hidden names and inspect security, channel, vendor and full passive facts | `FUNC-10`, `FUNC-16`, `FUNC-44` | `done` |
+| WF-04 | Use a strongest-first list without selection jumps or flicker | `FUNC-16` | `done` |
+| WF-05 | Open network/device Radar with RSSI history and honest limits | `FUNC-17` | `done` |
+| WF-06 | See current/mean load for channels 1–13 and an explainable best channel | `FUNC-42` | `done` |
+| WF-07 | Use the packet/channel monitor and save bounded PCAP with drop counters | `FUNC-42` | `done` |
+| WF-08 | Receive a passive Airspace Guard finding and open exact evidence/uncertainty | Wi-Fi part of `FUNC-48` | `done` |
+| WF-09 | Record bounded login evidence for an owned/permitted network | `FUNC-49` | `done` |
+| WF-10 | Export immutable PCAP and canonical `hc22000` | `FUNC-49`, `FUNC-26` | `done` |
+| WF-11 | Check evidence against a local common/vendor-default corpus and receive a privacy-safe report | Wi-Fi part of `FUNC-61` | `active` |
+| WF-12 | Receive a plain-language WPA2/WPA3/SAE/WPS/cipher assessment, exact “PMF not measured”, and the correct next step | Wi-Fi part of `FUNC-48` | `active` |
+| WF-13 | Select a named Airspace Guard sensitivity profile | Wi-Fi part of `FUNC-48` | `queued` |
+| WF-14 | Record an offline AP/station Field Survey, compare a revisit and export WiGLE | Wi-Fi part of `FUNC-50` | `active` |
+| WF-15 | Stream read-only evidence into Wireshark/extcap without changing the computer network | Wi-Fi part of `FUNC-57` | `queued` |
+| WF-16 | Complete scoped Wi-Fi/USB setup without leaking secrets or making Survey/Library network-dependent | Wi-Fi part of `FUNC-46` | `active` |
+| WF-17 | Randomize only Leshy's own STA/AP identities with truthful provenance | Wi-Fi part of `FUNC-59` | `queued` |
+| WF-18 | Run bounded targeted handshake assist only for an owned isolated fixture | Wi-Fi part of `FUNC-55` | `queued` |
+| WF-19 | Test a selected channel with declared power/duration and a physical Stop | Wi-Fi part of `FUNC-55` | `queued` |
+| WF-20 | Run read-only LAN inventory for a selected isolated network | Wi-Fi part of `FUNC-62` | `queued` |
+| WF-21 | Run bounded captive-portal/ARP/DHCP/MITM robustness recipes only in an isolated fixture | Wi-Fi part of `FUNC-62` | `queued` |
 
 ### S6 phase plan
 

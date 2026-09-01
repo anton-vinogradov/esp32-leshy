@@ -78,6 +78,7 @@
 #include "apps/ble/BleDeviceNavigationOrder.h"
 #include "apps/wifi/WifiNetworkCatalog.h"
 #include "apps/wifi/WifiNetworkNavigationOrder.h"
+#include "apps/wifi/WifiSecurityAdvisor.h"
 #include "apps/wifi/WifiDeviceCatalog.h"
 #include "apps/wifi/WifiDeviceNavigationOrder.h"
 #include "apps/wifi/WifiOuiDatabase.h"
@@ -325,6 +326,10 @@ using leshy1::apps::ble::BleTrackerKind;
 using leshy1::apps::wifi::WifiNetworkCatalog;
 using leshy1::apps::wifi::WifiNetworkNavigationOrder;
 using leshy1::apps::wifi::WifiNetworkSignalStats;
+using leshy1::apps::wifi::WifiSecurityAssessment;
+using leshy1::apps::wifi::WifiSecurityNextStep;
+using leshy1::apps::wifi::WifiSecurityPosture;
+using leshy1::apps::wifi::assessWifiSecurity;
 using leshy1::apps::wifi::WifiDeviceCatalog;
 using leshy1::apps::wifi::WifiDeviceObservation;
 using leshy1::apps::wifi::WifiDeviceRecord;
@@ -13398,8 +13403,12 @@ NavigationFooter navigationFooterForCurrentState() {
                     {NavigationKey::RightAndSelect, UiTextId::NavCheck}};
         }
         if (wifiProductView == WifiProductView::PasswordCheckIntro) {
-            return {back, {},
-                    {NavigationKey::RightAndSelect, UiTextId::NavStart}};
+            const WifiSecurityAssessment assessment =
+                assessWifiSecurity(wifiNetworkDetail.wifiNetwork);
+            return {back, {}, assessment.passwordCheckAvailable
+                    ? NavigationCell{NavigationKey::RightAndSelect,
+                                     UiTextId::NavStart}
+                    : NavigationCell{}};
         }
         if (wifiProductView == WifiProductView::AuthenticationCapture) {
             const WifiAuthenticationCaptureController& controller =
@@ -17018,17 +17027,77 @@ void renderWifiNetworkDetail(bool clearContent) {
     renderWifiNetworkDetailData();
 }
 
+UiTextId wifiSecurityPostureText(WifiSecurityPosture posture) {
+    switch (posture) {
+        case WifiSecurityPosture::Open:
+            return UiTextId::WifiSecurityOpen;
+        case WifiSecurityPosture::Legacy:
+            return UiTextId::WifiSecurityLegacy;
+        case WifiSecurityPosture::UpgradeRecommended:
+            return UiTextId::WifiSecurityUpgrade;
+        case WifiSecurityPosture::Protected:
+            return UiTextId::WifiSecurityProtected;
+        case WifiSecurityPosture::Unknown:
+        default:
+            return UiTextId::WifiSecurityUnknown;
+    }
+}
+
+Tone wifiSecurityPostureTone(WifiSecurityPosture posture) {
+    switch (posture) {
+        case WifiSecurityPosture::Protected:
+            return Tone::Positive;
+        case WifiSecurityPosture::Open:
+        case WifiSecurityPosture::Legacy:
+            return Tone::Danger;
+        case WifiSecurityPosture::UpgradeRecommended:
+        case WifiSecurityPosture::Unknown:
+        default:
+            return Tone::Warning;
+    }
+}
+
+UiTextId wifiSecurityNextStepText(WifiSecurityNextStep nextStep) {
+    switch (nextStep) {
+        case WifiSecurityNextStep::EnableProtection:
+            return UiTextId::WifiSecurityEnableProtection;
+        case WifiSecurityNextStep::UpgradeRouterSecurity:
+            return UiTextId::WifiSecurityUpgradeRouter;
+        case WifiSecurityNextStep::DisableWps:
+            return UiTextId::WifiSecurityDisableWps;
+        case WifiSecurityNextStep::RecordOwnedLogin:
+            return UiTextId::WifiSecurityRecordLogin;
+        case WifiSecurityNextStep::ReviewEnterpriseSettings:
+            return UiTextId::WifiSecurityReviewEnterprise;
+        case WifiSecurityNextStep::NoPasswordCheck:
+            return UiTextId::WifiSecurityNoPasswordCheck;
+        case WifiSecurityNextStep::ListenForFacts:
+        default:
+            return UiTextId::WifiSecurityListenForFacts;
+    }
+}
+
 void renderWifiPasswordCheckIntro(bool clearContent) {
-    renderHeader(tr(UiTextId::WifiPasswordCheckTitle), clearContent);
+    renderHeader(tr(UiTextId::WifiSecurityCheckTitle), clearContent);
     if (clearContent) {
         display.fillRect(0, Layout::ContentTop, Layout::ScreenWidth,
                          Layout::FooterDividerY - Layout::ContentTop,
                          Palette::Canvas);
     }
-    renderMetric(0, tr(UiTextId::WifiPasswordCheckTask), Tone::Positive);
-    renderMetric(1, tr(UiTextId::WifiPasswordCheckListen));
-    renderMetric(2, tr(UiTextId::WifiPasswordCheckComputer));
-    renderMetric(3, tr(UiTextId::WifiPasswordCheckNoPassword), Tone::Positive);
+    const WifiSecurityAssessment assessment =
+        assessWifiSecurity(wifiNetworkDetail.wifiNetwork);
+    renderMetric(0, tr(wifiSecurityPostureText(assessment.posture)),
+                 wifiSecurityPostureTone(assessment.posture));
+    renderMetric(1, tr(wifiSecurityNextStepText(assessment.nextStep)),
+                 assessment.passwordCheckAvailable ? Tone::Positive
+                                                   : Tone::Warning);
+    renderMetric(2, tr(UiTextId::WifiSecurityPmfUnknown), Tone::Muted);
+    renderMetric(3,
+                 tr(assessment.passwordCheckAvailable
+                        ? UiTextId::WifiSecurityStartMeaning
+                        : UiTextId::WifiSecurityStartUnavailable),
+                 assessment.passwordCheckAvailable ? Tone::Positive
+                                                   : Tone::Muted);
     renderMetric(4, tr(UiTextId::WifiPasswordCheckPermission), Tone::Warning);
 }
 
@@ -30223,7 +30292,11 @@ bool applyUiAction(UiAction action, bool render = true) {
                 changed = true;
             } else if (action == UiAction::Select ||
                        action == UiAction::Right) {
-                changed = requestWifiAuthenticationCaptureFromDetail();
+                const WifiSecurityAssessment assessment =
+                    assessWifiSecurity(wifiNetworkDetail.wifiNetwork);
+                if (assessment.passwordCheckAvailable) {
+                    changed = requestWifiAuthenticationCaptureFromDetail();
+                }
             }
         } else if (wifiProductView == WifiProductView::DeviceDetail) {
             handled = true;
