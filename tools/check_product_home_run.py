@@ -404,6 +404,27 @@ def main() -> int:
             "input health mismatch")
     require(failures, safe.get("buzzer_inactive") is True and
             safe.get("buzzer_level") == "low", "buzzer invariant mismatch")
+    fixture_heap_baseline = run.get("fixture_heap_baseline")
+    if isinstance(fixture_heap_baseline, dict):
+        fixture_heap_samples = run.get("fixture_heap_baseline_samples", [])
+        boot_free = boot.get("heap_free")
+        fixture_free = fixture_heap_baseline.get("heap_free")
+        require(failures,
+                run.get("fixture_heap_baseline_stabilized") is True and
+                isinstance(fixture_heap_samples, list) and
+                2 <= len(fixture_heap_samples) <= 4 and
+                fixture_heap_samples[-1] == fixture_heap_baseline and
+                all(fixture_heap_samples[-1].get(key) ==
+                    fixture_heap_samples[-2].get(key)
+                    for key in ("heap_total", "heap_free", "heap_min_free")),
+                "Device Lock fixture heap stabilization mismatch")
+        require(failures,
+                isinstance(boot_free, int) and
+                isinstance(fixture_free, int) and
+                0 <= boot_free - fixture_free <= 1024 and
+                fixture_heap_baseline.get("heap_total") ==
+                    boot.get("heap_total"),
+                "temporary Device Lock heap initialization mismatch")
     test_heap_baseline = run.get("test_heap_baseline")
     if isinstance(test_heap_baseline, dict):
         test_heap_samples = run.get("test_heap_baseline_samples", [])
@@ -418,12 +439,14 @@ def main() -> int:
                     test_heap_samples[-2].get(key)
                     for key in ("heap_total", "heap_free", "heap_min_free")),
                 "warm test heap baseline stabilization mismatch")
-        require(failures,
-                isinstance(boot_free, int) and isinstance(test_free, int) and
-                0 <= boot_free - test_free <= 1024 and
-                test_heap_baseline.get("heap_total") ==
-                    boot.get("heap_total"),
-                "temporary Device Lock heap initialization mismatch")
+        if not isinstance(fixture_heap_baseline, dict):
+            require(failures,
+                    isinstance(boot_free, int) and
+                    isinstance(test_free, int) and
+                    0 <= boot_free - test_free <= 1024 and
+                    test_heap_baseline.get("heap_total") ==
+                        boot.get("heap_total"),
+                    "temporary Device Lock heap initialization mismatch")
         require(failures,
                 metrics_after.get("heap_free") == test_free and
                 metrics_after.get("heap_total") ==

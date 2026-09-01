@@ -264,6 +264,8 @@ def main() -> int:
     waterfall_pixel_changes: dict[str, Any] = {}
     boot: dict[str, Any] = {}
     boot_metrics_samples: list[dict[str, Any]] = []
+    fixture_heap_baseline: dict[str, Any] = {}
+    fixture_heap_baseline_samples: list[dict[str, Any]] = []
     test_heap_baseline: dict[str, Any] = {}
     test_heap_baseline_samples: list[dict[str, Any]] = []
     recovery_before: dict[str, Any] = {}
@@ -334,10 +336,10 @@ def main() -> int:
                     raise RuntimeError(
                         "; ".join(fixture_configuration_failures))
                 home_device(device)
-                test_heap_baseline, test_heap_baseline_samples = \
+                fixture_heap_baseline, fixture_heap_baseline_samples = \
                     stabilized_boot_metrics(device)
                 fixture_heap_delta = int(boot.get("heap_free", 0)) - \
-                    int(test_heap_baseline.get("heap_free", 0))
+                    int(fixture_heap_baseline.get("heap_free", 0))
                 if not 0 <= fixture_heap_delta <= 1024:
                     raise RuntimeError(
                         "temporary Device Lock heap initialization outside "
@@ -380,6 +382,13 @@ def main() -> int:
                     20.0,
                     "BLE survey cancellation did not return Home/zero lease",
                 ))
+                # NimBLE and its observer release one-time startup allocations
+                # after the first complete lifecycle.  Measure the broad matrix
+                # against that stable warm state; otherwise a net increase in
+                # free heap is incorrectly reported as a leak.  The dedicated
+                # BLE HIL still proves that a second lifecycle is byte-invariant.
+                test_heap_baseline, test_heap_baseline_samples = \
+                    stabilized_boot_metrics(device)
 
                 home_selection(device, 2)
                 nrf_modes = action(device, "right")
@@ -690,6 +699,11 @@ def main() -> int:
         "boot_metrics_samples": boot_metrics_samples,
         "boot_metrics_stabilized": bool(boot_metrics_samples) and
             len(boot_metrics_samples) >= 2,
+        "fixture_heap_baseline": fixture_heap_baseline,
+        "fixture_heap_baseline_samples": fixture_heap_baseline_samples,
+        "fixture_heap_baseline_stabilized":
+            bool(fixture_heap_baseline_samples) and
+            len(fixture_heap_baseline_samples) >= 2,
         "test_heap_baseline": test_heap_baseline,
         "test_heap_baseline_samples": test_heap_baseline_samples,
         "test_heap_baseline_stabilized": bool(test_heap_baseline_samples) and
