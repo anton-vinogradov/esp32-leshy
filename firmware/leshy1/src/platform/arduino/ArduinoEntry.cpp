@@ -26437,8 +26437,6 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   headerB, sizeof(headerB),
                   "\"language_selection\":%u,"
                   "\"settings_selection\":%u,"
-                  "\"connectivity_view\":%u,"
-                  "\"connectivity_selection\":%u,"
                   "\"brightness_percent\":%u,"
                   "\"brightness_duty\":%u,"
                   "\"antenna_led_brightness_raw\":%u,"
@@ -26453,8 +26451,6 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   "\"ui_no_change_suppressed\":%lu",
                   static_cast<unsigned>(languageController.selection()),
                   static_cast<unsigned>(interfaceSettingsController.selection()),
-                  static_cast<unsigned>(connectivitySetupController.view()),
-                  static_cast<unsigned>(connectivitySetupController.selection()),
                   static_cast<unsigned>(
                       interfaceSettingsController.brightnessPercent()),
                   static_cast<unsigned>(
@@ -26509,7 +26505,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
         const int detailLength = std::snprintf(
                       line, sizeof(line),
                       ",\"runtime_event\":\"%s\",\"runtime_owner\":\"%s\","
-                      "\"lease_mask\":%lu,\"survey_simulated\":%s,"
+                      "\"lease_mask\":%lu,\"connectivity_view\":%u,"
+                      "\"connectivity_selection\":%u,"
+                      "\"survey_simulated\":%s,"
                       "\"survey_view\":\"%s\",\"survey_workflow_state\":\"%s\","
                       "\"survey_workflow_status\":\"%s\",\"survey_running\":%s,"
                       "\"survey_observations\":%u,\"survey_selection\":%u,"
@@ -26679,6 +26677,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"wifi_channel_best_primary\":%u",
                       lastRuntimeEvent, appRuntime.activeApp(),
                       static_cast<unsigned long>(appRuntime.activeResources()),
+                      static_cast<unsigned>(connectivitySetupController.view()),
+                      static_cast<unsigned>(
+                          connectivitySetupController.selection()),
                       surveyWorkflow.simulated() ? "true" : "false",
                       leshy1::apps::survey::surveyViewName(
                           surveyController.view()),

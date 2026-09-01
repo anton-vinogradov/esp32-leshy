@@ -248,9 +248,17 @@ def main() -> int:
         record["status"] = "failed"
         record["outcome"] = "failed"
         record["error"] = str(exc)
-        if admission is not None and device is not None:
+        if admission is not None:
             try:
-                admission.close()
+                # The main context manager closes the serial port while
+                # unwinding. Re-open the exact DUT so the RAM-only admission
+                # receives an explicit cleanup/end record before this failed
+                # run is retained.
+                with PassiveSerial(
+                        args.port, 115200, timeout=0.25) as cleanup_device:
+                    synchronize_console(cleanup_device, 10.0)
+                    admission.rebind(cleanup_device)
+                    admission.close()
                 record["protected_ui_admission"] = admission.evidence()
             except Exception as cleanup_exc:
                 record["cleanup_error"] = str(cleanup_exc)
