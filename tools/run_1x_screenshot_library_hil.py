@@ -31,6 +31,7 @@ from run_1x_product_survey_hil import (
     reset_capture,
     valid_cid,
 )
+from screenshot_library_hil_policy import owner_protected_access_admitted
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -251,10 +252,9 @@ def main() -> int:
             records["metrics_before"], args.expected_version, app_sha))
         records["lock_before"] = read_only(
             device, b"device-lock.state", LOCK_SCHEMA, "state")
-        failures.extend(expect(records["lock_before"], {
-            "status": "unlocked", "protected_access": True,
-            "worker_active": False,
-        }, "lock_before"))
+        if not owner_protected_access_admitted(records["lock_before"]):
+            failures.append(
+                "lock_before: owner protected access is not admitted")
         records["recovery_before"] = read_only(
             device, b"storage.product.boot-recovery", RECOVERY_SCHEMA, "state")
         failures.extend(expect(records["recovery_before"], {
