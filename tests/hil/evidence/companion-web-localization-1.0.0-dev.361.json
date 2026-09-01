@@ -1,0 +1,64 @@
+{
+  "candidate": {
+    "app_elf_sha256": "ee00685e532735351d1f6680c52ed3173d744dd1f6c3fa45f192fc5fe557b984",
+    "app_image_bytes": 3644528,
+    "factory_image_bytes": 3710064,
+    "factory_sha256": "89b225f33aa47b9385137b418587e71e5a4520ecb066dee996a9f19ee9133024",
+    "firmware_sha256": "b94b0349478210a6dc2e296bca116b36a1be2b46335052f65ba327f2b2b1edff",
+    "linked_flash_bytes": 3644032,
+    "map_sha256": "751030caf14b2c01986a9796d552e199ec7897000215bcadf0fe66a155a25af9",
+    "ota_headroom_bytes": 549776,
+    "source_commit": "39640cf7ca6b29d67404f17daaa2bf6a65c73946",
+    "static_ram_bytes": 234976,
+    "version": "1.0.0-dev.361"
+  },
+  "evidence_ids": [
+    "E-BUILD-235",
+    "E-AUTO-211",
+    "E-UX-086",
+    "E-COMPANION-009"
+  ],
+  "resource_bound": "RB-M247",
+  "schema": "leshy.companion_web_localization.host_acceptance.v1",
+  "status": "pass_host_localized_task_first_companion_web",
+  "verified": {
+    "board_flash_count": 0,
+    "browser_console_errors": 0,
+    "browser_language_default": "navigator_language",
+    "browser_visual_viewport": "390x844",
+    "cardputer_touched": false,
+    "comparison_classes_localized": true,
+    "dedicated_client_http_parity_claimed": false,
+    "external_origins": 0,
+    "host_network_changed": false,
+    "index_gzip_bytes": 3501,
+    "index_source_bytes": 8963,
+    "language_switch_preserves_target_detail": true,
+    "languages": [
+      "en",
+      "ru"
+    ],
+    "production_build_passed": true,
+    "radio_touched": false,
+    "search_visible_only_for_targets": true,
+    "script_gzip_bytes": 3956,
+    "script_source_bytes": 10276,
+    "task_navigation": [
+      "recorded_sessions",
+      "known_targets",
+      "what_changed"
+    ],
+    "tests": [
+      "tools/generate_companion_web_asset.py --check",
+      "tools/test_companion_web_preview.py",
+      "tests/native/companion_web_adapter_tests.cpp",
+      "tools/check_companion_protocol_contract.py",
+      "tools/check_clean_target.py",
+      "tools/test.sh",
+      "tools/build.sh",
+      "git diff --check"
+    ],
+    "translation_catalog_key_parity": true,
+    "tx_api_invoked": false
+  }
+}

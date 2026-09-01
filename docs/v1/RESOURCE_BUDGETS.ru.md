@@ -2124,3 +2124,22 @@ local Web index и application сжимаются с 2 431/10 079 B до 1 174/3
 полезные detail и canonical offline export с SHA-256 binding без external asset,
 прошивки платы или изменения host network. Physical HTTP parity, progress и
 cadence остаются открытыми/неизменными.
+
+Bound локализованного task-first Web `RB-M247`: exact host/build
+`1.0.0-dev.361` на firmware source
+`39640cf7ca6b29d67404f17daaa2bf6a65c73946` использует 234 976 B static RAM,
+3 644 032 B linked flash и app/factory images 3 644 528/3 710 064 B, оставляя
+549 776 B фактического headroom application image в OTA slot 4 MiB. SHA-256
+app/factory/ELF/map:
+`b94b0349478210a6dc2e296bca116b36a1be2b46335052f65ba327f2b2b1edff`/
+`89b225f33aa47b9385137b418587e71e5a4520ecb066dee996a9f19ee9133024`/
+`ee00685e532735351d1f6680c52ed3173d744dd1f6c3fa45f192fc5fe557b984`/
+`751030caf14b2c01986a9796d552e199ec7897000215bcadf0fe66a155a25af9`.
+Относительно dev.360 static RAM не меняется; linked flash и app/factory images
+растут на 2 704/2 704/2 704 B, OTA headroom уменьшается на 2 704 B. Полный
+task copy EN/RU и browser-language switch увеличивают immutable source
+index/application до 8 963/10 276 B, gzip — до 3 501/3 956 B; оба compressed
+response остаются внутри независимого bound 4 KiB. Exact production assets
+проходят полный host/build набор и loopback-only mobile visual review без board,
+host network или radio operation. Physical HTTP parity dedicated client, progress
+и cadence остаются открытыми/неизменными.

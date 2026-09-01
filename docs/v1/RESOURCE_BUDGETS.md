@@ -2135,3 +2135,21 @@ below one 4 KiB response window. The delta adds bounded Target search, useful
 detail and canonical SHA-256-bound offline export without an external asset,
 board flash or host-network change. Physical HTTP parity, progress and cadence
 remain open/unchanged.
+
+Localized task-first Web bound `RB-M247`: exact host/build `1.0.0-dev.361` at
+firmware source `39640cf7ca6b29d67404f17daaa2bf6a65c73946` uses 234,976 B
+static RAM, 3,644,032 B linked flash and 3,644,528/3,710,064 B app/factory
+images, leaving 549,776 B of actual application-image headroom in the 4 MiB OTA
+slot. App/factory/ELF/map SHA-256 values are
+`b94b0349478210a6dc2e296bca116b36a1be2b46335052f65ba327f2b2b1edff`/
+`89b225f33aa47b9385137b418587e71e5a4520ecb066dee996a9f19ee9133024`/
+`ee00685e532735351d1f6680c52ed3173d744dd1f6c3fa45f192fc5fe557b984`/
+`751030caf14b2c01986a9796d552e199ec7897000215bcadf0fe66a155a25af9`.
+Against dev.360, static RAM is unchanged; linked flash and app/factory images
+grow 2,704/2,704/2,704 B and OTA headroom falls 2,704 B. Complete EN/RU task
+copy and the browser-language switch grow immutable index/application source to
+8,963/10,276 B and gzip to 3,501/3,956 B; both compressed responses remain below
+the independent 4 KiB bound. The exact production assets pass full host/build
+checks and loopback-only mobile visual review without a board, host-network or
+radio operation. Physical dedicated-client HTTP parity, progress and cadence stay
+open/unchanged.
