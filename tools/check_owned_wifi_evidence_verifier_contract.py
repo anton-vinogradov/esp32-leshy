@@ -9,11 +9,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "tools/owned_wifi_evidence_verifier.py"
+JOURNEY = ROOT / "tools/check_my_wifi_password.py"
 
 
-def main() -> int:
-    text = SOURCE.read_text(encoding="utf-8")
-    tree = ast.parse(text, filename=str(SOURCE))
+def imported_modules(path: Path) -> set[str]:
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(path))
     imported = {
         alias.name.split(".", 1)[0]
         for node in ast.walk(tree)
@@ -25,7 +26,12 @@ def main() -> int:
         for node in ast.walk(tree)
         if isinstance(node, ast.ImportFrom) and node.module
     )
-    forbidden = imported & {
+    return imported
+
+
+def main() -> int:
+    text = SOURCE.read_text(encoding="utf-8")
+    forbidden = (imported_modules(SOURCE) | imported_modules(JOURNEY)) & {
         "asyncio", "http", "requests", "socket", "subprocess", "urllib"
     }
     if forbidden:
@@ -52,6 +58,23 @@ def main() -> int:
     if missing:
         raise SystemExit(
             "owned Wi-Fi verifier safety contract is incomplete: " +
+            ", ".join(missing))
+    journey = JOURNEY.read_text(encoding="utf-8")
+    journey_required = (
+        '--yes-i-am-authorized',
+        '--preview-only',
+        '--resume',
+        'No match does not prove that the password is strong',
+        'Отсутствие совпадения не доказывает надёжность пароля',
+        'без сети, радио и записи на устройство',
+        'checkpoint_path=checkpoint_path',
+        'preview_only=True',
+    )
+    missing = [fragment for fragment in journey_required
+               if fragment not in journey]
+    if missing:
+        raise SystemExit(
+            "task-first Wi-Fi journey contract is incomplete: " +
             ", ".join(missing))
     print("owned Wi-Fi evidence verifier contract: PASS")
     return 0
