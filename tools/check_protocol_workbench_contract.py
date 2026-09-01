@@ -7,12 +7,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = ROOT / "firmware/leshy1/src/apps/protocol/ProtocolWorkbench.h"
 SOURCE = ROOT / "firmware/leshy1/src/apps/protocol/ProtocolWorkbench.cpp"
+ANNOTATIONS = ROOT / "firmware/leshy1/src/apps/protocol/ProtocolAnnotations.h"
+ANNOTATIONS_SOURCE = ROOT / "firmware/leshy1/src/apps/protocol/ProtocolAnnotations.cpp"
+ANNOTATION_CODEC = ROOT / "firmware/leshy1/src/storage/ProtocolAnnotationCodec.cpp"
+ANNOTATION_STORE = ROOT / "firmware/leshy1/src/storage/ProtocolAnnotationStore.cpp"
 ENTRY = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 
 
 def main() -> int:
     header = HEADER.read_text(encoding="utf-8")
     source = SOURCE.read_text(encoding="utf-8")
+    annotation_source = ANNOTATIONS.read_text(encoding="utf-8") + \
+        ANNOTATIONS_SOURCE.read_text(encoding="utf-8") + \
+        ANNOTATION_CODEC.read_text(encoding="utf-8") + \
+        ANNOTATION_STORE.read_text(encoding="utf-8")
     entry = ENTRY.read_text(encoding="utf-8")
     combined = header + source
     failures: list[str] = []
@@ -35,6 +43,30 @@ def main() -> int:
     for marker in forbidden:
         if marker in combined:
             failures.append(f"receive-only analyzer contains output marker: {marker}")
+
+    annotation_required = (
+        "captureGeneration",
+        "captureFingerprint",
+        "kCapacity = 12U",
+        "sameProtocolAnnotationSource",
+        "ProtocolAnnotationStatus::SourceMismatch",
+        "ProtocolAnnotationStatus::Overlap",
+        "encodeProtocolAnnotations(",
+        "decodeProtocolAnnotations(",
+        "commitNextProtocolAnnotations(",
+        "recoverProtocolAnnotations(",
+        "commitGeneration(",
+        "crc32c(",
+        "protocol-annotations-%08lu-head-a.bin",
+    )
+    for marker in annotation_required:
+        if marker not in annotation_source:
+            failures.append(f"missing immutable annotation marker: {marker}")
+
+    for marker in forbidden:
+        if marker in annotation_source:
+            failures.append(
+                f"derived annotation path contains output marker: {marker}")
 
     ui_required = (
         "selected->generation != sessionStoreWorkspace().generation",
