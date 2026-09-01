@@ -2163,3 +2163,20 @@ generation визитов, read-only открывает generation 10/51 с zero
 а отдельный export выполняет zero radio/storage writes. Это закрывает focused
 `WF-14`, двигает cadence до 4/15 и не заявляет optional trusted-GPS completion
 или broad release matrix.
+
+Bound Wi-Fi Live Companion `RB-M251`: exact physical/build `1.0.0-dev.367`
+на firmware source `9febce4bb08cdc9965e03133850dcdc9c1259e30` использует 234 976 B
+static RAM, 3 649 260 B linked flash и 3 649 760/3 715 296 B app/factory
+images, оставляя 544 544 B actual application-image headroom в OTA slot 4 MiB.
+SHA-256 app/factory/ELF/map —
+`42954e66ba4a60cdc213a9c1806bbb9250506662283e67aa9fbe639619492cdc`/
+`5f972f09e87e593a6da23519bfb2ca2154138a9ec624cbac07a8c2508fdd4bb0`/
+`950fa5e8fe26acbeb80f23ecd08720b9176398a8fe3db8de3a70862c3892198e`/
+`8d7ef949a60f8943262b354c14aac7aafe267625f162f3c946e55359586a49a6`.
+Относительно dev.366 static RAM не меняется, linked/app/factory растут на
+2 132/2 128/2 128 B, OTA headroom уменьшается на 2 128 B. Runtime storage
+ограничен 16 captured records со snapshots frames до 256 B: accepted run отдаёт
+4 076 PCAP bytes за 194 requests, сообщает 269 capacity drops и очищает все
+records после cleanup. Boot heap остаётся 143 828/68 844/25 340 B
+total/free/minimum. Это закрывает focused `WF-15`, двигает cadence до 5/15,
+не сохраняет raw packets и не заявляет instrumented physical no-TX.

@@ -1,0 +1,187 @@
+{
+  "schema": "leshy.live_companion_wifi_hil.acceptance.v1",
+  "status": "pass_live_companion_wifi",
+  "board": "board-01",
+  "evidence_ids": [
+    "E-BUILD-239",
+    "E-AUTO-217",
+    "E-HIL-235",
+    "E-UX-090",
+    "E-COMPANION-011",
+    "RB-M251"
+  ],
+  "candidate": {
+    "version": "1.0.0-dev.367",
+    "cid": "FE343253440000002000000055019CB7",
+    "firmware_source_commit": "9febce4bb08cdc9965e03133850dcdc9c1259e30",
+    "accepted_runner_source_commit": "66a7272c5649c4e272327e6969dc1c90a1e303ae",
+    "firmware_sha256": "42954e66ba4a60cdc213a9c1806bbb9250506662283e67aa9fbe639619492cdc",
+    "factory_sha256": "5f972f09e87e593a6da23519bfb2ca2154138a9ec624cbac07a8c2508fdd4bb0",
+    "elf_sha256": "950fa5e8fe26acbeb80f23ecd08720b9176398a8fe3db8de3a70862c3892198e",
+    "map_sha256": "8d7ef949a60f8943262b354c14aac7aafe267625f162f3c946e55359586a49a6",
+    "firmware_bytes": 3649760,
+    "factory_bytes": 3715296,
+    "fresh_flashes": 1,
+    "accepted_run_exact_flash_reused": true
+  },
+  "host_tooling": {
+    "runner_sha256": "94b178ae9f007aa4529f879b43382564adbff431be0f935105b93058ff07fbfa",
+    "extcap_sha256": "76279fe1999ad401aea81345f09903fa657c8a01c5404532134004d2c96e3461",
+    "installer_sha256": "deeca9c6847045dd219586360032af7fa2734c07aa65116c0c5a4d4117635244",
+    "external_serial_dependency": false,
+    "daemon_or_service_installed": false,
+    "wireshark_executable": "tshark"
+  },
+  "accepted_run": {
+    "run_id": "ac165d3b38d852e111ab3528971cf0f3",
+    "run_sha256": "9e6cc9ac67807d9238d8e550b414019c15194123e4ff78f332215a66c5541099",
+    "artifact_index_sha256": "ae738f1200f50f72acbcffcd5b1fcd874a63d6b2bd26d4be0b21be70de77015c",
+    "status": "pass",
+    "cleanup_complete": true,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "final_lease_mask": 0,
+    "ports_opened": 1,
+    "serial_port_discovery_calls": 0,
+    "clone_ports_opened": 0,
+    "cardputer_ports_opened": 0
+  },
+  "storage_recovery": {
+    "generation": 10,
+    "observations": 51,
+    "exact_cid_matched": true,
+    "mounted_read_only": true,
+    "physical_write_calls": 0,
+    "blocked_write_attempts": 0,
+    "cleanup_complete": true
+  },
+  "live_stream": {
+    "connect_scopes": ["capture.live.read"],
+    "granted_capabilities": ["capture.live.wifi"],
+    "requests": 194,
+    "read_requests": 193,
+    "stream_bytes": 4076,
+    "frames": 16,
+    "dropped_capacity": 269,
+    "dropped_invalid": 0,
+    "driver_error": 0,
+    "duration_ms": 10000,
+    "maximum_frames": 16,
+    "snap_length": 256,
+    "passive_only": true,
+    "rx_only": true,
+    "storage_written": false,
+    "cleanup_complete": true,
+    "application_connect_calls": 0,
+    "application_raw_tx_calls": 0,
+    "pcap": {
+      "sha256": "7b1269fe801e44fe954c89245c6ca603fd6796e85c239c28f6eb22adbe1a8ee7",
+      "bytes": 4076,
+      "records": 16,
+      "linktype": 127,
+      "version": "2.4",
+      "snaplen": 271,
+      "captured_frame_bytes": 3556,
+      "original_frame_bytes": 4287,
+      "fcs_included_records": 8,
+      "management_frames": 14,
+      "data_frames": 2,
+      "frequencies_mhz": [2412, 2422, 2427, 2432],
+      "rssi_min_dbm": -87,
+      "rssi_max_dbm": -71
+    },
+    "wireshark": {
+      "accepted": true,
+      "records": 16,
+      "stderr_empty": true
+    }
+  },
+  "terminal_state": {
+    "capture_state": "idle",
+    "frames_accepted": 0,
+    "frames_reported": 0,
+    "payload_bytes": 0,
+    "pcap_available": false,
+    "lease_mask": 0,
+    "software_quiesce_complete": true,
+    "buzzer_inactive": true,
+    "nrf_ce_inactive": true,
+    "input_status": "ready",
+    "input_queue_drops": 0,
+    "input_read_errors": 0
+  },
+  "policy": {
+    "read_only_companion": true,
+    "capture_started_only_by_user_ui_action": true,
+    "companion_radio_start_commands": 0,
+    "companion_radio_stop_commands": 0,
+    "companion_tx_commands": 0,
+    "storage_writes_requested": 0,
+    "host_network_tools_invoked": false,
+    "active_host_wifi_touched": false,
+    "host_ble_advertising_started": false,
+    "physical_no_tx_claimed": false
+  },
+  "screens": {
+    "source_menu_png": "2f137db3ffcca972e39a9655b46de3726c8a34289b5215360257b697b6f6cb9b",
+    "source_menu_rgb565": "77f718fd389cf14c5d2cebdc994319143ff4909587cd0d2a0ac6cd8e675b62ef",
+    "setup_png": "ed3c114b2be00db75308e3055fe1353a7960e4a9d09dac4f1419baf84845160a",
+    "setup_rgb565": "313ca150fa3500d4a486079e732165b69e56b6327bb68214872bde89f2075830",
+    "running_png": "1e2d20ac262e05e29d4065c8fa20d19b19463905690e5a9ad9c093c772b3acf5",
+    "running_rgb565": "8b91751d5df7f3b0b1ad9ec9b74a824f9c1386905fddc0d46c5e09ef699f73ef",
+    "result_png": "06d348042a29b81784be414fc431e07f3b9164c7a81f4597ff28baf1380d0b8b",
+    "result_rgb565": "a597def18ceaaa4e41a1ace9d598c955868833aa9ea66d0fbca40654ad12f337",
+    "home_png": "628f9460ab740cdc0e16d4347d816cd0be7efcc524996761ea057a658791c53b",
+    "home_rgb565": "f218b0409a432da94b6cc674d1e0f430b948a55b4ef3b709da604533a5b1f8a5"
+  },
+  "visual_plain_language_review_passed": true,
+  "precursors": {
+    "flash_handshake": {
+      "accepted": false,
+      "device_actions_started": false,
+      "run_sha256": "197e305c51e5328d90d9446df350805807499a19ac451cee15d476b35e2c02ba",
+      "reason": "native USB flash handshake failed before candidate installation"
+    },
+    "mixed_fcs_oracle": {
+      "accepted": false,
+      "product_stream_complete": true,
+      "cleanup_complete": true,
+      "run_sha256": "8e0f55bb3e780a498ebef2f584b3e42ecdc1b238e2396eacb5dc62c69692fdfb",
+      "reason": "host oracle incorrectly required the Radiotap FCS-present flag on snaplen-truncated frames"
+    },
+    "safe_output_schema_oracle": {
+      "accepted": false,
+      "product_stream_complete": true,
+      "cleanup_complete": true,
+      "run_sha256": "7d69013ecf93821a16ec788f6db704a5b6639de43f8d60856371dc7174efdae3",
+      "reason": "host oracle waited for a non-existent safe_outputs schema spelling"
+    },
+    "input_schema_oracle": {
+      "accepted": false,
+      "product_stream_complete": true,
+      "cleanup_complete": true,
+      "run_sha256": "42ec6155fa69d38d89da2f9caaa8e73404d73f8d905ac970a31526f49ba8027c",
+      "reason": "host oracle waited for a non-existent input schema spelling"
+    }
+  },
+  "privacy": {
+    "ambient_identifiers_retained": false,
+    "raw_80211_payload_retained": false,
+    "raw_pcap_retained": false,
+    "raw_run_retained": false,
+    "screenshots_retained": false,
+    "screen_hashes_only": true,
+    "retained_pcap_material": "hash_counts_channel_rssi_bounds_only"
+  },
+  "resources": {
+    "static_ram_bytes": 234976,
+    "linked_flash_bytes": 3649260,
+    "application_image_bytes": 3649760,
+    "factory_image_bytes": 3715296,
+    "free_ota_bytes": 544544,
+    "required_free_ota_bytes": 524288,
+    "boot_heap_total_bytes": 143828,
+    "boot_heap_free_bytes": 68844,
+    "boot_heap_min_free_bytes": 25340
+  }
+}

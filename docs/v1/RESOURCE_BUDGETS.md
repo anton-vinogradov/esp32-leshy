@@ -2173,3 +2173,20 @@ the two explicit visit generations, reopens generation 10/51 read-only with zero
 physical writes, and its separate export performs zero radio/storage writes.
 This closes focused `WF-14`, moves cadence to 4/15 and does not claim optional
 trusted-GPS completion or the broad release matrix.
+
+Wi-Fi Live Companion bound `RB-M251`: exact physical/build `1.0.0-dev.367`
+at firmware source `9febce4bb08cdc9965e03133850dcdc9c1259e30` uses 234,976 B
+static RAM, 3,649,260 B linked flash and 3,649,760/3,715,296 B app/factory
+images, leaving 544,544 B of actual application-image headroom in the 4 MiB
+OTA slot. App/factory/ELF/map SHA-256 values are
+`42954e66ba4a60cdc213a9c1806bbb9250506662283e67aa9fbe639619492cdc`/
+`5f972f09e87e593a6da23519bfb2ca2154138a9ec624cbac07a8c2508fdd4bb0`/
+`950fa5e8fe26acbeb80f23ecd08720b9176398a8fe3db8de3a70862c3892198e`/
+`8d7ef949a60f8943262b354c14aac7aafe267625f162f3c946e55359586a49a6`.
+Against dev.366, static RAM is unchanged while linked/app/factory grow
+2,132/2,128/2,128 B and OTA headroom shrinks 2,128 B. Runtime storage is
+bounded to 16 captured records with 256-byte frame snapshots: the accepted run
+serves 4,076 PCAP bytes across 194 requests, reports 269 capacity drops, and
+scrubs all records after cleanup. Boot heap remains 143,828/68,844/25,340 B
+total/free/minimum. This closes focused `WF-15`, moves cadence to 5/15 and does
+not retain raw packets or claim instrumented physical no-TX.
