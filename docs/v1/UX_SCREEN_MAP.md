@@ -7,7 +7,9 @@ the Home hierarchy and direct controlled Lab entry on the real TFT. Host/build
 `1.0.0-dev.329` additionally implements the early Screenshot→protected Library→USB
 path, and host/build `1.0.0-dev.333` adds the first receive-only IR Protocol
 Workbench behind Library. Their connected physical gates remain open. This map
-binds task structure, color semantics and Back/Stop behavior.
+binds task structure, color semantics and Back/Stop behavior. Host/build dev.354
+also fixes the task-first semantics for compare and truthful derived decode before
+their product screens are wired.
 
 ## Task-first tree contract
 
@@ -295,8 +297,20 @@ foreign source fails closed. Exact physical dev.353 accepts the task-first
 Actions → start → end → meaning → result path on the real TFT. It derives one
 separate Address annotation without mutating the retained 67-pulse source; moving
 the end changes only 429 pixels in declared local regions. Its HIL-only fixture is
-RAM-only, so real-Capture protected save/reopen, comparison and derived decode stay
-open rather than being implied by the accepted marking UI.
+RAM-only, so real-Capture protected save/reopen stays open rather than being implied
+by the accepted marking UI.
+
+Host/build dev.354 defines the next task-first semantics before wiring pixels. The
+user chooses **Compare captures**, picks a reference and a second immutable Capture,
+then receives one plain outcome: same signal, timing differs, value differs, or
+structure differs. At most sixteen exact changed pulse ranges are retained and any
+additional regions are counted explicitly. **Interpret marked fields** uses only the
+current exact annotation generation: Header/Gap remain durations, unambiguous
+mark/space pairs become bits in observed on-air order, and uncertain fields say that
+there is not enough information. No byte order or protocol name is guessed. Derived
+results live in a separate atomic journal and contain no raw pulse copy. Product
+selection/result screens and physical protected save/reopen are still open, so this
+host foundation does not complete FUNC-37.
 
 ## UX-01 acceptance
 

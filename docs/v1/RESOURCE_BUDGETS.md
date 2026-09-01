@@ -2041,3 +2041,21 @@ total/free/minimum heap is 144,780/70,424/70,276 B, range navigation changes 429
 pixels and zero outside its three declared regions, product storage remains 8/54
 with zero writes, and final cleanup is Home/none/lease 0 with safety armed. This
 advances focused cadence to 14/15 without claiming physical annotation persistence.
+
+Protocol comparison and derived-decode foundation bound `RB-M242`: exact
+host/build `1.0.0-dev.354` at firmware source
+`9c1ca24a155bf79f9f1ecf1d39f31993fed2a48c` uses 234,024 B static RAM,
+3,619,684 B linked flash and 3,619,840/3,685,376 B app/factory images, leaving
+574,464 B of actual application-image headroom in the 4 MiB OTA slot.
+App/factory/ELF/map SHA-256 values are
+`70b030c5421757ca0e5f641c8bd4a9e18f4155c3a36b07a33f44d303ac6e2ccc`/
+`3218a9e33f582d6bf8442ad59ca5bd6aa2c38503c9f6cef525d7ffc3630ca173`/
+`21ceb7fca16ea371fa78c50225948636ed924db900036b1cde2e55d5bb83e1f3`/
+`4a6889ed26ae547bc0326ef4d5f5fa363f9e33610f022d2a69b2504a37e04210`.
+Against dev.353, static RAM is unchanged; linked flash and app/factory images
+grow 788/448/448 B and OTA headroom falls 448 B. The host working set is bounded
+to two immutable source references, sixteen changed regions, twelve derived
+fields, one 228-byte codec payload, one 16-byte manifest and two 24-byte heads;
+no raw Capture copy, heap allocation, worker, queue, radio lease or output path
+exists. This core is not yet retained by a product screen, so its device-side
+lifetime and physical protected-store behavior remain the next FF-3 boundary.

@@ -1,0 +1,60 @@
+{
+  "candidate": {
+    "app_elf_sha256": "21ceb7fca16ea371fa78c50225948636ed924db900036b1cde2e55d5bb83e1f3",
+    "app_image_bytes": 3619840,
+    "factory_image_bytes": 3685376,
+    "factory_sha256": "3218a9e33f582d6bf8442ad59ca5bd6aa2c38503c9f6cef525d7ffc3630ca173",
+    "firmware_sha256": "70b030c5421757ca0e5f641c8bd4a9e18f4155c3a36b07a33f44d303ac6e2ccc",
+    "linked_flash_bytes": 3619684,
+    "map_sha256": "4a6889ed26ae547bc0326ef4d5f5fa363f9e33610f022d2a69b2504a37e04210",
+    "ota_headroom_bytes": 574464,
+    "source_commit": "9c1ca24a155bf79f9f1ecf1d39f31993fed2a48c",
+    "static_ram_bytes": 234024,
+    "version": "1.0.0-dev.354"
+  },
+  "evidence_ids": ["E-BUILD-230", "E-AUTO-206", "E-STORAGE-074"],
+  "resource_bound": "RB-M242",
+  "schema": "leshy.protocol_compare_derived.host_acceptance.v1",
+  "status": "pass_host_bounded_comparison_and_truthful_derived_decode",
+  "verified": {
+    "annotation_generation_exact_binding": true,
+    "atomic_two_head_derived_store": true,
+    "comparison_outcomes": [
+      "identical",
+      "timing_variation",
+      "value_changed",
+      "structure_changed"
+    ],
+    "comparison_region_capacity": 16,
+    "corrupt_newest_falls_back": true,
+    "derived_codec_max_bytes": 228,
+    "derived_decoder_version": 1,
+    "derived_field_capacity": 12,
+    "derived_raw_capture_bytes_stored": 0,
+    "empty_annotations_rejected": true,
+    "exact_source_fields": [
+      "capture_generation",
+      "capture_fingerprint",
+      "pulse_count"
+    ],
+    "foreign_annotation_generation_rejected": true,
+    "foreign_capture_rejected": true,
+    "heap_allocation": false,
+    "inconclusive_fields_explicit": true,
+    "observed_bit_order": "first_on_air_is_bit_zero_no_byte_order_inference",
+    "omitted_difference_regions_counted": true,
+    "power_cut_before_head_preserves_previous": true,
+    "production_build_passed": true,
+    "radio_touched": false,
+    "raw_capture_mutated": false,
+    "tests": [
+      "tools/test-protocol-workbench.sh",
+      "tools/check_protocol_workbench_contract.py",
+      "tools/check_clean_target.py",
+      "tools/check_product_content_acceptance.py",
+      "tools/build.sh",
+      "git diff --check"
+    ],
+    "tx_api_present": false
+  }
+}

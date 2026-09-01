@@ -2030,3 +2030,21 @@ boot heap total/free/minimum — 144 780/70 424/70 276 Б, navigation range ме
 429 pixels и zero снаружи трёх declared regions, product storage остаётся 8/54 с
 zero writes, final cleanup — Home/none/lease 0, safety armed. Это продвигает
 focused cadence до 14/15 без заявления physical persistence annotations.
+
+Bound foundation comparison и derived decode Protocol `RB-M242`: exact
+host/build `1.0.0-dev.354` на firmware source
+`9c1ca24a155bf79f9f1ecf1d39f31993fed2a48c` использует 234 024 B static RAM,
+3 619 684 B linked flash и app/factory images 3 619 840/3 685 376 B, оставляя
+574 464 B фактического headroom application image в OTA slot 4 MiB.
+SHA-256 app/factory/ELF/map:
+`70b030c5421757ca0e5f641c8bd4a9e18f4155c3a36b07a33f44d303ac6e2ccc`/
+`3218a9e33f582d6bf8442ad59ca5bd6aa2c38503c9f6cef525d7ffc3630ca173`/
+`21ceb7fca16ea371fa78c50225948636ed924db900036b1cde2e55d5bb83e1f3`/
+`4a6889ed26ae547bc0326ef4d5f5fa363f9e33610f022d2a69b2504a37e04210`.
+Относительно dev.353 static RAM не меняется; linked flash и app/factory images
+растут на 788/448/448 B, OTA headroom уменьшается на 448 B. Host working set
+ограничен двумя references immutable source, шестнадцатью changed regions,
+двенадцатью derived fields, одним codec payload 228 B, manifest 16 B и двумя heads
+по 24 B; копии raw Capture, heap allocation, worker, queue, radio lease и output
+path нет. Product screen пока не удерживает этот core, поэтому device-side lifetime
+и physical behavior protected store остаются следующим boundary FF-3.

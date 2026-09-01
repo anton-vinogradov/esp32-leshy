@@ -7,7 +7,9 @@
 Host/build `1.0.0-dev.329` дополнительно реализует ранний путь Screenshot→защищённая
 Библиотека→USB, а host/build `1.0.0-dev.333` добавляет первый receive-only IR
 Protocol Workbench за Библиотекой. Их connected physical gates остаются открытыми.
-Карта задаёт структуру задач, семантику цветов и поведение Back/Stop.
+Карта задаёт структуру задач, семантику цветов и поведение Back/Stop. Host/build
+dev.354 также фиксирует task-first semantics compare и truthful derived decode до
+подключения их product screens.
 
 ## Контракт task-first дерева
 
@@ -301,7 +303,19 @@ Exact physical dev.353 принимает на реальном TFT task-first �
 конец → смысл → результат. Он выводит отдельную annotation Адрес без изменения
 retained source из 67 pulses; движение конца меняет только 429 pixels в declared
 local regions. HIL-only fixture остаётся RAM-only, поэтому protected save/reopen на
-real Capture, comparison и derived decode честно остаются открытыми.
+real Capture честно остаётся открытым.
+
+Host/build dev.354 задаёт semantics следующего task-first пути до подключения
+pixels. Пользователь выбирает **Сравнить записи**, отмечает эталон и второй immutable
+Capture, затем получает один понятный outcome: тот же сигнал, отличается timing,
+отличается значение или отличается структура. Сохраняются максимум шестнадцать
+exact ranges изменённых pulses, дополнительные regions считаются явно.
+**Понять отмеченные поля** использует только текущую exact generation annotations:
+Заголовок/Пауза остаются durations, однозначные mark/space pairs становятся bits в
+наблюдаемом порядке эфира, uncertain fields честно говорят, что данных недостаточно.
+Byte order и имя protocol не угадываются. Derived results живут в отдельном atomic
+journal и не содержат копию raw pulses. Product screens выбора/result и physical
+protected save/reopen пока открыты, поэтому host foundation не завершает FUNC-37.
 
 ## Acceptance UX-01
 

@@ -18,8 +18,8 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
-- **Verified checkpoint:** `E-BUILD-229`/`E-AUTO-205`/`E-HIL-229`/`E-UX-083`/`E-STORAGE-073`/`RB-M241` accept exact physical `1.0.0-dev.353`: the task-first **Mark a range** path traverses start, end and plain meaning, creates a separate Address annotation over immutable pulses and returns to the useful waveform. Exact RGB565 frames are visually accepted; range movement changes 429 pixels only inside the three declared local regions. The retained HIL fixture is deliberately RAM-only, leaves protected storage at generation 8/54 with zero writes and therefore does not claim a physical annotation commit. Exact dev.302 remains the periodic full anchor.
-- **Next gate:** `FF-3` remains active. The next delta compares two immutable Captures and stores any derived decode separately; a later real-Capture delta must exercise protected annotation save/reopen on exact-CID SD. RF TX stays forbidden.
+- **Verified checkpoint:** `E-BUILD-230`/`E-AUTO-206`/`E-STORAGE-074`/`RB-M242` accept host/build `1.0.0-dev.354`: a bounded exact-source comparison distinguishes identical evidence, timing jitter, value-family changes and structural changes without copying either Capture. Annotation-derived fields preserve on-air bit order, expose inconclusive ranges instead of guessing byte order, and use a separate CRC32C/two-head journal bound to both the exact Capture and exact annotation generation. Exact physical dev.353 remains the accepted TFT baseline; exact dev.302 remains the periodic full anchor.
+- **Next gate:** `FF-3` remains active. The next delta connects the comparison/decode foundation to a task-first two-Capture product path; the following exact-CID physical delta must exercise TFT flow and protected save/reopen with a real Capture. RF TX stays forbidden.
 
 ### Functional-first delivery queue
 
@@ -28,7 +28,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | FF-0 | Physical review build: traverse every available passive top-level workflow, retain stable screens/navigation and record only user-visible findings | ✅ complete |
 | FF-1 | Wi-Fi/BLE and Targets Radar plus the coherent cross-radio interaction review for `FUNC-17` | ✅ complete |
 | FF-2 | Deliver `FUNC-43` on-device screenshot → Library → export with build/state/time provenance | ✅ complete |
-| FF-3 | Complete `FUNC-37` Protocol Workbench over immutable Captures; waveform navigation and task-first marking are physically accepted, while real-Capture annotation save/reopen, compare and derived decode remain | 🟡 active |
+| FF-3 | Complete `FUNC-37` Protocol Workbench over immutable Captures; waveform navigation and task-first marking are physically accepted, compare/derived-decode cores and atomic storage are host-accepted, while product UI and real-Capture protected reopen remain | 🟡 active |
 | FF-4 | Finish `FUNC-38` local USB/Web browse, search, compare and export without making network access a device dependency | ⬜ queued |
 | FF-5 | Deliver `FUNC-34` IR replay from one selected immutable Capture with preview, confirmation and proven Stop/timeout | ⬜ queued |
 | FF-6 | Resume signed-package classification/execution for `FUNC-54`, then individually admitted Safe Lab actions; Automation/HID remains zero-output until this row becomes active | ⏸️ safely parked |
