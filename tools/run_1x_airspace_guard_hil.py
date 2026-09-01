@@ -307,12 +307,11 @@ def open_guard_profile(device: PassiveSerial,
         "runtime_owner": "wifi", "lease_mask": 15,
     }, "guard_profile")
     profile = guard_state(device)
+    # The diagnostic profile is the last policy that actually ran. The
+    # selector is a pending UI choice until Select/Right starts a lifecycle,
+    # so only the UI state above may prove its current row here.
     require_exact(profile, {
-        "capture_state": "idle", "profile": "everyday",
-        "profile_version": 1, "profile_selection": 0,
-        "disconnect_threshold": 4, "churn_threshold": 4,
-        "noise_floor_dbm": -75, "noise_threshold": 4,
-        "ble_tracker_threshold": 3,
+        "capture_state": "idle", "profile_version": 1,
         "passive_only": True, "rx_only": True,
         "application_connect_calls": 0,
         "application_raw_tx_calls": 0,

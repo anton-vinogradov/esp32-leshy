@@ -166,6 +166,7 @@ def main() -> int:
     cleanup_after: dict[str, Any] = {"attempted": False}
     hil_begin: dict[str, Any] = {}
     hil_end: dict[str, Any] = {}
+    capacity_drop_clear: dict[str, Any] = {}
     repaint: dict[str, Any] = {}
     candidate_verified = False
 
@@ -189,6 +190,17 @@ def main() -> int:
                 query(device, b"ui.language ru", "leshy.ui.v1", "state")
                 hil_begin = begin_hil_session(
                     device, run_id, app_identity, args.expected_version)
+                capacity_drop_clear = query(
+                    device, b"airspace-guard.test-capacity-drop clear",
+                    "leshy.airspace_guard.capacity_drop_test.v1", "state")
+                failures.extend(expect(capacity_drop_clear, {
+                    "status": "cleared", "armed": False,
+                    "one_shot": False, "hil_active": True,
+                    "worker_idle": True, "ui_home": True,
+                    "runtime_owner": "none", "lease_mask": 0,
+                    "hardware_touched": False, "radio_started": False,
+                    "storage_mounted": False, "storage_written": False,
+                }, "capacity_drop_clear"))
 
                 for name, policy in PROFILES:
                     open_guard_profile(device, trace)
@@ -197,10 +209,15 @@ def main() -> int:
                         device, frames, initial_name)
                     for _ in range(policy["profile_selection"]):
                         trace.append(action(device, "down"))
-                    profile = guard_state(device)
+                    profile = query(
+                        device, b"ui.state", "leshy.ui.v1", "state")
                     selected.append(profile)
-                    failures.extend(profile_failures(
-                        profile, name, policy, f"selected.{name}"))
+                    failures.extend(expect(profile, {
+                        "page": "survey",
+                        "wifi_product_view": "airspace_guard_profile",
+                        "wifi_product_selection": policy["profile_selection"],
+                        "runtime_owner": "wifi", "lease_mask": 15,
+                    }, f"selected.{name}"))
                     selected_name = f"guard-profile-{name}-selected"
                     screens[f"{name}_selected"] = capture(
                         device, frames, selected_name)
@@ -222,7 +239,7 @@ def main() -> int:
                     started.append(start)
                     failures.extend(profile_failures(
                         start, name, policy, f"started.{name}"))
-                    failures.extend(running_failures(start, f"started.{name}"))
+                    failures.extend(running_failures(start, "wifi_running"))
                     stop = cancel_to_menu(device, trace, f"stopped.{name}")
                     stopped.append(stop)
                     home = action(device, "left")
@@ -279,6 +296,7 @@ def main() -> int:
         "screens": screens,
         "trace": trace,
         "hil_session": {"begin": hil_begin, "end": hil_end},
+        "capacity_drop_clear": capacity_drop_clear,
         "cleanup_before": cleanup_before,
         "cleanup_after": cleanup_after,
         "scope": {
