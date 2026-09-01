@@ -88,7 +88,11 @@ def current_network_detail(
     trace.append(detail_ui)
     authentication.require_exact(detail_ui, {
         "wifi_product_view": "network_detail",
-        "wifi_network_navigation_locked": True,
+        # The live list keeps sorting after the user enters a card; only the
+        # focus is user-owned.  Freezing the order here would resurrect the
+        # navigation behaviour explicitly removed from the product contract.
+        "wifi_network_navigation_locked": False,
+        "wifi_network_focus_user_owned": True,
         "runtime_owner": "wifi", "lease_mask": 15,
     }, f"{label}_detail_ui")
     detail = authentication.read_only_query(

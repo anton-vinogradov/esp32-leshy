@@ -53,7 +53,8 @@ class OwnedWifiPasswordHilRunnerTests(unittest.TestCase):
         }
         detail_ui = {
             "wifi_product_view": "network_detail",
-            "wifi_network_navigation_locked": True,
+            "wifi_network_navigation_locked": False,
+            "wifi_network_focus_user_owned": True,
             "runtime_owner": "wifi", "lease_mask": 15,
         }
         detail = {
@@ -80,6 +81,8 @@ class OwnedWifiPasswordHilRunnerTests(unittest.TestCase):
         self.assertIs(live, selected)
         self.assertIs(detail_ui, selected_ui)
         self.assertIs(detail, selected_detail)
+        self.assertFalse(selected_ui["wifi_network_navigation_locked"])
+        self.assertTrue(selected_ui["wifi_network_focus_user_owned"])
         self.assertEqual("volatile_list_mount_on_save_only",
                          diagnostics["current"]["policy"])
 

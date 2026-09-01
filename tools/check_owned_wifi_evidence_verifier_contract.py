@@ -80,6 +80,8 @@ def main() -> int:
     hil = HIL_RUNNER.read_text(encoding="utf-8")
     hil_required = (
         'volatile_list_mount_on_save_only',
+        '"wifi_network_navigation_locked": False',
+        '"wifi_network_focus_user_owned": True',
         '"fresh_flash": False',
         '"raw_export_retained": False',
         '"candidate_plaintext_retained": False',
