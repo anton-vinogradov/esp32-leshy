@@ -2197,3 +2197,22 @@ slot 4 MiB. SHA-256 app/factory/ELF/map —
 zero physical writes, cleanup достигает Home/none/lease 0. Это закрывает
 `WF-16`/`FUNC-46`, двигает cadence до 6/15 и не заявляет physical HTTP payload
 parity или instrumented no-TX.
+
+Bound private собственной Wi-Fi identity `RB-M253`: exact physical/build
+`1.0.0-dev.369` на firmware/runner source
+`fa55cd1aeb78cc921e40879f2708e7870ccc351a` использует 235 000 B static RAM,
+3 656 388 B linked flash и 3 656 896/3 722 432 B app/factory images,
+оставляя 537 408 B actual application-image headroom в OTA slot 4 MiB.
+SHA-256 app/factory/ELF/map —
+`9591e4555dcab9ba26e3e7f3aa33a8454feef63baa6ed21b2a9be27f3f3e65a9`/
+`f606ac113ab6e34a6bfd6c0f7369062a60938409eae6e4ff60e6a876ad0c3367`/
+`7203f50d0bd02d1a95a86f8e3bf4cbf577e08b71e17b0dded5adcf1151dd4b7e`/
+`08786fd7aa7b8fa4db86c6c82a9bea6944406e623115147b14d19817bb54b56c`.
+Относительно dev.368 static RAM растёт на 24 B; linked/app/factory — на
+4 072/4 080/4 080 B, OTA headroom уменьшается на 4 080 B. Physical boot heap —
+143 804/69 448/69 300 B total/free/minimum. Две последовательные passive receiver
+сессии продвигают counters private generation/application без failures; raw
+собственные addresses не сохраняются, exact-CID storage остаётся read-only,
+final cleanup — Home/none/lease 0 с quiescent safe outputs. Это закрывает `WF-17`,
+двигает cadence до 7/15 и не заявляет synthetic identity owned Capture, выполнение
+SoftAP или instrumented no-TX.

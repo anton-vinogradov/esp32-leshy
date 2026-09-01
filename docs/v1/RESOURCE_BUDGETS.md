@@ -2207,3 +2207,22 @@ credential or network core and never starts SoftAP; exact-CID storage remains
 read-only with zero physical writes and cleanup reaches Home/none/lease 0. This
 closes `WF-16`/`FUNC-46`, moves cadence to 6/15 and does not claim physical HTTP
 payload parity or instrumented no-TX.
+
+Private own-Wi-Fi-identity bound `RB-M253`: exact physical/build
+`1.0.0-dev.369` at firmware/runner source
+`fa55cd1aeb78cc921e40879f2708e7870ccc351a` uses 235,000 B static RAM,
+3,656,388 B linked flash and 3,656,896/3,722,432 B app/factory images,
+leaving 537,408 B of actual application-image headroom in the 4 MiB OTA slot.
+App/factory/ELF/map SHA-256 values are
+`9591e4555dcab9ba26e3e7f3aa33a8454feef63baa6ed21b2a9be27f3f3e65a9`/
+`f606ac113ab6e34a6bfd6c0f7369062a60938409eae6e4ff60e6a876ad0c3367`/
+`7203f50d0bd02d1a95a86f8e3bf4cbf577e08b71e17b0dded5adcf1151dd4b7e`/
+`08786fd7aa7b8fa4db86c6c82a9bea6944406e623115147b14d19817bb54b56c`.
+Against dev.368, static RAM grows 24 B; linked/app/factory grow
+4,072/4,080/4,080 B and OTA headroom shrinks 4,080 B. Physical boot heap is
+143,804/69,448/69,300 B total/free/minimum. Two sequential passive receiver
+sessions advance private generation/application counters without failure; raw own
+addresses are not retained, exact-CID storage stays read-only, and final cleanup is
+Home/none/lease 0 with safe outputs quiescent. This closes `WF-17`, moves cadence
+to 7/15 and does not claim synthetic owned-Capture identity, SoftAP execution or
+instrumented no-TX.

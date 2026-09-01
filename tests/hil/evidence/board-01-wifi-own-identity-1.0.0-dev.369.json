@@ -1,0 +1,128 @@
+{
+  "schema": "leshy.wifi_own_identity_hil.acceptance.v1",
+  "status": "pass_wifi_own_identity",
+  "board": "board-01",
+  "evidence_ids": [
+    "E-BUILD-241",
+    "E-AUTO-219",
+    "E-HIL-237",
+    "RB-M253"
+  ],
+  "candidate": {
+    "version": "1.0.0-dev.369",
+    "cid": "FE343253440000002000000055019CB7",
+    "firmware_source_commit": "fa55cd1aeb78cc921e40879f2708e7870ccc351a",
+    "runner_source_commit": "fa55cd1aeb78cc921e40879f2708e7870ccc351a",
+    "firmware_sha256": "9591e4555dcab9ba26e3e7f3aa33a8454feef63baa6ed21b2a9be27f3f3e65a9",
+    "factory_sha256": "f606ac113ab6e34a6bfd6c0f7369062a60938409eae6e4ff60e6a876ad0c3367",
+    "elf_sha256": "7203f50d0bd02d1a95a86f8e3bf4cbf577e08b71e17b0dded5adcf1151dd4b7e",
+    "map_sha256": "08786fd7aa7b8fa4db86c6c82a9bea6944406e623115147b14d19817bb54b56c",
+    "firmware_bytes": 3656896,
+    "factory_bytes": 3722432,
+    "fresh_flashes": 1
+  },
+  "host_tooling": {
+    "runner_sha256": "b1ce90f244d06ad275a05a3d0c239bfdedee204c20c78e40585dbda1299f30c9",
+    "contract_checker_sha256": "09e895145a85308dccc04b0bf6e0e5daa400c1a0dc1603bd6ceff3fbe95a786c",
+    "external_serial_dependency": true,
+    "daemon_or_service_installed": false
+  },
+  "accepted_run": {
+    "run_sha256": "b2cae5c32cdb10fba6bc48cbb2d573224ce9766942a116bbf80550d36e2296ad",
+    "status": "pass",
+    "flash_count": 1,
+    "ports_opened": 1,
+    "clone_ports_opened": 0,
+    "cardputer_ports_opened": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "final_lease_mask": 0
+  },
+  "journey": {
+    "device_connection_index": 2,
+    "identity_privacy_view": 3,
+    "hardware_opt_out_selected": true,
+    "private_mode_restored": true,
+    "passive_receiver_sessions": 2,
+    "cleanup_before_first_complete": true,
+    "cleanup_between_complete": true,
+    "cleanup_final_complete": true
+  },
+  "identity_policy": {
+    "default_mode": "private_per_session",
+    "scope": "own_station_and_temporary_wifi",
+    "persisted_value": "mode_only",
+    "hardware_mode_provenance": "hardware",
+    "private_mode_provenance": "generated_private_session",
+    "first_generation": 1,
+    "second_generation": 2,
+    "first_station_applications": 1,
+    "second_station_applications": 2,
+    "local_admin": true,
+    "unicast": true,
+    "differs_from_hardware": true,
+    "nearby_identity_modified": false,
+    "raw_address_retained": false,
+    "failures": 0,
+    "last_error": 0
+  },
+  "storage_recovery": {
+    "generation": 10,
+    "observations": 51,
+    "exact_cid_matched": true,
+    "mounted_read_only": true,
+    "physical_write_calls": 0,
+    "blocked_write_attempts": 0,
+    "cleanup_complete": true
+  },
+  "protected_ui_admission": {
+    "begun": true,
+    "ram_only": true,
+    "protected_ui_only": true,
+    "credential_written": false,
+    "whole_nvs_read_or_copied": false,
+    "product_namespace_written_or_erased": false,
+    "cleanup_proven": true,
+    "active_at_end": false
+  },
+  "policy": {
+    "wifi_softap_started": false,
+    "host_network_tools_invoked": false,
+    "active_host_wifi_touched": false,
+    "raw_radio_tx_commands": 0,
+    "buzzer_inactive": true,
+    "nrf_ce_inactive": true,
+    "software_quiesce_complete": true
+  },
+  "precursor": {
+    "accepted": false,
+    "run_sha256": "95be8c10508f61a96cc9ce946bdabba4e7d90bd6e49a76a07412d9b9f4f7aa30",
+    "source_commit": "fa55cd1aeb78cc921e40879f2708e7870ccc351a",
+    "reason": "host sandbox denied opening the serial device before flashing",
+    "device_access_succeeded": false,
+    "flash_started": false,
+    "product_navigation_started": false,
+    "wifi_softap_started": false,
+    "active_host_wifi_touched": false,
+    "raw_radio_tx_commands": 0
+  },
+  "privacy": {
+    "own_raw_addresses_retained": false,
+    "ambient_identifiers_retained": false,
+    "credentials_retained": false,
+    "raw_run_retained": false,
+    "screenshots_retained": false,
+    "exact_device_port_retained": false
+  },
+  "resources": {
+    "static_ram_bytes": 235000,
+    "linked_flash_bytes": 3656388,
+    "application_image_bytes": 3656896,
+    "factory_image_bytes": 3722432,
+    "free_ota_bytes": 537408,
+    "required_free_ota_bytes": 524288,
+    "boot_heap_total_bytes": 143804,
+    "boot_heap_free_bytes": 69448,
+    "boot_heap_min_free_bytes": 69300
+  }
+}
