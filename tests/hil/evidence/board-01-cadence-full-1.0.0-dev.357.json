@@ -1,0 +1,172 @@
+{
+  "schema": "leshy.hil_cadence_full.summary.v3",
+  "status": "pass_full_checkpoint",
+  "evidence_ids": [
+    "E-BUILD-231",
+    "E-AUTO-207",
+    "E-HIL-230",
+    "E-UX-084",
+    "E-STORAGE-075",
+    "E-CADENCE-004",
+    "RB-M243"
+  ],
+  "firmware_source_commit": "56e6ebe67b2b4d2e77e28bbf2cf0d29bed17a568",
+  "candidate": {
+    "version": "1.0.0-dev.357",
+    "firmware_sha256": "dd8f1325c50fce9e5503f41606f7365ccd8495f4ef9a708630f61edd8bc62425",
+    "factory_sha256": "e27f7429e24bcda1b93c26d99b52cc4a1435e073ef158cdcd7fa2e97a0706455",
+    "app_elf_sha256": "a949f6073f1e016d9d455638e4b7673c70215c7cb85858fb329c20cdbeacc5d4",
+    "map_sha256": "6da5d4b7e278278d2c669d78ce3d21aadb773da0ddb8be0f3bfca287747939f3",
+    "partitions_sha256": "325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3",
+    "firmware_bytes": 3637024,
+    "factory_bytes": 3702560,
+    "static_ram_bytes": 234976,
+    "linked_flash_bytes": 3636516,
+    "ota_slot_free_bytes": 557280
+  },
+  "board": {
+    "id": "board-01",
+    "media_profile": "media-01",
+    "configured_identity_match": true,
+    "raw_identifiers_retained": false,
+    "candidate_flash_count": 1,
+    "additional_checkpoint_flashes": 0,
+    "clone_port_touched": false,
+    "cardputer_ports_opened": 0,
+    "active_mac_wifi_touched": false
+  },
+  "ble_lifecycle": {
+    "raw_run_sha256": "cea9f69fc6d3457b3f85db7f320542a693d43cf0c532f953fe1066b72fb4b5d1",
+    "independent_checker": "pass",
+    "entry_transport_retries": 0,
+    "unique_devices": 32,
+    "list_changed_pixels": 2781,
+    "list_chrome_changed_pixels": 0,
+    "list_row_repaints": 28,
+    "list_full_row_repaints": 20,
+    "list_identity_replacements": 16,
+    "list_signal_delta_repaints": 8,
+    "list_atomic_note_pushes": 28,
+    "detail_changed_pixels": 789,
+    "detail_static_changed_pixels": 0,
+    "detail_chrome_changed_pixels": 0,
+    "detail_atomic_text_pushes": 7,
+    "allocation_failures": 0,
+    "direct_fallbacks": 0,
+    "heap_total_after_first": 143828,
+    "heap_total_after_second": 143828,
+    "heap_free_after_first": 72412,
+    "heap_free_after_second": 72412,
+    "driver_drops": 0,
+    "storage_writes": 0
+  },
+  "home_matrix": {
+    "raw_run_sha256": "dcbfcf64f9185d8ba159eb8abd76c2b0314ed402675525ed3d89b7e6cd649018",
+    "home_items": [
+      "wifi",
+      "ble",
+      "spectrum24",
+      "subghz",
+      "capture",
+      "targets",
+      "library",
+      "lab",
+      "device"
+    ],
+    "automatic_screens": 21,
+    "manual_button_presses": 0,
+    "nrf_graph_changed_pixels": 649,
+    "cc_graph_changed_pixels": 420,
+    "waterfall_chrome_changed_pixels": 0,
+    "heap_total_before": 143828,
+    "heap_total_after": 143828,
+    "heap_free_before": 72412,
+    "heap_free_after": 72412,
+    "input_read_errors": 0,
+    "input_queue_drops": 0
+  },
+  "targets_matrix": {
+    "raw_run_sha256": "ccd022573498d59a976b20806fa568f02bdaffcdb1ff57f08111af59df42151e",
+    "exact_flash_reused": true,
+    "survey_pair": [7, 8],
+    "new_survey_cycles": 0,
+    "catalog_count": 16,
+    "comparison_count": 16,
+    "compare_counts": {
+      "added": 1,
+      "changed": 1,
+      "removed": 1,
+      "unchanged": 13
+    },
+    "automatic_screens": 3,
+    "released_heap_bytes": 72412,
+    "cleanup_complete": true,
+    "radio_tx_commands": 0,
+    "storage_writes": 0
+  },
+  "companion_matrix": {
+    "raw_run_sha256": "df79d56794d0690613b0195bd83b5039d1b4ab1ccc03b56ab870d591bcd359d4",
+    "exact_flash_reused": true,
+    "transport": "usb_serial_ndjson",
+    "max_frame_bytes": 512,
+    "sessions": 2,
+    "session_generations": [7, 8],
+    "catalog_count": 16,
+    "comparison_count": 16,
+    "heap_total_before": 143828,
+    "heap_total_after": 143828,
+    "heap_free_before": 72412,
+    "heap_free_after": 72412,
+    "radio_tx_commands": 0,
+    "storage_write_commands": 0,
+    "host_network_tools_invoked": false,
+    "active_mac_wifi_touched": false,
+    "wifi_softap_started": false,
+    "offline_snapshot": {
+      "snapshot_id": "93997691f1d95149cce0c3e11cb611f6b325f334d4fea5b8a385ef7576e6ab3d",
+      "sha256": "7b471c94f30c77f953c8aa85caf7e3880b8b88e997f3fb4784a72dc0df9a8aea",
+      "canonical_round_trip": true
+    }
+  },
+  "final": {
+    "page": "home",
+    "runtime_owner": "none",
+    "lease_mask": 0,
+    "buzzer_inactive": true,
+    "nrf_ce_inactive": true,
+    "software_quiesce_complete": true
+  },
+  "fail_closed_lineage": [
+    {
+      "raw_run_sha256": "2f8af1572399a29f0d1e653cde31d70514950ff74d3ead8cf817ef211f6f66df",
+      "reason": "dev.355 broad Home used a cold pre-BLE heap baseline instead of the stabilized post-BLE baseline"
+    },
+    {
+      "raw_run_sha256": "2d353113cd155418b6908c754fa70d042b487bc70ee40069577f06ce5df9056d",
+      "reason": "dev.355 BLE regression exposed one bounded serial state-query timeout"
+    },
+    {
+      "raw_run_sha256": "4bb9675c132b7147b1e42893e20d0ab7b6fd615f426447a3ca27e2a445ef3aa3",
+      "reason": "dev.355 BLE repaint oracle did not account for legitimate strongest-first identity replacements"
+    },
+    {
+      "raw_run_sha256": "dfcef9339339a509f26608936b7807e5c450f187abd996eb55651aff02b1c2af",
+      "reason": "dev.356 second BLE entry exposed first-use UI compositor allocations fragmenting the released controller arena"
+    }
+  ],
+  "cadence": {
+    "trigger": "accepted_delta_interval",
+    "accepted_deltas_before_checkpoint": 15,
+    "full_after_accepted_deltas": 15,
+    "previous_anchor": "tests/hil/evidence/board-01-cadence-full-1.0.0-dev.302.json",
+    "next_anchor": "tests/hil/evidence/board-01-cadence-full-1.0.0-dev.357.json",
+    "accepted_deltas_after_checkpoint": 0
+  },
+  "limitations": {
+    "release_promotion": false,
+    "s5_rf_positive_gate": false,
+    "instrumented_rf_claim": false,
+    "protocol_workbench_real_capture_commit_reopen": false,
+    "reason": "This is a periodic receive-only regression checkpoint, not a release, instrumented RF proof or FF-3 persistence acceptance."
+  }
+}

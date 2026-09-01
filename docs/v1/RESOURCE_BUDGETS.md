@@ -2059,3 +2059,27 @@ fields, one 228-byte codec payload, one 16-byte manifest and two 24-byte heads;
 no raw Capture copy, heap allocation, worker, queue, radio lease or output path
 exists. This core is not yet retained by a product screen, so its device-side
 lifetime and physical protected-store behavior remain the next FF-3 boundary.
+
+Periodic full checkpoint and repeatable BLE-entry bound `RB-M243`: exact physical
+`1.0.0-dev.357` at firmware source
+`56e6ebe67b2b4d2e77e28bbf2cf0d29bed17a568` uses 234,976 B static RAM,
+3,636,516 B linked flash and 3,637,024/3,702,560 B app/factory images, leaving
+557,280 B of actual application-image headroom in the 4 MiB OTA slot.
+App/factory/ELF/map SHA-256 values are
+`dd8f1325c50fce9e5503f41606f7365ccd8495f4ef9a708630f61edd8bc62425`/
+`e27f7429e24bcda1b93c26d99b52cc4a1435e073ef158cdcd7fa2e97a0706455`/
+`a949f6073f1e016d9d455638e4b7673c70215c7cb85858fb329c20cdbeacc5d4`/
+`6da5d4b7e278278d2c669d78ce3d21aadb773da0ddb8be0f3bfca287747939f3`.
+Against dev.354, static RAM grows 952 B, linked flash 16,832 B and app/factory
+images 17,184/17,184 B; the product delta includes the task-first Protocol
+Workbench product wiring from dev.355 plus bounded BLE diagnostics and three
+persistent UI compositors. Allocating those compositors before controller startup
+keeps both complete passive BLE lifecycles at exactly 143,828/72,412 B total/free
+heap after cleanup. The subsequent 21-screen Home/RF, Targets and USB companion
+matrices preserve that same warm heap, generation 8/54, zero input errors/drops,
+zero storage writes, zero RF TX and final Home/none/lease 0. The historical
+`heap_min_free` of 508 B was recorded while NimBLE owned its runtime arena and is
+not available allocation headroom; admission continues to require a 72,000 B free
+and 28,000 B largest block before controller startup. This periodic regression
+bound resets cadence to 0/15 but does not supersede the one-hour release endurance
+gate or accept FF-3 real-Capture protected commit/reopen.
