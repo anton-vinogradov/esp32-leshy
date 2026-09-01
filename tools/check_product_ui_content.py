@@ -100,11 +100,96 @@ REQUIRED_DENSE_DETAIL_IDS = {
     "WifiNetworkVendorFormat",
 }
 
+# These strings are decisions or explanations on the normal user path. They
+# must name the user's task or outcome, never the implementation that happens
+# to provide it. Technical terminology remains valid in optional detail and
+# export-format strings outside this set.
+PRIMARY_TASK_IDS = {
+    "AutomationInspectorTitle",
+    "AutomationTrustDeviceItem",
+    "AutomationTrustDeviceNote",
+    "DeviceSerialConsole",
+    "DeviceSerialConsoleReady",
+    "DeviceSerialConsoleConflict",
+    "CaptureWifiSource",
+    "CaptureWifiSourceNote",
+    "BleInspectorModesTitle",
+    "BleInspectorRawMode",
+    "BleInspectorRawModeNote",
+    "BleInspectorGattMode",
+    "BleInspectorGattModeNote",
+    "SpectrumNrf24",
+    "SpectrumCc1101",
+    "ProtocolWorkbenchTitle",
+    "WifiPasswordCheckTitle",
+    "WifiPasswordCheckTask",
+    "WifiPasswordCheckListen",
+    "WifiPasswordCheckComputer",
+    "WifiPasswordCheckNoPassword",
+    "WifiPasswordCheckPermission",
+    "WifiAuthFullHandshakeHeadline",
+    "WifiAuthPartialHandshakeHeadline",
+    "WifiAuthPmkidHeadline",
+    "WifiAuthInconclusiveHeadline",
+    "WifiAuthDataHeadline",
+    "WifiAuthSavedStandardNote",
+    "WifiAuthSavedPcapNote",
+    "WifiAuthActionRepeat",
+}
+
+PRIMARY_JARGON = re.compile(
+    r"\b(?:PMKID|EAPOL|ESB|EXTCAP|GATT|PCAP|HC22000|NRF24|CC1101|GPIO|UART|RAW)\b",
+    re.IGNORECASE,
+)
+
+
+def parse_ui_strings(source: str) -> dict[str, tuple[str, str]]:
+    pattern = re.compile(
+        r'LESHY_UI_TEXT\(\s*([A-Za-z0-9_]+)\s*,\s*[^,]+\s*,\s*\d+\s*,'
+        r'\s*"((?:[^"\\]|\\.)*)"\s*,\s*u8"((?:[^"\\]|\\.)*)"\s*\)'
+    )
+    return {match.group(1): (match.group(2), match.group(3))
+            for match in pattern.finditer(source)}
+
 
 def main() -> int:
     renderer = RENDERER.read_text(encoding="utf-8")
     strings = STRINGS.read_text(encoding="utf-8")
+    catalog = parse_ui_strings(strings)
     failures: list[str] = []
+
+    for identifier in sorted(PRIMARY_TASK_IDS):
+        localized = catalog.get(identifier)
+        if localized is None:
+            failures.append(f"missing primary task string: {identifier}")
+            continue
+        for language, value in zip(("en", "ru"), localized):
+            jargon = PRIMARY_JARGON.search(value)
+            if jargon is not None:
+                failures.append(
+                    f"primary task string {identifier}/{language} exposes "
+                    f"implementation jargon: {jargon.group(0)}"
+                )
+
+    if "WifiProductView::PasswordCheckIntro" not in renderer:
+        failures.append(
+            "network detail must route through a password-check explanation"
+        )
+    network_detail_branch = re.search(
+        r"wifiProductView == WifiProductView::NetworkDetail\).*?"
+        r"wifiProductView == WifiProductView::PasswordCheckIntro",
+        renderer,
+        re.DOTALL,
+    )
+    if network_detail_branch is None:
+        failures.append(
+            "network detail does not expose the contextual password-check task"
+        )
+    elif "requestWifiAuthenticationCaptureFromDetail" in \
+            network_detail_branch.group(0):
+        failures.append(
+            "network detail starts password evidence recording before its intro"
+        )
 
     for identifier in sorted(REQUIRED_OUTCOME_IDS):
         if f"LESHY_UI_TEXT({identifier}," not in strings:
@@ -187,8 +272,9 @@ def main() -> int:
 
     print(
         "product UI content contract passed: outcomes/actions visible; "
-        "developer telemetry kept off product screens; radio details use the "
-        "shared user-facing signal card"
+        "primary tasks require no implementation jargon; developer telemetry "
+        "stays off product screens; radio details use the shared user-facing "
+        "signal card"
     )
     return 0
 

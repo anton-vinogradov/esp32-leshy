@@ -1639,6 +1639,7 @@ enum class WifiProductView : std::uint8_t {
     Menu,
     Networks,
     NetworkDetail,
+    PasswordCheckIntro,
     AuthenticationCapture,
     Devices,
     DeviceDetail,
@@ -1652,6 +1653,8 @@ const char* wifiProductViewName(WifiProductView view) {
         case WifiProductView::Menu: return "menu";
         case WifiProductView::Networks: return "networks";
         case WifiProductView::NetworkDetail: return "network_detail";
+        case WifiProductView::PasswordCheckIntro:
+            return "password_check_intro";
         case WifiProductView::AuthenticationCapture:
             return "authentication_capture";
         case WifiProductView::Devices: return "devices";
@@ -13289,7 +13292,12 @@ NavigationFooter navigationFooterForCurrentState() {
                     {NavigationKey::RightAndSelect, UiTextId::NavAgain}};
         }
         if (wifiProductView == WifiProductView::NetworkDetail) {
-            return {{NavigationKey::Left, UiTextId::NavList}, {}, enter};
+            return {{NavigationKey::Left, UiTextId::NavList}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavCheck}};
+        }
+        if (wifiProductView == WifiProductView::PasswordCheckIntro) {
+            return {back, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavStart}};
         }
         if (wifiProductView == WifiProductView::AuthenticationCapture) {
             const WifiAuthenticationCaptureController& controller =
@@ -16857,6 +16865,20 @@ void renderWifiNetworkDetail(bool clearContent) {
     renderWifiNetworkDetailData();
 }
 
+void renderWifiPasswordCheckIntro(bool clearContent) {
+    renderHeader(tr(UiTextId::WifiPasswordCheckTitle), clearContent);
+    if (clearContent) {
+        display.fillRect(0, Layout::ContentTop, Layout::ScreenWidth,
+                         Layout::FooterDividerY - Layout::ContentTop,
+                         Palette::Canvas);
+    }
+    renderMetric(0, tr(UiTextId::WifiPasswordCheckTask), Tone::Positive);
+    renderMetric(1, tr(UiTextId::WifiPasswordCheckListen));
+    renderMetric(2, tr(UiTextId::WifiPasswordCheckComputer));
+    renderMetric(3, tr(UiTextId::WifiPasswordCheckNoPassword), Tone::Positive);
+    renderMetric(4, tr(UiTextId::WifiPasswordCheckPermission), Tone::Warning);
+}
+
 std::size_t bleDeviceFirstVisible(std::size_t selection) {
     return selection < kVisibleWifiNetworkRows
         ? 0 : selection - kVisibleWifiNetworkRows + 1U;
@@ -19920,6 +19942,10 @@ void renderInventoryPage(bool clearContent) {
     }
     if (wifiProductView == WifiProductView::AuthenticationCapture) {
         renderWifiAuthenticationCapture(clearContent);
+        return;
+    }
+    if (wifiProductView == WifiProductView::PasswordCheckIntro) {
+        renderWifiPasswordCheckIntro(clearContent);
         return;
     }
     if (wifiProductView == WifiProductView::NetworkDetail) {
@@ -29348,6 +29374,18 @@ bool applyUiAction(UiAction action, bool render = true) {
             if (action == UiAction::Back || action == UiAction::Left) {
                 wifiProductView = WifiProductView::Networks;
                 lastRuntimeEvent = "wifi_networks";
+                changed = true;
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                wifiProductView = WifiProductView::PasswordCheckIntro;
+                lastRuntimeEvent = "wifi_password_check_intro";
+                changed = true;
+            }
+        } else if (wifiProductView == WifiProductView::PasswordCheckIntro) {
+            handled = true;
+            if (action == UiAction::Back || action == UiAction::Left) {
+                wifiProductView = WifiProductView::NetworkDetail;
+                lastRuntimeEvent = "wifi_network_detail";
                 changed = true;
             } else if (action == UiAction::Select ||
                        action == UiAction::Right) {

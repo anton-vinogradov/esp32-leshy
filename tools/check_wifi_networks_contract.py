@@ -41,6 +41,8 @@ def main() -> int:
         "wifi_networks_strongest_first",
         "wifi_network_catalog_revision",
         "wifiNetworkCatalog.indexOfIdentity(wifiSelectionAnchor)",
+        "wifiNetworkFocus.userOwned()",
+        "wifiNetworkFocus.claimByUser()",
         "renderWifiNetworkDetailData()",
         "renderWifiNetworkRadar(live, signal, false)",
         "liveWifiNetworkSignal()",
@@ -50,7 +52,6 @@ def main() -> int:
         "emitWifiNetworkDetailState(",
         "leshy.wifi.network_detail.v1",
         "active_probe_allowed\\\":false",
-        "wifiNetworkNavigationOrder.lock(wifiNetworkCatalog)",
         "wifiNetworkVisibleSize()",
         "wifiNetworkAt(wifiNetworkSelection)",
         "!wifiNetworkNavigationOrder.locked()",
@@ -107,6 +108,10 @@ def main() -> int:
         f"renderer token missing: {token}"
         for token in required_renderer if token not in renderer
     ]
+    if "wifiNetworkNavigationOrder.lock(wifiNetworkCatalog)" in renderer:
+        failures.append(
+            "renderer must not freeze live Wi-Fi order after user input"
+        )
     failures.extend(
         f"catalog token missing: {token}"
         for token in required_catalog
@@ -126,7 +131,7 @@ def main() -> int:
         return 1
     print(
         "Wi-Fi networks contract passed: unique strongest-first BSSID rows, four-row "
-        "touch UI, strongest-first discovery with identity-stable navigation, "
+        "touch UI, continuous strongest-first sorting with identity-anchored focus, "
         "data-only live redraw, OUI/security/PHY detail, monotonic hidden-SSID "
         "resolution and bounded live BSSID radar without cursor movement"
     )

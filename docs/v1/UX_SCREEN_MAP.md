@@ -9,6 +9,37 @@ path, and host/build `1.0.0-dev.333` adds the first receive-only IR Protocol
 Workbench behind Library. Their connected physical gates remain open. This map
 binds task structure, color semantics and Back/Stop behavior.
 
+## Task-first tree contract
+
+The fixed 1.0 denominator is **62 capabilities (`Y = 62`)**. It does not mean 62
+menu entries. Menu row count and capability count are deliberately independent:
+one understandable user task composes several CAPs behind a contextual transition.
+
+- Home contains only nine stable domain entries.
+- The next level selects an observed entity: network, device, channel, signal,
+  saved record, or owned fixture.
+- An entity card offers only tasks relevant to that entity, for example
+  `Network → Check my password`, `Device → Find nearby`, and
+  `Saved signal → Understand this signal`.
+- Implementation terms (`PMKID`, `EAPOL`, `ESB`, `GATT`, `extcap`, chip names,
+  and file formats) are never prerequisites for choosing a path. They belong only
+  in an optional **Technical details** leaf and export format names.
+- A new capability does not receive a Home row when it naturally belongs to an
+  already selected entity or result.
+
+Every executable task uses one guided flow instead of inventing its own sequence:
+
+```text
+Task → what will happen → what to prepare → target and bounds preview
+     → Start → progress with permanent Stop → plain-language outcome
+     → useful next actions → Technical details (optional)
+```
+
+The first screen answers “what will I get,” preparation answers “what is required
+and is it safe to continue,” and the result answers “what does this mean and what
+can I do next.” The complete path remains usable without knowing protocol, radio
+chip, or computer-tool terminology.
+
 ## Global shell
 
 The current `UX-S01 Home` is one flat nine-entry list, ordered into five conceptual
@@ -57,15 +88,14 @@ status bar never invents battery or power state without an authoritative
 capability. Touch, physical buttons, and diagnostic automation emit the same typed
 Actions.
 
-Every live list of radio objects is ordered by descending received signal: the
-strongest current RSSI is first and weaker entries follow. Equal RSSI keeps its
-existing relative order, and a refresh anchors selection to the same identity so
-resorting never silently changes the object under the user's cursor. For an
-interactive live list, descending signal defines the order before navigation.
-The first Navigate/Open action freezes the visible identity order until the user
-leaves that task: current signal values still update in place, while rows and the
-object under the cursor cannot jump. Re-entering takes a new strongest-first
-snapshot and includes newly discovered objects.
+Every live list of radio objects is continuously ordered by descending received
+signal: the strongest current RSSI is first and weaker entries follow. Equal RSSI
+keeps its existing relative order. Before the first manual action, focus may follow
+the first/strongest row. The first Navigate/Open action gives focus to the user:
+subsequent refreshes keep sorting the list, but reanchor the cursor to the same
+identity and never pull it back to the first row. Newly discovered objects appear
+without requiring task re-entry. Thus the order remains truthful and live while
+resorting never silently changes the object the user selected.
 
 Screen space is budgeted by user value. A non-interactive one-line fact occupies
 one compact line. A large row is reserved for a touch target and carries both its
@@ -84,54 +114,52 @@ result while preserving the same typed Action and safety admission path.
 
 ```text
 UX-S01 Home
-├─ Survey
-│  ├─ UX-S02 New Survey: sources, storage, duty-cycle preview
-│  ├─ UX-S03 Running Survey: summary ↔ timeline ↔ list
-│  │  └─ UX-S04 Observation Detail → Target / Radar / Capture
-│  ├─ UX-S05 Stop & Commit Result → Session Detail / Export / Home
-│  ├─ UX-S29 Airspace Guard: findings → explanation → exact evidence
-│  └─ UX-S31 Field Survey: sources / GPS / revisit / local export
-├─ Targets
-│  ├─ UX-S06 Target List: search, filter, sort
-│  └─ UX-S07 Target Detail
-│     ├─ UX-S08 Name / Tags / Notes / Identities / Merge-Split
-│     ├─ UX-S09 Baseline & Compare
-│     └─ UX-S10 Radar / Localize
-├─ Capture
-│  ├─ UX-S11 Capture Source: Wi-Fi packets / Sub-GHz / IR / NFC / Screenshot
-│  │  └─ Screenshot: arm → Home → desired screen → Select/SHOT → protected Library
-│  ├─ UX-S12 Capture Setup: source, bounds, destination
-│  ├─ UX-S13 Capture Running: progress, drops, explicit Stop
-│  ├─ UX-S14 Capture Result: raw metadata / derived decode / Save / Export / Lab
-│  ├─ UX-S30 Wi-Fi Authentication Capture
-│  │  ├─ Running: remaining time / candidate frames / retained/drop accounting
-│  │  └─ Result → Actions → Peer → Evidence → Detail
-│  │     └─ Repeat: start the same bounded capture again
-│  └─ UX-S32 BLE Inspector: raw packets / explicit connected GATT
+├─ Wi-Fi nearby
+│  ├─ Networks → network card
+│  │  ├─ understand protection and quality
+│  │  ├─ find its source by live signal
+│  │  └─ check my password → explanation → record → computer check
+│  ├─ Devices → device card → identify / current intent / find nearby
+│  ├─ Channels → load / average background / recommendation
+│  ├─ Record visit → compare with a previous visit
+│  └─ Check suspicious activity → conclusion → source evidence
+├─ Bluetooth nearby
+│  └─ Devices → device card → find nearby
+│     ├─ record radio data for later analysis
+│     └─ see device features → explicit one-time connection
+├─ 2.4 GHz air
+│  ├─ see activity: graph ↔ waterfall
+│  └─ find a signal from a remote, tag, or sensor
+├─ Sub-GHz air
+│  ├─ choose a familiar band → graph ↔ waterfall
+│  └─ find / record a signal → save → optionally repeat in Lab
+├─ Record
+│  ├─ Wi-Fi air → save for computer analysis
+│  ├─ infrared remote key → save / understand / compare
+│  ├─ NFC tag when hardware is present → read / save / recover an owned tag
+│  └─ screenshot → open desired screen → Shot
+├─ My targets
+│  └─ target → name / notes / links / compare visits / find nearby / record
+├─ Saved records
+│  └─ record → plain summary → compare / export / open in Lab
+│     └─ Technical details: formats, protocol, raw fields
 ├─ Lab
-│  ├─ UX-S18 Scope & Safety Context
-│  ├─ UX-S19 Saved Capture + TX Parameters
-│  ├─ UX-S20 Explicit Confirmation
-│  ├─ UX-S21 Running TX: frequency, power, deadline, permanent Stop
-│  ├─ UX-S22 Result / Fault / Source Capture
-│  ├─ UX-S35 Automation / HID: package, permissions, target, preview
-│  └─ UX-S36 Wireless Recipes: admitted Wi-Fi / BLE / nRF fixtures
-├─ Library
-│  ├─ UX-S15 Sessions / Captures / Exports / Screenshots
-│  ├─ UX-S16 Item Detail: integrity, provenance, source/derived data
-│  │  └─ IR Analyze → UX-S37 Protocol Workbench: immutable waveform / pulse cursor
-│  └─ UX-S17 Import / Export / Compare / Open in Lab
+│  ├─ select an owned network, device, or isolated fixture
+│  ├─ select an understandable resilience check
+│  └─ bounds → power and time → confirmation → Stop → report
+│     ├─ Wi-Fi / Bluetooth / remotes and sensors / infrared / USB
+│     └─ scenarios and automation → explain permissions first
 └─ Device
-   ├─ Settings → UX-S25 Language / Display / Input / Feedback / Connectivity
-   ├─ Self-Test → UX-S24 test context
-   │  ├─ Quick: bounded read-only automatic plan
-   │  └─ Full / Guided: scoped preflight → applicable checks → report
-   ├─ Diagnostics → UX-S24 Capability / Module Detail / Report
-   ├─ About → UX-S27 Version / Profile / Update / Rollback / Recovery
-   ├─ Lock → UX-S33 Setup / Unlock / Recovery / Protected Scope
-   └─ Serial Console → UX-S34 UART Preview / Running / Save Result
+   ├─ Settings / Lock / Update
+   ├─ Self-Test: Quick / Full guided
+   ├─ Diagnostics: what works / why unavailable / what to do
+   ├─ Read a wired device → connect / view / save text
+   ├─ Trusted scenarios → who may add and run them
+   └─ About
 
-UX-S28 Global dialog layer: unavailable reason, progress, confirm, error, panic.
+UX-S28 is the shared unavailable, preparation, progress, confirmation, error, and
+panic-Stop layer. UX-S02…S62 are reusable screens and contextual transitions in
+the tree, not separate Home rows.
 ```
 
 Deep links open the existing screen with an entity ID rather than duplicating an
@@ -185,7 +213,8 @@ product workflow therefore has three compact levels:
    blocks a local survey.
 2. **Running** uses the full content area for elapsed time, unique total, New,
    Seen again and the strongest recent objects. A switch opens the strongest-first
-   AP/station/BLE list; navigation freezes identity order while signal values update.
+   AP/station/BLE list; live sorting continues while the cursor remains anchored to
+   the identity selected by the user.
    Implementation counters, redraw totals and empty decorative frames are absent.
    Stop remains explicit and Back cancels through the common bounded cleanup path.
 3. **Result** leads with `New / Seen again / Missing`, then AP/station/BLE totals.
@@ -382,6 +411,9 @@ not jump. Networks first discovered after the lock appear on task re-entry. A fr
 physical run exercises eight actions and two further scans across 23 locked rows
 without changing selection, visible size, BSSID-order hash or selected-BSSID hash
 (`E-BUILD-114`/`E-AUTO-078`/`E-HIL-138`/`E-UX-033`).
+This paragraph records the accepted 0.114 behavior only. The current normative
+rule above supersedes its order freeze: live strongest-first order continues, and
+focus is reanchored by identity after the user takes control.
 
 Exact `0.115.0-wifi-device-intelligence` turns Wi-Fi→Devices into a three-level
 user flow: strongest-first live list → stable device passport → live signal radar.
@@ -394,6 +426,8 @@ interaction freezes row identities, and radar pins reception to the selected cha
 while updating only its RSSI state/range card. Eight exact TFT states verify zero
 static-chrome repaint and a pixel-stable passport during background traffic
 (`E-BUILD-115`/`E-AUTO-079`/`E-HIL-139`/`E-UX-034`).
+Its historical row-identity freeze is likewise superseded by the current live-order,
+identity-anchored-focus contract; the selected device and Radar source remain exact.
 
 Exact `0.116.0-wifi-channel-average` refines Wi-Fi→Channels without adding another
 screen. The full 1…13 axis remains visible on a black graph. Each channel overlays a

@@ -8,10 +8,9 @@
 
 namespace leshy1::apps::wifi {
 
-// The catalog remains strongest-first for discovery. Once the user starts
-// navigating, this allocation-free identity snapshot prevents RSSI changes from
-// moving rows or replacing the object under the cursor. Visible fields are still
-// read live from the catalog by identity.
+// The product catalog remains live strongest-first and reanchors user focus by
+// identity after every reorder. The snapshot API is retained only for historical
+// evidence/native compatibility; production UI must not call lock().
 class WifiNetworkNavigationOrder final {
 public:
     void reset() {
