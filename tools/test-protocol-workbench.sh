@@ -11,6 +11,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     -Wconversion -Wsign-conversion -Wshadow \
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/protocol_workbench_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/protocol/ProtocolAnnotationController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/protocol/ProtocolAnnotations.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/protocol/ProtocolWorkbench.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/ProtocolAnnotationCodec.cpp" \

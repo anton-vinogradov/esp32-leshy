@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "apps/protocol/ProtocolAnnotations.h"
+#include "apps/protocol/ProtocolAnnotationController.h"
 #include "apps/protocol/ProtocolWorkbench.h"
 #include "storage/ProtocolAnnotationCodec.h"
 #include "storage/ProtocolAnnotationStore.h"
@@ -210,6 +211,66 @@ void testProtocolAnnotationAtomicStore() {
     assert(!recovered.bound());
 }
 
+void testProtocolAnnotationTaskFlow() {
+    using namespace leshy1::apps::protocol;
+
+    const ProtocolAnnotationSource source{8U, 0x8FF146182DB0BEA0ULL, 67U};
+    ProtocolAnnotationController controller;
+    assert(controller.enter(source) == ProtocolAnnotationStatus::Valid);
+    assert(controller.view() == ProtocolAnnotationView::Waveform);
+    assert(!controller.dirty());
+
+    assert(controller.activate() == ProtocolAnnotationActivation::Changed);
+    assert(controller.view() == ProtocolAnnotationView::Actions);
+    assert(controller.actionCount() == 1U);
+    assert(controller.activate() == ProtocolAnnotationActivation::Changed);
+    assert(controller.view() == ProtocolAnnotationView::ChooseStart);
+    assert(controller.activate() == ProtocolAnnotationActivation::Changed);
+    assert(controller.view() == ProtocolAnnotationView::ChooseEnd);
+    assert(controller.next());
+    assert(controller.next());
+    assert(controller.next());
+    assert(controller.activate() == ProtocolAnnotationActivation::Changed);
+    assert(controller.view() == ProtocolAnnotationView::ChooseKind);
+    assert(controller.next());
+    assert(controller.kindSelection() == ProtocolAnnotationKind::Address);
+    assert(controller.activate() == ProtocolAnnotationActivation::Changed);
+    assert(controller.view() == ProtocolAnnotationView::Result);
+    assert(controller.outcome() == ProtocolAnnotationOutcome::Marked);
+    assert(controller.annotations().size() == 1U);
+    assert(controller.annotations().get(0U)->firstPulse == 0U);
+    assert(controller.annotations().get(0U)->lastPulse == 3U);
+    assert(controller.dirty());
+
+    assert(controller.activate() == ProtocolAnnotationActivation::Changed);
+    assert(controller.view() == ProtocolAnnotationView::Waveform);
+    assert(controller.activate() == ProtocolAnnotationActivation::Changed);
+    assert(controller.actionCount() == 3U);
+    assert(controller.next());
+    assert(controller.next());
+    assert(controller.activate() ==
+           ProtocolAnnotationActivation::SaveRequested);
+    controller.noteSaved(4U);
+    assert(controller.outcome() == ProtocolAnnotationOutcome::Saved);
+    assert(controller.storeGeneration() == 4U);
+    assert(!controller.dirty());
+
+    assert(controller.activate() == ProtocolAnnotationActivation::Changed);
+    assert(controller.activate() == ProtocolAnnotationActivation::Changed);
+    assert(controller.actionCount() == 2U);
+    assert(controller.next());
+    assert(controller.activate() == ProtocolAnnotationActivation::Changed);
+    assert(controller.outcome() == ProtocolAnnotationOutcome::Removed);
+    assert(controller.annotations().size() == 0U);
+    assert(controller.dirty());
+
+    ProtocolAnnotationSet foreign;
+    assert(foreign.bind({9U, source.captureFingerprint, source.pulseCount}) ==
+           ProtocolAnnotationStatus::Valid);
+    assert(controller.restore(foreign, 1U) ==
+           ProtocolAnnotationStatus::SourceMismatch);
+}
+
 }  // namespace
 
 int main() {
@@ -255,6 +316,7 @@ int main() {
 
     testProtocolAnnotationsModelAndCodec();
     testProtocolAnnotationAtomicStore();
+    testProtocolAnnotationTaskFlow();
 
     std::cout << "protocol workbench tests passed\n";
     return 0;

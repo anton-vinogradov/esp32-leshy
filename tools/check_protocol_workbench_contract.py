@@ -9,6 +9,8 @@ HEADER = ROOT / "firmware/leshy1/src/apps/protocol/ProtocolWorkbench.h"
 SOURCE = ROOT / "firmware/leshy1/src/apps/protocol/ProtocolWorkbench.cpp"
 ANNOTATIONS = ROOT / "firmware/leshy1/src/apps/protocol/ProtocolAnnotations.h"
 ANNOTATIONS_SOURCE = ROOT / "firmware/leshy1/src/apps/protocol/ProtocolAnnotations.cpp"
+ANNOTATION_CONTROLLER = ROOT / \
+    "firmware/leshy1/src/apps/protocol/ProtocolAnnotationController.cpp"
 ANNOTATION_CODEC = ROOT / "firmware/leshy1/src/storage/ProtocolAnnotationCodec.cpp"
 ANNOTATION_STORE = ROOT / "firmware/leshy1/src/storage/ProtocolAnnotationStore.cpp"
 ENTRY = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
@@ -19,6 +21,7 @@ def main() -> int:
     source = SOURCE.read_text(encoding="utf-8")
     annotation_source = ANNOTATIONS.read_text(encoding="utf-8") + \
         ANNOTATIONS_SOURCE.read_text(encoding="utf-8") + \
+        ANNOTATION_CONTROLLER.read_text(encoding="utf-8") + \
         ANNOTATION_CODEC.read_text(encoding="utf-8") + \
         ANNOTATION_STORE.read_text(encoding="utf-8")
     entry = ENTRY.read_text(encoding="utf-8")
@@ -58,6 +61,10 @@ def main() -> int:
         "commitGeneration(",
         "crc32c(",
         "protocol-annotations-%08lu-head-a.bin",
+        "ProtocolAnnotationActivation::SaveRequested",
+        "ProtocolAnnotationView::ChooseStart",
+        "ProtocolAnnotationView::ChooseEnd",
+        "ProtocolAnnotationView::ChooseKind",
     )
     for marker in annotation_required:
         if marker not in annotation_source:
@@ -76,6 +83,16 @@ def main() -> int:
         "kProtocolWorkbenchPage",
         "protocol_workbench_opened",
         "ProtocolWorkbenchHilSource",
+        "protocolAnnotationController.activate()",
+        "renderProtocolAnnotationActionRow(",
+        "renderProtocolAnnotationRangeStatus(",
+        "persistProtocolWorkbenchAnnotations()",
+        "DeviceLockOperation::ProtectedEvidence",
+        "identifyScreenshotProductMedia(",
+        "ProductStoreOperation::CommitEvidence",
+        "commitNextProtocolAnnotations(",
+        "sameProtocolAnnotationSet(",
+        "protocolAnnotationController.noteSaved(",
         "protocol.workbench.hil-fixture open-nec",
         "protocol.workbench.hil-fixture clear",
         "if (!hilSession.active())",
@@ -92,6 +109,7 @@ def main() -> int:
         print("\n".join(f"FAIL: {failure}" for failure in failures))
         return 1
     print("Protocol Workbench contract passed: bounded immutable IR analysis; "
+          "task-first exact-source annotations; protected atomic save; "
           "no TX/replay/output API")
     return 0
 

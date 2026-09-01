@@ -36,6 +36,7 @@
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
 #include "apps/protocol/ProtocolWorkbench.h"
+#include "apps/protocol/ProtocolAnnotationController.h"
 #include "apps/automation/AutomationInspectorController.h"
 #include "apps/guard/AirspaceGuardController.h"
 #include "apps/auth/WifiAuthenticationCaptureController.h"
@@ -144,6 +145,7 @@
 #include "storage/MediaDiscovery.h"
 #include "storage/MountPolicy.h"
 #include "storage/ProductStorePolicy.h"
+#include "storage/ProtocolAnnotationStore.h"
 #include "storage/ProductBootRetry.h"
 #include "storage/ProductStartRetry.h"
 #include "storage/SdReadOnlyProtocol.h"
@@ -194,6 +196,14 @@ using leshy1::apps::library::SessionIntegrity;
 using leshy1::apps::protocol::ProtocolWorkbenchAnalysis;
 using leshy1::apps::protocol::ProtocolWorkbenchStatus;
 using leshy1::apps::protocol::ProtocolWorkbenchWorkspace;
+using leshy1::apps::protocol::ProtocolAnnotationActivation;
+using leshy1::apps::protocol::ProtocolAnnotationController;
+using leshy1::apps::protocol::ProtocolAnnotationKind;
+using leshy1::apps::protocol::ProtocolAnnotationOutcome;
+using leshy1::apps::protocol::ProtocolAnnotationSet;
+using leshy1::apps::protocol::ProtocolAnnotationSource;
+using leshy1::apps::protocol::ProtocolAnnotationStatus;
+using leshy1::apps::protocol::ProtocolAnnotationView;
 using leshy1::apps::automation::AutomationInspectorController;
 using leshy1::apps::automation::AutomationInspectorModel;
 using leshy1::apps::automation::AutomationInspectorSourceStatus;
@@ -486,6 +496,7 @@ constexpr leshy1::kernel::runtime::ResourceOwner kBootCatalogOwner = 4;
 constexpr leshy1::kernel::runtime::ResourceOwner kLittleFsHilOwner = 5;
 constexpr leshy1::kernel::runtime::ResourceOwner kScreenshotOwner = 6;
 constexpr leshy1::kernel::runtime::ResourceOwner kBleGattHilConflictOwner = 7;
+constexpr leshy1::kernel::runtime::ResourceOwner kProtocolAnnotationOwner = 9;
 constexpr std::size_t kSdThroughputSamples = 32;
 constexpr std::size_t kWifiIngressMaxSamples = 32;
 constexpr std::uint64_t kWifiIngressP99EncodedBytesPerSecond = 546;
@@ -495,6 +506,7 @@ constexpr std::uint64_t kStorageRequiredEncodedBytesPerSecond =
 constexpr std::uint64_t kProductSurveyCommitBytes = 64U * 1024U;
 constexpr std::uint64_t kProductSurveyReserveBytes = 1024U * 1024U;
 constexpr std::uint64_t kProductScreenshotCommitBytes = 192U * 1024U;
+constexpr std::uint64_t kProductProtocolAnnotationCommitBytes = 8U * 1024U;
 constexpr unsigned kWifiPersistMaxScans = 8;
 constexpr const char* kFullGuidedDisposableRunId = "full-guided-v10";
 constexpr std::uint64_t kFullGuidedDisposableBytes = 64U * 1024U;
@@ -630,7 +642,11 @@ private:
 ProtocolWorkbenchHilSource protocolWorkbenchHilSource;
 ProtocolWorkbenchWorkspace protocolWorkbenchWorkspace;
 ProtocolWorkbenchAnalysis protocolWorkbenchAnalysis;
-std::size_t protocolWorkbenchPulseSelection = 0U;
+ProtocolAnnotationController protocolAnnotationController;
+leshy1::storage::ProtocolAnnotationStoreWorkspace
+    protocolAnnotationStoreWorkspace;
+ProtocolAnnotationSet protocolAnnotationRecoveryScratch;
+const char* protocolAnnotationStorageStatus = "not_loaded";
 leshy1::storage::ScreenshotStoreWorkspace screenshotStoreWorkspace;
 leshy1::storage::ScreenshotMetadata latestScreenshotMetadata;
 bool latestScreenshotAvailable = false;
@@ -13505,8 +13521,36 @@ NavigationFooter navigationFooterForCurrentState() {
                 {NavigationKey::RightAndSelect, UiTextId::NavDetails}};
     }
     if (uiController.page() == kProtocolWorkbenchPage) {
-        return {{NavigationKey::Left, UiTextId::NavBack},
-                {NavigationKey::UpDown, UiTextId::NavPulse}, {}};
+        switch (protocolAnnotationController.view()) {
+            case ProtocolAnnotationView::Waveform:
+                return {{NavigationKey::Left, UiTextId::NavBack},
+                        {NavigationKey::UpDown, UiTextId::NavPulse},
+                        {NavigationKey::RightAndSelect,
+                         UiTextId::NavActions}};
+            case ProtocolAnnotationView::Actions:
+                return {{NavigationKey::Left, UiTextId::NavBack}, choose,
+                        {NavigationKey::RightAndSelect,
+                         protocolAnnotationController.dirty() &&
+                                 protocolAnnotationController.actionSelection() +
+                                         1U ==
+                                     protocolAnnotationController.actionCount()
+                             ? UiTextId::NavSave
+                             : UiTextId::NavEnter}};
+            case ProtocolAnnotationView::ChooseStart:
+            case ProtocolAnnotationView::ChooseEnd:
+                return {{NavigationKey::Left, UiTextId::NavBack},
+                        {NavigationKey::UpDown, UiTextId::NavPulse},
+                        {NavigationKey::RightAndSelect,
+                         UiTextId::NavNext}};
+            case ProtocolAnnotationView::ChooseKind:
+                return {{NavigationKey::Left, UiTextId::NavBack}, choose,
+                        {NavigationKey::RightAndSelect,
+                         UiTextId::NavApply}};
+            case ProtocolAnnotationView::Result:
+                return {{NavigationKey::Left, UiTextId::NavBack}, {},
+                        {NavigationKey::RightAndSelect,
+                         UiTextId::NavBack}};
+        }
     }
 
     if (uiController.page() == 4) {
@@ -20511,6 +20555,29 @@ void renderLibraryPage(bool clearContent) {
     }
 }
 
+bool recoverProtocolWorkbenchAnnotations();
+bool persistProtocolWorkbenchAnnotations();
+
+ProtocolAnnotationSource protocolWorkbenchAnnotationSource() {
+    if (!protocolWorkbenchAnalysis.valid()) return {};
+    const LibraryEntry* selected = libraryController.selected();
+    const std::uint32_t generation = protocolWorkbenchHilSource.active()
+        ? UINT32_MAX
+        : selected != nullptr ? selected->generation : 0U;
+    return {
+        generation,
+        protocolWorkbenchAnalysis.sourceFingerprint,
+        static_cast<std::uint16_t>(protocolWorkbenchAnalysis.pulseCount),
+    };
+}
+
+void resetProtocolWorkbenchAnnotations() {
+    protocolAnnotationController = {};
+    protocolAnnotationRecoveryScratch.clear();
+    protocolAnnotationStoreWorkspace = {};
+    protocolAnnotationStorageStatus = "not_loaded";
+}
+
 bool openSelectedProtocolWorkbench() {
     const LibraryEntry* selected = libraryController.selected();
     if (selected == nullptr || selected->session == nullptr ||
@@ -20518,7 +20585,7 @@ bool openSelectedProtocolWorkbench() {
         return false;
     }
     protocolWorkbenchHilSource.reset();
-    protocolWorkbenchPulseSelection = 0U;
+    resetProtocolWorkbenchAnnotations();
     if (selected->generation != sessionStoreWorkspace().generation) {
         protocolWorkbenchAnalysis = {};
         protocolWorkbenchAnalysis.status =
@@ -20540,6 +20607,13 @@ bool openSelectedProtocolWorkbench() {
         &protocolWorkbenchAnalysis);
     if (analyzed != ProtocolWorkbenchStatus::Valid) {
         return uiController.openChild(kProtocolWorkbenchPage);
+    }
+    if (protocolAnnotationController.enter(
+            protocolWorkbenchAnnotationSource()) !=
+        ProtocolAnnotationStatus::Valid) {
+        protocolAnnotationStorageStatus = "source_invalid";
+    } else {
+        recoverProtocolWorkbenchAnnotations();
     }
     return uiController.openChild(kProtocolWorkbenchPage);
 }
@@ -20609,12 +20683,12 @@ void renderProtocolWorkbenchSelection() {
                      kProtocolWorkbenchGraph.width, 12,
                      Palette::Canvas);
     if (!protocolWorkbenchAnalysis.valid() ||
-        protocolWorkbenchPulseSelection >=
+        protocolAnnotationController.pulseSelection() >=
             source.pulseCount()) {
         return;
     }
     const std::int16_t cursorX =
-        protocolWorkbenchCursorX(protocolWorkbenchPulseSelection);
+        protocolWorkbenchCursorX(protocolAnnotationController.pulseSelection());
     display.fillTriangle(cursorX, kProtocolWorkbenchCursorY,
                          cursorX - 4, kProtocolWorkbenchCursorY + 7,
                          cursorX + 4, kProtocolWorkbenchCursorY + 7,
@@ -20622,12 +20696,12 @@ void renderProtocolWorkbenchSelection() {
 
     leshy1::domain::captures::InfraredRawPulseView pulse;
     if (!source.pulseView(
-            protocolWorkbenchPulseSelection, &pulse)) {
+            protocolAnnotationController.pulseSelection(), &pulse)) {
         return;
     }
     const bool startLevel = protocolWorkbenchStartLevel();
     const bool electricalLevel =
-        (protocolWorkbenchPulseSelection % 2U == 0U)
+        (protocolAnnotationController.pulseSelection() % 2U == 0U)
             ? startLevel : !startLevel;
     // The stock demodulating receiver is active-low: present the useful
     // logical mark/space envelope instead of exposing its pin polarity.
@@ -20635,7 +20709,7 @@ void renderProtocolWorkbenchSelection() {
     char line[96] = {};
     std::snprintf(
         line, sizeof(line), tr(UiTextId::ProtocolWorkbenchPulseFormat),
-        static_cast<unsigned>(protocolWorkbenchPulseSelection + 1U),
+        static_cast<unsigned>(protocolAnnotationController.pulseSelection() + 1U),
         static_cast<unsigned>(source.pulseCount()),
         tr(mark ? UiTextId::ProtocolWorkbenchMark
                 : UiTextId::ProtocolWorkbenchSpace),
@@ -20695,7 +20769,257 @@ void renderProtocolWorkbenchWaveform() {
     }
 }
 
+UiTextId protocolAnnotationKindText(ProtocolAnnotationKind kind) {
+    switch (kind) {
+        case ProtocolAnnotationKind::Header:
+            return UiTextId::ProtocolAnnotationKindHeader;
+        case ProtocolAnnotationKind::Address:
+            return UiTextId::ProtocolAnnotationKindAddress;
+        case ProtocolAnnotationKind::Command:
+            return UiTextId::ProtocolAnnotationKindCommand;
+        case ProtocolAnnotationKind::Data:
+            return UiTextId::ProtocolAnnotationKindData;
+        case ProtocolAnnotationKind::Checksum:
+            return UiTextId::ProtocolAnnotationKindChecksum;
+        case ProtocolAnnotationKind::Gap:
+            return UiTextId::ProtocolAnnotationKindGap;
+    }
+    return UiTextId::ProtocolAnnotationKindData;
+}
+
+std::uint16_t protocolAnnotationKindColor(ProtocolAnnotationKind kind) {
+    switch (kind) {
+        case ProtocolAnnotationKind::Header: return Palette::Focus;
+        case ProtocolAnnotationKind::Address: return Palette::Positive;
+        case ProtocolAnnotationKind::Command: return Palette::Warning;
+        case ProtocolAnnotationKind::Data: return Palette::TextSecondary;
+        case ProtocolAnnotationKind::Checksum: return Palette::Danger;
+        case ProtocolAnnotationKind::Gap: return Palette::TextMuted;
+    }
+    return Palette::TextSecondary;
+}
+
+UiTextId protocolAnnotationStorageHint() {
+    if (std::strcmp(protocolAnnotationStorageStatus, "device_locked") == 0) {
+        return UiTextId::ProtocolAnnotationUnlockHint;
+    }
+    if (std::strcmp(protocolAnnotationStorageStatus, "power_unsafe") == 0) {
+        return UiTextId::ProtocolAnnotationPowerHint;
+    }
+    if (std::strcmp(protocolAnnotationStorageStatus, "live_work_busy") == 0 ||
+        std::strcmp(protocolAnnotationStorageStatus, "resources_busy") == 0) {
+        return UiTextId::ProtocolAnnotationBusyHint;
+    }
+    if (std::strcmp(protocolAnnotationStorageStatus, "hil_ram_only") == 0) {
+        return UiTextId::ProtocolAnnotationHilHint;
+    }
+    if (std::strcmp(protocolAnnotationStorageStatus, "enrollment_missing") == 0 ||
+        std::strcmp(protocolAnnotationStorageStatus, "identity_failed") == 0 ||
+        std::strcmp(protocolAnnotationStorageStatus, "readonly_mount_failed") == 0 ||
+        std::strcmp(protocolAnnotationStorageStatus, "mount_failed") == 0 ||
+        std::strcmp(protocolAnnotationStorageStatus, "root_missing") == 0 ||
+        std::strcmp(protocolAnnotationStorageStatus, "missing_media") == 0 ||
+        std::strcmp(protocolAnnotationStorageStatus, "fingerprint_mismatch") == 0) {
+        return UiTextId::ProtocolAnnotationCardHint;
+    }
+    return UiTextId::ProtocolAnnotationRetryHint;
+}
+
+bool protocolAnnotationStorageHealthy() {
+    return std::strcmp(protocolAnnotationStorageStatus, "empty") == 0 ||
+        std::strcmp(protocolAnnotationStorageStatus, "recovered") == 0 ||
+        std::strcmp(protocolAnnotationStorageStatus, "saved") == 0 ||
+        std::strcmp(protocolAnnotationStorageStatus, "not_loaded") == 0;
+}
+
+void renderProtocolWorkbenchAnnotationBands() {
+    if (!protocolWorkbenchAnalysis.valid()) return;
+    constexpr std::int16_t y =
+        kProtocolWorkbenchGraph.y + kProtocolWorkbenchGraph.height - 7;
+    const auto& annotations = protocolAnnotationController.annotations();
+    for (std::size_t index = 0U; index < annotations.size(); ++index) {
+        const auto* annotation = annotations.get(index);
+        if (annotation == nullptr) continue;
+        const std::int16_t firstX = protocolWorkbenchCursorX(
+            annotation->firstPulse);
+        const std::size_t afterLast =
+            static_cast<std::size_t>(annotation->lastPulse) + 1U;
+        const std::int16_t lastX = afterLast < annotations.source().pulseCount
+            ? protocolWorkbenchCursorX(afterLast)
+            : static_cast<std::int16_t>(
+                  kProtocolWorkbenchGraph.x +
+                  kProtocolWorkbenchGraph.width - 2);
+        display.fillRect(firstX, y,
+                         std::max<std::int16_t>(2, lastX - firstX + 1), 4,
+                         protocolAnnotationKindColor(annotation->kind));
+    }
+}
+
+void renderProtocolAnnotationActionRow(std::size_t index) {
+    const bool removable = protocolAnnotationController.hasCurrentAnnotation();
+    UiTextId label = UiTextId::ProtocolAnnotationMarkAction;
+    UiTextId note = UiTextId::ProtocolAnnotationMarkNote;
+    Tone tone = Tone::Positive;
+    if (removable && index == 1U) {
+        label = UiTextId::ProtocolAnnotationRemoveAction;
+        note = UiTextId::ProtocolAnnotationRemoveNote;
+        tone = Tone::Warning;
+    } else if (index != 0U) {
+        label = UiTextId::ProtocolAnnotationSaveAction;
+        note = UiTextId::ProtocolAnnotationSaveNote;
+    }
+    renderMenuRow(
+        Components::choiceRow(static_cast<std::uint8_t>(index)),
+        tr(label), tr(note),
+        protocolAnnotationController.actionSelection() == index,
+        true, tone);
+}
+
+void renderProtocolAnnotationActions(bool clearContent) {
+    renderHeader(tr(UiTextId::ProtocolAnnotationActionsTitle), clearContent);
+    const std::size_t count = protocolAnnotationController.actionCount();
+    for (std::size_t index = 0U; index < count; ++index) {
+        renderProtocolAnnotationActionRow(index);
+    }
+}
+
+void renderProtocolAnnotationRangeStatus(bool start) {
+    char line[72] = {};
+    const std::uint16_t first = start
+        ? static_cast<std::uint16_t>(
+              protocolAnnotationController.pulseSelection())
+        : protocolAnnotationController.draftFirstPulse();
+    const std::uint16_t last = static_cast<std::uint16_t>(
+        protocolAnnotationController.pulseSelection());
+    std::snprintf(line, sizeof(line),
+                  tr(UiTextId::ProtocolAnnotationRangeFormat),
+                  static_cast<unsigned>(std::min(first, last) + 1U),
+                  static_cast<unsigned>(std::max(first, last) + 1U));
+    pushLiveMetaTextRow(line, Palette::Focus, 229);
+}
+
+void renderProtocolAnnotationRangeStep(bool clearContent, bool start) {
+    renderHeader(tr(start ? UiTextId::ProtocolAnnotationStartTitle
+                          : UiTextId::ProtocolAnnotationEndTitle),
+                 clearContent);
+    pushLiveMetaTextRow(
+        tr(start ? UiTextId::ProtocolAnnotationStartHint
+                 : UiTextId::ProtocolAnnotationEndHint),
+        Palette::TextSecondary, 34);
+    renderProtocolWorkbenchWaveform();
+    renderProtocolWorkbenchAnnotationBands();
+    renderProtocolWorkbenchSelection();
+    renderProtocolAnnotationRangeStatus(start);
+}
+
+void renderProtocolAnnotationKindCard() {
+    renderStateCard(
+        tr(protocolAnnotationKindText(
+            protocolAnnotationController.kindSelection())),
+        tr(UiTextId::ProtocolAnnotationKindNote), Tone::Positive, 3U);
+}
+
+void renderProtocolAnnotationKindStep(bool clearContent) {
+    renderHeader(tr(UiTextId::ProtocolAnnotationKindTitle), clearContent);
+    char line[72] = {};
+    std::snprintf(line, sizeof(line),
+                  tr(UiTextId::ProtocolAnnotationRangeFormat),
+                  static_cast<unsigned>(
+                      protocolAnnotationController.draftFirstPulse() + 1U),
+                  static_cast<unsigned>(
+                      protocolAnnotationController.draftLastPulse() + 1U));
+    renderProtocolAnnotationKindCard();
+    pushLiveMetaTextRow(line, Palette::Focus, 194);
+}
+
+void renderProtocolAnnotationResult(bool clearContent) {
+    renderHeader(tr(UiTextId::ProtocolAnnotationActionsTitle), clearContent);
+    UiTextId result = UiTextId::ProtocolAnnotationFailed;
+    Tone tone = Tone::Warning;
+    switch (protocolAnnotationController.outcome()) {
+        case ProtocolAnnotationOutcome::Marked:
+            result = UiTextId::ProtocolAnnotationMarked;
+            tone = Tone::Positive;
+            break;
+        case ProtocolAnnotationOutcome::Removed:
+            result = UiTextId::ProtocolAnnotationRemoved;
+            tone = Tone::Positive;
+            break;
+        case ProtocolAnnotationOutcome::Saved:
+            result = UiTextId::ProtocolAnnotationSaved;
+            tone = Tone::Positive;
+            break;
+        case ProtocolAnnotationOutcome::None:
+        case ProtocolAnnotationOutcome::Failed:
+            break;
+    }
+    renderMetric(1, tr(result), tone);
+    renderMetric(
+        3,
+        tr(protocolAnnotationController.outcome() ==
+                   ProtocolAnnotationOutcome::Failed
+               ? protocolAnnotationStorageHint()
+               : UiTextId::ProtocolAnnotationResultHint));
+}
+
+void renderProtocolWorkbenchAnnotationStatus() {
+    char line[96] = {};
+    const auto* current = protocolAnnotationController.annotations().findAtPulse(
+        static_cast<std::uint16_t>(
+            protocolAnnotationController.pulseSelection()));
+    if (current != nullptr) {
+        std::snprintf(
+            line, sizeof(line),
+            tr(UiTextId::ProtocolAnnotationCurrentFormat),
+            tr(protocolAnnotationKindText(current->kind)),
+            static_cast<unsigned>(current->firstPulse + 1U),
+            static_cast<unsigned>(current->lastPulse + 1U));
+    } else if (protocolAnnotationController.dirty()) {
+        std::snprintf(
+            line, sizeof(line),
+            tr(UiTextId::ProtocolAnnotationUnsavedFormat),
+            static_cast<unsigned>(
+                protocolAnnotationController.annotations().size()));
+    } else if (!protocolAnnotationStorageHealthy() &&
+               std::strcmp(protocolAnnotationStorageStatus,
+                           "hil_ram_only") != 0) {
+        std::snprintf(line, sizeof(line), "%s",
+                      tr(protocolAnnotationStorageHint()));
+    } else {
+        std::snprintf(
+            line, sizeof(line),
+            tr(UiTextId::ProtocolAnnotationStatusFormat),
+            static_cast<unsigned>(
+                protocolAnnotationController.annotations().size()),
+            static_cast<unsigned long>(
+                protocolAnnotationController.storeGeneration()));
+    }
+    pushLiveMetaTextRow(line,
+                        protocolAnnotationController.dirty()
+                            ? Palette::Warning : Palette::TextSecondary,
+                        229);
+}
+
 void renderProtocolWorkbenchPage(bool clearContent) {
+    const ProtocolAnnotationView view = protocolAnnotationController.view();
+    if (view == ProtocolAnnotationView::Actions) {
+        renderProtocolAnnotationActions(clearContent);
+        return;
+    }
+    if (view == ProtocolAnnotationView::ChooseStart ||
+        view == ProtocolAnnotationView::ChooseEnd) {
+        renderProtocolAnnotationRangeStep(
+            clearContent, view == ProtocolAnnotationView::ChooseStart);
+        return;
+    }
+    if (view == ProtocolAnnotationView::ChooseKind) {
+        renderProtocolAnnotationKindStep(clearContent);
+        return;
+    }
+    if (view == ProtocolAnnotationView::Result) {
+        renderProtocolAnnotationResult(clearContent);
+        return;
+    }
     renderHeader(tr(UiTextId::ProtocolWorkbenchTitle), clearContent);
     if (!protocolWorkbenchAnalysis.valid()) {
         renderMetric(0, tr(UiTextId::ProtocolWorkbenchUnavailable),
@@ -20713,18 +21037,9 @@ void renderProtocolWorkbenchPage(bool clearContent) {
     pushLiveMetaTextRow(tr(UiTextId::ProtocolWorkbenchReadOnly),
                         Palette::Positive, 53);
     renderProtocolWorkbenchWaveform();
+    renderProtocolWorkbenchAnnotationBands();
     renderProtocolWorkbenchSelection();
-    const auto band = [&](std::size_t index) {
-        return index < protocolWorkbenchAnalysis.bandCount
-            ? protocolWorkbenchAnalysis.bands[index].centerUs : 0U;
-    };
-    std::snprintf(
-        line, sizeof(line), tr(UiTextId::ProtocolWorkbenchBandsFormat),
-        static_cast<unsigned>(band(0U)),
-        static_cast<unsigned>(band(1U)),
-        static_cast<unsigned>(band(2U)),
-        static_cast<unsigned>(band(3U)));
-    pushLiveMetaTextRow(line, Palette::TextSecondary, 229);
+    renderProtocolWorkbenchAnnotationStatus();
     const std::uint64_t fingerprint =
         protocolWorkbenchAnalysis.sourceFingerprint;
     std::snprintf(
@@ -21970,7 +22285,14 @@ struct UiRenderSnapshot final {
     std::size_t librarySelection = 0;
     std::size_t librarySize = 0;
     std::uint8_t libraryDetailActionSelection = 0U;
-    std::size_t protocolWorkbenchPulseSelection = 0U;
+    std::uint8_t protocolAnnotationView = 0U;
+    std::uint8_t protocolAnnotationOutcome = 0U;
+    std::uint8_t protocolAnnotationKind = 0U;
+    std::size_t protocolAnnotationActionSelection = 0U;
+    std::size_t protocolAnnotationPulseSelection = 0U;
+    std::size_t protocolAnnotationCount = 0U;
+    std::uint32_t protocolAnnotationStoreGeneration = 0U;
+    bool protocolAnnotationDirty = false;
     std::uint8_t automationCatalogStatus = 0;
     std::size_t automationSelection = 0;
     std::size_t automationSize = 0;
@@ -22056,7 +22378,15 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         libraryController.selection(),
         libraryController.size(),
         libraryDetailActionSelection,
-        protocolWorkbenchPulseSelection,
+        static_cast<std::uint8_t>(protocolAnnotationController.view()),
+        static_cast<std::uint8_t>(protocolAnnotationController.outcome()),
+        static_cast<std::uint8_t>(
+            protocolAnnotationController.kindSelection()),
+        protocolAnnotationController.actionSelection(),
+        protocolAnnotationController.pulseSelection(),
+        protocolAnnotationController.annotations().size(),
+        protocolAnnotationController.storeGeneration(),
+        protocolAnnotationController.dirty(),
         static_cast<std::uint8_t>(automationCatalogStatus),
         automationPackageCatalog.selection(),
         automationPackageCatalog.size(),
@@ -22800,12 +23130,66 @@ UiDeltaRenderResult renderSelectionDelta() {
     }
 
     if (uiController.page() == kProtocolWorkbenchPage) {
-        if (renderedUi.protocolWorkbenchPulseSelection ==
-            protocolWorkbenchPulseSelection) {
+        const ProtocolAnnotationView view =
+            protocolAnnotationController.view();
+        if (renderedUi.protocolAnnotationView !=
+                static_cast<std::uint8_t>(view) ||
+            renderedUi.protocolAnnotationOutcome !=
+                static_cast<std::uint8_t>(
+                    protocolAnnotationController.outcome()) ||
+            renderedUi.protocolAnnotationCount !=
+                protocolAnnotationController.annotations().size() ||
+            renderedUi.protocolAnnotationStoreGeneration !=
+                protocolAnnotationController.storeGeneration() ||
+            renderedUi.protocolAnnotationDirty !=
+                protocolAnnotationController.dirty()) {
+            return UiDeltaRenderResult::RequiresFull;
+        }
+        if (view == ProtocolAnnotationView::Waveform) {
+            if (renderedUi.protocolAnnotationPulseSelection ==
+                protocolAnnotationController.pulseSelection()) {
+                return UiDeltaRenderResult::NoChange;
+            }
+            renderProtocolWorkbenchSelection();
+            renderProtocolWorkbenchAnnotationStatus();
+            return UiDeltaRenderResult::Rendered;
+        }
+        if (view == ProtocolAnnotationView::ChooseStart ||
+            view == ProtocolAnnotationView::ChooseEnd) {
+            if (renderedUi.protocolAnnotationPulseSelection ==
+                protocolAnnotationController.pulseSelection()) {
+                return UiDeltaRenderResult::NoChange;
+            }
+            renderProtocolWorkbenchSelection();
+            renderProtocolAnnotationRangeStatus(
+                view == ProtocolAnnotationView::ChooseStart);
+            return UiDeltaRenderResult::Rendered;
+        }
+        if (view == ProtocolAnnotationView::Actions) {
+            const std::size_t current =
+                protocolAnnotationController.actionSelection();
+            if (renderedUi.protocolAnnotationActionSelection == current) {
+                return UiDeltaRenderResult::NoChange;
+            }
+            renderProtocolAnnotationActionRow(
+                renderedUi.protocolAnnotationActionSelection);
+            renderProtocolAnnotationActionRow(current);
+            renderNavigationFooter();
+            return UiDeltaRenderResult::Rendered;
+        }
+        if (view == ProtocolAnnotationView::ChooseKind) {
+            if (renderedUi.protocolAnnotationKind ==
+                static_cast<std::uint8_t>(
+                    protocolAnnotationController.kindSelection())) {
+                return UiDeltaRenderResult::NoChange;
+            }
+            renderProtocolAnnotationKindCard();
+            return UiDeltaRenderResult::Rendered;
+        }
+        if (view == ProtocolAnnotationView::Result) {
             return UiDeltaRenderResult::NoChange;
         }
-        renderProtocolWorkbenchSelection();
-        return UiDeltaRenderResult::Rendered;
+        return UiDeltaRenderResult::RequiresFull;
     }
 
     if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
@@ -29772,26 +30156,54 @@ bool applyUiAction(UiAction action, bool render = true) {
         bool changed = false;
         if (action == UiAction::Back || action == UiAction::Left) {
             handled = true;
-            changed = uiController.apply(
-                action, static_cast<std::uint8_t>(appCatalog.size()),
-                true, kProtocolWorkbenchPage);
-            lastRuntimeEvent = changed ? "protocol_workbench_library"
-                                       : "protocol_workbench_back_rejected";
-        } else if (action == UiAction::Up &&
-                   protocolWorkbenchPulseSelection > 0U) {
+            changed = protocolAnnotationController.back();
+            if (changed) {
+                uiController.recordHandledAction(action);
+                lastRuntimeEvent = "protocol_annotation_back";
+            } else {
+                changed = uiController.apply(
+                    action, static_cast<std::uint8_t>(appCatalog.size()),
+                    true, kProtocolWorkbenchPage);
+                lastRuntimeEvent = changed
+                    ? "protocol_workbench_library"
+                    : "protocol_workbench_back_rejected";
+            }
+        } else if (action == UiAction::Up) {
             handled = true;
-            --protocolWorkbenchPulseSelection;
-            changed = true;
-            lastRuntimeEvent = "protocol_workbench_previous_pulse";
-        } else if (action == UiAction::Down &&
-                   protocolWorkbenchPulseSelection + 1U <
-                       protocolWorkbenchPulseSource().pulseCount()) {
+            changed = protocolAnnotationController.previous();
+            lastRuntimeEvent = changed
+                ? "protocol_annotation_previous"
+                : "protocol_annotation_at_first";
+        } else if (action == UiAction::Down) {
             handled = true;
-            ++protocolWorkbenchPulseSelection;
-            changed = true;
-            lastRuntimeEvent = "protocol_workbench_next_pulse";
-        } else if (action == UiAction::Up || action == UiAction::Down) {
+            changed = protocolAnnotationController.next();
+            lastRuntimeEvent = changed
+                ? "protocol_annotation_next"
+                : "protocol_annotation_at_last";
+        } else if (action == UiAction::Select ||
+                   action == UiAction::Right) {
             handled = true;
+            if (!protocolWorkbenchAnalysis.valid() ||
+                !protocolAnnotationController.source().valid()) {
+                lastRuntimeEvent = "protocol_workbench_unavailable";
+            } else {
+                const ProtocolAnnotationActivation activation =
+                    protocolAnnotationController.activate();
+                if (activation ==
+                    ProtocolAnnotationActivation::SaveRequested) {
+                    changed = persistProtocolWorkbenchAnnotations();
+                    lastRuntimeEvent = protocolAnnotationController.outcome() ==
+                            ProtocolAnnotationOutcome::Saved
+                        ? "protocol_annotations_saved"
+                        : "protocol_annotations_save_failed";
+                } else {
+                    changed = activation ==
+                        ProtocolAnnotationActivation::Changed;
+                    lastRuntimeEvent = changed
+                        ? "protocol_annotation_activated"
+                        : "protocol_annotation_no_action";
+                }
+            }
         }
         if (handled) {
             if (action != UiAction::Back && action != UiAction::Left) {
@@ -31731,6 +32143,318 @@ ScreenshotSdIdentityResult identifyScreenshotProductMedia(
         if (!result.safetyProgressComplete) break;
     }
     return result;
+}
+
+bool sameProtocolAnnotationSet(const ProtocolAnnotationSet& left,
+                               const ProtocolAnnotationSet& right) {
+    if (!left.bound() || !right.bound() ||
+        !leshy1::apps::protocol::sameProtocolAnnotationSource(
+            left.source(), right.source()) ||
+        left.size() != right.size()) {
+        return false;
+    }
+    for (std::size_t index = 0U; index < left.size(); ++index) {
+        const auto* leftAnnotation = left.get(index);
+        const auto* rightAnnotation = right.get(index);
+        if (leftAnnotation == nullptr || rightAnnotation == nullptr ||
+            leftAnnotation->kind != rightAnnotation->kind ||
+            leftAnnotation->firstPulse != rightAnnotation->firstPulse ||
+            leftAnnotation->lastPulse != rightAnnotation->lastPulse) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool recoverProtocolWorkbenchAnnotations() {
+    if (protocolWorkbenchHilSource.active()) {
+        protocolAnnotationStorageStatus = "hil_ram_only";
+        return true;
+    }
+    if (!protocolAnnotationController.source().valid()) {
+        protocolAnnotationStorageStatus = "source_invalid";
+        return false;
+    }
+    if (!deviceLockOperationAllowed(
+            leshy1::services::security::
+                DeviceLockOperation::ProtectedEvidence)) {
+        noteDeviceLockAdmissionBlocked();
+        protocolAnnotationStorageStatus = "device_locked";
+        return false;
+    }
+    if (screenshotLiveWorkActive()) {
+        protocolAnnotationStorageStatus = "live_work_busy";
+        return false;
+    }
+
+    const auto requestedResources =
+        leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    const auto owner = appRuntime.running()
+        ? AppRuntime::kForegroundOwner : kProtocolAnnotationOwner;
+    const auto ownedBefore = resourceBroker.ownedBy(owner);
+    const auto acquired = requestedResources & ~ownedBefore;
+    if (!resourceBroker.acquire(owner, requestedResources)) {
+        protocolAnnotationStorageStatus = "resources_busy";
+        return false;
+    }
+
+    bool valid = true;
+    const char* failure = "none";
+    char expectedFingerprint[33] = {};
+    char observedFingerprint[33] = {};
+    ScreenshotSdIdentityResult identityRun;
+    BoardSdFilesystem filesystem;
+    bool filesystemAttempted = false;
+    ArduinoFsSessionStoreIo io(
+        sdSessionStoreIoWorkspace, screenshotStorageProgress,
+        &protectedDataCipher, &deviceLock);
+    bool ioOpened = false;
+    leshy1::storage::ProtocolAnnotationStoreRecoveryResult recovered{};
+
+    if (!loadProductFingerprint(expectedFingerprint,
+                                sizeof(expectedFingerprint))) {
+        valid = false;
+        failure = "enrollment_missing";
+    }
+    if (valid) {
+        identityRun = identifyScreenshotProductMedia(
+            resourceBroker.ownedBy(owner), expectedFingerprint,
+            observedFingerprint, sizeof(observedFingerprint));
+        valid = identityRun.begun && identityRun.cleanupComplete &&
+            identityRun.safetyProgressComplete &&
+            identityRun.identity.status ==
+                leshy1::storage::SdTransportRunStatus::Valid &&
+            std::strcmp(expectedFingerprint, observedFingerprint) == 0;
+        if (!valid) {
+            failure = identityRun.safetyProgressComplete
+                ? "identity_failed" : "safety_latched";
+        }
+    }
+    if (valid) {
+        filesystemAttempted = true;
+        valid = filesystem.beginReadOnly() &&
+            filesystem.readOnlyGuaranteed();
+        if (!valid) failure = "readonly_mount_failed";
+    }
+    if (valid) {
+        const std::uint64_t capacity = filesystem.cardCapacityBytes();
+        leshy1::storage::MediaIdentity media;
+        media.present = capacity != 0U &&
+            capacity == identityRun.identity.identity.capacityBytes;
+        media.kind = leshy1::storage::MediaKind::Sd;
+        media.fingerprint = observedFingerprint;
+        media.capacityBytes = capacity;
+        media.freeBytes = 0U;
+        leshy1::storage::ProductStoreRequest request;
+        request.operation =
+            leshy1::storage::ProductStoreOperation::RecoverCatalog;
+        request.expectedFingerprint = expectedFingerprint;
+        request.rootPath = leshy1::storage::kProductSessionStoreRoot;
+        request.rootExists = knownProductSessionRootExists(
+            observedFingerprint);
+        request.driverReadOnlyGuaranteed =
+            filesystem.readOnlyGuaranteed();
+        request.ownedResources = resourceBroker.ownedBy(owner);
+        const auto permit = leshy1::storage::authorizeProductStore(
+            media, request);
+        valid = permit.allowed();
+        if (!valid) {
+            failure = leshy1::storage::productStoreAccessStatusName(
+                permit.status);
+        } else {
+            ioOpened = io.selectDrive(filesystem.driveNumber()) &&
+                io.openExistingReadOnly(permit);
+            valid = ioOpened;
+            if (!valid) failure = "store_open_failed";
+        }
+    }
+    if (valid) {
+        recovered = leshy1::storage::recoverProtocolAnnotations(
+            io, protocolAnnotationStoreWorkspace,
+            protocolAnnotationController.source(),
+            &protocolAnnotationRecoveryScratch);
+        if (recovered.valid()) {
+            valid = protocolAnnotationController.restore(
+                protocolAnnotationRecoveryScratch,
+                recovered.storeGeneration) ==
+                ProtocolAnnotationStatus::Valid;
+            if (!valid) failure = "restore_failed";
+        } else if (recovered.status ==
+                   leshy1::storage::ProtocolAnnotationStoreStatus::Empty) {
+            protocolAnnotationRecoveryScratch.clear();
+        } else {
+            valid = false;
+            failure = leshy1::storage::protocolAnnotationStoreStatusName(
+                recovered.status);
+        }
+    }
+
+    if (ioOpened) io.end();
+    if (filesystem.mounted()) filesystem.end();
+    const bool cleanupComplete =
+        identityRun.cleanupComplete &&
+        (!filesystemAttempted || filesystem.cleanupComplete());
+    if (acquired != 0U) resourceBroker.release(owner, acquired);
+    valid = valid && cleanupComplete;
+    protocolAnnotationStorageStatus = valid
+        ? recovered.valid() ? "recovered" : "empty"
+        : failure;
+    return valid;
+}
+
+bool persistProtocolWorkbenchAnnotations() {
+    bool valid = protocolAnnotationController.source().valid() &&
+        protocolAnnotationController.dirty() &&
+        !protocolWorkbenchHilSource.active();
+    const char* failure = valid ? "none" :
+        protocolWorkbenchHilSource.active() ? "hil_ram_only" :
+        "nothing_to_save";
+    if (valid && !deviceLockOperationAllowed(
+            leshy1::services::security::
+                DeviceLockOperation::ProtectedEvidence)) {
+        noteDeviceLockAdmissionBlocked();
+        valid = false;
+        failure = "device_locked";
+    }
+    if (valid && powerSafetyPolicy.writeDisposition() ==
+            PowerWriteDisposition::ProhibitedLowVoltage) {
+        valid = false;
+        failure = "power_unsafe";
+    }
+    if (valid && screenshotLiveWorkActive()) {
+        valid = false;
+        failure = "live_work_busy";
+    }
+
+    const auto requestedResources =
+        leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    const auto owner = appRuntime.running()
+        ? AppRuntime::kForegroundOwner : kProtocolAnnotationOwner;
+    const auto ownedBefore = resourceBroker.ownedBy(owner);
+    const auto acquired = requestedResources & ~ownedBefore;
+    bool resourcesAcquired = false;
+    if (valid) {
+        resourcesAcquired = resourceBroker.acquire(owner,
+                                                    requestedResources);
+        valid = resourcesAcquired;
+        if (!valid) failure = "resources_busy";
+    }
+
+    char expectedFingerprint[33] = {};
+    char observedFingerprint[33] = {};
+    ScreenshotSdIdentityResult identityRun;
+    BoardSdFilesystem filesystem;
+    bool filesystemAttempted = false;
+    ArduinoFsSessionStoreIo io(
+        sdSessionStoreIoWorkspace, screenshotStorageProgress,
+        &protectedDataCipher, &deviceLock);
+    bool ioOpened = false;
+    leshy1::storage::ProtocolAnnotationStoreCommitResult committed{};
+    leshy1::storage::ProtocolAnnotationStoreRecoveryResult reopened{};
+
+    if (valid && !loadProductFingerprint(expectedFingerprint,
+                                         sizeof(expectedFingerprint))) {
+        valid = false;
+        failure = "enrollment_missing";
+    }
+    if (valid) {
+        identityRun = identifyScreenshotProductMedia(
+            resourceBroker.ownedBy(owner), expectedFingerprint,
+            observedFingerprint, sizeof(observedFingerprint));
+        valid = identityRun.begun && identityRun.cleanupComplete &&
+            identityRun.safetyProgressComplete &&
+            identityRun.identity.status ==
+                leshy1::storage::SdTransportRunStatus::Valid &&
+            std::strcmp(expectedFingerprint, observedFingerprint) == 0;
+        if (!valid) {
+            failure = identityRun.safetyProgressComplete
+                ? "identity_failed" : "safety_latched";
+        }
+    }
+    if (valid) {
+        filesystemAttempted = true;
+        valid = filesystem.begin();
+        if (!valid) failure = "mount_failed";
+    }
+    if (valid) {
+        const std::uint64_t capacity = filesystem.cardCapacityBytes();
+        leshy1::storage::MediaIdentity media;
+        media.present = capacity != 0U &&
+            capacity == identityRun.identity.identity.capacityBytes;
+        media.kind = leshy1::storage::MediaKind::Sd;
+        media.fingerprint = observedFingerprint;
+        media.capacityBytes = capacity;
+        media.freeBytes = filesystem.cachedFreeBytes();
+        leshy1::storage::ProductStoreRequest request;
+        request.operation =
+            leshy1::storage::ProductStoreOperation::CommitEvidence;
+        request.explicitlySelected = true;
+        request.expectedFingerprint = expectedFingerprint;
+        request.rootPath = leshy1::storage::kProductSessionStoreRoot;
+        request.rootExists = knownProductSessionRootExists(
+            observedFingerprint);
+        request.driverWriteEnabled = true;
+        request.requiredBytes = kProductProtocolAnnotationCommitBytes;
+        request.reserveBytes = kProductSurveyReserveBytes;
+        request.ownedResources = resourceBroker.ownedBy(owner);
+        request.power = powerSafetyPolicy.writeDisposition();
+        const auto permit = leshy1::storage::authorizeProductStore(
+            media, request);
+        valid = permit.allowed();
+        if (!valid) {
+            failure = leshy1::storage::productStoreAccessStatusName(
+                permit.status);
+        } else {
+            ioOpened = io.selectDrive(filesystem.driveNumber()) &&
+                io.openExistingWritable(permit);
+            valid = ioOpened;
+            if (!valid) failure = "store_open_failed";
+        }
+    }
+    if (valid) {
+        protocolAnnotationRecoveryScratch.clear();
+        committed = leshy1::storage::commitNextProtocolAnnotations(
+            io, protocolAnnotationStoreWorkspace,
+            protocolAnnotationController.annotations(),
+            protocolAnnotationRecoveryScratch);
+        valid = committed.complete();
+        if (!valid) {
+            failure = leshy1::storage::protocolAnnotationStoreStatusName(
+                committed.status);
+        }
+    }
+    if (valid) {
+        protocolAnnotationRecoveryScratch.clear();
+        reopened = leshy1::storage::recoverProtocolAnnotations(
+            io, protocolAnnotationStoreWorkspace,
+            protocolAnnotationController.source(),
+            &protocolAnnotationRecoveryScratch);
+        valid = reopened.valid() &&
+            reopened.storeGeneration == committed.storeGeneration &&
+            sameProtocolAnnotationSet(
+                protocolAnnotationController.annotations(),
+                protocolAnnotationRecoveryScratch);
+        if (!valid) failure = "reopen_failed";
+    }
+
+    if (ioOpened) io.end();
+    if (filesystem.mounted()) filesystem.end();
+    const bool cleanupComplete =
+        identityRun.cleanupComplete &&
+        (!filesystemAttempted || filesystem.cleanupComplete());
+    if (resourcesAcquired && acquired != 0U) {
+        resourceBroker.release(owner, acquired);
+    }
+    valid = valid && cleanupComplete;
+    protocolAnnotationStorageStatus = valid ? "saved" : failure;
+    if (valid) {
+        protocolAnnotationController.noteSaved(committed.storeGeneration);
+    } else {
+        protocolAnnotationController.noteSaveFailed();
+    }
+    return true;
 }
 
 bool captureAndPersistScreenshot() {
@@ -37175,12 +37899,20 @@ void emitProtocolWorkbenchHilFixture(Stream& reply, const char* command) {
     } else if (open) {
         protocolWorkbenchSource.reset();
         protocolWorkbenchHilSource.activate();
-        protocolWorkbenchPulseSelection = 0U;
+        resetProtocolWorkbenchAnnotations();
         const auto analyzed =
             leshy1::apps::protocol::analyzeInfraredCapture(
                 protocolWorkbenchHilSource, protocolWorkbenchWorkspace,
                 &protocolWorkbenchAnalysis);
-        const bool opened = analyzed == ProtocolWorkbenchStatus::Valid &&
+        const bool annotationsReady =
+            analyzed == ProtocolWorkbenchStatus::Valid &&
+            protocolAnnotationController.enter(
+                protocolWorkbenchAnnotationSource()) ==
+                ProtocolAnnotationStatus::Valid;
+        if (annotationsReady) {
+            protocolAnnotationStorageStatus = "hil_ram_only";
+        }
+        const bool opened = annotationsReady &&
             uiController.apply(
                 UiAction::Right,
                 static_cast<std::uint8_t>(appCatalog.size()), true,
@@ -37201,7 +37933,7 @@ void emitProtocolWorkbenchHilFixture(Stream& reply, const char* command) {
         }
         protocolWorkbenchHilSource.reset();
         protocolWorkbenchAnalysis = {};
-        protocolWorkbenchPulseSelection = 0U;
+        resetProtocolWorkbenchAnnotations();
         lastRuntimeEvent = "protocol_workbench_hil_fixture_cleared";
         renderInteractiveScreen(true);
         status = "cleared";
@@ -37221,7 +37953,7 @@ void emitProtocolWorkbenchHilFixture(Stream& reply, const char* command) {
         ? protocolWorkbenchAnalysis.bandCount : 0U;
     const std::uint64_t reportedFingerprint = fixtureActive
         ? protocolWorkbenchAnalysis.sourceFingerprint : 0U;
-    char line[768] = {};
+    char line[960] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.protocol_workbench.hil_fixture.v1\","
@@ -37230,6 +37962,9 @@ void emitProtocolWorkbenchHilFixture(Stream& reply, const char* command) {
         "\"ui_home\":%s,\"page\":\"%s\","
         "\"analysis_status\":\"%s\",\"protocol\":\"%s\","
         "\"pulses\":%u,\"selected_pulse\":%u,"
+        "\"annotation_view\":%u,\"annotation_kind\":%u,"
+        "\"annotation_action\":%u,\"annotations\":%u,"
+        "\"annotation_dirty\":%s,\"annotation_store_generation\":%lu,"
         "\"base_unit_us\":%u,\"timing_bands\":%u,"
         "\"source_fingerprint\":\"%08lX%08lX\","
         "\"start_level\":false,\"read_only\":true,"
@@ -37249,7 +37984,21 @@ void emitProtocolWorkbenchHilFixture(Stream& reply, const char* command) {
                 : leshy1::domain::captures::InfraredProtocol::Unknown),
         static_cast<unsigned>(reportedPulses),
         static_cast<unsigned>(fixtureActive
-            ? protocolWorkbenchPulseSelection : 0U),
+            ? protocolAnnotationController.pulseSelection() : 0U),
+        static_cast<unsigned>(fixtureActive
+            ? protocolAnnotationController.view()
+            : ProtocolAnnotationView::Waveform),
+        static_cast<unsigned>(fixtureActive
+            ? protocolAnnotationController.kindSelection()
+            : ProtocolAnnotationKind::Header),
+        static_cast<unsigned>(fixtureActive
+            ? protocolAnnotationController.actionSelection() : 0U),
+        static_cast<unsigned>(fixtureActive
+            ? protocolAnnotationController.annotations().size() : 0U),
+        fixtureActive && protocolAnnotationController.dirty()
+            ? "true" : "false",
+        static_cast<unsigned long>(fixtureActive
+            ? protocolAnnotationController.storeGeneration() : 0U),
         static_cast<unsigned>(reportedBaseUnit),
         static_cast<unsigned>(reportedBands),
         static_cast<unsigned long>(
@@ -37371,7 +38120,7 @@ void emitHilSessionEnd(Stream& reply, const char* command) {
         }
         protocolWorkbenchHilSource.reset();
         protocolWorkbenchAnalysis = {};
-        protocolWorkbenchPulseSelection = 0U;
+        resetProtocolWorkbenchAnnotations();
         if (fixtureReturnedHome) {
             lastRuntimeEvent = "protocol_workbench_hil_fixture_cleared";
             renderInteractiveScreen(true);

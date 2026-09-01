@@ -45,6 +45,8 @@ def main() -> int:
          "fixture was not RAM-only")
     need(policy.get("product_storage_writes") == 0,
          "product storage write was requested")
+    need(policy.get("annotation_task_flow") == "mark_range_and_meaning",
+         "annotation task flow was not exercised")
     candidate = value.get("candidate", {})
     need(candidate.get("fresh_flash") is True, "candidate was not freshly flashed")
     for key in ("firmware_sha256", "app_elf_sha256"):
@@ -99,6 +101,48 @@ def main() -> int:
     need(records.get("ui_2", {}).get("ui_delta_repaints", 0) >
          records.get("ui_1", {}).get("ui_delta_repaints", 0),
          "pulse navigation did not increment delta repaint count")
+
+    annotation_frames = {
+        "frame_actions": "annotation-actions",
+        "frame_end_before": "annotation-end-before",
+        "frame_end_after": "annotation-end-after",
+        "frame_mark_result": "annotation-mark-result",
+        "frame_marked_waveform": "annotation-marked-waveform",
+    }
+    for record_name, file_name in annotation_frames.items():
+        frame = records.get(record_name, {})
+        need(frame.get("bytes") == 153600, f"{record_name} size invalid")
+        sha = frame.get("sha256")
+        raw_path = root / "frames" / f"{file_name}.rgb565"
+        need(raw_path.is_file(), f"{raw_path.name} missing")
+        if raw_path.is_file():
+            need(digest(raw_path) == sha, f"{raw_path.name} hash mismatch")
+        need((root / "frames" / f"{file_name}.png").is_file(),
+             f"{file_name}.png missing")
+    need(records.get("state_actions", {}).get("annotation_view") == 1 and
+         records.get("state_start", {}).get("annotation_view") == 2 and
+         records.get("state_end", {}).get("annotation_view") == 3 and
+         records.get("state_kind", {}).get("annotation_view") == 4 and
+         records.get("state_mark", {}).get("annotation_view") == 5,
+         "annotation task views were not traversed")
+    marked = records.get("state_marked_waveform", {})
+    need(marked.get("annotation_view") == 0 and
+         marked.get("annotations") == 1 and
+         marked.get("annotation_dirty") is True and
+         marked.get("annotation_store_generation") == 0,
+         "derived mark did not return to the waveform")
+    annotation_delta = records.get("delta_annotation_end", {})
+    need(isinstance(annotation_delta.get("changed_pixels"), int) and
+         annotation_delta.get("changed_pixels") > 0,
+         "annotation range move changed nothing")
+    need(annotation_delta.get("outside_allowed_regions") == 0,
+         "annotation range move repainted static pixels")
+    need(records.get("ui_end", {}).get("ui_full_repaints") ==
+         records.get("ui_end_move", {}).get("ui_full_repaints"),
+         "annotation range move performed a full repaint")
+    need(records.get("ui_end_move", {}).get("ui_delta_repaints", 0) >
+         records.get("ui_end", {}).get("ui_delta_repaints", 0),
+         "annotation range move did not increment delta repaint count")
 
     before = records.get("recovery_before", {})
     after = records.get("recovery_after", {})

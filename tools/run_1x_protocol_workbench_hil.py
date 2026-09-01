@@ -97,7 +97,8 @@ def capture_frame(device: PassiveSerial, output: Path,
     return record, frame
 
 
-def cursor_delta(before: bytes, after: bytes) -> dict[str, Any]:
+def frame_delta(before: bytes, after: bytes,
+                allowed_regions: list[dict[str, int]]) -> dict[str, Any]:
     if len(before) != FRAME_BYTES or len(after) != FRAME_BYTES:
         raise RuntimeError("frame size changed")
     changed: list[tuple[int, int]] = []
@@ -109,8 +110,10 @@ def cursor_delta(before: bytes, after: bytes) -> dict[str, Any]:
         x = pixel % 240
         y = pixel // 240
         changed.append((x, y))
-        allowed = 8 <= x < 232 and (
-            184 <= y < 196 or 202 <= y < 221)
+        allowed = any(
+            region["x"] <= x < region["x"] + region["width"] and
+            region["y"] <= y < region["y"] + region["height"]
+            for region in allowed_regions)
         if not allowed:
             outside.append((x, y))
     bbox = None if not changed else {
@@ -123,11 +126,23 @@ def cursor_delta(before: bytes, after: bytes) -> dict[str, Any]:
         "changed_pixels": len(changed),
         "outside_allowed_regions": len(outside),
         "bbox": bbox,
-        "allowed_regions": [
+        "allowed_regions": allowed_regions,
+    }
+
+
+def cursor_delta(before: bytes, after: bytes) -> dict[str, Any]:
+    return frame_delta(before, after, [
             {"x": 8, "y": 184, "width": 224, "height": 12},
             {"x": 8, "y": 202, "width": 224, "height": 19},
-        ],
-    }
+        ])
+
+
+def annotation_range_delta(before: bytes, after: bytes) -> dict[str, Any]:
+    return frame_delta(before, after, [
+        {"x": 8, "y": 184, "width": 224, "height": 12},
+        {"x": 8, "y": 202, "width": 224, "height": 19},
+        {"x": 8, "y": 229, "width": 224, "height": 17},
+    ])
 
 
 def validate_args(parser: argparse.ArgumentParser,
@@ -267,6 +282,106 @@ def main() -> int:
                 int(ui_1.get("ui_delta_repaints", 0)):
             raise RuntimeError("second pulse navigation was not a delta repaint")
 
+        records["ui_actions"] = action(device, "right")
+        state_actions = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_actions"] = state_actions
+        require(state_actions, {
+            "status": "active", "annotation_view": 1,
+            "selected_pulse": 2, "annotations": 0,
+            "annotation_dirty": False,
+        }, "annotation actions")
+        records["frame_actions"], _ = capture_frame(
+            device, frames, "annotation-actions")
+
+        records["ui_start"] = action(device, "right")
+        state_start = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_start"] = state_start
+        require(state_start, {"annotation_view": 2,
+                              "selected_pulse": 2}, "annotation start")
+
+        records["ui_end"] = action(device, "right")
+        state_end = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_end"] = state_end
+        require(state_end, {"annotation_view": 3,
+                            "selected_pulse": 2}, "annotation end")
+        records["frame_end_before"], frame_end_before = capture_frame(
+            device, frames, "annotation-end-before")
+
+        records["ui_end_move"] = action(device, "down")
+        state_end_move = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_end_move"] = state_end_move
+        require(state_end_move, {"annotation_view": 3,
+                                 "selected_pulse": 3}, "annotation end move")
+        records["frame_end_after"], frame_end_after = capture_frame(
+            device, frames, "annotation-end-after")
+        records["delta_annotation_end"] = annotation_range_delta(
+            frame_end_before, frame_end_after)
+        delta = records["delta_annotation_end"]
+        if delta["changed_pixels"] <= 0 or \
+                delta["outside_allowed_regions"] != 0:
+            raise RuntimeError(
+                f"annotation dirty-region violation: {delta!r}")
+        if records["ui_end"].get("ui_full_repaints") != \
+                records["ui_end_move"].get("ui_full_repaints"):
+            raise RuntimeError("annotation range move triggered a full repaint")
+        if int(records["ui_end_move"].get("ui_delta_repaints", 0)) <= \
+                int(records["ui_end"].get("ui_delta_repaints", 0)):
+            raise RuntimeError("annotation range move was not a delta repaint")
+
+        records["ui_kind"] = action(device, "right")
+        state_kind = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_kind"] = state_kind
+        require(state_kind, {"annotation_view": 4,
+                             "annotation_kind": 0}, "annotation kind")
+        records["ui_kind_address"] = action(device, "down")
+        state_kind_address = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_kind_address"] = state_kind_address
+        require(state_kind_address, {"annotation_view": 4,
+                                     "annotation_kind": 1},
+                "annotation kind address")
+        if records["ui_kind"].get("ui_full_repaints") != \
+                records["ui_kind_address"].get("ui_full_repaints"):
+            raise RuntimeError("annotation meaning move triggered a full repaint")
+
+        records["ui_mark"] = action(device, "right")
+        state_mark = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_mark"] = state_mark
+        require(state_mark, {
+            "annotation_view": 5, "annotations": 1,
+            "annotation_dirty": True, "storage_mounted": False,
+            "storage_written": False,
+        }, "annotation result")
+        records["frame_mark_result"], _ = capture_frame(
+            device, frames, "annotation-mark-result")
+
+        records["ui_marked_waveform"] = action(device, "right")
+        state_marked_waveform = read_only(
+            device, b"protocol.workbench.hil-fixture state",
+            FIXTURE_SCHEMA, "state")
+        records["state_marked_waveform"] = state_marked_waveform
+        require(state_marked_waveform, {
+            "annotation_view": 0, "annotations": 1,
+            "annotation_dirty": True,
+            "annotation_store_generation": 0,
+            "storage_mounted": False, "storage_written": False,
+        }, "annotated waveform")
+        records["frame_marked_waveform"], _ = capture_frame(
+            device, frames, "annotation-marked-waveform")
+
         records["clear"] = read_only(
             device, b"protocol.workbench.hil-fixture clear",
             FIXTURE_SCHEMA, "state")
@@ -345,6 +460,7 @@ def main() -> int:
             "fixture_source": "retained_physical_nec_0.129",
             "fixture_storage": "bounded_ram",
             "product_storage_writes": 0,
+            "annotation_task_flow": "mark_range_and_meaning",
             "exact_tft_bytes_required": True,
         },
         "hil_sessions": sessions,
