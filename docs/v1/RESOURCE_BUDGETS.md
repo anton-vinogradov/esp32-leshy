@@ -2083,3 +2083,20 @@ not available allocation headroom; admission continues to require a 72,000 B fre
 and 28,000 B largest block before controller startup. This periodic regression
 bound resets cadence to 0/15 but does not supersede the one-hour release endurance
 gate or accept FF-3 real-Capture protected commit/reopen.
+
+Protocol Workbench task/result presentation bound `RB-M244`: exact physical
+`1.0.0-dev.358` at firmware source
+`738435159bc54aa2f99be2a869a2ccb2a521719f` uses 234,976 B static RAM,
+3,637,032 B linked flash and 3,637,536/3,703,072 B app/factory images, leaving
+556,768 B of actual application-image headroom in the 4 MiB OTA slot.
+App/factory/ELF/map SHA-256 values are
+`8973dc6035e1b23f67c4e396d3bb1c522aaec7be5d4eb890e14c1c77b53082fb`/
+`4125da568c602208b93ba47cd667f8b67d93219cefa32a14650df5463b76cb41`/
+`aeedd731d60263dd00a7b5ab270060dbb02f58d68b1fa612df0ca92f91bf45d3`/
+`8ba576835bb911ff86bc4546e7f692818433e8870b788aefee631b6aa3c5f171`.
+Against dev.357, static RAM is unchanged; linked flash and app/factory images grow
+516/512/512 B and OTA headroom falls 512 B. The delta adds role-correct compact
+result typography and a physical left-gutter overflow oracle. The focused HIL boot
+heap is 143,828/69,472/69,324 B total/free/minimum, captures 14 exact TFT frames,
+keeps storage 8/54 with zero writes and finishes Home/none/lease 0. It advances
+focused cadence to 1/15 without accepting protected real-Capture persistence.

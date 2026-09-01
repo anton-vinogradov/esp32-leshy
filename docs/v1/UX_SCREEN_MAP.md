@@ -266,6 +266,13 @@ SD and useful-evidence acceptance; dev.248 remains the physical baseline.
 
 ## UX-S37 receive-only IR Protocol Workbench
 
+Exact physical dev.358 accepts the complete plain-language task tree and both
+comparison/derived-decode result screens over 14 full-resolution TFT captures.
+The fail-closed pixel oracle finds zero ink in the reserved left gutter; visual
+review confirms no clipped or orphaned glyphs. The retained fixture is still
+RAM-only, so protected annotation/decode commit and cold reopen against a real
+Capture remain open and FUNC-37 is not yet complete.
+
 The user opens one saved IR Capture to answer three immediate questions: what shape
 was received, which timing families form it, and what exact pulse is under review.
 The Library detail therefore keeps **Analyze** and **Export** as separate actions;

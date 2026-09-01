@@ -2071,3 +2071,21 @@ zero input errors/drops, zero storage writes, zero RF TX и final Home/none/leas
 и largest block 28 000 B до controller startup. Этот periodic regression bound
 сбрасывает cadence до 0/15, но не заменяет one-hour release endurance и не принимает
 protected commit/reopen real Capture для FF-3.
+
+Bound task/result presentation Protocol Workbench `RB-M244`: exact physical
+`1.0.0-dev.358` на firmware source
+`738435159bc54aa2f99be2a869a2ccb2a521719f` использует 234 976 B static RAM,
+3 637 032 B linked flash и app/factory images 3 637 536/3 703 072 B, оставляя
+556 768 B фактического headroom application image в OTA slot 4 MiB.
+SHA-256 app/factory/ELF/map:
+`8973dc6035e1b23f67c4e396d3bb1c522aaec7be5d4eb890e14c1c77b53082fb`/
+`4125da568c602208b93ba47cd667f8b67d93219cefa32a14650df5463b76cb41`/
+`aeedd731d60263dd00a7b5ab270060dbb02f58d68b1fa612df0ca92f91bf45d3`/
+`8ba576835bb911ff86bc4546e7f692818433e8870b788aefee631b6aa3c5f171`.
+Относительно dev.357 static RAM не меняется; linked flash и app/factory images
+растут на 516/512/512 B, OTA headroom уменьшается на 512 B. Delta добавляет
+role-correct compact typography результатов и physical oracle overflow левого
+отступа. Focused HIL boot heap — 143 828/69 472/69 324 B total/free/minimum,
+снимает 14 exact TFT frames, сохраняет storage 8/54 с zero writes и заканчивает
+Home/none/lease 0. Cadence двигается до 1/15 без принятия protected persistence
+real Capture.

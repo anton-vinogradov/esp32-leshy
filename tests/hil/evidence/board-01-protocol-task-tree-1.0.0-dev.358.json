@@ -1,0 +1,109 @@
+{
+  "schema": "leshy.protocol_workbench_hil.acceptance.v2",
+  "status": "pass_task_first_compare_decode_tft_review",
+  "evidence_ids": [
+    "E-BUILD-232",
+    "E-AUTO-208",
+    "E-HIL-231",
+    "E-UX-085",
+    "E-STORAGE-076",
+    "RB-M244"
+  ],
+  "firmware_source_commit": "738435159bc54aa2f99be2a869a2ccb2a521719f",
+  "candidate": {
+    "version": "1.0.0-dev.358",
+    "firmware_sha256": "8973dc6035e1b23f67c4e396d3bb1c522aaec7be5d4eb890e14c1c77b53082fb",
+    "factory_sha256": "4125da568c602208b93ba47cd667f8b67d93219cefa32a14650df5463b76cb41",
+    "app_elf_sha256": "aeedd731d60263dd00a7b5ab270060dbb02f58d68b1fa612df0ca92f91bf45d3",
+    "map_sha256": "8ba576835bb911ff86bc4546e7f692818433e8870b788aefee631b6aa3c5f171",
+    "partitions_sha256": "325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3",
+    "firmware_bytes": 3637536,
+    "factory_bytes": 3703072,
+    "static_ram_bytes": 234976,
+    "linked_flash_bytes": 3637032,
+    "ota_slot_free_bytes": 556768
+  },
+  "board": {
+    "id": "board-01",
+    "media_profile": "media-01",
+    "configured_identity_match": true,
+    "raw_identifiers_retained": false,
+    "candidate_flash_count": 1,
+    "clone_port_touched": false,
+    "cardputer_ports_opened": 0,
+    "active_mac_wifi_touched": false
+  },
+  "evidence": {
+    "raw_run": "work/outputs/protocol-workbench-1.0.0-dev.358-result-fit-01/run.json",
+    "raw_run_sha256": "37535359f063a37e2724e3d62eaffdac6ac09ea3448b7de3e2aeabb0c6ad3434",
+    "artifact_index_sha256": "47e465c12de4358b279b351e9fb9b2390f4f2f686c0e5da8305d6d2c2bb4477f",
+    "runner_sha256": "fc537905cc773386f67ef83f29e7188461b2b5cfbe74627236009d43dc81a38d",
+    "checker_sha256": "97b53c53d4b094d97609b2243cfefe592919d3479c2ea5d75c0dd4ad1b3299a6",
+    "rejected_predecessor": {
+      "version": "1.0.0-dev.357",
+      "raw_run_sha256": "d7a02e7ea6a06ced44f149f506fb6425cc0af243be6adc081fe97eecbbb9ad7b",
+      "reason": "machine state passed, but visual review rejected wrapped result text in the left gutter"
+    }
+  },
+  "verified": {
+    "task_tree": [
+      "view_signal",
+      "understand_parts/mark_parts",
+      "understand_parts/read_marks",
+      "compare_with_previous"
+    ],
+    "fixture_source": "retained_physical_nec_0.129",
+    "fixture_storage": "bounded_ram_hil_only",
+    "fixture_pulses": 67,
+    "base_unit_us": 555,
+    "timing_bands": 4,
+    "exact_tft_frames": 14,
+    "frame_format": "rgb565be",
+    "frame_width": 240,
+    "frame_height": 320,
+    "decode_outcome": "complete",
+    "decode_fields": 1,
+    "decode_status": "hil_ram_only",
+    "comparison_outcome": "value_changed",
+    "comparison_regions": 1,
+    "comparison_status": "hil_ram_only",
+    "decode_left_gutter_ink": 0,
+    "compare_left_gutter_ink": 0,
+    "task_cursor_changed_pixels": 21404,
+    "task_cursor_outside_allowed_regions": 0,
+    "annotation_range_changed_pixels": 429,
+    "annotation_range_outside_allowed_regions": 0,
+    "visual_self_review": "pass_no_clipping_overlap_or_orphaned_glyphs",
+    "raw_capture_mutated": false,
+    "product_storage_writes": 0,
+    "storage_generation_before": 8,
+    "storage_generation_after": 8,
+    "storage_observations_before": 54,
+    "storage_observations_after": 54,
+    "storage_physical_write_calls": 0,
+    "boot_heap_total_bytes": 143828,
+    "boot_heap_free_bytes": 69472,
+    "boot_heap_minimum_free_bytes": 69324,
+    "radio_tx_commands": 0,
+    "hil_sessions_begun": 1,
+    "hil_sessions_ended": 1,
+    "final_fixture_active": false,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "final_lease_mask": 0,
+    "final_safety_state": "armed",
+    "final_buzzer_inactive": true,
+    "final_nrf_ce_inactive": true,
+    "final_software_quiesce_complete": true
+  },
+  "cadence": {
+    "anchor": "tests/hil/evidence/board-01-cadence-full-1.0.0-dev.357.json",
+    "accepted_deltas_after_anchor": 1,
+    "full_after_accepted_deltas": 15
+  },
+  "limitations": {
+    "real_capture_protected_commit_reopen": false,
+    "release_promotion": false,
+    "reason": "The task tree and RAM-only compare/decode result screens are physically accepted; protected annotation/decode commit and cold reopen against a real Capture remain open."
+  }
+}

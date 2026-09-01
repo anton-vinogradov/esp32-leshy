@@ -18,8 +18,8 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
-- **Verified checkpoint:** `E-BUILD-231`/`E-AUTO-207`/`E-HIL-230`/`E-UX-084`/`E-STORAGE-075`/`E-CADENCE-004`/`RB-M243` accept exact physical `1.0.0-dev.357` as the periodic full anchor. One exact flash passes two repeatable passive BLE lifecycles, identity-aware dirty rendering, all nine Home routes and 21 screens, both receive-only waterfalls, 16 Targets and the read-only USB companion. Warm heap is exactly 143,828/72,412 B total/free before and after each matrix; radio TX, storage writes, Mac Wi-Fi control, clone and Cardputer access stay zero.
-- **Next gate:** `FF-3` remains active. The next delta connects the comparison/decode foundation to a task-first two-Capture product path; the following exact-CID physical delta must exercise TFT flow and protected save/reopen with a real Capture. RF TX stays forbidden.
+- **Verified checkpoint:** `E-BUILD-232`/`E-AUTO-208`/`E-HIL-231`/`E-UX-085`/`E-STORAGE-076`/`RB-M244` accept the exact physical `1.0.0-dev.358` Protocol Workbench task tree and its comparison/derived-decode result screens. Four plain-language tasks traverse waveform, annotation, truthful decode and previous-Capture comparison; 14 exact TFT frames have zero clipped/orphaned result glyphs, storage remains 8/54 with zero writes, and cleanup is Home/none/lease 0. Exact dev.357 remains the periodic full anchor.
+- **Next gate:** `FF-3` remains active. The next delta must use a real immutable IR Capture, commit its annotation and derived decode through the protected store, then cold-reopen the exact generations without mutating the raw Capture. RF TX stays forbidden.
 
 ### Functional-first delivery queue
 
@@ -28,7 +28,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | FF-0 | Physical review build: traverse every available passive top-level workflow, retain stable screens/navigation and record only user-visible findings | ✅ complete |
 | FF-1 | Wi-Fi/BLE and Targets Radar plus the coherent cross-radio interaction review for `FUNC-17` | ✅ complete |
 | FF-2 | Deliver `FUNC-43` on-device screenshot → Library → export with build/state/time provenance | ✅ complete |
-| FF-3 | Complete `FUNC-37` Protocol Workbench over immutable Captures; waveform navigation and task-first marking are physically accepted, compare/derived-decode cores and atomic storage are host-accepted, while product UI and real-Capture protected reopen remain | 🟡 active |
+| FF-3 | Complete `FUNC-37` Protocol Workbench over immutable Captures; waveform, task-first marking, comparison and truthful derived-decode screens are physically accepted, while protected commit/cold reopen against a real Capture remains | 🟡 active |
 | FF-4 | Finish `FUNC-38` local USB/Web browse, search, compare and export without making network access a device dependency | ⬜ queued |
 | FF-5 | Deliver `FUNC-34` IR replay from one selected immutable Capture with preview, confirmation and proven Stop/timeout | ⬜ queued |
 | FF-6 | Resume signed-package classification/execution for `FUNC-54`, then individually admitted Safe Lab actions; Automation/HID remains zero-output until this row becomes active | ⏸️ safely parked |

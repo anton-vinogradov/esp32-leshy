@@ -271,6 +271,13 @@ evidence; dev.248 остаётся physical baseline.
 
 ## UX-S37 receive-only IR Protocol Workbench
 
+Exact physical dev.358 принимает всё понятное дерево задач и оба result screen
+comparison/derived decode по 14 full-resolution TFT captures. Fail-closed pixel
+oracle видит zero ink в служебном левом отступе, а visual review подтверждает
+отсутствие clipped/orphaned glyphs. Fixture всё ещё RAM-only, поэтому protected
+commit/cold reopen annotation/decode на real Capture остаются открыты и FUNC-37
+ещё не завершён.
+
 Пользователь открывает один сохранённый IR Capture, чтобы сразу ответить на три
 вопроса: какую форму приняли, из каких timing families она состоит и какой exact
 pulse сейчас изучается. Поэтому detail Библиотеки сохраняет **Анализ** и **Экспорт**

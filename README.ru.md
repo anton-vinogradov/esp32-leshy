@@ -18,8 +18,8 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
-- **Проверенный checkpoint:** `E-BUILD-231`/`E-AUTO-207`/`E-HIL-230`/`E-UX-084`/`E-STORAGE-075`/`E-CADENCE-004`/`RB-M243` принимают exact physical `1.0.0-dev.357` как новый periodic full anchor. Одна exact flash проходит два повторяемых passive BLE lifecycle, identity-aware dirty rendering, все девять Home routes и 21 экран, оба receive-only waterfall, 16 Targets и read-only USB companion. Warm heap точно равен 143 828/72 412 B total/free до и после каждой matrix; radio TX, storage writes, управление Wi-Fi Mac, доступ к clone и Cardputer остаются zero.
-- **Следующий gate:** `FF-3` остаётся активным. Следующий delta подключает основу comparison/decode к task-first product пути двух Capture; последующий exact-CID physical delta обязан проверить TFT flow и protected save/reopen с real Capture. RF TX запрещён.
+- **Проверенный checkpoint:** `E-BUILD-232`/`E-AUTO-208`/`E-HIL-231`/`E-UX-085`/`E-STORAGE-076`/`RB-M244` принимают exact physical `1.0.0-dev.358`: task-first дерево Protocol Workbench и экраны comparison/derived decode. Четыре понятные задачи проходят waveform, annotation, честное чтение и сравнение с предыдущим Capture; 14 exact TFT frames не имеют clipped/orphaned glyphs, storage остаётся 8/54 с zero writes, cleanup — Home/none/lease 0. Exact dev.357 остаётся periodic full anchor.
+- **Следующий gate:** `FF-3` остаётся активным. Следующий delta обязан взять реальный immutable IR Capture, commit-нуть его annotation и derived decode через protected store, затем cold-reopen exact generations без изменения raw Capture. RF TX запрещён.
 
 ### Functional-first очередь поставки
 
@@ -28,7 +28,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | FF-0 | Физическая ревью-сборка: пройти все доступные passive top-level workflows, сохранить stable screens/navigation и записать только пользовательские findings | ✅ готово |
 | FF-1 | Radar Wi-Fi/BLE и Targets плюс согласованный cross-radio interaction review `FUNC-17` | ✅ готово |
 | FF-2 | Поставить `FUNC-43` screenshot устройства → Library → export с provenance build/state/time | ✅ готово |
-| FF-3 | Завершить `FUNC-37` Protocol Workbench над immutable Captures; navigation waveform и task-first разметка физически приняты, cores compare/derived decode и atomic storage приняты на host, остаются product UI и protected reopen real Capture | 🟡 в работе |
+| FF-3 | Завершить `FUNC-37` Protocol Workbench над immutable Captures; waveform, task-first разметка, comparison и truthful derived-decode screens физически приняты, остаётся protected commit/cold reopen на реальном Capture | 🟡 в работе |
 | FF-4 | Завершить `FUNC-38` local USB/Web browse, search, compare и export, не делая сеть зависимостью устройства | ⬜ в очереди |
 | FF-5 | Поставить `FUNC-34` IR replay из одного выбранного immutable Capture с preview, confirmation и доказанным Stop/timeout | ⬜ в очереди |
 | FF-6 | Вернуться к classification/execution signed packages `FUNC-54`, затем к отдельно допускаемым действиям Safe Lab; Automation/HID остаётся zero-output до активации этой строки | ⏸️ безопасно заморожен |
