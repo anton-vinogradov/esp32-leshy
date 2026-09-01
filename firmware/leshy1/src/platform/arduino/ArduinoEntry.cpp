@@ -5324,8 +5324,11 @@ void runProductSurveyWorker(void*) {
         std::uint16_t pendingScanDropped = 0;
         while (!productSurveyStopRequested()) {
             std::uint8_t attemptedSourceMask = 0;
-            const std::array<RadioKind, 2> schedule{
-                RadioKind::Wifi, RadioKind::Ble};
+            const std::array<RadioKind, 2> schedule =
+                productSurveyFieldVisit()
+                    ? leshy1::apps::survey::fieldSurveySourceOrder()
+                    : std::array<RadioKind, 2>{
+                          RadioKind::Wifi, RadioKind::Ble};
             for (const RadioKind source : schedule) {
                 const std::uint8_t mask =
                     leshy1::services::survey::sourceMask(source);

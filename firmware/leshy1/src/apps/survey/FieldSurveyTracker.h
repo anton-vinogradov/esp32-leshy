@@ -33,6 +33,16 @@ struct FieldSurveyCycleEvidence final {
 // policy and remains continuous.
 bool shouldAutoPauseFieldVisit(const FieldSurveyCycleEvidence& evidence);
 
+// Initialize the most fragmentation-sensitive receiver first. NimBLE needs a
+// large contiguous internal-RAM arena; a complete Wi-Fi AP/station pass can
+// leave enough total heap while splitting that arena. The visit remains one
+// bounded snapshot and the resulting catalog is independent of source order.
+constexpr std::array<domain::observations::RadioKind, 2>
+fieldSurveySourceOrder() {
+    return {domain::observations::RadioKind::Ble,
+            domain::observations::RadioKind::Wifi};
+}
+
 struct FieldSurveyVisitResult final {
     FieldSurveyVisitStatus status = FieldSurveyVisitStatus::Empty;
     FieldSurveyBuildStatus buildStatus =

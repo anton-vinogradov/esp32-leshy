@@ -482,6 +482,10 @@ void testVisitTrackerFailsClosedOnIncompleteCurrentVisit() {
 }
 
 void testFieldVisitAutoPauseRequiresOneCoveredPass() {
+    constexpr auto order = fieldSurveySourceOrder();
+    static_assert(order[0] == RadioKind::Ble);
+    static_assert(order[1] == RadioKind::Wifi);
+
     FieldSurveyCycleEvidence evidence;
     evidence.fieldVisit = true;
     evidence.selectedSourceMask = 0x03U;
