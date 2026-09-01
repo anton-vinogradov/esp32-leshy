@@ -22,6 +22,9 @@ if [[ $# -gt 0 ]]; then
         if [[ "$2" == "target-radar" ]]; then
             exec "$(cd "$(dirname "$0")" && pwd)/test-target-radar.sh"
         fi
+        if [[ "$2" == "owned-wifi-evidence" ]]; then
+            exec "$(cd "$(dirname "$0")" && pwd)/test-owned-wifi-evidence.sh"
+        fi
         if [[ "$2" == "protocol-workbench" ]]; then
             exec "$(cd "$(dirname "$0")" && pwd)/test-protocol-workbench.sh"
         fi
@@ -31,11 +34,11 @@ if [[ $# -gt 0 ]]; then
         if [[ "$2" == "clean-target" ]]; then
             only_clean_target=true
         else
-            echo "usage: $0 [--only automation-hid|clean-target|device-lock|protocol-workbench|screenshot-store|serial-console|target-radar]" >&2
+            echo "usage: $0 [--only automation-hid|clean-target|device-lock|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar]" >&2
             exit 2
         fi
     else
-        echo "usage: $0 [--only automation-hid|clean-target|device-lock|protocol-workbench|screenshot-store|serial-console|target-radar]" >&2
+        echo "usage: $0 [--only automation-hid|clean-target|device-lock|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar]" >&2
         exit 2
     fi
 fi
@@ -891,6 +894,8 @@ python3 "$repo_dir/tools/test_companion_web_http_hil.py"
 python3 "$repo_dir/tools/test_companion_web_preview.py"
 python3 "$repo_dir/tools/test_companion_web_external_client.py"
 python3 "$repo_dir/tools/test_check_companion_external_http_report.py"
+python3 "$repo_dir/tools/test_owned_wifi_evidence_verifier.py"
+python3 "$repo_dir/tools/check_owned_wifi_evidence_verifier_contract.py"
 python3 "$repo_dir/tools/test_source_timeline_hil_runner.py"
 python3 "$repo_dir/tools/test_passive_ble_hil_runner.py"
 python3 "$repo_dir/tools/test_ble_nearby_entry_gate.py"
