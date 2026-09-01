@@ -97,6 +97,13 @@ LESHY_UI_TEXT(AutomationTrustStoreUnavailable, Body, 212, "TRUST STORE UNAVAILAB
 LESHY_UI_TEXT(AutomationTrustNoExecution, Meta, 212, "TRUST ONLY · NO EXECUTION", u8"ДОВЕРИЕ · БЕЗ ЗАПУСКА")
 
 LESHY_UI_TEXT(AirspaceGuardTitle, Body, 206, "AIRSPACE GUARD", u8"ЗАЩИТА ЭФИРА")
+LESHY_UI_TEXT(AirspaceGuardProfileTitle, Body, 206, "CHOOSE SURROUNDINGS", u8"ГДЕ ИДЕТ ПРОВЕРКА")
+LESHY_UI_TEXT(AirspaceGuardProfileEveryday, Body, 196, "EVERYDAY", u8"ОБЫЧНО")
+LESHY_UI_TEXT(AirspaceGuardProfileEverydayNote, Meta, 196, "BALANCED ALERTS", u8"СБАЛАНСИРОВАННЫЕ СИГНАЛЫ")
+LESHY_UI_TEXT(AirspaceGuardProfileQuiet, Body, 196, "QUIET PLACE", u8"ТИХОЕ МЕСТО")
+LESHY_UI_TEXT(AirspaceGuardProfileQuietNote, Meta, 196, "REPORT CHANGES EARLIER", u8"РАНЬШЕ СООБЩАТЬ ОБ ИЗМЕНЕНИЯХ")
+LESHY_UI_TEXT(AirspaceGuardProfileBusy, Body, 196, "BUSY PLACE", u8"МНОГОЛЮДНОЕ МЕСТО")
+LESHY_UI_TEXT(AirspaceGuardProfileBusyNote, Meta, 196, "FEWER UNNECESSARY ALERTS", u8"МЕНЬШЕ ЛИШНИХ СИГНАЛОВ")
 LESHY_UI_TEXT(AirspaceGuardClear, Body, 212, "NO SUSPICIOUS ACTIVITY", u8"ПОДОЗРИТЕЛЬНОГО НЕТ")
 LESHY_UI_TEXT(AirspaceGuardFinding, Body, 212, "REPEATED WI-FI DISCONNECTS", u8"ЧАСТЫЕ ОТКЛЮЧЕНИЯ WI-FI")
 LESHY_UI_TEXT(AirspaceGuardIdentityConflict, Body, 212, "WI-FI IDENTITY CONFLICT", u8"КОНФЛИКТ СЕТИ WI-FI")

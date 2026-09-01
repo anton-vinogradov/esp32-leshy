@@ -253,6 +253,79 @@ void testPolicyAndEmptyEvidenceFailClosed() {
     CHECK(report.findingCount == 0);
 }
 
+void testNamedProfilesAreVersionedValidAndKeepOptionalEvidenceGated() {
+    CHECK(kAirspaceGuardProfileVersion == 1U);
+    CHECK(std::strcmp(airspaceGuardProfileName(
+                          AirspaceGuardProfile::Everyday),
+                      "everyday") == 0);
+    CHECK(std::strcmp(airspaceGuardProfileName(
+                          AirspaceGuardProfile::QuietPlace),
+                      "quiet_place") == 0);
+    CHECK(std::strcmp(airspaceGuardProfileName(
+                          AirspaceGuardProfile::BusyPlace),
+                      "busy_place") == 0);
+
+    const AirspaceGuardPolicy everyday = airspaceGuardPolicyForProfile(
+        AirspaceGuardProfile::Everyday);
+    const AirspaceGuardPolicy quiet = airspaceGuardPolicyForProfile(
+        AirspaceGuardProfile::QuietPlace);
+    const AirspaceGuardPolicy busy = airspaceGuardPolicyForProfile(
+        AirspaceGuardProfile::BusyPlace);
+    CHECK(validateAirspaceGuardPolicy(everyday));
+    CHECK(validateAirspaceGuardPolicy(quiet));
+    CHECK(validateAirspaceGuardPolicy(busy));
+    CHECK(everyday.disconnectBurstThreshold == 4U);
+    CHECK(quiet.disconnectBurstThreshold == 3U);
+    CHECK(quiet.disconnectWindowUs == 3000000ULL);
+    CHECK(quiet.ssidChurnThreshold == 3U);
+    CHECK(quiet.elevatedNoiseFloorDbm == -80);
+    CHECK(quiet.elevatedNoiseThreshold == 3U);
+    CHECK(quiet.bleTrackerPresenceThreshold == 3U);
+    CHECK(busy.disconnectBurstThreshold == 6U);
+    CHECK(busy.ssidChurnThreshold == 6U);
+    CHECK(busy.elevatedNoiseFloorDbm == -70);
+    CHECK(busy.elevatedNoiseThreshold == 6U);
+    CHECK(busy.bleTrackerPresenceThreshold == 5U);
+    for (const AirspaceGuardPolicy* policy : {&everyday, &quiet, &busy}) {
+        CHECK(!policy->ssidSecurityConflictEnabled);
+        CHECK(!policy->ssidChurnEnabled);
+        CHECK(!policy->elevatedNoiseEnabled);
+        CHECK(!policy->bleTrackerPresenceEnabled);
+    }
+}
+
+void testNamedProfilesChangeOnlyEvidenceSensitivity() {
+    FixtureSource source;
+    source.add(12U, 1000000ULL, kTransmitterA);
+    source.add(12U, 1400000ULL, kTransmitterA);
+    source.add(12U, 1800000ULL, kTransmitterA);
+    AirspaceGuard guard;
+    CHECK(guard.inspectWifi(
+              source, airspaceGuardPolicyForProfile(
+                          AirspaceGuardProfile::QuietPlace)).status ==
+          AirspaceGuardStatus::Finding);
+    CHECK(guard.inspectWifi(
+              source, airspaceGuardPolicyForProfile(
+                          AirspaceGuardProfile::Everyday)).status ==
+          AirspaceGuardStatus::Clear);
+    CHECK(guard.inspectWifi(
+              source, airspaceGuardPolicyForProfile(
+                          AirspaceGuardProfile::BusyPlace)).status ==
+          AirspaceGuardStatus::Clear);
+
+    source.add(12U, 2000000ULL, kTransmitterA);
+    source.add(12U, 2200000ULL, kTransmitterA);
+    CHECK(guard.inspectWifi(
+              source, airspaceGuardPolicyForProfile(
+                          AirspaceGuardProfile::BusyPlace)).status ==
+          AirspaceGuardStatus::Clear);
+    source.add(12U, 2400000ULL, kTransmitterA);
+    CHECK(guard.inspectWifi(
+              source, airspaceGuardPolicyForProfile(
+                          AirspaceGuardProfile::BusyPlace)).status ==
+          AirspaceGuardStatus::Finding);
+}
+
 void testIngressClassifiersStayManagementOnly() {
     const std::array<std::uint8_t, 2> deauth{0xc0, 0x00};
     const std::array<std::uint8_t, 2> disassoc{0xa0, 0x00};
@@ -1297,6 +1370,8 @@ void testStableNames() {
 
 int main() {
     testPolicyAndEmptyEvidenceFailClosed();
+    testNamedProfilesAreVersionedValidAndKeepOptionalEvidenceGated();
+    testNamedProfilesChangeOnlyEvidenceSensitivity();
     testIngressClassifiersStayManagementOnly();
     testIdentityConflictIsOptInUntilLiveRetentionIsComplete();
     testLiveIdentityRetentionKeyIsExactAndFailClosed();

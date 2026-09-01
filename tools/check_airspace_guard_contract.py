@@ -94,6 +94,13 @@ def main() -> int:
         "kWifiDisconnectDetectorVersion = 1",
         "disconnectBurstThreshold = 4",
         "disconnectWindowUs = 2000000ULL",
+        "enum class AirspaceGuardProfile",
+        "kAirspaceGuardProfileVersion = 1U",
+        "airspaceGuardProfileName",
+        "airspaceGuardPolicyForProfile",
+        "AirspaceGuardProfile::Everyday",
+        "AirspaceGuardProfile::QuietPlace",
+        "AirspaceGuardProfile::BusyPlace",
         "ssidSecurityConflictEnabled = false",
         "ssidSecurityConflictWindowUs = 10000000ULL",
         "WifiSsidSecurityConflict",
@@ -151,6 +158,10 @@ def main() -> int:
 
     for marker in (
         "testPolicyAndEmptyEvidenceFailClosed",
+        "testNamedProfilesAreVersionedValidAndKeepOptionalEvidenceGated",
+        "testNamedProfilesChangeOnlyEvidenceSensitivity",
+        "quiet.disconnectBurstThreshold == 3U",
+        "busy.disconnectBurstThreshold == 6U",
         "testBenignAndSparseDisconnectFramesStayClear",
         "testDisconnectBurstRetainsExactEvidence",
         "testSourcesAreNeverMergedAndConfidenceIsBounded",
@@ -320,6 +331,13 @@ def main() -> int:
         require(failures, marker in presenter_tests,
                 f"missing Airspace Guard presenter coverage: {marker}")
     for marker in (
+        "AirspaceGuardProfileTitle",
+        "AirspaceGuardProfileEveryday",
+        "AirspaceGuardProfileEverydayNote",
+        "AirspaceGuardProfileQuiet",
+        "AirspaceGuardProfileQuietNote",
+        "AirspaceGuardProfileBusy",
+        "AirspaceGuardProfileBusyNote",
         "AirspaceGuardTitle",
         "AirspaceGuardFinding",
         "AirspaceGuardEvidenceTitle",
@@ -367,9 +385,15 @@ def main() -> int:
                 f"Airspace Guard presenter bypasses passive boundary: {forbidden}")
 
     for marker in (
+        "WifiProductView::AirspaceGuardProfile",
         "WifiProductView::AirspaceGuard",
         "UiTextId::WifiMenuAirspaceGuard",
+        "openAirspaceGuardProfileProduct()",
         "openAirspaceGuardProduct()",
+        "renderAirspaceGuardProfileMenu",
+        "selectedAirspaceGuardPolicy()",
+        "policy = selectedAirspaceGuardPolicy()",
+        "kAirspaceGuardProfileVersion",
         "renderAirspaceGuardPage",
         "presentAirspaceGuard",
         "airspaceGuardController.openSelected()",
@@ -522,6 +546,11 @@ def main() -> int:
     for marker in (
         'RUN_SCHEMA = "leshy.airspace_guard_hil.run.v1"',
         'STATE_SCHEMA = "leshy.airspace_guard.v1"',
+        '"wifi_product_view": "airspace_guard_profile"',
+        '"profile": "everyday"',
+        '"profile_version": 1',
+        '"disconnect_threshold": 4',
+        '"noise_floor_dbm": -75',
         "wifi_cancelled",
         "ble_cancelled",
         "two_complete_guard_lifecycles",

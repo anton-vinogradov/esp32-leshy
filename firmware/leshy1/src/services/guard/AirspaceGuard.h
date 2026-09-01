@@ -137,6 +137,21 @@ struct AirspaceGuardPolicy final {
     std::uint64_t bleTrackerPresenceWindowUs = 10000000ULL;
 };
 
+// Named profiles describe the surroundings in the user's language. They only
+// tune evidence thresholds: callers must still prove complete bounded
+// retention before enabling optional identity, noise or tracker detectors.
+enum class AirspaceGuardProfile : std::uint8_t {
+    Everyday,
+    QuietPlace,
+    BusyPlace,
+};
+
+inline constexpr std::uint8_t kAirspaceGuardProfileVersion = 1U;
+
+const char* airspaceGuardProfileName(AirspaceGuardProfile profile);
+AirspaceGuardPolicy airspaceGuardPolicyForProfile(
+    AirspaceGuardProfile profile);
+
 bool validateAirspaceGuardPolicy(const AirspaceGuardPolicy& policy);
 
 // Cheap ingress classifiers for bounded passive adapters. Full structural

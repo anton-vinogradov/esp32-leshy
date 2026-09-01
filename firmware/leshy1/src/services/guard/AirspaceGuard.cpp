@@ -619,6 +619,43 @@ const char* airspaceConfidenceName(AirspaceConfidence confidence) {
     return "unknown";
 }
 
+const char* airspaceGuardProfileName(AirspaceGuardProfile profile) {
+    switch (profile) {
+        case AirspaceGuardProfile::Everyday: return "everyday";
+        case AirspaceGuardProfile::QuietPlace: return "quiet_place";
+        case AirspaceGuardProfile::BusyPlace: return "busy_place";
+    }
+    return "unknown";
+}
+
+AirspaceGuardPolicy airspaceGuardPolicyForProfile(
+    AirspaceGuardProfile profile) {
+    AirspaceGuardPolicy policy{};
+    switch (profile) {
+        case AirspaceGuardProfile::QuietPlace:
+            policy.disconnectBurstThreshold = 3U;
+            policy.disconnectWindowUs = 3000000ULL;
+            policy.ssidChurnThreshold = 3U;
+            policy.elevatedNoiseFloorDbm = -80;
+            policy.elevatedNoiseThreshold = 3U;
+            policy.elevatedNoiseWindowUs = 3000000ULL;
+            policy.bleTrackerPresenceThreshold = 3U;
+            policy.bleTrackerPresenceWindowUs = 15000000ULL;
+            break;
+        case AirspaceGuardProfile::BusyPlace:
+            policy.disconnectBurstThreshold = 6U;
+            policy.ssidChurnThreshold = 6U;
+            policy.elevatedNoiseFloorDbm = -70;
+            policy.elevatedNoiseThreshold = 6U;
+            policy.bleTrackerPresenceThreshold = 5U;
+            break;
+        case AirspaceGuardProfile::Everyday:
+        default:
+            break;
+    }
+    return policy;
+}
+
 bool validateAirspaceGuardPolicy(const AirspaceGuardPolicy& policy) {
     return policy.disconnectBurstThreshold >= 2U &&
         policy.disconnectBurstThreshold <=

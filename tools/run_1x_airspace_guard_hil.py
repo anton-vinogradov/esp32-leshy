@@ -301,10 +301,35 @@ def open_guard(device: PassiveSerial,
     state = action(device, "right")
     trace.append(state)
     require_exact(state, {
+        "wifi_product_view": "airspace_guard_profile",
+        "wifi_product_selection": 0,
+        "runtime_owner": "wifi", "lease_mask": 15,
+    }, "guard_profile")
+    profile = guard_state(device)
+    require_exact(profile, {
+        "capture_state": "idle", "profile": "everyday",
+        "profile_version": 1, "profile_selection": 0,
+        "disconnect_threshold": 4, "churn_threshold": 4,
+        "noise_floor_dbm": -75, "noise_threshold": 4,
+        "ble_tracker_threshold": 3,
+        "passive_only": True, "rx_only": True,
+        "application_connect_calls": 0,
+        "application_raw_tx_calls": 0,
+    }, "guard_profile_state")
+    state = action(device, "right")
+    trace.append(state)
+    require_exact(state, {
         "wifi_product_view": "airspace_guard", "runtime_owner": "wifi",
         "lease_mask": 15,
     }, "guard_open")
-    return guard_state(device)
+    started = guard_state(device)
+    require_exact(started, {
+        "profile": "everyday", "profile_version": 1,
+        "profile_selection": 0, "disconnect_threshold": 4,
+        "churn_threshold": 4, "noise_floor_dbm": -75,
+        "noise_threshold": 4, "ble_tracker_threshold": 3,
+    }, "guard_started_profile")
+    return started
 
 
 def pixel_changes(frames: Path, before_name: str, after_name: str,

@@ -387,6 +387,7 @@ using leshy1::services::power::PowerWriteDisposition;
 using leshy1::services::guard::AirspaceGuardBleRetention;
 using leshy1::services::guard::AirspaceGuardBleRetentionStats;
 using leshy1::services::guard::AirspaceGuardPolicy;
+using leshy1::services::guard::AirspaceGuardProfile;
 using leshy1::services::guard::AirspaceGuardReport;
 using leshy1::services::guard::AirspaceGuardStatus;
 using leshy1::services::guard::BleLiveRetentionDisposition;
@@ -1750,6 +1751,7 @@ enum class WifiProductView : std::uint8_t {
     DeviceDetail,
     Channels,
     Visit,
+    AirspaceGuardProfile,
     AirspaceGuard,
 };
 
@@ -1766,6 +1768,8 @@ const char* wifiProductViewName(WifiProductView view) {
         case WifiProductView::DeviceDetail: return "device_detail";
         case WifiProductView::Channels: return "channels";
         case WifiProductView::Visit: return "visit";
+        case WifiProductView::AirspaceGuardProfile:
+            return "airspace_guard_profile";
         case WifiProductView::AirspaceGuard: return "airspace_guard";
         case WifiProductView::None:
         default: return "none";
@@ -1979,6 +1983,8 @@ enum class AirspaceGuardCaptureState : std::uint8_t {
 };
 AirspaceGuardCaptureState airspaceGuardCaptureState =
     AirspaceGuardCaptureState::Idle;
+AirspaceGuardProfile airspaceGuardProfile =
+    AirspaceGuardProfile::Everyday;
 bool airspaceGuardCaptureRunning() {
     return airspaceGuardCaptureState ==
                AirspaceGuardCaptureState::WifiRunning ||
@@ -2011,6 +2017,10 @@ void resetAirspaceGuardWifiReport() {
     airspaceGuardWifiReport.status = AirspaceGuardStatus::Inconclusive;
 }
 bool airspaceGuardResultNeedsContentClear = false;
+AirspaceGuardPolicy selectedAirspaceGuardPolicy() {
+    return leshy1::services::guard::airspaceGuardPolicyForProfile(
+        airspaceGuardProfile);
+}
 WifiNetworkCatalog wifiNetworkCatalog;
 WifiNetworkNavigationOrder wifiNetworkNavigationOrder;
 leshy1::ui::RankedListFocus wifiNetworkFocus;
@@ -5104,7 +5114,7 @@ void runAirspaceGuardBleWorker() {
         event.retention.recordsRetained ==
             airspaceGuardBleRetention.observationCount();
     if (inspectable) {
-        AirspaceGuardPolicy policy{};
+        AirspaceGuardPolicy policy = selectedAirspaceGuardPolicy();
         policy.bleTrackerPresenceEnabled = true;
         const bool inspected = airspaceGuardDetector.writeBleReport(
             airspaceGuardBleRetention, policy,
@@ -13381,6 +13391,10 @@ NavigationFooter navigationFooterForCurrentState() {
         if (wifiProductView == WifiProductView::Menu) {
             return {back, choose, enter};
         }
+        if (wifiProductView == WifiProductView::AirspaceGuardProfile) {
+            return {back, choose,
+                    {NavigationKey::RightAndSelect, UiTextId::NavStart}};
+        }
         if (wifiProductView == WifiProductView::AirspaceGuard) {
             if (airspaceGuardCaptureRunning()) {
                 return {back, {}, {}};
@@ -18792,6 +18806,62 @@ void renderWifiProductMenu(bool clearContent) {
     }
 }
 
+constexpr std::uint8_t kAirspaceGuardProfileCount = 3U;
+
+AirspaceGuardProfile airspaceGuardProfileForSelection(
+    std::uint8_t selection) {
+    switch (selection) {
+        case 1U: return AirspaceGuardProfile::QuietPlace;
+        case 2U: return AirspaceGuardProfile::BusyPlace;
+        case 0U:
+        default: return AirspaceGuardProfile::Everyday;
+    }
+}
+
+std::uint8_t airspaceGuardSelectionForProfile(
+    AirspaceGuardProfile profile) {
+    switch (profile) {
+        case AirspaceGuardProfile::QuietPlace: return 1U;
+        case AirspaceGuardProfile::BusyPlace: return 2U;
+        case AirspaceGuardProfile::Everyday:
+        default: return 0U;
+    }
+}
+
+UiTextId airspaceGuardProfileLabel(std::uint8_t index) {
+    constexpr UiTextId labels[kAirspaceGuardProfileCount] = {
+        UiTextId::AirspaceGuardProfileEveryday,
+        UiTextId::AirspaceGuardProfileQuiet,
+        UiTextId::AirspaceGuardProfileBusy,
+    };
+    return labels[index < kAirspaceGuardProfileCount ? index : 0U];
+}
+
+UiTextId airspaceGuardProfileNote(std::uint8_t index) {
+    constexpr UiTextId notes[kAirspaceGuardProfileCount] = {
+        UiTextId::AirspaceGuardProfileEverydayNote,
+        UiTextId::AirspaceGuardProfileQuietNote,
+        UiTextId::AirspaceGuardProfileBusyNote,
+    };
+    return notes[index < kAirspaceGuardProfileCount ? index : 0U];
+}
+
+void renderAirspaceGuardProfileRow(std::uint8_t index) {
+    if (index >= kAirspaceGuardProfileCount) return;
+    renderMenuRow(Components::homeRow(index),
+                  tr(airspaceGuardProfileLabel(index)),
+                  tr(airspaceGuardProfileNote(index)),
+                  wifiProductSelection == index, true, Tone::Positive);
+}
+
+void renderAirspaceGuardProfileMenu(bool clearContent) {
+    renderHeader(tr(UiTextId::AirspaceGuardProfileTitle), clearContent);
+    for (std::uint8_t index = 0U; index < kAirspaceGuardProfileCount;
+         ++index) {
+        renderAirspaceGuardProfileRow(index);
+    }
+}
+
 Tone airspaceGuardTone(AirspaceGuardUiTone tone) {
     switch (tone) {
         case AirspaceGuardUiTone::Healthy: return Tone::Positive;
@@ -20179,6 +20249,10 @@ void renderInventoryPage(bool clearContent) {
     }
     if (wifiProductView == WifiProductView::Menu) {
         renderWifiProductMenu(clearContent);
+        return;
+    }
+    if (wifiProductView == WifiProductView::AirspaceGuardProfile) {
+        renderAirspaceGuardProfileMenu(clearContent);
         return;
     }
     if (wifiProductView == WifiProductView::AirspaceGuard) {
@@ -23134,6 +23208,19 @@ UiDeltaRenderResult renderSelectionDelta() {
         }
         renderWifiProductRow(renderedUi.wifiProductSelection, currentFirst);
         renderWifiProductRow(wifiProductSelection, currentFirst);
+        renderNavigationFooter();
+        return UiDeltaRenderResult::Rendered;
+    }
+
+    if (uiController.page() == 2 &&
+        wifiProductView == WifiProductView::AirspaceGuardProfile &&
+        renderedUi.wifiProductView == static_cast<std::uint8_t>(
+            WifiProductView::AirspaceGuardProfile)) {
+        if (renderedUi.wifiProductSelection == wifiProductSelection) {
+            return UiDeltaRenderResult::NoChange;
+        }
+        renderAirspaceGuardProfileRow(renderedUi.wifiProductSelection);
+        renderAirspaceGuardProfileRow(wifiProductSelection);
         renderNavigationFooter();
         return UiDeltaRenderResult::Rendered;
     }
@@ -28025,11 +28112,17 @@ void emitAirspaceGuardState(Stream& reply) {
     }
     const auto workerControl = airspaceGuardBleControl();
     const auto& bleWorkerEvent = airspaceGuardBleEventWorkspace;
+    const AirspaceGuardPolicy profilePolicy = selectedAirspaceGuardPolicy();
     auto& line = diagnosticJson;
     const int written = std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.airspace_guard.v1\",\"kind\":\"state\","
         "\"capture_state\":\"%s\",\"generation\":%lu,"
+        "\"profile\":\"%s\",\"profile_version\":%u,"
+        "\"profile_selection\":%u,"
+        "\"disconnect_threshold\":%u,\"churn_threshold\":%u,"
+        "\"noise_floor_dbm\":%d,\"noise_threshold\":%u,"
+        "\"ble_tracker_threshold\":%u,"
         "\"view\":\"%s\",\"load_status\":\"%s\","
         "\"outcome\":\"%s\",\"evidence_incomplete\":%s,"
         "\"finding_count\":%u,\"finding_mask\":%lu,"
@@ -28094,6 +28187,17 @@ void emitAirspaceGuardState(Stream& reply) {
         "\"runtime_owner\":\"%s\",\"lease_mask\":%lu}",
         airspaceGuardCaptureStateName(airspaceGuardCaptureState),
         static_cast<unsigned long>(airspaceGuardGeneration),
+        leshy1::services::guard::airspaceGuardProfileName(
+            airspaceGuardProfile),
+        static_cast<unsigned>(
+            leshy1::services::guard::kAirspaceGuardProfileVersion),
+        static_cast<unsigned>(
+            airspaceGuardSelectionForProfile(airspaceGuardProfile)),
+        static_cast<unsigned>(profilePolicy.disconnectBurstThreshold),
+        static_cast<unsigned>(profilePolicy.ssidChurnThreshold),
+        static_cast<int>(profilePolicy.elevatedNoiseFloorDbm),
+        static_cast<unsigned>(profilePolicy.elevatedNoiseThreshold),
+        static_cast<unsigned>(profilePolicy.bleTrackerPresenceThreshold),
         leshy1::apps::guard::airspaceGuardViewName(
             airspaceGuardController.view()),
         leshy1::apps::guard::airspaceGuardLoadStatusName(
@@ -29045,7 +29149,23 @@ bool openWifiVisitProduct() {
     return true;
 }
 
+bool openAirspaceGuardProfileProduct() {
+    wifiFrameCapture.reset();
+    airspaceGuardController.reset();
+    airspaceGuardCaptureState = AirspaceGuardCaptureState::Idle;
+    nextAirspaceGuardUiRefreshUs = 0U;
+    airspaceGuardResultNeedsContentClear = false;
+    wifiProductSelection = 0U;
+    wifiProductView = WifiProductView::AirspaceGuardProfile;
+    lastRuntimeEvent = "airspace_guard_choose_surroundings";
+    return true;
+}
+
 bool openAirspaceGuardProduct() {
+    if (wifiProductView == WifiProductView::AirspaceGuardProfile) {
+        airspaceGuardProfile = airspaceGuardProfileForSelection(
+            wifiProductSelection);
+    }
     wifiFrameCapture.reset();
     airspaceGuardController.reset();
     wifiProductView = WifiProductView::AirspaceGuard;
@@ -29141,7 +29261,7 @@ __attribute__((noinline)) bool finalizeAirspaceGuardWifiEvidence(
             static_cast<std::size_t>(monitor.disconnectFramesDropped) +
             static_cast<std::size_t>(monitor.identityProfilesDropped) +
             static_cast<std::size_t>(monitor.invalidFrames);
-        AirspaceGuardPolicy policy{};
+        AirspaceGuardPolicy policy = selectedAirspaceGuardPolicy();
         policy.ssidSecurityConflictEnabled =
             monitor.identityRetentionComplete;
         policy.ssidChurnEnabled = monitor.identityRetentionComplete;
@@ -29831,6 +29951,27 @@ bool applyUiAction(UiAction action, bool render = true) {
                     changed = changed && memoryRestored;
                 }
             }
+        } else if (wifiProductView ==
+                   WifiProductView::AirspaceGuardProfile) {
+            handled = true;
+            if (action == UiAction::Up && wifiProductSelection > 0U) {
+                --wifiProductSelection;
+                changed = true;
+            } else if (action == UiAction::Down &&
+                       wifiProductSelection + 1U <
+                           kAirspaceGuardProfileCount) {
+                ++wifiProductSelection;
+                changed = true;
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                changed = openAirspaceGuardProduct();
+            } else if (action == UiAction::Back ||
+                       action == UiAction::Left) {
+                wifiProductView = WifiProductView::Menu;
+                wifiProductSelection = 4U;
+                lastRuntimeEvent = "wifi_menu";
+                changed = true;
+            }
         } else if (wifiProductView == WifiProductView::AirspaceGuard) {
             handled = true;
             if (airspaceGuardCaptureRunning()) {
@@ -29876,7 +30017,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                 } else if (wifiProductSelection == 3) {
                     changed = openWifiVisitProduct();
                 } else if (wifiProductSelection == 4) {
-                    changed = openAirspaceGuardProduct();
+                    changed = openAirspaceGuardProfileProduct();
                 }
             } else if (action == UiAction::Select ||
                        action == UiAction::Right) {
@@ -31891,6 +32032,12 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
             return {leshy1::ui::hitTouchTarget(
                         TouchTargetLayout::HomeRows, point, first,
                         kWifiProductTaskCount),
+                    wifiProductSelection};
+        }
+        if (wifiProductView == WifiProductView::AirspaceGuardProfile) {
+            return {leshy1::ui::hitTouchTarget(
+                        TouchTargetLayout::HomeRows, point, 0U,
+                        kAirspaceGuardProfileCount),
                     wifiProductSelection};
         }
         if (wifiProductView == WifiProductView::AirspaceGuard &&
