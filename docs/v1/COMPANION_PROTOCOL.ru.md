@@ -244,6 +244,40 @@ powered-off, saved-network или powered-on/disconnected, иначе run не �
 Пока это только готовое по
 host/build определение gate; physical HTTP parity не принята без retained passing run.
 
+Альтернативный split с external client оставляет всю настройку сети вне verifier.
+USB conductor запускает explicit session Local Web exact candidate и создаёт один
+fresh challenge 16-byte в hexadecimal. После того как отдельный client уже подключён
+к этому one-shot AP независимо выбранным способом, его checkout запускает:
+
+```sh
+python3 tools/companion_web_external_client.py \
+  --challenge 00112233445566778899aabbccddeeff \
+  --output work/external-http-report.json
+```
+
+Verifier жёстко ограничен direct `http://192.168.4.1`, отключает ambient HTTP proxy,
+не выполняет commands настройки сети, не обрабатывает credential, запрашивает только
+три read scope, byte-сравнивает `/` и `/app.js` с exact embedded production assets,
+обходит все bounded pages Session/Target/detail/comparison и выдаёт только counts,
+identities assets и privacy-safe digest canonical projection. Затем conductor
+связывает report со fresh challenge и canonical snapshot native USB:
+
+```sh
+python3 tools/check_companion_external_http_report.py \
+  --report work/external-http-report.json \
+  --usb-snapshot work/companion-usb-snapshot.json \
+  --challenge 00112233445566778899aabbccddeeff \
+  --output work/external-http-parity.json
+```
+
+Checker отвергает unknown fields, другой challenge/asset/grant, noncanonical USB input
+и любой drift projection/count. Команды выше документируют split и используют
+публичный пример challenge; physical gate обязан создать fresh challenge. Exact
+`E-AUTO-212`/`E-COMPANION-010` на tooling source
+`0ca71812ea6df2a9688a47d7f3b3fe56e9ed9a6f` принимают эту host-only automation
+восьмью прямыми fail-closed tests и соседним companion suite. Сами по себе они не
+подключают client, не запускают session DUT и не доказывают physical HTTP parity.
+
 ## Правила trust и lifecycle
 
 - Local cable или loopback socket задаёт locality transport, а не authorization.
@@ -343,3 +377,13 @@ search/detail/export. Immutable sources index/application сжимаются с 
 tamper rejection, executable known-answer self-test SHA-256, 30 focused companion
 tests, full host suite и production build. Это `E-COMPANION-008`; host network не
 меняется, physical HTTP claim не создаётся и остаётся отложенным до dedicated client.
+
+Exact host/build `1.0.0-dev.361` на firmware source
+`39640cf7ca6b29d67404f17daaa2bf6a65c73946` завершает bilingual task-first
+checkpoint presentation `E-COMPANION-009`: browser-language default и switch EN/RU
+сохраняют selected Target, весь copy результатов/errors локализован, search Target
+отсутствует на unrelated pages. Exact production assets проходят deterministic
+loopback preview и browser review 390×844; gzip index/application остаются bounded
+3 501/3 956 B. Затем `E-COMPANION-010` добавляет описанные выше external read-only
+probe и binder exact USB projection без изменения firmware и без claim physical
+client run.

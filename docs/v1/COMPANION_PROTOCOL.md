@@ -243,6 +243,41 @@ powered-on/disconnected state was restored before the run may pass. This is a
 host/build-ready gate definition only;
 physical HTTP parity is not accepted until its retained run passes.
 
+The alternative external-client split keeps all network configuration outside the
+verifier. The USB conductor starts the exact candidate's explicit Local Web session
+and creates one fresh 16-byte hexadecimal challenge. After an independently managed
+dedicated client is already associated with that one-shot AP, its checkout runs:
+
+```sh
+python3 tools/companion_web_external_client.py \
+  --challenge 00112233445566778899aabbccddeeff \
+  --output work/external-http-report.json
+```
+
+The verifier is fixed to direct `http://192.168.4.1`, disables ambient HTTP proxies,
+performs no network-configuration command, handles no credential, requests only the
+three read scopes, byte-compares `/` and `/app.js` with the exact embedded production
+assets, walks every bounded Session/Target/detail/comparison page and emits only
+counts, asset identities and a privacy-safe canonical projection digest. The
+conductor then binds that report to its fresh challenge and canonical native-USB
+snapshot:
+
+```sh
+python3 tools/check_companion_external_http_report.py \
+  --report work/external-http-report.json \
+  --usb-snapshot work/companion-usb-snapshot.json \
+  --challenge 00112233445566778899aabbccddeeff \
+  --output work/external-http-parity.json
+```
+
+The checker rejects unknown fields, a different challenge/asset/grant, noncanonical
+USB input or any projection/count drift. The commands above document the split and
+use a public example challenge; a physical gate must generate a fresh challenge.
+Exact `E-AUTO-212`/`E-COMPANION-010` at tooling source
+`0ca71812ea6df2a9688a47d7f3b3fe56e9ed9a6f` accept this host-only automation with
+eight direct fail-closed tests and the adjacent companion suite. They do not join a
+client, start the DUT session or establish physical HTTP parity by themselves.
+
 ## Trust and lifecycle rules
 
 - A local cable or loopback socket is transport locality, not authorization.
@@ -341,3 +376,13 @@ executable SHA-256 known-answer self-test, 30 focused companion tests, the full 
 suite and production build pass. This is `E-COMPANION-008`; it changes no host
 network and makes no physical HTTP claim, which remains deferred to a dedicated
 client.
+
+Exact host/build `1.0.0-dev.361` at firmware source
+`39640cf7ca6b29d67404f17daaa2bf6a65c73946` completes the bilingual task-first
+presentation checkpoint `E-COMPANION-009`: browser-language default and the EN/RU
+switch preserve the selected Target, all result/error copy is localized and Target
+search is absent from unrelated pages. Exact production assets pass a deterministic
+loopback preview and 390×844 browser review; gzip index/application remain bounded at
+3,501/3,956 B. `E-COMPANION-010` then adds the external read-only probe and exact
+USB projection binder described above without changing firmware or claiming a
+physical client run.
