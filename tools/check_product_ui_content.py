@@ -149,7 +149,10 @@ PRIMARY_TASK_IDS = {
     "SubGhzRawOok",
     "SubGhzRawFsk",
     "LibraryActionAnalyze",
+    "LibraryActionAnalyzeNote",
     "LibraryActionExport",
+    "LibraryActionExportNote",
+    "LibraryActionsTitle",
     "ProtocolWorkbenchTitle",
     "WifiPasswordCheckTitle",
     "WifiPasswordCheckTask",
@@ -258,6 +261,20 @@ def main() -> int:
     ):
         if required not in renderer:
             failures.append(f"missing contextual task-tree route: {required}")
+
+    library_actions_call = renderer.find("libraryController.openActions()")
+    library_detail_branch = renderer[
+        max(0, library_actions_call - 420):library_actions_call + 80
+    ] if library_actions_call >= 0 else ""
+    if "LibraryView::SessionDetail" not in library_detail_branch:
+        failures.append(
+            "Library detail must open contextual actions before execution"
+        )
+    elif "requestExport" in library_detail_branch or \
+            "openSelectedProtocolWorkbench" in library_detail_branch:
+        failures.append(
+            "Library detail executes a task before the contextual action node"
+        )
 
     for identifier in sorted(REQUIRED_OUTCOME_IDS):
         if f"LESHY_UI_TEXT({identifier}," not in strings:

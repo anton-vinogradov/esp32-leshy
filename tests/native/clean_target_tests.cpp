@@ -3864,6 +3864,8 @@ void testOfflineLibraryControllerIsBoundedAndPreservesProvenance() {
     CHECK(library.openSelected());
     CHECK(library.view() == LibraryView::SessionDetail);
     CHECK(!library.previous());
+    CHECK(library.openActions());
+    CHECK(library.view() == LibraryView::Actions);
     CHECK(library.requestExport());
     CHECK(library.view() == LibraryView::ExportReady);
     char exported[640] = {};
@@ -3885,6 +3887,12 @@ void testOfflineLibraryControllerIsBoundedAndPreservesProvenance() {
     CHECK(library.formatSelectedJsonExport(exportTooSmall, sizeof(exportTooSmall)).status ==
           LibraryExportStatus::BufferTooSmall);
     CHECK(exportTooSmall[0] == '\0');
+    CHECK(library.back());
+    CHECK(library.view() == LibraryView::Actions);
+    CHECK(library.back());
+    CHECK(library.view() == LibraryView::SessionDetail);
+    CHECK(library.requestExport());
+    CHECK(library.view() == LibraryView::ExportReady);
     CHECK(library.back());
     CHECK(library.view() == LibraryView::SessionDetail);
     CHECK(library.back());

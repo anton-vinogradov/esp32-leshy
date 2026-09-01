@@ -13451,15 +13451,19 @@ NavigationFooter navigationFooterForCurrentState() {
 
     if (uiController.page() == 3) {
         if (libraryController.view() == LibraryView::ExportReady) {
-            return {{NavigationKey::Left, UiTextId::NavDetails}, {}, {}};
+            return {{NavigationKey::Left,
+                     libraryController.exportReturnView() ==
+                             LibraryView::Actions
+                         ? UiTextId::NavActions : UiTextId::NavDetails},
+                    {}, {}};
+        }
+        if (libraryController.view() == LibraryView::Actions) {
+            return {{NavigationKey::Left, UiTextId::NavDetails}, choose,
+                    {NavigationKey::RightAndSelect, UiTextId::NavEnter}};
         }
         if (libraryController.view() == LibraryView::SessionDetail) {
-            const bool multiple = libraryDetailActionCount() > 1U;
-            return {{NavigationKey::Left, UiTextId::NavList},
-                    multiple ? choose : NavigationCell{},
-                    {NavigationKey::RightAndSelect,
-                     multiple && libraryDetailActionSelection == 0U
-                         ? UiTextId::NavAnalyze : UiTextId::NavExport}};
+            return {{NavigationKey::Left, UiTextId::NavList}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavActions}};
         }
         return {back, choose,
                 {NavigationKey::RightAndSelect, UiTextId::NavDetails}};
@@ -20288,24 +20292,28 @@ std::uint8_t libraryDetailActionCount() {
     return selectedLibraryHasInfraredCapture() ? 2U : 1U;
 }
 
-void renderLibraryDetailAction() {
-    const bool analyze = selectedLibraryHasInfraredCapture() &&
-        libraryDetailActionSelection == 0U;
-    const char* label = tr(analyze ? UiTextId::LibraryActionAnalyze
-                                   : UiTextId::LibraryActionExport);
-    const Rect bounds = Components::metricRow(4U);
-    if (beginLiveTextRow(UiTextRole::Body, Palette::Focus,
-                         Palette::Canvas)) {
-        setLiveTextRowCursor(UiTextRole::Body, 2, 0);
-        liveTextRowSprite.print(label);
-        pushLiveTextRow(bounds.x, bounds.y - 2);
-        return;
+bool libraryActionIsAnalyze(std::uint8_t index) {
+    return selectedLibraryHasInfraredCapture() && index == 0U;
+}
+
+void renderLibraryActionRow(std::uint8_t index) {
+    if (index >= libraryDetailActionCount()) return;
+    const bool analyze = libraryActionIsAnalyze(index);
+    renderMenuRow(
+        Components::choiceRow(index),
+        tr(analyze ? UiTextId::LibraryActionAnalyze
+                   : UiTextId::LibraryActionExport),
+        tr(analyze ? UiTextId::LibraryActionAnalyzeNote
+                   : UiTextId::LibraryActionExportNote),
+        libraryDetailActionSelection == index, true, Tone::Positive);
+}
+
+void renderLibraryActions(bool clearContent) {
+    renderHeader(tr(UiTextId::LibraryActionsTitle), clearContent);
+    for (std::uint8_t index = 0U;
+         index < libraryDetailActionCount(); ++index) {
+        renderLibraryActionRow(index);
     }
-    display.fillRect(bounds.x, bounds.y - 2, bounds.width,
-                     kLiveTextRowHeight, Palette::Canvas);
-    display.setTextColor(Palette::Focus, Palette::Canvas);
-    setUiCursor(UiTextRole::Body, bounds.x + 2, bounds.y - 2);
-    display.print(label);
 }
 
 void renderLibraryListRow(std::size_t index) {
@@ -20380,6 +20388,10 @@ void renderLibraryPage(bool clearContent) {
         renderMetric(3, tr(UiTextId::ExportUsbRequired), Tone::Positive);
         return;
     }
+    if (libraryController.view() == LibraryView::Actions) {
+        renderLibraryActions(clearContent);
+        return;
+    }
     if (libraryController.view() == LibraryView::SessionDetail) {
         renderHeader(tr(UiTextId::SessionDetail), clearContent);
         if (selected == nullptr) return;
@@ -20449,7 +20461,6 @@ void renderLibraryPage(bool clearContent) {
                                  RecoveredFallback
                          ? Tone::Warning
                          : persistent ? Tone::Positive : Tone::Warning);
-        renderLibraryDetailAction();
         return;
     }
 
@@ -22718,14 +22729,15 @@ UiDeltaRenderResult renderSelectionDelta() {
     }
 
     if (uiController.page() == 3 &&
-        libraryController.view() == LibraryView::SessionDetail &&
+        libraryController.view() == LibraryView::Actions &&
         renderedUi.libraryView ==
-            static_cast<std::uint8_t>(LibraryView::SessionDetail)) {
+            static_cast<std::uint8_t>(LibraryView::Actions)) {
         if (renderedUi.libraryDetailActionSelection ==
             libraryDetailActionSelection) {
             return UiDeltaRenderResult::NoChange;
         }
-        renderLibraryDetailAction();
+        renderLibraryActionRow(renderedUi.libraryDetailActionSelection);
+        renderLibraryActionRow(libraryDetailActionSelection);
         renderNavigationFooter();
         return UiDeltaRenderResult::Rendered;
     }
@@ -23727,6 +23739,9 @@ void releaseFullGuidedRfResource() {
 
 void restoreFullGuidedLibraryView() {
     if (libraryController.view() == LibraryView::ExportReady) {
+        libraryController.back();
+    }
+    if (libraryController.view() == LibraryView::Actions) {
         libraryController.back();
     }
     if (libraryController.view() == LibraryView::SessionDetail) {
@@ -25858,8 +25873,10 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                 ? "true" : "false",
             libraryController.view() == LibraryView::ExportReady
                 ? "export_ready"
-                : (libraryController.view() == LibraryView::SessionDetail
-                       ? "detail" : "list"),
+                : (libraryController.view() == LibraryView::Actions
+                       ? "actions"
+                       : (libraryController.view() == LibraryView::SessionDetail
+                              ? "detail" : "list")),
             static_cast<unsigned>(libraryController.size()),
             static_cast<unsigned long>(selectedLibrary == nullptr
                                            ? 0
@@ -28614,7 +28631,7 @@ bool selectionCanRepaintInPlace(UiAction action) {
     }
     if (uiController.page() == 3) {
         return libraryController.view() == LibraryView::SessionList ||
-            (libraryController.view() == LibraryView::SessionDetail &&
+            (libraryController.view() == LibraryView::Actions &&
              libraryDetailActionCount() > 1U);
     }
     if (uiController.page() == kProtocolWorkbenchPage) return true;
@@ -28644,6 +28661,10 @@ bool openCurrentFieldSurveyExport() {
         return false;
     }
     if (libraryController.view() == LibraryView::ExportReady &&
+        !libraryController.back()) {
+        return false;
+    }
+    if (libraryController.view() == LibraryView::Actions &&
         !libraryController.back()) {
         return false;
     }
@@ -29729,28 +29750,33 @@ bool applyUiAction(UiAction action, bool render = true) {
             (action == UiAction::Back || action == UiAction::Left)) {
             handled = true;
             changed = libraryController.back();
-        } else if (libraryController.view() == LibraryView::SessionDetail &&
+        } else if (libraryController.view() == LibraryView::Actions &&
             (action == UiAction::Back || action == UiAction::Left)) {
             handled = true;
             changed = libraryController.back();
             libraryDetailActionSelection = 0U;
         } else if (libraryController.view() == LibraryView::SessionDetail &&
+            (action == UiAction::Back || action == UiAction::Left)) {
+            handled = true;
+            changed = libraryController.back();
+            libraryDetailActionSelection = 0U;
+        } else if (libraryController.view() == LibraryView::Actions &&
                    action == UiAction::Up &&
                    libraryDetailActionSelection > 0U) {
             handled = true;
             --libraryDetailActionSelection;
             changed = true;
-        } else if (libraryController.view() == LibraryView::SessionDetail &&
+        } else if (libraryController.view() == LibraryView::Actions &&
                    action == UiAction::Down &&
                    libraryDetailActionSelection + 1U <
                        libraryDetailActionCount()) {
             handled = true;
             ++libraryDetailActionSelection;
             changed = true;
-        } else if (libraryController.view() == LibraryView::SessionDetail &&
+        } else if (libraryController.view() == LibraryView::Actions &&
                    (action == UiAction::Up || action == UiAction::Down)) {
             handled = true;
-        } else if (libraryController.view() == LibraryView::SessionDetail &&
+        } else if (libraryController.view() == LibraryView::Actions &&
                    (action == UiAction::Select ||
                     action == UiAction::Right)) {
             handled = true;
@@ -29770,6 +29796,14 @@ bool applyUiAction(UiAction action, bool render = true) {
                     noteDeviceLockAdmissionBlocked();
                 }
             }
+        } else if (libraryController.view() == LibraryView::SessionDetail &&
+                   (action == UiAction::Select ||
+                    action == UiAction::Right)) {
+            handled = true;
+            libraryDetailActionSelection = 0U;
+            changed = libraryController.openActions();
+            lastRuntimeEvent = changed ? "library_actions"
+                                       : "library_actions_open_failed";
         } else if (libraryController.view() == LibraryView::SessionList) {
             if (action == UiAction::Up) {
                 handled = true;

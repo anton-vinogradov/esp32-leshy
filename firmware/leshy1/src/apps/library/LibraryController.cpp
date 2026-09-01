@@ -62,6 +62,7 @@ void LibraryController::clear() {
     size_ = 0;
     selection_ = 0;
     view_ = LibraryView::SessionList;
+    exportReturnView_ = LibraryView::SessionDetail;
 }
 
 bool LibraryController::add(const services::survey::SurveySession& session,
@@ -145,6 +146,7 @@ bool LibraryController::replaceWithOwnedCopy(
     }
     selection_ = 0;
     view_ = LibraryView::SessionList;
+    exportReturnView_ = LibraryView::SessionDetail;
     return true;
 }
 
@@ -185,14 +187,30 @@ bool LibraryController::openSelected() {
     return true;
 }
 
+bool LibraryController::openActions() {
+    if (view_ != LibraryView::SessionDetail || selected() == nullptr) {
+        return false;
+    }
+    view_ = LibraryView::Actions;
+    return true;
+}
+
 bool LibraryController::requestExport() {
-    if (view_ != LibraryView::SessionDetail || selected() == nullptr) return false;
+    if ((view_ != LibraryView::SessionDetail &&
+         view_ != LibraryView::Actions) || selected() == nullptr) {
+        return false;
+    }
+    exportReturnView_ = view_;
     view_ = LibraryView::ExportReady;
     return true;
 }
 
 bool LibraryController::back() {
     if (view_ == LibraryView::ExportReady) {
+        view_ = exportReturnView_;
+        return true;
+    }
+    if (view_ == LibraryView::Actions) {
         view_ = LibraryView::SessionDetail;
         return true;
     }

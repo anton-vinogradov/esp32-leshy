@@ -174,6 +174,12 @@ def open_screenshot_export(device: PassiveSerial) -> list[dict[str, Any]]:
     current = action(device, "right")
     trace.append(current)
     require(current, {
+        "page": "library", "library_view": "actions",
+        "library_selected_kind": "screenshot",
+    }, "Screenshot actions")
+    current = action(device, "right")
+    trace.append(current)
+    require(current, {
         "page": "library", "library_view": "export_ready",
         "library_selected_kind": "screenshot",
     }, "Screenshot export ready")

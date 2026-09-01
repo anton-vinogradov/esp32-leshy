@@ -334,6 +334,17 @@
           }
         },
         {
+          "id": "open-library-actions",
+          "action": "right",
+          "assert": {
+            "changed": true,
+            "page": "library",
+            "library_view": "actions",
+            "library_generation": 2,
+            "library_persistent": false
+          }
+        },
+        {
           "id": "prepare-export",
           "action": "right",
           "assert": {
@@ -373,6 +384,17 @@
                 "wifi": 3
               }
             }
+          }
+        },
+        {
+          "id": "back-library-actions",
+          "action": "back",
+          "assert": {
+            "changed": true,
+            "page": "library",
+            "library_view": "actions",
+            "runtime_owner": "library",
+            "lease_mask": 1
           }
         },
         {

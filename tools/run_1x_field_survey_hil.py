@@ -335,6 +335,13 @@ def run_exports(device: Any, frames: Path, trace: list[dict[str, Any]],
         "library_generation": generation, "runtime_owner": "library",
         "lease_mask": 5,
     }, "export.detail"))
+    actions = action(device, "right")
+    trace.append(actions)
+    failures.extend(expect(actions, {
+        "page": "library", "library_view": "actions",
+        "library_generation": generation, "runtime_owner": "library",
+        "lease_mask": 5,
+    }, "export.actions"))
     export_ready = action(device, "right")
     trace.append(export_ready)
     failures.extend(expect(export_ready, {

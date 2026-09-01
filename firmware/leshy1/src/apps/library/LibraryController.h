@@ -12,6 +12,7 @@ namespace leshy1::apps::library {
 enum class LibraryView : std::uint8_t {
     SessionList,
     SessionDetail,
+    Actions,
     ExportReady,
 };
 
@@ -72,6 +73,7 @@ public:
     bool next();
     bool previous();
     bool openSelected();
+    bool openActions();
     bool requestExport();
     bool back();
     LibraryExportResult formatSelectedJsonExport(char* output, std::size_t capacity) const;
@@ -87,6 +89,7 @@ public:
         char* output, std::size_t capacity) const;
 
     LibraryView view() const { return view_; }
+    LibraryView exportReturnView() const { return exportReturnView_; }
     std::size_t selection() const { return selection_; }
     std::size_t size() const { return size_; }
     const LibraryEntry* selected() const;
@@ -97,6 +100,7 @@ private:
     std::size_t size_ = 0;
     std::size_t selection_ = 0;
     LibraryView view_ = LibraryView::SessionList;
+    LibraryView exportReturnView_ = LibraryView::SessionDetail;
 };
 
 }  // namespace leshy1::apps::library
