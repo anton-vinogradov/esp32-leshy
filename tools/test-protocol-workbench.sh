@@ -13,9 +13,13 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/tests/native/protocol_workbench_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/protocol/ProtocolAnnotationController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/protocol/ProtocolAnnotations.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/protocol/ProtocolComparison.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/protocol/ProtocolDerivedDecode.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/protocol/ProtocolWorkbench.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/ProtocolAnnotationCodec.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/ProtocolAnnotationStore.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/ProtocolDerivedDecodeCodec.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/ProtocolDerivedDecodeStore.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/AtomicHead.cpp" \
     -o "$test_tmp/protocol_workbench_tests"
 

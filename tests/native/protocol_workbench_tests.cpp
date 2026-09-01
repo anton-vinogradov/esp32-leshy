@@ -10,9 +10,13 @@
 
 #include "apps/protocol/ProtocolAnnotations.h"
 #include "apps/protocol/ProtocolAnnotationController.h"
+#include "apps/protocol/ProtocolComparison.h"
+#include "apps/protocol/ProtocolDerivedDecode.h"
 #include "apps/protocol/ProtocolWorkbench.h"
 #include "storage/ProtocolAnnotationCodec.h"
 #include "storage/ProtocolAnnotationStore.h"
+#include "storage/ProtocolDerivedDecodeCodec.h"
+#include "storage/ProtocolDerivedDecodeStore.h"
 
 namespace {
 
@@ -271,6 +275,269 @@ void testProtocolAnnotationTaskFlow() {
            ProtocolAnnotationStatus::SourceMismatch);
 }
 
+void testProtocolComparison() {
+    using namespace leshy1::apps::protocol;
+
+    FixtureSource left = necFixture();
+    FixtureSource right = left;
+    ProtocolWorkbenchWorkspace leftWorkspace;
+    ProtocolWorkbenchWorkspace rightWorkspace;
+    ProtocolWorkbenchAnalysis leftAnalysis;
+    ProtocolWorkbenchAnalysis rightAnalysis;
+    assert(analyzeInfraredCapture(left, leftWorkspace, &leftAnalysis) ==
+           ProtocolWorkbenchStatus::Valid);
+    assert(analyzeInfraredCapture(right, rightWorkspace, &rightAnalysis) ==
+           ProtocolWorkbenchStatus::Valid);
+    const ProtocolAnnotationSource leftIdentity{
+        8U, leftAnalysis.sourceFingerprint,
+        static_cast<std::uint16_t>(leftAnalysis.pulseCount)};
+    ProtocolAnnotationSource rightIdentity{
+        9U, rightAnalysis.sourceFingerprint,
+        static_cast<std::uint16_t>(rightAnalysis.pulseCount)};
+    ProtocolComparisonResult result;
+    assert(compareInfraredCaptures(
+               left, leftAnalysis, leftIdentity, false,
+               right, rightAnalysis, rightIdentity, false, &result) ==
+           ProtocolComparisonStatus::Valid);
+    assert(result.outcome == ProtocolComparisonOutcome::Identical);
+    assert(result.exactChangedPulses == 0U);
+    assert(result.valueChangedPulses == 0U);
+    assert(result.regionCount == 0U);
+    assert(result.left.captureGeneration == 8U);
+    assert(result.right.captureGeneration == 9U);
+
+    // Receiver jitter changes exact evidence but not the decoded symbol family.
+    right.pulses[2U] = static_cast<std::uint16_t>(right.pulses[2U] + 10U);
+    assert(analyzeInfraredCapture(right, rightWorkspace, &rightAnalysis) ==
+           ProtocolWorkbenchStatus::Valid);
+    rightIdentity.captureFingerprint = rightAnalysis.sourceFingerprint;
+    assert(compareInfraredCaptures(
+               left, leftAnalysis, leftIdentity, false,
+               right, rightAnalysis, rightIdentity, false, &result) ==
+           ProtocolComparisonStatus::Valid);
+    assert(result.outcome == ProtocolComparisonOutcome::TimingVariation);
+    assert(result.exactChangedPulses == 1U);
+    assert(result.valueChangedPulses == 0U);
+
+    // A short/long symbol-family transition is useful payload change, with an
+    // exact bounded pulse region rather than a copy of either raw Capture.
+    right = left;
+    right.pulses[5U] = 1680U;
+    assert(analyzeInfraredCapture(right, rightWorkspace, &rightAnalysis) ==
+           ProtocolWorkbenchStatus::Valid);
+    rightIdentity.captureFingerprint = rightAnalysis.sourceFingerprint;
+    assert(compareInfraredCaptures(
+               left, leftAnalysis, leftIdentity, false,
+               right, rightAnalysis, rightIdentity, false, &result) ==
+           ProtocolComparisonStatus::Valid);
+    assert(result.outcome == ProtocolComparisonOutcome::ValueChanged);
+    assert(result.valueChangedPulses == 1U);
+    assert(result.regionCount == 1U);
+    assert(result.regions[0U].firstPulse == 5U);
+    assert(result.regions[0U].lastPulse == 5U);
+
+    assert(compareInfraredCaptures(
+               left, leftAnalysis, leftIdentity, false,
+               right, rightAnalysis, rightIdentity, true, &result) ==
+           ProtocolComparisonStatus::Valid);
+    assert(result.outcome == ProtocolComparisonOutcome::StructureChanged);
+
+    // The summary counts omitted regions, not every pulse after capacity.
+    right = left;
+    for (std::size_t index = 2U; index <= 34U; index += 2U) {
+        right.pulses[index] = 1680U;
+    }
+    assert(analyzeInfraredCapture(right, rightWorkspace, &rightAnalysis) ==
+           ProtocolWorkbenchStatus::Valid);
+    rightIdentity.captureFingerprint = rightAnalysis.sourceFingerprint;
+    assert(compareInfraredCaptures(
+               left, leftAnalysis, leftIdentity, false,
+               right, rightAnalysis, rightIdentity, false, &result) ==
+           ProtocolComparisonStatus::Valid);
+    assert(result.regionCount == ProtocolComparisonResult::kMaximumRegions);
+    assert(result.omittedRegions == 1U);
+
+    ProtocolAnnotationSource foreign = rightIdentity;
+    ++foreign.captureFingerprint;
+    assert(compareInfraredCaptures(
+               left, leftAnalysis, leftIdentity, false,
+               right, rightAnalysis, foreign, false, &result) ==
+           ProtocolComparisonStatus::SourceMismatch);
+    right.failedIndex = 4U;
+    assert(compareInfraredCaptures(
+               left, leftAnalysis, leftIdentity, false,
+               right, rightAnalysis, rightIdentity, false, &result) ==
+           ProtocolComparisonStatus::SourceReadFailed);
+}
+
+void testProtocolDerivedDecode() {
+    using namespace leshy1::apps::protocol;
+
+    FixtureSource source = necFixture();
+    ProtocolWorkbenchWorkspace workspace;
+    ProtocolWorkbenchAnalysis analysis;
+    assert(analyzeInfraredCapture(source, workspace, &analysis) ==
+           ProtocolWorkbenchStatus::Valid);
+    const ProtocolAnnotationSource identity{
+        8U, analysis.sourceFingerprint,
+        static_cast<std::uint16_t>(analysis.pulseCount)};
+    ProtocolAnnotationSet annotations;
+    assert(annotations.bind(identity) == ProtocolAnnotationStatus::Valid);
+    assert(annotations.add(identity, {ProtocolAnnotationKind::Header, 0U, 1U}) ==
+           ProtocolAnnotationStatus::Valid);
+    assert(annotations.add(identity, {ProtocolAnnotationKind::Address, 2U, 17U}) ==
+           ProtocolAnnotationStatus::Valid);
+    assert(annotations.add(identity, {ProtocolAnnotationKind::Command, 18U, 33U}) ==
+           ProtocolAnnotationStatus::Valid);
+    ProtocolDerivedDecode decode;
+    ProtocolAnnotationSet empty;
+    assert(empty.bind(identity) == ProtocolAnnotationStatus::Valid);
+    assert(deriveProtocolDecode(source, analysis, false, empty, 1U,
+                                &decode) ==
+           ProtocolDerivedDecodeStatus::InvalidArgument);
+    assert(deriveProtocolDecode(source, analysis, false, annotations, 2U,
+                                &decode) ==
+           ProtocolDerivedDecodeStatus::Valid);
+    assert(decode.outcome == ProtocolDerivedDecodeOutcome::Complete);
+    assert(decode.fieldCount == 3U);
+    assert(decode.observedBitFields == 2U);
+    assert(decode.inconclusiveFields == 0U);
+    assert(decode.fields[0U].status ==
+           ProtocolDerivedFieldStatus::DurationOnly);
+    assert(decode.fields[1U].status ==
+           ProtocolDerivedFieldStatus::BitsObserved);
+    assert(decode.fields[1U].bitCount == 8U);
+    assert(decode.fields[1U].observedBits == 0x49U);
+    assert(decode.fields[2U].observedBits == 0x92U);
+    assert(decode.source.captureFingerprint == analysis.sourceFingerprint);
+    assert(decode.annotationStoreGeneration == 2U);
+    assert(decode.decoderVersion == 1U);
+
+    ProtocolAnnotationSet partial;
+    assert(partial.bind(identity) == ProtocolAnnotationStatus::Valid);
+    assert(partial.add(identity, {ProtocolAnnotationKind::Data, 34U, 34U}) ==
+           ProtocolAnnotationStatus::Valid);
+    assert(deriveProtocolDecode(source, analysis, false, partial, 3U,
+                                &decode) ==
+           ProtocolDerivedDecodeStatus::Valid);
+    assert(decode.outcome == ProtocolDerivedDecodeOutcome::Partial);
+    assert(decode.fields[0U].status ==
+           ProtocolDerivedFieldStatus::Inconclusive);
+    assert(decode.inconclusiveFields == 1U);
+
+    ProtocolAnnotationSet foreign;
+    assert(foreign.bind({9U, analysis.sourceFingerprint + 1U,
+                         identity.pulseCount}) ==
+           ProtocolAnnotationStatus::Valid);
+    assert(foreign.add(foreign.source(),
+                       {ProtocolAnnotationKind::Header, 0U, 1U}) ==
+           ProtocolAnnotationStatus::Valid);
+    assert(deriveProtocolDecode(source, analysis, false, foreign, 1U,
+                                &decode) ==
+           ProtocolDerivedDecodeStatus::SourceMismatch);
+    source.failedIndex = 5U;
+    assert(deriveProtocolDecode(source, analysis, false, annotations, 2U,
+                                &decode) ==
+           ProtocolDerivedDecodeStatus::SourceReadFailed);
+}
+
+void testProtocolDerivedDecodeAtomicStore() {
+    using namespace leshy1::apps::protocol;
+    using namespace leshy1::storage;
+
+    FixtureSource pulseSource = necFixture();
+    ProtocolWorkbenchWorkspace analysisWorkspace;
+    ProtocolWorkbenchAnalysis analysis;
+    assert(analyzeInfraredCapture(pulseSource, analysisWorkspace, &analysis) ==
+           ProtocolWorkbenchStatus::Valid);
+    const ProtocolAnnotationSource source{
+        8U, analysis.sourceFingerprint,
+        static_cast<std::uint16_t>(analysis.pulseCount)};
+    ProtocolAnnotationSet annotations;
+    assert(annotations.bind(source) == ProtocolAnnotationStatus::Valid);
+    assert(annotations.add(source, {ProtocolAnnotationKind::Header, 0U, 1U}) ==
+           ProtocolAnnotationStatus::Valid);
+    assert(annotations.add(source, {ProtocolAnnotationKind::Address, 2U, 17U}) ==
+           ProtocolAnnotationStatus::Valid);
+    ProtocolDerivedDecode decode;
+    assert(deriveProtocolDecode(pulseSource, analysis, false, annotations, 2U,
+                                &decode) ==
+           ProtocolDerivedDecodeStatus::Valid);
+
+    std::array<std::uint8_t, kProtocolDerivedDecodeWireMaxBytes> wire{};
+    std::size_t wireSize = 0U;
+    assert(encodeProtocolDerivedDecode(decode, wire.data(), wire.size(),
+                                       &wireSize) ==
+           ProtocolDerivedDecodeCodecStatus::Valid);
+    ProtocolDerivedDecode decoded;
+    assert(decodeProtocolDerivedDecode(wire.data(), wireSize, &decoded) ==
+           ProtocolDerivedDecodeCodecStatus::Valid);
+    assert(decoded.source.captureFingerprint == source.captureFingerprint);
+    assert(decoded.annotationStoreGeneration == 2U);
+    assert(decoded.fieldCount == 2U);
+    assert(decoded.fields[1U].observedBits == 0x49U);
+    wire[40U] ^= 1U;
+    assert(decodeProtocolDerivedDecode(wire.data(), wireSize, &decoded) ==
+           ProtocolDerivedDecodeCodecStatus::ChecksumMismatch);
+    assert(!decoded.valid());
+
+    MemoryStoreIo io;
+    ProtocolDerivedDecodeStoreWorkspace workspace;
+    ProtocolDerivedDecode scratch;
+    auto committed = commitNextProtocolDerivedDecode(
+        io, workspace, decode, scratch);
+    assert(committed.complete());
+    assert(committed.storeGeneration == 1U);
+    assert(committed.publishedSlot == HeadSlot::A);
+
+    ProtocolDerivedDecode recovered;
+    auto recovery = recoverProtocolDerivedDecode(
+        io, workspace, source, 2U, &recovered);
+    assert(recovery.valid());
+    assert(recovery.storeGeneration == 1U);
+    assert(recovery.fields == 2U);
+
+    ++decode.fields[0U].durationUs;
+    committed = commitNextProtocolDerivedDecode(
+        io, workspace, decode, scratch);
+    assert(committed.complete());
+    assert(committed.storeGeneration == 2U);
+    assert(committed.publishedSlot == HeadSlot::B);
+
+    // A torn third derived generation cannot displace the durable second one.
+    ++decode.fields[0U].durationUs;
+    io.failNextSync("protocol-derived-00000008-00000002-00000003.manifest");
+    committed = commitNextProtocolDerivedDecode(
+        io, workspace, decode, scratch);
+    assert(!committed.complete());
+    assert(committed.stage == CommitStage::SyncManifest);
+    recovery = recoverProtocolDerivedDecode(
+        io, workspace, source, 2U, &recovered);
+    assert(recovery.valid());
+    assert(recovery.storeGeneration == 2U);
+
+    // Corrupt newest payload: the first exact-source generation survives.
+    io.flip("protocol-derived-00000008-00000002-00000002.bin", 40U);
+    recovery = recoverProtocolDerivedDecode(
+        io, workspace, source, 2U, &recovered);
+    assert(recovery.valid());
+    assert(recovery.storeGeneration == 1U);
+
+    // Another annotation generation has an independent namespace and cannot
+    // silently reuse this derived interpretation.
+    recovery = recoverProtocolDerivedDecode(
+        io, workspace, source, 3U, &recovered);
+    assert(recovery.status == ProtocolDerivedDecodeStoreStatus::Empty);
+    assert(!recovered.valid());
+
+    ProtocolAnnotationSource foreign = source;
+    ++foreign.captureFingerprint;
+    recovery = recoverProtocolDerivedDecode(
+        io, workspace, foreign, 2U, &recovered);
+    assert(!recovery.valid());
+    assert(!recovered.valid());
+}
+
 }  // namespace
 
 int main() {
@@ -317,6 +584,9 @@ int main() {
     testProtocolAnnotationsModelAndCodec();
     testProtocolAnnotationAtomicStore();
     testProtocolAnnotationTaskFlow();
+    testProtocolComparison();
+    testProtocolDerivedDecode();
+    testProtocolDerivedDecodeAtomicStore();
 
     std::cout << "protocol workbench tests passed\n";
     return 0;
