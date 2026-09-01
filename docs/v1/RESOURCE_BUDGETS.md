@@ -2153,3 +2153,23 @@ the independent 4 KiB bound. The exact production assets pass full host/build
 checks and loopback-only mobile visual review without a board, host-network or
 radio operation. Physical dedicated-client HTTP parity, progress and cadence stay
 open/unchanged.
+
+Field Survey end-to-end bound `RB-M250`: exact physical/build
+`1.0.0-dev.366` at firmware source
+`48845265fc969ed7062793f85bf8251bec948bcb` uses 234,976 B static RAM,
+3,647,128 B linked flash and 3,647,632/3,713,168 B app/factory images,
+leaving 546,672 B of actual application-image headroom in the 4 MiB OTA slot.
+App/factory/ELF/map SHA-256 values are
+`b20d8be892133742a14384496d140ef54032526b11d340eeeb127d6c125a7151`/
+`4c0d2285b3ff840b6d2b3dd18cf8abd23c8bd4bf0694fa0fd66b70bd1d708a3f`/
+`0f4bf17987f688cff4e554768f8a2381030608f6013dbd5785ffa727a7d8cf2a`/
+`c03289236aa8c234597f9cb1dc40010c154f3ede73c1695c5b2a01c17af71527`.
+Against dev.365, static RAM is unchanged while linked/app/factory sizes shrink
+156/160/160 B and OTA headroom grows 160 B. BLE-first Field Survey scheduling
+restores a 31,732 B largest internal block at both controller bootstraps, versus
+the retained Wi-Fi-first failure at 26,612 B; both visits then complete one
+Wi-Fi and one BLE pass with zero pipeline drops. The accepted run writes only
+the two explicit visit generations, reopens generation 10/51 read-only with zero
+physical writes, and its separate export performs zero radio/storage writes.
+This closes focused `WF-14`, moves cadence to 4/15 and does not claim optional
+trusted-GPS completion or the broad release matrix.

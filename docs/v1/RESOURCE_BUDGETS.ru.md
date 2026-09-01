@@ -2143,3 +2143,23 @@ response остаются внутри независимого bound 4 KiB. Exa
 проходят полный host/build набор и loopback-only mobile visual review без board,
 host network или radio operation. Physical HTTP parity dedicated client, progress
 и cadence остаются открытыми/неизменными.
+
+End-to-end bound Field Survey `RB-M250`: exact physical/build
+`1.0.0-dev.366` на firmware source
+`48845265fc969ed7062793f85bf8251bec948bcb` использует 234 976 B static RAM,
+3 647 128 B linked flash и 3 647 632/3 713 168 B app/factory images, оставляя
+546 672 B actual application-image headroom в OTA slot 4 MiB. SHA-256
+app/factory/ELF/map —
+`b20d8be892133742a14384496d140ef54032526b11d340eeeb127d6c125a7151`/
+`4c0d2285b3ff840b6d2b3dd18cf8abd23c8bd4bf0694fa0fd66b70bd1d708a3f`/
+`0f4bf17987f688cff4e554768f8a2381030608f6013dbd5785ffa727a7d8cf2a`/
+`c03289236aa8c234597f9cb1dc40010c154f3ede73c1695c5b2a01c17af71527`.
+Относительно dev.365 static RAM не меняется, linked/app/factory уменьшаются на
+156/160/160 B, OTA headroom растёт на 160 B. Порядок BLE-first Field Survey
+возвращает largest internal block 31 732 B для обоих bootstrap controller против
+retained Wi-Fi-first failure при 26 612 B; затем оба визита выполняют один проход
+Wi-Fi и BLE с zero pipeline drops. Accepted run пишет только две явно выбранные
+generation визитов, read-only открывает generation 10/51 с zero physical writes,
+а отдельный export выполняет zero radio/storage writes. Это закрывает focused
+`WF-14`, двигает cadence до 4/15 и не заявляет optional trusted-GPS completion
+или broad release matrix.

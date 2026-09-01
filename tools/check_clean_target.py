@@ -849,8 +849,9 @@ def main() -> int:
             "bool initializeProductSurveyWorker()", product_worker
         )]
         disjoint_radio_markers = (
-            "const std::array<RadioKind, 2> schedule{",
-            "RadioKind::Wifi, RadioKind::Ble",
+            "const std::array<RadioKind, 2> schedule =",
+            "? leshy1::apps::survey::fieldSurveySourceOrder()",
+            ": std::array<RadioKind, 2>{",
             "if (wifiScanner.begin())",
             "const bool bleReady = bleScanner.begin();",
             "if (bleReady)",

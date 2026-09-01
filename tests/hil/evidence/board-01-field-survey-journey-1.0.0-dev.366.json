@@ -1,0 +1,160 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "0f4bf17987f688cff4e554768f8a2381030608f6013dbd5785ffa727a7d8cf2a",
+    "app_image_bytes": 3647632,
+    "cid": "FE343253440000002000000055019CB7",
+    "factory_image_bytes": 3713168,
+    "factory_sha256": "4c0d2285b3ff840b6d2b3dd18cf8abd23c8bd4bf0694fa0fd66b70bd1d708a3f",
+    "firmware_sha256": "b20d8be892133742a14384496d140ef54032526b11d340eeeb127d6c125a7151",
+    "firmware_source_commit": "48845265fc969ed7062793f85bf8251bec948bcb",
+    "fresh_flashes": 1,
+    "map_sha256": "c03289236aa8c234597f9cb1dc40010c154f3ede73c1695c5b2a01c17af71527",
+    "version": "1.0.0-dev.366"
+  },
+  "evidence_ids": [
+    "E-BUILD-238",
+    "E-AUTO-216",
+    "E-HIL-234",
+    "E-UX-089",
+    "RB-M250"
+  ],
+  "export_verification": {
+    "accepted_by_composed_machine_check": true,
+    "corrected_oracle_commit": "7620d81a4e1e2f04ca983314d0778b0d8a8c630f",
+    "corrected_oracle_runner_sha256": "cfa693b04956d94853f42efd6f83ed67ad8f2f143c7e8eaf4b9edcc0ca064fc3",
+    "corrected_oracle_tests": 15,
+    "device_actions_complete": true,
+    "export_artifact_index_sha256": "c87f19a052fe369eb5c594d895290faaf4f82311f880603e52eb041d30b8b4d0",
+    "export_run_sha256": "8f5c9b728ba58eaa38ec5d6f32e3ebe866f594ff9bde47583114fa9e55af305a",
+    "library_entries": 2,
+    "library_generation": 10,
+    "library_persistent": true,
+    "library_selected_kind": "session",
+    "native": {
+      "ble_devices": 31,
+      "bytes": 4661,
+      "records": 51,
+      "sha256": "3c1de02bdf558f80e1615e14526809eb642ed388549fd57817de27c92af2557b",
+      "status": "complete",
+      "wifi_access_points": 15,
+      "wifi_stations": 5
+    },
+    "raw_runner_failure": "export.library.library_entries: 2 != 1",
+    "raw_runner_status": "failed",
+    "radio_touched": false,
+    "runner_before_fix_sha256": "af90095d2d6bc904c4b5b64f043d37c5aef5795d0ad83d34712dddf2277ebfee",
+    "wigle": {
+      "bytes": 3164,
+      "readiness": "untimed_unlocated",
+      "records": 46,
+      "sha256": "a6d12d7769a8809d02285e65dc6e74b5ce659f687de490b1b8ce7bd947b92805",
+      "skipped_wifi_stations": 5,
+      "status": "complete",
+      "upload_ready": false
+    },
+    "writes_committed": 0
+  },
+  "journey": {
+    "artifact_index_sha256": "f871feb2e97dc8033733662c69485661cd0ae7cacf9739bcf17eb0869dedfd10",
+    "boot_generation": 8,
+    "boot_observations": 54,
+    "cleanup_complete": true,
+    "final_hil_session_active": false,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "first_visit": {
+      "ble_begin_error": 0,
+      "ble_begin_heap_largest_before": 31732,
+      "ble_devices": 36,
+      "complete": true,
+      "generation": 9,
+      "new": 55,
+      "observations": 55,
+      "pipeline_drops": 0,
+      "seen_again": 0,
+      "source_passes": {
+        "ble": 1,
+        "wifi": 1
+      },
+      "wifi_access_points": 14,
+      "wifi_stations": 5
+    },
+    "gate_eligible": true,
+    "post_commit_generation": 10,
+    "post_commit_observations": 51,
+    "post_commit_physical_writes": 0,
+    "revisit": {
+      "baseline_unique": 55,
+      "ble_begin_error": 0,
+      "ble_begin_heap_largest_before": 31732,
+      "ble_devices": 31,
+      "complete": true,
+      "generation": 10,
+      "missing": 15,
+      "new": 11,
+      "observations": 51,
+      "pipeline_drops": 0,
+      "seen_again": 40,
+      "source_passes": {
+        "ble": 1,
+        "wifi": 1
+      },
+      "wifi_access_points": 15,
+      "wifi_stations": 5
+    },
+    "run_sha256": "9f03a4c4b7b0fedc8d4fde87d8afe78423115b9fc7ded7ba14f3b944e8a1b04a",
+    "status": "pass"
+  },
+  "precursors": {
+    "dev365_memory_failure": {
+      "accepted": false,
+      "ble_begin_error": 257,
+      "ble_begin_heap_largest_before": 26612,
+      "cleanup_complete": true,
+      "reason": "Wi-Fi-first scheduling fragmented internal RAM before the BLE controller bootstrap",
+      "run_sha256": "168de6f8a5d45b789e21c9ddb3272101767bd455da36342121bf68596d25b711",
+      "version": "1.0.0-dev.365"
+    },
+    "post_export_transport": {
+      "accepted": false,
+      "device_actions_started": false,
+      "reason": "macOS enumerated native USB but received zero console bytes before HIL begin",
+      "run_sha256": [
+        "0aed5478f711172036e0a83873c21bd9a368768446a7ecd1e380837fc127d7d1",
+        "f708b628cdf2253e4305f1ea053ca6a9c76b32a719ef3bc8d6ff64e62b2c5221"
+      ],
+      "status": "infrastructure_only"
+    }
+  },
+  "privacy": {
+    "ambient_bssid_retained": false,
+    "ambient_raw_csv_retained": false,
+    "ambient_ssid_retained": false,
+    "ambient_vendor_retained": false,
+    "raw_run_retained": false,
+    "screen_hashes_only": true
+  },
+  "resources": {
+    "free_ota_bytes": 546672,
+    "linked_flash_bytes": 3647128,
+    "required_free_ota_bytes": 524288,
+    "static_ram_bytes": 234976
+  },
+  "schema": "leshy.field_survey_journey_hil.acceptance.v1",
+  "screens": {
+    "export_ready_png": "e34cb5aa8b346b415b4e833499127b27b4fe80001d5ff5c96f03ab97992b9e18",
+    "export_ready_rgb565": "e8df772132670137f6ae587ae000bf789388d06fbfe9cb5fe1a74f56a3806d73",
+    "first_result_png": "8ab9b47d4edb7cb76a80ac109ddd95c0ee7d2a0c367b554b877aa7ff56f0a3c1",
+    "first_result_rgb565": "d6ea229ccb09eee53e2c8f5cff5e32d004d9667334c49f4979fbe4b15f049e7d",
+    "first_setup_png": "6ecd02766add03af3ac4a49e717834f6751a8a7cfa37b737e07c4a6fa8d93115",
+    "first_setup_rgb565": "8de8c7d043435e1d9828af4178dc4a248398c1d57a699b8a59021ab04c4b1499",
+    "revisit_result_png": "2a3f4d8aa3e10625f004303c438d29eb8625d9249a498f6f33895175b2708ca7",
+    "revisit_result_rgb565": "68081991624ff6f7af0ff73fa1e2ad21d3b99948b1ff9271d10825ba989d6e1e",
+    "revisit_setup_png": "85d3082ae0c9fc18ff6611c26c5599ff07e7010ea3d09e00283bb31059104b39",
+    "revisit_setup_rgb565": "6a1ff22c8eb750974490333685e2f6e5081c160d3a3081c9cd098a9f09f5b0b3"
+  },
+  "status": "pass_field_survey_journey",
+  "visual_plain_language_review_passed": true
+}
