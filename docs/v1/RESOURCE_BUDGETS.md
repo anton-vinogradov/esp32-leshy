@@ -1939,3 +1939,17 @@ images 1,408 B. The delta adds one enum state and plain-language explanation
 screen plus strings/guards; it adds no capture buffer, queue, radio worker or
 storage allocation. Focused host checks and the production build pass; physical
 heap and TFT acceptance remain bound to dev.343.
+
+Contextual Bluetooth/radio/Library task-path bound `RB-M236`: exact host/build
+`1.0.0-dev.346` at firmware source `f525810` uses 233,600 B static RAM,
+3,602,528 B linked flash and 3,602,688/3,668,224 B app/factory images, leaving
+591,616 B in the 4 MiB OTA slot. App/factory/ELF/map SHA-256 values are
+`62601d12b8e808569160fd82b0ca5983c980a61979ff720d47086b69338cb700`/
+`1b8c0426238a6d9397ad5bad05d891e5bca8eccafcc108050a7aedceee05505b`/
+`8314ad11c6d51f2d5d517e6b4d82acbc661bfa2df3b32b013492b08e250ae443`/
+`2fad542bf3765e77f3962854a681a214bbd8ede06d5f8b54853d0cea17a13a3d`.
+Against dev.345, static RAM is unchanged, linked flash falls 24 B and
+app/factory images fall 32 B. The delta changes strings, two navigation labels
+and host guards only; it adds no runtime allocation, buffer, queue, worker,
+storage operation or radio activity. Focused host checks and production build
+pass; physical heap and TFT acceptance remain bound to dev.343.

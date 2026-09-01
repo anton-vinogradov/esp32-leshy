@@ -1927,3 +1927,18 @@ app/factory images — на 1 408 B. Delta добавляет один enum stat
 объяснения, strings и guards; capture buffer, queue, radio worker или storage
 allocation не добавляются. Проходят focused host checks и production build;
 physical heap/TFT acceptance остаётся привязанным к dev.343.
+
+Build bound контекстных путей задач Bluetooth/radio/Библиотеки `RB-M236`:
+exact host/build `1.0.0-dev.346` на firmware source `f525810` использует
+233 600 B static RAM, 3 602 528 B linked flash и app/factory images
+3 602 688/3 668 224 B, оставляя 591 616 B в OTA slot 4 MiB. SHA-256
+app/factory/ELF/map —
+`62601d12b8e808569160fd82b0ca5983c980a61979ff720d47086b69338cb700`/
+`1b8c0426238a6d9397ad5bad05d891e5bca8eccafcc108050a7aedceee05505b`/
+`8314ad11c6d51f2d5d517e6b4d82acbc661bfa2df3b32b013492b08e250ae443`/
+`2fad542bf3765e77f3962854a681a214bbd8ede06d5f8b54853d0cea17a13a3d`.
+Относительно dev.345 static RAM не меняется, linked flash уменьшается на 24 B,
+app/factory images — на 32 B. Delta меняет только strings, две navigation labels
+и host guards; runtime allocation, buffer, queue, worker, storage operation и
+radio activity не добавляются. Focused host checks и production build проходят;
+physical heap/TFT acceptance остаётся привязанным к dev.343.
