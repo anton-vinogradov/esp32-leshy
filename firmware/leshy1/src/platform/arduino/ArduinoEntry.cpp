@@ -592,6 +592,42 @@ SurveySession& littleFsResetSession = surveySession;
 LibraryController libraryController;
 std::uint8_t libraryDetailActionSelection = 0U;
 leshy1::storage::PersistedInfraredRawCaptureView protocolWorkbenchSource;
+
+constexpr std::array<std::uint16_t, 67U> kProtocolWorkbenchHilNecDurations = {{
+    8938U, 4543U, 534U, 596U, 532U, 620U, 529U, 599U, 528U, 598U,
+    528U, 1745U, 521U, 596U, 531U, 616U, 531U, 599U, 526U, 1720U,
+    551U, 1725U, 531U, 1737U, 536U, 1724U, 527U, 599U, 527U, 1743U,
+    537U, 1719U, 532U, 1730U, 536U, 598U, 527U, 620U, 528U, 1729U,
+    528U, 599U, 531U, 1741U, 532U, 1731U, 532U, 598U, 528U, 598U,
+    528U, 1730U, 543U, 1722U, 532U, 598U, 549U, 1717U, 532U, 599U,
+    532U, 618U, 531U, 1715U, 533U, 1747U, 527U,
+}};
+
+class ProtocolWorkbenchHilSource final
+    : public leshy1::domain::captures::InfraredRawSource {
+public:
+    void activate() { active_ = true; }
+    void reset() { active_ = false; }
+    bool active() const { return active_; }
+    std::size_t pulseCount() const override {
+        return active_ ? kProtocolWorkbenchHilNecDurations.size() : 0U;
+    }
+    bool pulseView(
+        std::size_t index,
+        leshy1::domain::captures::InfraredRawPulseView* output) const override {
+        if (!active_ || output == nullptr ||
+            index >= kProtocolWorkbenchHilNecDurations.size()) {
+            return false;
+        }
+        output->durationUs = kProtocolWorkbenchHilNecDurations[index];
+        return true;
+    }
+
+private:
+    bool active_ = false;
+};
+
+ProtocolWorkbenchHilSource protocolWorkbenchHilSource;
 ProtocolWorkbenchWorkspace protocolWorkbenchWorkspace;
 ProtocolWorkbenchAnalysis protocolWorkbenchAnalysis;
 std::size_t protocolWorkbenchPulseSelection = 0U;
@@ -20481,6 +20517,7 @@ bool openSelectedProtocolWorkbench() {
         !selected->session->captureMetadata().infraredRawCaptured) {
         return false;
     }
+    protocolWorkbenchHilSource.reset();
     protocolWorkbenchPulseSelection = 0U;
     if (selected->generation != sessionStoreWorkspace().generation) {
         protocolWorkbenchAnalysis = {};
@@ -20507,18 +20544,45 @@ bool openSelectedProtocolWorkbench() {
     return uiController.openChild(kProtocolWorkbenchPage);
 }
 
+const leshy1::domain::captures::InfraredRawSource&
+protocolWorkbenchPulseSource() {
+    return protocolWorkbenchHilSource.active()
+        ? static_cast<const leshy1::domain::captures::InfraredRawSource&>(
+              protocolWorkbenchHilSource)
+        : static_cast<const leshy1::domain::captures::InfraredRawSource&>(
+              protocolWorkbenchSource);
+}
+
+bool protocolWorkbenchStartLevel() {
+    if (protocolWorkbenchHilSource.active()) return false;
+    const LibraryEntry* selected = libraryController.selected();
+    return selected != nullptr && selected->session != nullptr &&
+        selected->session->captureMetadata().infraredStartLevel;
+}
+
+leshy1::domain::captures::InfraredProtocol protocolWorkbenchProtocol() {
+    if (protocolWorkbenchHilSource.active()) {
+        return leshy1::domain::captures::InfraredProtocol::Nec;
+    }
+    const LibraryEntry* selected = libraryController.selected();
+    return selected != nullptr && selected->session != nullptr
+        ? selected->session->captureMetadata().infraredDecode.protocol
+        : leshy1::domain::captures::InfraredProtocol::Unknown;
+}
+
 constexpr Rect kProtocolWorkbenchGraph = {
     Layout::Edge, 78, Layout::ContentWidth, 102};
 constexpr std::int16_t kProtocolWorkbenchCursorY = 184;
 constexpr std::int16_t kProtocolWorkbenchPulseLineY = 204;
 
 std::uint64_t protocolWorkbenchPulseStartUs(std::size_t selectedIndex) {
+    const auto& source = protocolWorkbenchPulseSource();
     std::uint64_t elapsed = 0U;
     for (std::size_t index = 0U;
          index < selectedIndex &&
-         index < protocolWorkbenchSource.pulseCount(); ++index) {
+         index < source.pulseCount(); ++index) {
         leshy1::domain::captures::InfraredRawPulseView pulse;
-        if (!protocolWorkbenchSource.pulseView(index, &pulse)) return 0U;
+        if (!source.pulseView(index, &pulse)) return 0U;
         elapsed += pulse.durationUs;
     }
     return elapsed;
@@ -20539,13 +20603,14 @@ std::int16_t protocolWorkbenchCursorX(std::size_t selectedIndex) {
 }
 
 void renderProtocolWorkbenchSelection() {
+    const auto& source = protocolWorkbenchPulseSource();
     display.fillRect(kProtocolWorkbenchGraph.x,
                      kProtocolWorkbenchCursorY,
                      kProtocolWorkbenchGraph.width, 12,
                      Palette::Canvas);
     if (!protocolWorkbenchAnalysis.valid() ||
         protocolWorkbenchPulseSelection >=
-            protocolWorkbenchSource.pulseCount()) {
+            source.pulseCount()) {
         return;
     }
     const std::int16_t cursorX =
@@ -20556,14 +20621,11 @@ void renderProtocolWorkbenchSelection() {
                          Palette::Focus);
 
     leshy1::domain::captures::InfraredRawPulseView pulse;
-    if (!protocolWorkbenchSource.pulseView(
+    if (!source.pulseView(
             protocolWorkbenchPulseSelection, &pulse)) {
         return;
     }
-    const LibraryEntry* selected = libraryController.selected();
-    const bool startLevel = selected != nullptr &&
-        selected->session != nullptr &&
-        selected->session->captureMetadata().infraredStartLevel;
+    const bool startLevel = protocolWorkbenchStartLevel();
     const bool electricalLevel =
         (protocolWorkbenchPulseSelection % 2U == 0U)
             ? startLevel : !startLevel;
@@ -20574,7 +20636,7 @@ void renderProtocolWorkbenchSelection() {
     std::snprintf(
         line, sizeof(line), tr(UiTextId::ProtocolWorkbenchPulseFormat),
         static_cast<unsigned>(protocolWorkbenchPulseSelection + 1U),
-        static_cast<unsigned>(protocolWorkbenchSource.pulseCount()),
+        static_cast<unsigned>(source.pulseCount()),
         tr(mark ? UiTextId::ProtocolWorkbenchMark
                 : UiTextId::ProtocolWorkbenchSpace),
         static_cast<unsigned>(pulse.durationUs),
@@ -20586,6 +20648,7 @@ void renderProtocolWorkbenchSelection() {
 }
 
 void renderProtocolWorkbenchWaveform() {
+    const auto& source = protocolWorkbenchPulseSource();
     display.fillRect(kProtocolWorkbenchGraph.x, kProtocolWorkbenchGraph.y,
                      kProtocolWorkbenchGraph.width,
                      kProtocolWorkbenchGraph.height, Palette::Surface);
@@ -20596,10 +20659,7 @@ void renderProtocolWorkbenchWaveform() {
         protocolWorkbenchAnalysis.totalDurationUs == 0U) {
         return;
     }
-    const LibraryEntry* selected = libraryController.selected();
-    const bool electricalStartLevel = selected != nullptr &&
-        selected->session != nullptr &&
-        selected->session->captureMetadata().infraredStartLevel;
+    const bool electricalStartLevel = protocolWorkbenchStartLevel();
     bool level = !electricalStartLevel;
     const std::int16_t highY = kProtocolWorkbenchGraph.y + 20;
     const std::int16_t lowY = kProtocolWorkbenchGraph.y +
@@ -20608,9 +20668,9 @@ void renderProtocolWorkbenchWaveform() {
     std::int16_t previousX = kProtocolWorkbenchGraph.x + 1;
     std::int16_t previousY = level ? highY : lowY;
     for (std::size_t index = 0U;
-         index < protocolWorkbenchSource.pulseCount(); ++index) {
+         index < source.pulseCount(); ++index) {
         leshy1::domain::captures::InfraredRawPulseView pulse;
-        if (!protocolWorkbenchSource.pulseView(index, &pulse)) break;
+        if (!source.pulseView(index, &pulse)) break;
         elapsed += pulse.durationUs;
         const std::uint64_t scaled = elapsed *
             static_cast<std::uint64_t>(kProtocolWorkbenchGraph.width - 3);
@@ -20642,10 +20702,7 @@ void renderProtocolWorkbenchPage(bool clearContent) {
                      Tone::Warning);
         return;
     }
-    const LibraryEntry* selected = libraryController.selected();
-    const auto protocol = selected != nullptr && selected->session != nullptr
-        ? selected->session->captureMetadata().infraredDecode.protocol
-        : leshy1::domain::captures::InfraredProtocol::Unknown;
+    const auto protocol = protocolWorkbenchProtocol();
     char line[96] = {};
     std::snprintf(
         line, sizeof(line), tr(UiTextId::ProtocolWorkbenchSummaryFormat),
@@ -29728,7 +29785,7 @@ bool applyUiAction(UiAction action, bool render = true) {
             lastRuntimeEvent = "protocol_workbench_previous_pulse";
         } else if (action == UiAction::Down &&
                    protocolWorkbenchPulseSelection + 1U <
-                       protocolWorkbenchSource.pulseCount()) {
+                       protocolWorkbenchPulseSource().pulseCount()) {
             handled = true;
             ++protocolWorkbenchPulseSelection;
             changed = true;
@@ -37097,6 +37154,112 @@ void emitLibraryHc22000(Stream& reply) {
     reply.flush();
 }
 
+void emitProtocolWorkbenchHilFixture(Stream& reply, const char* command) {
+    constexpr const char* kOpen =
+        "protocol.workbench.hil-fixture open-nec";
+    constexpr const char* kState =
+        "protocol.workbench.hil-fixture state";
+    constexpr const char* kClear =
+        "protocol.workbench.hil-fixture clear";
+    const bool open = std::strcmp(command, kOpen) == 0;
+    const bool state = std::strcmp(command, kState) == 0;
+    const bool clear = std::strcmp(command, kClear) == 0;
+    const bool idleHome = uiController.isRoot() && !appRuntime.running() &&
+        appRuntime.activeResources() == 0U;
+    const char* status = "invalid_request";
+
+    if (!hilSession.active()) {
+        status = "hil_inactive";
+    } else if (open && !idleHome) {
+        status = "unsafe_state";
+    } else if (open) {
+        protocolWorkbenchSource.reset();
+        protocolWorkbenchHilSource.activate();
+        protocolWorkbenchPulseSelection = 0U;
+        const auto analyzed =
+            leshy1::apps::protocol::analyzeInfraredCapture(
+                protocolWorkbenchHilSource, protocolWorkbenchWorkspace,
+                &protocolWorkbenchAnalysis);
+        const bool opened = analyzed == ProtocolWorkbenchStatus::Valid &&
+            uiController.openChild(kProtocolWorkbenchPage);
+        if (opened) {
+            lastRuntimeEvent = "protocol_workbench_hil_fixture_opened";
+            renderInteractiveScreen(true);
+            status = "opened";
+        } else {
+            protocolWorkbenchHilSource.reset();
+            protocolWorkbenchAnalysis = {};
+            status = "analysis_failed";
+        }
+    } else if (clear) {
+        if (protocolWorkbenchHilSource.active() &&
+            uiController.page() == kProtocolWorkbenchPage) {
+            uiController.returnToRoot();
+        }
+        protocolWorkbenchHilSource.reset();
+        protocolWorkbenchAnalysis = {};
+        protocolWorkbenchPulseSelection = 0U;
+        lastRuntimeEvent = "protocol_workbench_hil_fixture_cleared";
+        renderInteractiveScreen(true);
+        status = "cleared";
+    } else if (state) {
+        status = protocolWorkbenchHilSource.active() ? "active" : "inactive";
+    }
+
+    const bool fixtureActive = protocolWorkbenchHilSource.active();
+    const std::size_t reportedPulses = fixtureActive
+        ? protocolWorkbenchHilSource.pulseCount() : 0U;
+    const ProtocolWorkbenchStatus reportedAnalysisStatus = fixtureActive
+        ? protocolWorkbenchAnalysis.status
+        : ProtocolWorkbenchStatus::InvalidArgument;
+    const std::uint16_t reportedBaseUnit = fixtureActive
+        ? protocolWorkbenchAnalysis.baseUnitUs : 0U;
+    const std::size_t reportedBands = fixtureActive
+        ? protocolWorkbenchAnalysis.bandCount : 0U;
+    const std::uint64_t reportedFingerprint = fixtureActive
+        ? protocolWorkbenchAnalysis.sourceFingerprint : 0U;
+    char line[768] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.protocol_workbench.hil_fixture.v1\","
+        "\"kind\":\"state\",\"status\":\"%s\","
+        "\"hil_active\":%s,\"fixture_active\":%s,"
+        "\"ui_home\":%s,\"page\":\"%s\","
+        "\"analysis_status\":\"%s\",\"protocol\":\"%s\","
+        "\"pulses\":%u,\"selected_pulse\":%u,"
+        "\"base_unit_us\":%u,\"timing_bands\":%u,"
+        "\"source_fingerprint\":\"%08lX%08lX\","
+        "\"start_level\":false,\"read_only\":true,"
+        "\"radio_touched\":false,\"application_tx_calls\":0,"
+        "\"storage_mounted\":false,\"storage_written\":false,"
+        "\"runtime_owner\":\"%s\",\"lease_mask\":%lu,"
+        "\"cleanup_complete\":%s}",
+        status, hilSession.active() ? "true" : "false",
+        fixtureActive ? "true" : "false",
+        uiController.isRoot() ? "true" : "false",
+        leshy1::ui::probePageName(uiController.page()),
+        leshy1::apps::protocol::protocolWorkbenchStatusName(
+            reportedAnalysisStatus),
+        leshy1::domain::captures::infraredProtocolName(
+            fixtureActive
+                ? leshy1::domain::captures::InfraredProtocol::Nec
+                : leshy1::domain::captures::InfraredProtocol::Unknown),
+        static_cast<unsigned>(reportedPulses),
+        static_cast<unsigned>(fixtureActive
+            ? protocolWorkbenchPulseSelection : 0U),
+        static_cast<unsigned>(reportedBaseUnit),
+        static_cast<unsigned>(reportedBands),
+        static_cast<unsigned long>(
+            reportedFingerprint >> 32U),
+        static_cast<unsigned long>(
+            reportedFingerprint & 0xFFFFFFFFULL),
+        appRuntime.activeApp(),
+        static_cast<unsigned long>(appRuntime.activeResources()),
+        !protocolWorkbenchHilSource.active() && uiController.isRoot()
+            ? "true" : "false");
+    reply.println(line);
+}
+
 void emitHilSessionBegin(Stream& reply, const char* command) {
     constexpr const char* prefix = "hil.begin ";
     const char* arguments = command + std::strlen(prefix);
@@ -37198,6 +37361,18 @@ void emitHilSessionEnd(Stream& reply, const char* command) {
     }
     const HilSessionStatus status = hilSession.end(sessionId);
     if (status == HilSessionStatus::Ended) {
+        bool fixtureReturnedHome = false;
+        if (protocolWorkbenchHilSource.active() &&
+            uiController.page() == kProtocolWorkbenchPage) {
+            fixtureReturnedHome = uiController.returnToRoot();
+        }
+        protocolWorkbenchHilSource.reset();
+        protocolWorkbenchAnalysis = {};
+        protocolWorkbenchPulseSelection = 0U;
+        if (fixtureReturnedHome) {
+            lastRuntimeEvent = "protocol_workbench_hil_fixture_cleared";
+            renderInteractiveScreen(true);
+        }
         bleGattTransport.clearHilFault();
         resourceBroker.releaseAll(kBleGattHilConflictOwner);
         clearWebCompanionHilEntropy();
@@ -40193,6 +40368,10 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitHilSessionState(reply);
     } else if (std::strncmp(command, "hil.end ", 8) == 0) {
         emitHilSessionEnd(reply, command);
+    } else if (std::strncmp(
+                   command, "protocol.workbench.hil-fixture ",
+                   sizeof("protocol.workbench.hil-fixture ") - 1U) == 0) {
+        emitProtocolWorkbenchHilFixture(reply, command);
     } else if (std::strcmp(command, "metrics") == 0) {
         emitMetrics();
     } else if (std::strcmp(command, "inventory") == 0) {
@@ -41163,6 +41342,7 @@ void setup() {
               "\"hil.begin <session-id> <app-elf-sha256>\","
               "\"hil.state\","
               "\"hil.end <session-id>\","
+              "\"protocol.workbench.hil-fixture open-nec|state|clear\","
               "\"wifi.authentication.hil-hold-survey-stop once\","
               "\"wifi.authentication.hil-load-synthetic-report once\","
               "\"wifi.authentication.hil-load-persistence-fixture once\","

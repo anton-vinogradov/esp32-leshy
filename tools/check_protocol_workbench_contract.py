@@ -43,6 +43,13 @@ def main() -> int:
         "ProtocolWorkbenchReadOnly",
         "kProtocolWorkbenchPage",
         "protocol_workbench_opened",
+        "ProtocolWorkbenchHilSource",
+        "protocol.workbench.hil-fixture open-nec",
+        "protocol.workbench.hil-fixture clear",
+        "if (!hilSession.active())",
+        '"\\\"radio_touched\\\":false,\\\"application_tx_calls\\\":0,"',
+        '"\\\"storage_mounted\\\":false,\\\"storage_written\\\":false,"',
+        "protocolWorkbenchHilSource.reset();",
     )
     for marker in ui_required:
         if marker not in entry:
