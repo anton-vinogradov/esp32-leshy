@@ -47,6 +47,7 @@ def main() -> int:
         "protocol.workbench.hil-fixture open-nec",
         "protocol.workbench.hil-fixture clear",
         "if (!hilSession.active())",
+        "kProtocolWorkbenchPage);",
         '"\\\"radio_touched\\\":false,\\\"application_tx_calls\\\":0,"',
         '"\\\"storage_mounted\\\":false,\\\"storage_written\\\":false,"',
         "protocolWorkbenchHilSource.reset();",

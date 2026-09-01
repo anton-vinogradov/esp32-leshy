@@ -37181,7 +37181,10 @@ void emitProtocolWorkbenchHilFixture(Stream& reply, const char* command) {
                 protocolWorkbenchHilSource, protocolWorkbenchWorkspace,
                 &protocolWorkbenchAnalysis);
         const bool opened = analyzed == ProtocolWorkbenchStatus::Valid &&
-            uiController.openChild(kProtocolWorkbenchPage);
+            uiController.apply(
+                UiAction::Right,
+                static_cast<std::uint8_t>(appCatalog.size()), true,
+                kProtocolWorkbenchPage);
         if (opened) {
             lastRuntimeEvent = "protocol_workbench_hil_fixture_opened";
             renderInteractiveScreen(true);
