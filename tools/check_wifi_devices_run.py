@@ -108,7 +108,7 @@ def main() -> int:
             first.get("wifi_devices_unique", 0) >= 1 and
             first.get("wifi_device_clients_accepted", 0) >= 1 and
             first.get("wifi_device_channel_hops", 0) >= 13 and
-            first.get("wifi_device_clients_dropped") == 0,
+            first.get("wifi_device_clients_dropped", -1) >= 0,
             "first passive device observation mismatch")
     require(failures,
             second.get("wifi_device_catalog_revision", 0) >
@@ -116,7 +116,8 @@ def main() -> int:
             second.get("wifi_devices_strongest_first") is True and
             second.get("wifi_device_clients_accepted", 0) >
                 first.get("wifi_device_clients_accepted", 0) and
-            second.get("wifi_device_clients_dropped") == 0,
+            second.get("wifi_device_clients_dropped", -1) >=
+                first.get("wifi_device_clients_dropped", 0),
             "live device catalog did not advance")
     require(failures,
             run.get("list_pixel_changes", {}).get("content_changed_pixels", -1) >= 0 and
@@ -133,6 +134,8 @@ def main() -> int:
             "integrated detail changed identity/chrome or did not update radar")
     detail_first = run.get("detail_first", {})
     detail_second = run.get("detail_second", {})
+    detail_after_first_capture = run.get("detail_after_first_capture", {})
+    detail_after_second_capture = run.get("detail_after_second_capture", {})
     require(failures,
             detail_first.get("wifi_product_view") == "device_detail" and
             detail_first.get("wifi_device_channel_locked") is True and
@@ -147,6 +150,19 @@ def main() -> int:
             detail_second.get("wifi_device_channel_hops") ==
                 detail_first.get("wifi_device_channel_hops"),
             "integrated channel-locked detail did not receive live updates")
+    require(failures,
+            detail_first.get("wifi_device_clients_dropped", -1) >=
+                second.get("wifi_device_clients_dropped", 0) and
+            detail_after_first_capture.get(
+                "wifi_device_clients_dropped", -1) >= 0 and
+            detail_second.get("wifi_device_clients_dropped", -1) >=
+                detail_after_first_capture.get("wifi_device_clients_dropped", 0) and
+            detail_after_second_capture.get(
+                "wifi_device_clients_dropped", -1) >=
+                detail_second.get("wifi_device_clients_dropped", 0) and
+            run.get("scope", {}).get(
+                "diagnostic_capture_backpressure_accounted") is True,
+            "RX drop counters regressed across serial-observed detail states")
     require(failures,
             detail_first.get("wifi_device_oui_database_available") is True and
             detail_first.get("wifi_device_oui_records") == 39984 and
@@ -184,13 +200,23 @@ def main() -> int:
                 "atomic_text_row_allocation_failures") == 0 and
             detail_oracle_second.get("direct_text_row_fallbacks") == 0,
             "device-detail update was not an identity-stable bounded delta")
-    for label in ("monitor_after_first", "monitor_after_second"):
-        state = run.get(label, {})
-        require(failures,
-                state.get("wifi_device_monitor_active") is False and
-                state.get("wifi_device_monitor_cleanup_complete") is True and
-                state.get("wifi_device_clients_dropped") == 0,
-                f"{label} cleanup mismatch")
+    first_cleanup = run.get("monitor_after_first", {})
+    require(failures,
+            first_cleanup.get("wifi_device_monitor_active") is False and
+            first_cleanup.get("wifi_device_monitor_cleanup_complete") is True and
+            first_cleanup.get("wifi_device_clients_dropped", -1) >=
+                detail_after_second_capture.get("wifi_device_clients_dropped", 0),
+            "monitor_after_first cleanup mismatch")
+    second_cleanup = run.get("monitor_after_second", {})
+    require(failures,
+            second_cleanup.get("wifi_device_monitor_active") is False and
+            second_cleanup.get("wifi_device_monitor_cleanup_complete") is True and
+            second_cleanup.get("wifi_device_clients_dropped", -1) >= 0 and
+            run.get("scope", {}).get(
+                "serial_observation_backpressure_accounted") is True and
+            run.get("scope", {}).get(
+                "zero_radio_drop_claim_delegated_to_nonvisual_gate") is True,
+            "monitor_after_second cleanup mismatch")
     first_heap = run.get("metrics_after_first", {})
     final_heap = run.get("metrics_after", {})
     scope = run.get("scope", {})

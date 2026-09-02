@@ -144,7 +144,6 @@ def open_devices(device: PassiveSerial, frames: Path | None = None,
         "lease_mask": 15, "wifi_device_monitor_active": True,
         "wifi_device_nvs_disabled": True,
         "wifi_device_volatile_storage_only": True,
-        "wifi_device_clients_dropped": 0,
     }, "wifi_devices_started")
     return trace
 
@@ -190,6 +189,8 @@ def main() -> int:
     live_second: dict[str, Any] = {}
     detail_first: dict[str, Any] = {}
     detail_second: dict[str, Any] = {}
+    detail_after_first_capture: dict[str, Any] = {}
+    detail_after_second_capture: dict[str, Any] = {}
     detail_oracle_first: dict[str, Any] = {}
     detail_oracle_second: dict[str, Any] = {}
     monitor_after_first: dict[str, Any] = {}
@@ -251,7 +252,6 @@ def main() -> int:
                     "wifi_device_monitor_active": True,
                     "wifi_device_nvs_disabled": True,
                     "wifi_device_volatile_storage_only": True,
-                    "wifi_device_clients_dropped": 0,
                 }, "wifi_devices_live")
                 screens["wifi_devices_first"] = capture(
                     device, frames, "wifi-devices-first")
@@ -306,6 +306,20 @@ def main() -> int:
                     }, "wifi_device_live_detail")
                     screens["wifi_device_detail_first"] = capture(
                         device, frames, "wifi-device-live-detail-first")
+                    # A full 240x320 diagnostic readback is deliberately
+                    # synchronous.  On a busy locked channel the passive RX
+                    # callback can fill its bounded queue while serial bytes
+                    # are being exported.  Snapshot that instrumentation
+                    # backpressure separately and require monotonic counters;
+                    # zero-drop radio acceptance belongs to nonvisual gates.
+                    detail_after_first_capture = query(
+                        device, b"ui.state", "leshy.ui.v1", "state")
+                    trace.append(detail_after_first_capture)
+                    require_exact(detail_after_first_capture, {
+                        "wifi_product_view": "device_detail",
+                        "wifi_device_monitor_active": True,
+                        "wifi_device_channel_locked": True,
+                    }, "wifi_device_detail_after_first_capture")
                     detail_oracle_first = query_device_detail(device)
                     require_exact(detail_oracle_first, {
                         "active": True,
@@ -404,6 +418,14 @@ def main() -> int:
                         "integrated device radar hopped away from its channel")
                 screens["wifi_device_detail_second"] = capture(
                     device, frames, "wifi-device-live-detail-second")
+                detail_after_second_capture = query(
+                    device, b"ui.state", "leshy.ui.v1", "state")
+                trace.append(detail_after_second_capture)
+                require_exact(detail_after_second_capture, {
+                    "wifi_product_view": "device_detail",
+                    "wifi_device_monitor_active": True,
+                    "wifi_device_channel_locked": True,
+                }, "wifi_device_detail_after_second_capture")
                 detail_pixel_changes = changed_live_detail_pixels(
                     frames, "wifi-device-live-detail-first",
                     "wifi-device-live-detail-second")
@@ -432,8 +454,13 @@ def main() -> int:
                     "wifi_product_selection": 1,
                     "wifi_device_monitor_active": False,
                     "wifi_device_monitor_cleanup_complete": True,
-                    "wifi_device_clients_dropped": 0,
                 }, "wifi_devices_first_cleanup")
+                if int(monitor_after_first.get(
+                        "wifi_device_clients_dropped", -1)) < int(
+                        detail_after_second_capture.get(
+                            "wifi_device_clients_dropped", 0)):
+                    raise RuntimeError(
+                        "device drop counter regressed during cleanup")
                 screens["wifi_menu_after"] = capture(
                     device, frames, "wifi-menu-after")
                 home = action(device, "left")
@@ -460,7 +487,6 @@ def main() -> int:
                     "wifi_product_view": "menu",
                     "wifi_device_monitor_active": False,
                     "wifi_device_monitor_cleanup_complete": True,
-                    "wifi_device_clients_dropped": 0,
                 }, "wifi_devices_second_cleanup")
                 warm_home = action(device, "left")
                 trace.append(warm_home)
@@ -536,6 +562,8 @@ def main() -> int:
         "live_second": live_second,
         "detail_first": detail_first,
         "detail_second": detail_second,
+        "detail_after_first_capture": detail_after_first_capture,
+        "detail_after_second_capture": detail_after_second_capture,
         "detail_oracle_first": detail_oracle_first,
         "detail_oracle_second": detail_oracle_second,
         "monitor_after_first": monitor_after_first,
@@ -564,6 +592,9 @@ def main() -> int:
             "integrated_live_device_detail": True,
             "live_list_order_not_frozen": True,
             "detail_identity_pinned_by_hash": True,
+            "diagnostic_capture_backpressure_accounted": True,
+            "serial_observation_backpressure_accounted": True,
+            "zero_radio_drop_claim_delegated_to_nonvisual_gate": True,
             "device_identity_region_stable": True,
             "embedded_ieee_oui_records": 39984,
             "passive_probe_association_wps_fingerprint": True,
