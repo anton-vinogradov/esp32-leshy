@@ -37,14 +37,17 @@ if [[ $# -gt 0 ]]; then
         if [[ "$2" == "live-companion" ]]; then
             exec "$(cd "$(dirname "$0")" && pwd)/test-live-companion.sh"
         fi
+        if [[ "$2" == "live-list-rendering" ]]; then
+            exec "$(cd "$(dirname "$0")" && pwd)/test-live-list-rendering.sh"
+        fi
         if [[ "$2" == "clean-target" ]]; then
             only_clean_target=true
         else
-            echo "usage: $0 [--only automation-hid|clean-target|device-lock|live-companion|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar|wifi-security]" >&2
+            echo "usage: $0 [--only automation-hid|clean-target|device-lock|live-companion|live-list-rendering|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar|wifi-security]" >&2
             exit 2
         fi
     else
-        echo "usage: $0 [--only automation-hid|clean-target|device-lock|live-companion|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar|wifi-security]" >&2
+        echo "usage: $0 [--only automation-hid|clean-target|device-lock|live-companion|live-list-rendering|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar|wifi-security]" >&2
         exit 2
     fi
 fi
@@ -170,6 +173,8 @@ run_opaque_evidence_check() {
     -o "$test_tmp/clean_target_tests"
 
 "$test_tmp/clean_target_tests"
+
+"$repo_dir/tools/test-live-list-rendering.sh"
 
 "$repo_dir/tools/test-screenshot-store.sh"
 "$repo_dir/tools/test-protocol-workbench.sh"

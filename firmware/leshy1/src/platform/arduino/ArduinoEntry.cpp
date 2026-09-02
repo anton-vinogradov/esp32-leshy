@@ -172,6 +172,7 @@
 #include "ui/TouchTargets.h"
 #include "ui/ConnectivitySetupController.h"
 #include "ui/InterfaceSettingsController.h"
+#include "ui/LiveListRenderCache.h"
 #include "ui/RankedListFocus.h"
 #include "ui/AntennaStatusController.h"
 #include "ui/AirspaceGuardPresenter.h"
@@ -1236,11 +1237,11 @@ TFT_eSprite liveTextRowSprite(&display);
 // 513 bytes and lets a later BLE advertisement replace one complete field
 // without clearing either the whole card or the neighbouring row first.
 TFT_eSprite liveMetaTextRowSprite(&display);
-// BLE list RSSI changes are frequent but affect only the second text line and
-// (occasionally) the four-level signal glyph. Keep a separate 1-bpp
-// compositor for that bounded region so a new advertisement never erases and
-// redraws the complete menu row.
-TFT_eSprite bleDeviceNoteSprite(&display);
+// One retained 4-bpp row compositor is shared by every live/sorted discovery
+// list.  It costs 216*60/2 = 6480 bytes and retains the exact semantic theme
+// colours in a 16-entry palette.  A reordered identity is therefore replaced
+// by one opaque TFT transfer rather than a visible erase-then-draw sequence.
+TFT_eSprite liveListRowSprite(&display);
 BoardTouchInput boardTouchInput;
 bool touchCalibrationRequiredAtBoot = false;
 bool touchCalibrationSucceededAtBoot = false;
@@ -2265,11 +2266,61 @@ struct BleDeviceRowVisual final {
     }
 };
 
-enum class BleDeviceListRenderState : std::uint8_t {
-    Unknown,
-    Rows,
-    Searching,
-    Unavailable,
+struct WifiNetworkRowVisual final {
+    bool present = false;
+    bool selected = false;
+    std::int16_t rssiDbm = 0;
+    std::uint8_t channel = 0U;
+    std::array<std::uint8_t, Observation::kIdentityCapacity> identity{};
+    std::uint8_t identityLength = 0U;
+    std::array<char, 24> label{};
+
+    bool operator==(const WifiNetworkRowVisual& other) const {
+        return present == other.present && selected == other.selected &&
+            rssiDbm == other.rssiDbm && channel == other.channel &&
+            identity == other.identity &&
+            identityLength == other.identityLength && label == other.label;
+    }
+
+    bool staticFieldsEqual(const WifiNetworkRowVisual& other) const {
+        return present == other.present && selected == other.selected &&
+            channel == other.channel && identity == other.identity &&
+            identityLength == other.identityLength && label == other.label;
+    }
+
+    bool sameIdentity(const WifiNetworkRowVisual& other) const {
+        return present && other.present && identityLength != 0U &&
+            identityLength == other.identityLength &&
+            std::memcmp(identity.data(), other.identity.data(),
+                        identityLength) == 0;
+    }
+};
+
+struct WifiDeviceRowVisual final {
+    bool present = false;
+    bool selected = false;
+    std::int16_t rssiDbm = 0;
+    std::uint8_t channel = 0U;
+    WifiDeviceState state = WifiDeviceState::Searching;
+    std::array<std::uint8_t, 6> identity{};
+    std::array<char, 23> label{};
+
+    bool operator==(const WifiDeviceRowVisual& other) const {
+        return present == other.present && selected == other.selected &&
+            rssiDbm == other.rssiDbm && channel == other.channel &&
+            state == other.state && identity == other.identity &&
+            label == other.label;
+    }
+
+    bool staticFieldsEqual(const WifiDeviceRowVisual& other) const {
+        return present == other.present && selected == other.selected &&
+            channel == other.channel && state == other.state &&
+            identity == other.identity && label == other.label;
+    }
+
+    bool sameIdentity(const WifiDeviceRowVisual& other) const {
+        return present && other.present && identity == other.identity;
+    }
 };
 
 struct BleDeviceRadarVisual final {
@@ -2287,12 +2338,13 @@ struct BleDeviceRadarVisual final {
     }
 };
 
-constexpr std::size_t kVisibleBleDeviceRows = 4U;
-std::array<BleDeviceRowVisual, kVisibleBleDeviceRows>
-    bleDeviceRenderedRows{};
-std::array<bool, kVisibleBleDeviceRows> bleDeviceRenderedRowValid{};
-BleDeviceListRenderState bleDeviceListRenderState =
-    BleDeviceListRenderState::Unknown;
+constexpr std::size_t kVisibleLiveListRows = 4U;
+leshy1::ui::LiveListRenderCache<WifiNetworkRowVisual, kVisibleLiveListRows>
+    wifiNetworkListRenderCache;
+leshy1::ui::LiveListRenderCache<WifiDeviceRowVisual, kVisibleLiveListRows>
+    wifiDeviceListRenderCache;
+leshy1::ui::LiveListRenderCache<BleDeviceRowVisual, kVisibleLiveListRows>
+    bleDeviceListRenderCache;
 BleDeviceRadarVisual bleDeviceRenderedRadar{};
 constexpr std::uint64_t kBleDeviceUiRefreshPeriodUs = 250000ULL;
 // The 0.x list only published a completed four-second scan snapshot. Keep the
@@ -2310,9 +2362,26 @@ std::uint32_t bleDeviceListIdentityReplacements = 0U;
 std::uint32_t bleDeviceListSignalDeltaRepaints = 0U;
 std::uint32_t bleDeviceListAtomicNotePushes = 0U;
 std::uint32_t bleDeviceListContentClears = 0U;
+std::uint32_t bleDeviceListSlotClears = 0U;
 std::uint32_t bleDeviceListRefreshes = 0U;
 std::uint32_t bleDeviceListRefreshesDeferred = 0U;
 std::uint32_t bleDeviceListStaticChurnSuppressed = 0U;
+std::uint32_t wifiNetworkListRowRepaints = 0U;
+std::uint32_t wifiNetworkListRowFullRepaints = 0U;
+std::uint32_t wifiNetworkListIdentityReplacements = 0U;
+std::uint32_t wifiNetworkListDynamicFieldRepaints = 0U;
+std::uint32_t wifiNetworkListContentClears = 0U;
+std::uint32_t wifiNetworkListSlotClears = 0U;
+std::uint32_t wifiDeviceListRowRepaints = 0U;
+std::uint32_t wifiDeviceListRowFullRepaints = 0U;
+std::uint32_t wifiDeviceListIdentityReplacements = 0U;
+std::uint32_t wifiDeviceListDynamicFieldRepaints = 0U;
+std::uint32_t wifiDeviceListContentClears = 0U;
+std::uint32_t wifiDeviceListSlotClears = 0U;
+std::uint32_t liveListAtomicRowPushes = 0U;
+std::uint32_t liveListAtomicFieldPushes = 0U;
+std::uint32_t liveListRowAllocationFailures = 0U;
+std::uint32_t liveListDirectFallbacks = 0U;
 std::uint32_t bleDeviceDetailContentClears = 0U;
 std::uint32_t bleDeviceRadarFullRepaints = 0U;
 std::uint32_t bleDeviceRadarDeltaRepaints = 0U;
@@ -13410,6 +13479,251 @@ bool pushLiveMetaTextRow(const char* text, std::uint16_t foreground,
     return false;
 }
 
+constexpr std::int16_t kInteractiveRowTextInset = 12;
+std::int16_t menuRowTextTop(Rect bounds);
+std::uint8_t wifiSignalLevel(std::int16_t rssiDbm);
+void renderWifiSignalBars(Rect bounds, std::int16_t rssiDbm,
+                          std::uint16_t background);
+
+enum class LiveListPaletteIndex : std::uint8_t {
+    Canvas = 0U,
+    Surface = 1U,
+    SurfaceFocus = 2U,
+    Focus = 3U,
+    TextSecondary = 4U,
+    TextMuted = 5U,
+    Positive = 6U,
+    Warning = 7U,
+    Danger = 8U,
+    TextPrimary = 9U,
+};
+
+constexpr std::int16_t kLiveListRowWidth = Layout::ContentWidth;
+constexpr std::int16_t kLiveListRowHeight = Layout::HomeRowHeight;
+
+std::uint8_t liveListColor(LiveListPaletteIndex index) {
+    return static_cast<std::uint8_t>(index);
+}
+
+void refreshLiveListRowPalette() {
+    liveListRowSprite.setPaletteColor(
+        liveListColor(LiveListPaletteIndex::Canvas), Palette::Canvas);
+    liveListRowSprite.setPaletteColor(
+        liveListColor(LiveListPaletteIndex::Surface), Palette::Surface);
+    liveListRowSprite.setPaletteColor(
+        liveListColor(LiveListPaletteIndex::SurfaceFocus),
+        Palette::SurfaceFocus);
+    liveListRowSprite.setPaletteColor(
+        liveListColor(LiveListPaletteIndex::Focus), Palette::Focus);
+    liveListRowSprite.setPaletteColor(
+        liveListColor(LiveListPaletteIndex::TextSecondary),
+        Palette::TextSecondary);
+    liveListRowSprite.setPaletteColor(
+        liveListColor(LiveListPaletteIndex::TextMuted), Palette::TextMuted);
+    liveListRowSprite.setPaletteColor(
+        liveListColor(LiveListPaletteIndex::Positive), Palette::Positive);
+    liveListRowSprite.setPaletteColor(
+        liveListColor(LiveListPaletteIndex::Warning), Palette::Warning);
+    liveListRowSprite.setPaletteColor(
+        liveListColor(LiveListPaletteIndex::Danger), Palette::Danger);
+    liveListRowSprite.setPaletteColor(
+        liveListColor(LiveListPaletteIndex::TextPrimary),
+        Palette::TextPrimary);
+}
+
+bool prepareLiveListRowSprite() {
+    if (!liveListRowSprite.created()) {
+        liveListRowSprite.setColorDepth(4);
+        if (liveListRowSprite.createSprite(
+                kLiveListRowWidth, kLiveListRowHeight) == nullptr) {
+            ++liveListRowAllocationFailures;
+            return false;
+        }
+        liveListRowSprite.setTextWrap(false, false);
+    }
+    refreshLiveListRowPalette();
+    return true;
+}
+
+LiveListPaletteIndex liveListBackground(bool selected) {
+    return selected ? LiveListPaletteIndex::SurfaceFocus
+                    : LiveListPaletteIndex::Surface;
+}
+
+void beginLiveListRow(bool selected) {
+    const std::uint8_t canvas = liveListColor(LiveListPaletteIndex::Canvas);
+    const std::uint8_t background = liveListColor(
+        liveListBackground(selected));
+    liveListRowSprite.fillSprite(canvas);
+    liveListRowSprite.fillRoundRect(
+        0, 0, kLiveListRowWidth, kLiveListRowHeight, Layout::Radius,
+        background);
+    if (selected) {
+        liveListRowSprite.drawRoundRect(
+            0, 0, kLiveListRowWidth, kLiveListRowHeight, Layout::Radius,
+            liveListColor(LiveListPaletteIndex::Focus));
+        const Rect marker = Components::focusMarker(
+            {0, 0, kLiveListRowWidth, kLiveListRowHeight});
+        liveListRowSprite.fillTriangle(
+            marker.x, marker.y, marker.x, marker.y + marker.height,
+            marker.x + marker.width, marker.y + marker.height / 2,
+            liveListColor(LiveListPaletteIndex::Focus));
+    }
+}
+
+void setLiveListRowCursor(UiTextRole role, std::int16_t x,
+                          std::int16_t top) {
+    liveListRowSprite.setFreeFont(
+        role == UiTextRole::Body ? &RobotoCondensedBody
+                                 : &RobotoCondensedMeta);
+    liveListRowSprite.setCursor(x, top + uiFontAscent(role));
+}
+
+void drawLiveListSignalBars(std::int16_t rssiDbm) {
+    constexpr std::int16_t kBarWidth = 4;
+    constexpr std::int16_t kBarGap = 2;
+    constexpr std::int16_t kBarCount = 4;
+    constexpr std::int16_t kX = kLiveListRowWidth - 30;
+    constexpr std::int16_t kBaseline = kLiveListRowHeight - 12;
+    const std::uint8_t level = wifiSignalLevel(rssiDbm);
+    for (std::int16_t index = 0; index < kBarCount; ++index) {
+        const std::int16_t height = 4 + index * 3;
+        liveListRowSprite.fillRect(
+            kX + index * (kBarWidth + kBarGap), kBaseline - height,
+            kBarWidth, height,
+            liveListColor(index < level
+                ? LiveListPaletteIndex::Positive
+                : LiveListPaletteIndex::TextMuted));
+    }
+}
+
+void drawLiveListRowText(bool selected, const char* label, const char* note,
+                         LiveListPaletteIndex noteTone,
+                         bool signalBars, std::int16_t rssiDbm) {
+    const std::int16_t labelTop = menuRowTextTop(
+        {0, 0, kLiveListRowWidth, kLiveListRowHeight});
+    const std::uint8_t background = liveListColor(
+        liveListBackground(selected));
+    liveListRowSprite.setTextColor(
+        liveListColor(selected ? LiveListPaletteIndex::Focus
+                               : LiveListPaletteIndex::TextSecondary),
+        background);
+    setLiveListRowCursor(
+        UiTextRole::Body, kInteractiveRowTextInset, labelTop);
+    liveListRowSprite.print(label);
+    liveListRowSprite.setTextColor(liveListColor(noteTone), background);
+    setLiveListRowCursor(
+        UiTextRole::Meta, kInteractiveRowTextInset,
+        labelTop + kRobotoCondensedBodyAscent +
+            kRobotoCondensedBodyDescent + 1);
+    liveListRowSprite.print(note);
+    if (signalBars) drawLiveListSignalBars(rssiDbm);
+}
+
+bool pushLiveListRow(const Rect& bounds, bool selected, const char* label,
+                     const char* note, LiveListPaletteIndex noteTone,
+                     bool signalBars, std::int16_t rssiDbm) {
+    if (!prepareLiveListRowSprite()) {
+        ++liveListDirectFallbacks;
+        const std::uint16_t background = selected
+            ? Palette::SurfaceFocus : Palette::Surface;
+        display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                              Layout::Radius, background);
+        if (selected) {
+            display.drawRoundRect(bounds.x, bounds.y, bounds.width,
+                                  bounds.height, Layout::Radius,
+                                  Palette::Focus);
+            const Rect marker = Components::focusMarker(bounds);
+            display.fillTriangle(
+                marker.x, marker.y, marker.x, marker.y + marker.height,
+                marker.x + marker.width, marker.y + marker.height / 2,
+                Palette::Focus);
+        }
+        const std::int16_t labelTop = menuRowTextTop(bounds);
+        display.setTextColor(selected ? Palette::Focus
+                                      : Palette::TextSecondary,
+                             background);
+        setUiCursor(UiTextRole::Body,
+                    bounds.x + kInteractiveRowTextInset, labelTop);
+        display.print(label);
+        const std::uint16_t noteColor = noteTone ==
+                LiveListPaletteIndex::Warning
+            ? Palette::Warning
+            : (noteTone == LiveListPaletteIndex::Danger
+                ? Palette::Danger : Palette::Positive);
+        display.setTextColor(noteColor, background);
+        setUiCursor(
+            UiTextRole::Meta, bounds.x + kInteractiveRowTextInset,
+            labelTop + kRobotoCondensedBodyAscent +
+                kRobotoCondensedBodyDescent + 1);
+        display.print(note);
+        if (signalBars) renderWifiSignalBars(bounds, rssiDbm, background);
+        return false;
+    }
+    beginLiveListRow(selected);
+    drawLiveListRowText(
+        selected, label, note, noteTone, signalBars, rssiDbm);
+    liveListRowSprite.pushSprite(bounds.x, bounds.y);
+    ++liveListAtomicRowPushes;
+    return true;
+}
+
+bool pushLiveListDynamicFields(
+        const Rect& bounds, bool selected, const char* note,
+        LiveListPaletteIndex noteTone, bool signalBars,
+        std::int16_t rssiDbm) {
+    if (!prepareLiveListRowSprite()) {
+        ++liveListDirectFallbacks;
+        const std::uint16_t background = selected
+            ? Palette::SurfaceFocus : Palette::Surface;
+        const std::int16_t labelTop = menuRowTextTop(bounds);
+        const std::int16_t textTop = labelTop +
+            kRobotoCondensedBodyAscent + kRobotoCondensedBodyDescent + 1;
+        display.fillRect(
+            bounds.x + kInteractiveRowTextInset, textTop - 2,
+            bounds.width - kInteractiveRowTextInset,
+            kRobotoCondensedMetaAscent + kRobotoCondensedMetaDescent + 5,
+            background);
+        const std::uint16_t noteColor = noteTone ==
+                LiveListPaletteIndex::Warning
+            ? Palette::Warning
+            : (noteTone == LiveListPaletteIndex::Danger
+                ? Palette::Danger : Palette::Positive);
+        display.setTextColor(noteColor, background);
+        setUiCursor(UiTextRole::Meta,
+                    bounds.x + kInteractiveRowTextInset, textTop);
+        display.print(note);
+        if (signalBars) renderWifiSignalBars(bounds, rssiDbm, background);
+        return false;
+    }
+    const std::int16_t labelTop = menuRowTextTop(
+        {0, 0, kLiveListRowWidth, kLiveListRowHeight});
+    const std::int16_t textTop = labelTop + kRobotoCondensedBodyAscent +
+                                 kRobotoCondensedBodyDescent + 1;
+    constexpr std::int16_t kTopPadding = 2;
+    const std::int16_t sourceY = textTop - kTopPadding;
+    // The signal bars extend below the meta baseline.  Replace the complete
+    // dynamic band down to the row edge so a falling RSSI cannot leave stale
+    // pixels from a previously taller bar, while the stable title/frame stay
+    // untouched.
+    const std::int16_t height = kLiveListRowHeight - sourceY;
+    const std::uint8_t background = liveListColor(
+        liveListBackground(selected));
+    liveListRowSprite.fillRect(
+        kInteractiveRowTextInset, sourceY,
+        kLiveListRowWidth - kInteractiveRowTextInset, height, background);
+    liveListRowSprite.setTextColor(liveListColor(noteTone), background);
+    setLiveListRowCursor(UiTextRole::Meta, kInteractiveRowTextInset, textTop);
+    liveListRowSprite.print(note);
+    if (signalBars) drawLiveListSignalBars(rssiDbm);
+    liveListRowSprite.pushSprite(
+        bounds.x + kInteractiveRowTextInset, bounds.y + sourceY,
+        kInteractiveRowTextInset, sourceY,
+        kLiveListRowWidth - kInteractiveRowTextInset, height);
+    ++liveListAtomicFieldPushes;
+    return true;
+}
+
 enum class NavigationKey : std::uint8_t {
     None,
     Left,
@@ -14259,8 +14573,6 @@ void renderFocusCue(Rect bounds, bool selected) {
                          marker.y + marker.height / 2,
                          Palette::Focus);
 }
-
-constexpr std::int16_t kInteractiveRowTextInset = 12;
 
 std::int16_t menuRowTextTop(Rect bounds) {
     constexpr std::int16_t kLineGap = 1;
@@ -16732,7 +17044,7 @@ void renderSafetyStop(bool clearContent) {
 constexpr std::size_t kVisibleSurveyRows = 2;
 constexpr std::int16_t kSurveyFilterY = 101;
 constexpr std::int16_t kSurveyRowsY = 132;
-constexpr std::size_t kVisibleWifiNetworkRows = 4;
+constexpr std::size_t kVisibleWifiNetworkRows = kVisibleLiveListRows;
 
 std::size_t surveyFirstVisible(std::size_t selection) {
     return selection < kVisibleSurveyRows
@@ -16954,70 +17266,129 @@ void renderRadioSignalCardDelta(
     }
 }
 
-void renderWifiNetworkRow(std::size_t index, std::size_t firstVisible) {
+void resetWifiNetworkListRenderCache() {
+    wifiNetworkListRenderCache.reset();
+}
+
+WifiNetworkRowVisual composeWifiNetworkRowVisual(
+        std::size_t index, std::size_t firstVisible) {
+    WifiNetworkRowVisual visual{};
     const Observation* observation = wifiNetworkAt(index);
     if (observation == nullptr || index < firstVisible ||
         index >= firstVisible + kVisibleWifiNetworkRows) {
-        return;
+        return visual;
     }
-    const Rect bounds = Components::homeRow(
-        static_cast<std::uint8_t>(index - firstVisible));
-    const bool selected = wifiNetworkSelection == index;
-    const std::uint16_t background = selected ? Palette::SurfaceFocus
-                                               : Palette::Surface;
-    display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
-                          Layout::Radius, background);
-    renderFocusCue(bounds, selected);
-    char label[24] = {};
+    visual.present = true;
+    visual.selected = wifiNetworkSelection == index;
+    visual.rssiDbm = observation->rssiDbm;
+    visual.channel = observation->channel;
+    visual.identity = observation->identity;
+    visual.identityLength = observation->identityLength;
     const std::size_t visibleLength = observation->labelLength < 18U
         ? observation->labelLength : 18U;
     if (visibleLength == 0) {
-        std::snprintf(label, sizeof(label), "%s", tr(UiTextId::Hidden));
+        std::snprintf(visual.label.data(), visual.label.size(), "%s",
+                      tr(UiTextId::Hidden));
     } else {
-        std::memcpy(label, observation->label.data(), visibleLength);
+        std::memcpy(visual.label.data(), observation->label.data(),
+                    visibleLength);
         if (observation->labelLength > visibleLength) {
-            label[visibleLength - 1U] = '~';
+            visual.label[visibleLength - 1U] = '~';
         }
     }
-    const std::int16_t labelTop = menuRowTextTop(bounds);
-    display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
-                         background);
-    setUiCursor(UiTextRole::Body,
-                bounds.x + kInteractiveRowTextInset, labelTop);
-    display.print(label);
-    char note[48] = {};
-    std::snprintf(note, sizeof(note), tr(UiTextId::ChannelRssiFormat),
-                  static_cast<unsigned>(observation->channel),
-                  static_cast<int>(observation->rssiDbm));
-    display.setTextColor(Palette::Positive, background);
-    setUiCursor(UiTextRole::Meta,
-                bounds.x + kInteractiveRowTextInset,
-                labelTop + kRobotoCondensedBodyAscent +
-                    kRobotoCondensedBodyDescent + 1);
-    display.print(note);
-    renderWifiSignalBars(bounds, observation->rssiDbm, background);
+    return visual;
 }
 
-void renderWifiNetworksData() {
+bool renderWifiNetworkRow(std::size_t index, std::size_t firstVisible,
+                          bool force = false) {
+    if (index < firstVisible ||
+        index >= firstVisible + kVisibleWifiNetworkRows) {
+        return false;
+    }
+    const std::size_t slot = index - firstVisible;
+    const WifiNetworkRowVisual visual =
+        composeWifiNetworkRowVisual(index, firstVisible);
+    const leshy1::ui::LiveListRowChange change = force
+        ? (visual.present ? leshy1::ui::LiveListRowChange::Replace
+                          : leshy1::ui::LiveListRowChange::None)
+        : wifiNetworkListRenderCache.classify(slot, visual);
+    if (change == leshy1::ui::LiveListRowChange::None) {
+        wifiNetworkListRenderCache.publish(slot, visual);
+        return false;
+    }
+    ++wifiNetworkListRowRepaints;
+    const Rect bounds = Components::homeRow(static_cast<std::uint8_t>(slot));
+    if (change == leshy1::ui::LiveListRowChange::Clear) {
+        display.fillRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                         Palette::Canvas);
+        ++wifiNetworkListSlotClears;
+        wifiNetworkListRenderCache.publish(slot, visual);
+        return true;
+    }
+    char note[48] = {};
+    std::snprintf(note, sizeof(note), tr(UiTextId::ChannelRssiFormat),
+                  static_cast<unsigned>(visual.channel),
+                  static_cast<int>(visual.rssiDbm));
+    if (change == leshy1::ui::LiveListRowChange::DynamicFields) {
+        ++wifiNetworkListDynamicFieldRepaints;
+        (void)pushLiveListDynamicFields(
+            bounds, visual.selected, note,
+            LiveListPaletteIndex::Positive, true, visual.rssiDbm);
+        wifiNetworkListRenderCache.publish(slot, visual);
+        return true;
+    }
+    const bool identityReplacement = !force &&
+        wifiNetworkListRenderCache.valid(slot) &&
+        wifiNetworkListRenderCache.row(slot).present && visual.present &&
+        !wifiNetworkListRenderCache.row(slot).sameIdentity(visual);
+    ++wifiNetworkListRowFullRepaints;
+    if (identityReplacement) ++wifiNetworkListIdentityReplacements;
+    (void)pushLiveListRow(
+        bounds, visual.selected, visual.label.data(), note,
+        LiveListPaletteIndex::Positive, true, visual.rssiDbm);
+    wifiNetworkListRenderCache.publish(slot, visual);
+    return true;
+}
+
+bool renderWifiNetworksData(bool force = false) {
     const std::size_t visibleSize = wifiNetworkVisibleSize();
     if (visibleSize == 0) {
+        const auto nextState = leshy1::ui::LiveListSceneState::Searching;
+        if (!force && wifiNetworkListRenderCache.state() == nextState) {
+            return false;
+        }
+        for (std::size_t slot = 0U; slot < kVisibleWifiNetworkRows; ++slot) {
+            WifiNetworkRowVisual empty{};
+            if (wifiNetworkListRenderCache.classify(slot, empty) ==
+                    leshy1::ui::LiveListRowChange::Clear) {
+                const Rect bounds = Components::homeRow(
+                    static_cast<std::uint8_t>(slot));
+                display.fillRect(bounds.x, bounds.y, bounds.width,
+                                 bounds.height, Palette::Canvas);
+                ++wifiNetworkListSlotClears;
+            }
+            wifiNetworkListRenderCache.publish(slot, empty);
+        }
         display.setTextColor(Palette::Positive, Palette::Canvas);
         setUiCursor(UiTextRole::Meta, 14, 70);
         display.print(tr(UiTextId::WifiNetworksSearching));
-        return;
+        wifiNetworkListRenderCache.setState(nextState);
+        return true;
     }
     const std::size_t first = wifiNetworkFirstVisible(wifiNetworkSelection);
-    const std::size_t end = visibleSize <
-            first + kVisibleWifiNetworkRows
-        ? visibleSize : first + kVisibleWifiNetworkRows;
-    for (std::size_t index = first; index < end; ++index) {
-        renderWifiNetworkRow(index, first);
+    bool changed = false;
+    for (std::size_t slot = 0U; slot < kVisibleWifiNetworkRows; ++slot) {
+        changed = renderWifiNetworkRow(first + slot, first, force) || changed;
     }
+    wifiNetworkListRenderCache.setState(
+        leshy1::ui::LiveListSceneState::Rows);
+    return changed;
 }
 
 void renderWifiNetworks(bool clearContent) {
+    if (clearContent) resetWifiNetworkListRenderCache();
     renderHeader(tr(UiTextId::WifiMenuNetworks), clearContent);
-    renderWifiNetworksData();
+    (void)renderWifiNetworksData(clearContent);
 }
 
 bool wifiNetworkDetailStaticFieldsDiffer(const Observation& left,
@@ -17460,13 +17831,13 @@ const char* compactBleService(const Observation& device, char* output,
     return output;
 }
 
+constexpr std::size_t kVisibleBleDeviceRows = kVisibleLiveListRows;
+
 static_assert(kVisibleBleDeviceRows == kVisibleWifiNetworkRows,
               "Bluetooth and Wi-Fi lists share the four-row layout");
 
 void resetBleDeviceListRenderCache() {
-    bleDeviceRenderedRows = {};
-    bleDeviceRenderedRowValid = {};
-    bleDeviceListRenderState = BleDeviceListRenderState::Unknown;
+    bleDeviceListRenderCache.reset();
 }
 
 BleDeviceRowVisual composeBleDeviceRowVisual(
@@ -17502,23 +17873,7 @@ BleDeviceRowVisual composeBleDeviceRowVisual(
     return visual;
 }
 
-constexpr std::int16_t kBleDeviceNoteRightInset = 34;
-constexpr std::int16_t kBleDeviceNoteWidth =
-    Layout::ContentWidth - kInteractiveRowTextInset -
-    kBleDeviceNoteRightInset;
-
-bool prepareBleDeviceNoteSprite() {
-    if (!bleDeviceNoteSprite.created()) {
-        bleDeviceNoteSprite.setColorDepth(1);
-        if (bleDeviceNoteSprite.createSprite(
-                kBleDeviceNoteWidth, kLiveMetaTextRowHeight) != nullptr) {
-            bleDeviceNoteSprite.setTextWrap(false, false);
-        }
-    }
-    return bleDeviceNoteSprite.created();
-}
-
-bool prepareBleUiCompositors() {
+bool prepareLiveUiCompositors() {
     // Allocate every persistent UI sprite before the Survey queue is compacted
     // and before NimBLE claims its arena. Creating one while NimBLE is alive
     // pins a tiny block in the middle of the released controller heap and can
@@ -17527,47 +17882,21 @@ bool prepareBleUiCompositors() {
         UiTextRole::Body, Palette::TextSecondary, Palette::Canvas);
     const bool metaReady = beginLiveMetaTextRow(
         Palette::TextSecondary, Palette::Canvas);
-    const bool noteReady = prepareBleDeviceNoteSprite();
-    if (!noteReady) ++liveTextRowAllocationFailures;
-    return bodyReady && metaReady && noteReady;
+    const bool listRowReady = prepareLiveListRowSprite();
+    return bodyReady && metaReady && listRowReady;
 }
 
 void renderBleDeviceRowNote(const BleDeviceRowVisual& visual,
-                            const Rect& bounds,
-                            std::uint16_t background) {
+                            const Rect& bounds) {
     char note[64] = {};
     std::snprintf(note, sizeof(note), tr(UiTextId::BleDeviceRowFormat),
                   visual.descriptor.data(), static_cast<int>(visual.rssiDbm));
-    const std::uint16_t tone = visual.tracker ? Palette::Warning
-                                              : Palette::Positive;
-    const std::int16_t labelTop = menuRowTextTop(bounds);
-    const std::int16_t textTop = labelTop + kRobotoCondensedBodyAscent +
-                                 kRobotoCondensedBodyDescent + 1;
-    constexpr std::int16_t kSpriteTextTop = 2;
-    if (prepareBleDeviceNoteSprite()) {
-        bleDeviceNoteSprite.fillSprite(0U);
-        bleDeviceNoteSprite.setBitmapColor(tone, background);
-        bleDeviceNoteSprite.setTextColor(1U, 0U);
-        bleDeviceNoteSprite.setFreeFont(&RobotoCondensedMeta);
-        bleDeviceNoteSprite.setCursor(
-            0, kSpriteTextTop + kRobotoCondensedMetaAscent);
-        bleDeviceNoteSprite.print(note);
-        bleDeviceNoteSprite.pushSprite(
-            bounds.x + kInteractiveRowTextInset,
-            textTop - kSpriteTextTop);
+    const LiveListPaletteIndex tone = visual.tracker
+        ? LiveListPaletteIndex::Warning : LiveListPaletteIndex::Positive;
+    if (pushLiveListDynamicFields(
+            bounds, visual.selected, note, tone, true, visual.rssiDbm)) {
         ++bleDeviceListAtomicNotePushes;
-        return;
     }
-
-    ++liveTextRowAllocationFailures;
-    ++liveTextRowDirectFallbacks;
-    display.fillRect(bounds.x + kInteractiveRowTextInset,
-                     textTop - kSpriteTextTop, kBleDeviceNoteWidth,
-                     kLiveMetaTextRowHeight, background);
-    display.setTextColor(tone, background);
-    setUiCursor(UiTextRole::Meta,
-                bounds.x + kInteractiveRowTextInset, textTop);
-    display.print(note);
 }
 
 bool renderBleDeviceRow(std::size_t index, std::size_t firstVisible,
@@ -17579,9 +17908,9 @@ bool renderBleDeviceRow(std::size_t index, std::size_t firstVisible,
     const std::size_t slot = index - firstVisible;
     BleDeviceRowVisual visual =
         composeBleDeviceRowVisual(index, firstVisible);
-    if (!force && bleDeviceRenderedRowValid[slot] &&
-        bleDeviceRenderedRows[slot].sameIdentity(visual)) {
-        const BleDeviceRowVisual& stable = bleDeviceRenderedRows[slot];
+    if (!force && bleDeviceListRenderCache.valid(slot) &&
+        bleDeviceListRenderCache.row(slot).sameIdentity(visual)) {
+        const BleDeviceRowVisual& stable = bleDeviceListRenderCache.row(slot);
         // One BLE address commonly alternates several advertisement packet
         // shapes. Their company/service descriptors are useful to the detail
         // view, but publishing every alternation in the list erases and
@@ -17601,60 +17930,44 @@ bool renderBleDeviceRow(std::size_t index, std::size_t firstVisible,
         visual.label = stable.label;
         visual.descriptor = stable.descriptor;
     }
-    if (!force && bleDeviceRenderedRowValid[slot] &&
-        bleDeviceRenderedRows[slot] == visual) {
+    const leshy1::ui::LiveListRowChange change = force
+        ? (visual.present ? leshy1::ui::LiveListRowChange::Replace
+                          : leshy1::ui::LiveListRowChange::None)
+        : bleDeviceListRenderCache.classify(slot, visual);
+    if (change == leshy1::ui::LiveListRowChange::None) {
+        bleDeviceListRenderCache.publish(slot, visual);
         return false;
     }
     ++bleDeviceListRowRepaints;
     const Rect bounds = Components::homeRow(
         static_cast<std::uint8_t>(slot));
-    if (!visual.present) {
-        if (force || (bleDeviceRenderedRowValid[slot] &&
-                      bleDeviceRenderedRows[slot].present)) {
-            display.fillRect(bounds.x, bounds.y, bounds.width, bounds.height,
-                             Palette::Canvas);
-        }
-        bleDeviceRenderedRows[slot] = visual;
-        bleDeviceRenderedRowValid[slot] = true;
+    if (change == leshy1::ui::LiveListRowChange::Clear) {
+        display.fillRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                         Palette::Canvas);
+        ++bleDeviceListSlotClears;
+        bleDeviceListRenderCache.publish(slot, visual);
         return true;
     }
-    const bool canRenderSignalDelta = !force &&
-        bleDeviceRenderedRowValid[slot] &&
-        bleDeviceRenderedRows[slot].staticFieldsEqual(visual);
-    if (canRenderSignalDelta) {
+    if (change == leshy1::ui::LiveListRowChange::DynamicFields) {
         ++bleDeviceListSignalDeltaRepaints;
-        const std::uint16_t background = visual.selected
-            ? Palette::SurfaceFocus : Palette::Surface;
-        renderBleDeviceRowNote(visual, bounds, background);
-        if (wifiSignalLevel(bleDeviceRenderedRows[slot].rssiDbm) !=
-            wifiSignalLevel(visual.rssiDbm)) {
-            renderWifiSignalBars(bounds, visual.rssiDbm, background);
-        }
-        bleDeviceRenderedRows[slot] = visual;
+        renderBleDeviceRowNote(visual, bounds);
+        bleDeviceListRenderCache.publish(slot, visual);
         return true;
     }
     const bool identityReplacement = !force &&
-        bleDeviceRenderedRowValid[slot] &&
-        bleDeviceRenderedRows[slot].present && visual.present &&
-        !bleDeviceRenderedRows[slot].sameIdentity(visual);
+        bleDeviceListRenderCache.valid(slot) &&
+        bleDeviceListRenderCache.row(slot).present && visual.present &&
+        !bleDeviceListRenderCache.row(slot).sameIdentity(visual);
     ++bleDeviceListRowFullRepaints;
     if (identityReplacement) ++bleDeviceListIdentityReplacements;
-    const std::uint16_t background = visual.selected
-        ? Palette::SurfaceFocus : Palette::Surface;
-    display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
-                          Layout::Radius, background);
-    renderFocusCue(bounds, visual.selected);
-    const std::int16_t labelTop = menuRowTextTop(bounds);
-    display.setTextColor(visual.selected ? Palette::Focus
-                                         : Palette::TextSecondary,
-                         background);
-    setUiCursor(UiTextRole::Body,
-                bounds.x + kInteractiveRowTextInset, labelTop);
-    display.print(visual.label.data());
-    renderBleDeviceRowNote(visual, bounds, background);
-    renderWifiSignalBars(bounds, visual.rssiDbm, background);
-    bleDeviceRenderedRows[slot] = visual;
-    bleDeviceRenderedRowValid[slot] = true;
+    char note[64] = {};
+    std::snprintf(note, sizeof(note), tr(UiTextId::BleDeviceRowFormat),
+                  visual.descriptor.data(), static_cast<int>(visual.rssiDbm));
+    const LiveListPaletteIndex tone = visual.tracker
+        ? LiveListPaletteIndex::Warning : LiveListPaletteIndex::Positive;
+    (void)pushLiveListRow(bounds, visual.selected, visual.label.data(), note,
+                          tone, true, visual.rssiDbm);
+    bleDeviceListRenderCache.publish(slot, visual);
     return true;
 }
 
@@ -17662,40 +17975,39 @@ bool renderBleDevicesData(bool force = false) {
     const std::size_t visibleSize = bleDeviceVisibleSize();
     if (visibleSize == 0U) {
         const bool unavailable = productSurveySourceUnavailableVisible();
-        const BleDeviceListRenderState nextState = unavailable
-            ? BleDeviceListRenderState::Unavailable
-            : BleDeviceListRenderState::Searching;
-        if (!force && bleDeviceListRenderState == nextState) return false;
-        display.fillRect(
-            Layout::Edge, Layout::ContentTop, Layout::ContentWidth,
-            Layout::FooterDividerY - Layout::ContentTop, Palette::Canvas);
-        ++bleDeviceListContentClears;
-        bleDeviceRenderedRows = {};
-        bleDeviceRenderedRowValid = {};
+        const auto nextState = unavailable
+            ? leshy1::ui::LiveListSceneState::Unavailable
+            : leshy1::ui::LiveListSceneState::Searching;
+        if (!force && bleDeviceListRenderCache.state() == nextState) {
+            return false;
+        }
+        for (std::size_t slot = 0U; slot < kVisibleBleDeviceRows; ++slot) {
+            BleDeviceRowVisual empty{};
+            if (bleDeviceListRenderCache.classify(slot, empty) ==
+                    leshy1::ui::LiveListRowChange::Clear) {
+                const Rect bounds = Components::homeRow(
+                    static_cast<std::uint8_t>(slot));
+                display.fillRect(bounds.x, bounds.y, bounds.width,
+                                 bounds.height, Palette::Canvas);
+                ++bleDeviceListSlotClears;
+            }
+            bleDeviceListRenderCache.publish(slot, empty);
+        }
         display.setTextColor(unavailable ? Palette::Danger : Palette::Positive,
                              Palette::Canvas);
         setUiCursor(UiTextRole::Meta, 14, 70);
         display.print(tr(unavailable ? UiTextId::BleReceiverUnavailable
                                      : UiTextId::BleDevicesSearching));
-        bleDeviceListRenderState = nextState;
+        bleDeviceListRenderCache.setState(nextState);
         return true;
-    }
-    if (bleDeviceListRenderState != BleDeviceListRenderState::Rows) {
-        if (!force) {
-            display.fillRect(
-                Layout::Edge, Layout::ContentTop, Layout::ContentWidth,
-                Layout::FooterDividerY - Layout::ContentTop, Palette::Canvas);
-            ++bleDeviceListContentClears;
-        }
-        bleDeviceRenderedRows = {};
-        bleDeviceRenderedRowValid = {};
     }
     const std::size_t first = bleDeviceFirstVisible(bleDeviceSelection);
     bool changed = false;
     for (std::size_t slot = 0U; slot < kVisibleBleDeviceRows; ++slot) {
         changed = renderBleDeviceRow(first + slot, first, force) || changed;
     }
-    bleDeviceListRenderState = BleDeviceListRenderState::Rows;
+    bleDeviceListRenderCache.setState(
+        leshy1::ui::LiveListSceneState::Rows);
     return changed;
 }
 
@@ -18318,63 +18630,124 @@ void formatWifiAddress(const std::array<std::uint8_t, 6>& address,
                   static_cast<unsigned>(address[5]));
 }
 
-void renderWifiDeviceRow(std::size_t index, std::size_t firstVisible) {
+void resetWifiDeviceListRenderCache() {
+    wifiDeviceListRenderCache.reset();
+}
+
+WifiDeviceRowVisual composeWifiDeviceRowVisual(
+        std::size_t index, std::size_t firstVisible) {
+    WifiDeviceRowVisual visual{};
     const WifiDeviceRecord* device = wifiDeviceAt(index);
     if (device == nullptr || index < firstVisible ||
         index >= firstVisible + kVisibleWifiNetworkRows) {
-        return;
+        return visual;
     }
-    const Rect bounds = Components::homeRow(
-        static_cast<std::uint8_t>(index - firstVisible));
-    const bool selected = wifiDeviceSelection == index;
-    const std::uint16_t background = selected ? Palette::SurfaceFocus
-                                               : Palette::Surface;
-    display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
-                          Layout::Radius, background);
-    renderFocusCue(bounds, selected);
-    char primary[23] = {};
-    compactWifiDeviceLabel(*device, primary, sizeof(primary));
-    const std::int16_t labelTop = menuRowTextTop(bounds);
-    display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
-                         background);
-    setUiCursor(UiTextRole::Body,
-                bounds.x + kInteractiveRowTextInset, labelTop);
-    display.print(primary);
-    char note[64] = {};
-    std::snprintf(note, sizeof(note), tr(UiTextId::WifiDeviceRowFormat),
-                  tr(wifiDeviceStateText(device->state)),
-                  static_cast<unsigned>(device->channel),
-                  static_cast<int>(device->rssiDbm));
-    display.setTextColor(Palette::Positive, background);
-    setUiCursor(UiTextRole::Meta,
-                bounds.x + kInteractiveRowTextInset,
-                labelTop + kRobotoCondensedBodyAscent +
-                    kRobotoCondensedBodyDescent + 1);
-    display.print(note);
+    visual.present = true;
+    visual.selected = wifiDeviceSelection == index;
+    visual.rssiDbm = device->rssiDbm;
+    visual.channel = device->channel;
+    visual.state = device->state;
+    visual.identity = device->address;
+    compactWifiDeviceLabel(
+        *device, visual.label.data(), visual.label.size());
+    return visual;
 }
 
-void renderWifiDevicesData() {
+bool renderWifiDeviceRow(std::size_t index, std::size_t firstVisible,
+                         bool force = false) {
+    if (index < firstVisible ||
+        index >= firstVisible + kVisibleWifiNetworkRows) {
+        return false;
+    }
+    const std::size_t slot = index - firstVisible;
+    const WifiDeviceRowVisual visual =
+        composeWifiDeviceRowVisual(index, firstVisible);
+    const leshy1::ui::LiveListRowChange change = force
+        ? (visual.present ? leshy1::ui::LiveListRowChange::Replace
+                          : leshy1::ui::LiveListRowChange::None)
+        : wifiDeviceListRenderCache.classify(slot, visual);
+    if (change == leshy1::ui::LiveListRowChange::None) {
+        wifiDeviceListRenderCache.publish(slot, visual);
+        return false;
+    }
+    ++wifiDeviceListRowRepaints;
+    const Rect bounds = Components::homeRow(static_cast<std::uint8_t>(slot));
+    if (change == leshy1::ui::LiveListRowChange::Clear) {
+        display.fillRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                         Palette::Canvas);
+        ++wifiDeviceListSlotClears;
+        wifiDeviceListRenderCache.publish(slot, visual);
+        return true;
+    }
+    char note[64] = {};
+    std::snprintf(note, sizeof(note), tr(UiTextId::WifiDeviceRowFormat),
+                  tr(wifiDeviceStateText(visual.state)),
+                  static_cast<unsigned>(visual.channel),
+                  static_cast<int>(visual.rssiDbm));
+    if (change == leshy1::ui::LiveListRowChange::DynamicFields) {
+        ++wifiDeviceListDynamicFieldRepaints;
+        (void)pushLiveListDynamicFields(
+            bounds, visual.selected, note,
+            LiveListPaletteIndex::Positive, false, visual.rssiDbm);
+        wifiDeviceListRenderCache.publish(slot, visual);
+        return true;
+    }
+    const bool identityReplacement = !force &&
+        wifiDeviceListRenderCache.valid(slot) &&
+        wifiDeviceListRenderCache.row(slot).present && visual.present &&
+        !wifiDeviceListRenderCache.row(slot).sameIdentity(visual);
+    ++wifiDeviceListRowFullRepaints;
+    if (identityReplacement) ++wifiDeviceListIdentityReplacements;
+    (void)pushLiveListRow(
+        bounds, visual.selected, visual.label.data(), note,
+        LiveListPaletteIndex::Positive, false, visual.rssiDbm);
+    wifiDeviceListRenderCache.publish(slot, visual);
+    return true;
+}
+
+bool renderWifiDevicesData(bool force = false) {
     if (wifiDeviceCatalog.size() == 0U) {
         const auto stats = wifiFrameCapture.deviceMonitorStats();
+        const auto nextState = stats.active
+            ? leshy1::ui::LiveListSceneState::Searching
+            : leshy1::ui::LiveListSceneState::Unavailable;
+        if (!force && wifiDeviceListRenderCache.state() == nextState) {
+            return false;
+        }
+        for (std::size_t slot = 0U; slot < kVisibleWifiNetworkRows; ++slot) {
+            WifiDeviceRowVisual empty{};
+            if (wifiDeviceListRenderCache.classify(slot, empty) ==
+                    leshy1::ui::LiveListRowChange::Clear) {
+                const Rect bounds = Components::homeRow(
+                    static_cast<std::uint8_t>(slot));
+                display.fillRect(bounds.x, bounds.y, bounds.width,
+                                 bounds.height, Palette::Canvas);
+                ++wifiDeviceListSlotClears;
+            }
+            wifiDeviceListRenderCache.publish(slot, empty);
+        }
         display.setTextColor(stats.active ? Palette::Positive : Palette::Danger,
                              Palette::Canvas);
         setUiCursor(UiTextRole::Meta, 14, 70);
         display.print(tr(stats.active ? UiTextId::WifiDevicesListening
                                       : UiTextId::WifiDevicesFailed));
-        return;
+        wifiDeviceListRenderCache.setState(nextState);
+        return true;
     }
     const std::size_t first = wifiDeviceFirstVisible(wifiDeviceSelection);
-    const std::size_t end = wifiDeviceVisibleSize() <
-            first + kVisibleWifiNetworkRows
-        ? wifiDeviceVisibleSize() : first + kVisibleWifiNetworkRows;
-    for (std::size_t index = first; index < end; ++index) {
-        renderWifiDeviceRow(index, first);
+    bool changed = false;
+    for (std::size_t slot = 0U; slot < kVisibleWifiNetworkRows; ++slot) {
+        changed = renderWifiDeviceRow(first + slot, first, force) || changed;
     }
+    wifiDeviceListRenderCache.setState(
+        leshy1::ui::LiveListSceneState::Rows);
+    return changed;
 }
 
 void renderWifiDevices(bool clearContent) {
+    if (clearContent) resetWifiDeviceListRenderCache();
     renderHeader(tr(UiTextId::WifiMenuDevices), clearContent);
-    renderWifiDevicesData();
+    (void)renderWifiDevicesData(clearContent);
 }
 
 void renderWifiDeviceDetailLiveData(bool force = true);
@@ -23511,24 +23884,7 @@ UiDeltaRenderResult renderSelectionDelta() {
             renderedUi.wifiNetworkSize != wifiNetworkVisibleSize() ||
             renderedUi.wifiNetworkRevision != wifiNetworkCatalog.revision();
         if (dataChanged || oldFirst != currentFirst) {
-            const bool clearRows = oldFirst != currentFirst ||
-                renderedUi.wifiNetworkSize == 0 ||
-                wifiNetworkVisibleSize() == 0;
-            if (clearRows) {
-                display.fillRect(
-                    Layout::Edge, Layout::ContentTop, Layout::ContentWidth,
-                    Layout::FooterDividerY - Layout::ContentTop,
-                    Palette::Canvas);
-                renderWifiNetworksData();
-            } else {
-                const std::size_t end = wifiNetworkVisibleSize() <
-                        currentFirst + kVisibleWifiNetworkRows
-                    ? wifiNetworkVisibleSize()
-                    : currentFirst + kVisibleWifiNetworkRows;
-                for (std::size_t index = currentFirst; index < end; ++index) {
-                    renderWifiNetworkRow(index, currentFirst);
-                }
-            }
+            const bool rowsPainted = renderWifiNetworksData(false);
             if (renderedUi.surveyState !=
                 static_cast<std::uint8_t>(SurveyWorkflowState::Running)) {
                 display.fillRect(128, 0, Layout::ScreenWidth - 128,
@@ -23536,14 +23892,15 @@ UiDeltaRenderResult renderSelectionDelta() {
                 renderHeaderStatus();
                 renderNavigationFooter();
             }
-            return UiDeltaRenderResult::Rendered;
+            return rowsPainted ? UiDeltaRenderResult::Rendered
+                               : UiDeltaRenderResult::NoChange;
         }
         if (renderedUi.wifiNetworkSelection == current) {
             return UiDeltaRenderResult::NoChange;
         }
-        renderWifiNetworkRow(renderedUi.wifiNetworkSelection, currentFirst);
-        renderWifiNetworkRow(current, currentFirst);
-        return UiDeltaRenderResult::Rendered;
+        const bool rowsPainted = renderWifiNetworksData(false);
+        return rowsPainted ? UiDeltaRenderResult::Rendered
+                           : UiDeltaRenderResult::NoChange;
     }
 
     if (uiController.page() == 2 &&
@@ -23592,32 +23949,16 @@ UiDeltaRenderResult renderSelectionDelta() {
             renderedUi.wifiDeviceActive !=
                 wifiFrameCapture.deviceMonitorStats().active;
         if (dataChanged || oldFirst != currentFirst) {
-            const bool clearRows = oldFirst != currentFirst ||
-                renderedUi.wifiDeviceSize == 0U ||
-                wifiDeviceVisibleSize() == 0U;
-            if (clearRows) {
-                display.fillRect(
-                    Layout::Edge, Layout::ContentTop, Layout::ContentWidth,
-                    Layout::FooterDividerY - Layout::ContentTop,
-                    Palette::Canvas);
-                renderWifiDevicesData();
-            } else {
-                const std::size_t end = wifiDeviceVisibleSize() <
-                        currentFirst + kVisibleWifiNetworkRows
-                    ? wifiDeviceVisibleSize()
-                    : currentFirst + kVisibleWifiNetworkRows;
-                for (std::size_t index = currentFirst; index < end; ++index) {
-                    renderWifiDeviceRow(index, currentFirst);
-                }
-            }
-            return UiDeltaRenderResult::Rendered;
+            const bool rowsPainted = renderWifiDevicesData(false);
+            return rowsPainted ? UiDeltaRenderResult::Rendered
+                               : UiDeltaRenderResult::NoChange;
         }
         if (renderedUi.wifiDeviceSelection == current) {
             return UiDeltaRenderResult::NoChange;
         }
-        renderWifiDeviceRow(renderedUi.wifiDeviceSelection, currentFirst);
-        renderWifiDeviceRow(current, currentFirst);
-        return UiDeltaRenderResult::Rendered;
+        const bool rowsPainted = renderWifiDevicesData(false);
+        return rowsPainted ? UiDeltaRenderResult::Rendered
+                           : UiDeltaRenderResult::NoChange;
     }
 
     if (uiController.page() == 2 &&
@@ -28948,6 +29289,24 @@ bool startWifiNetworksProduct() {
     wifiNetworkDetail = {};
     wifiNetworkRenderedDetail = {};
     wifiNetworkDetailSignal = {};
+    resetWifiNetworkListRenderCache();
+    wifiNetworkListRowRepaints = 0U;
+    wifiNetworkListRowFullRepaints = 0U;
+    wifiNetworkListIdentityReplacements = 0U;
+    wifiNetworkListDynamicFieldRepaints = 0U;
+    wifiNetworkListContentClears = 0U;
+    wifiNetworkListSlotClears = 0U;
+    liveListAtomicRowPushes = 0U;
+    liveListAtomicFieldPushes = 0U;
+    liveListDirectFallbacks = 0U;
+    if (!prepareLiveUiCompositors()) {
+        productSurveyRuntime = {};
+        productSurveyRuntime.selected = true;
+        productSurveyRuntime.status = "wifi_ui_memory_unavailable";
+        lastRuntimeEvent = productSurveyRuntime.status;
+        wifiProductView = WifiProductView::Networks;
+        return true;
+    }
     productSurveyRuntime = {};
     productSurveyRuntime.selected = true;
     productSurveyRuntime.workerReady = productSurveyWorkerReady;
@@ -28989,7 +29348,7 @@ bool startBleDevicesProduct() {
         lastRuntimeEvent = productSurveyRuntime.status;
         return false;
     }
-    if (!prepareBleUiCompositors()) {
+    if (!prepareLiveUiCompositors()) {
         productSurveyRuntime = {};
         productSurveyRuntime.selected = true;
         productSurveyRuntime.status = "ble_ui_memory_unavailable";
@@ -29034,9 +29393,13 @@ bool startBleDevicesProduct() {
     bleDeviceListSignalDeltaRepaints = 0U;
     bleDeviceListAtomicNotePushes = 0U;
     bleDeviceListContentClears = 0U;
+    bleDeviceListSlotClears = 0U;
     bleDeviceListRefreshes = 0U;
     bleDeviceListRefreshesDeferred = 0U;
     bleDeviceListStaticChurnSuppressed = 0U;
+    liveListAtomicRowPushes = 0U;
+    liveListAtomicFieldPushes = 0U;
+    liveListDirectFallbacks = 0U;
     bleDeviceDetailContentClears = 0U;
     bleDeviceRadarFullRepaints = 0U;
     bleDeviceRadarDeltaRepaints = 0U;
@@ -29249,12 +29612,27 @@ bool startWifiDevicesProduct() {
     wifiDeviceSelection = 0;
     wifiDeviceDetail = {};
     wifiDeviceRenderedDetail = {};
+    resetWifiDeviceListRenderCache();
+    wifiDeviceListRowRepaints = 0U;
+    wifiDeviceListRowFullRepaints = 0U;
+    wifiDeviceListIdentityReplacements = 0U;
+    wifiDeviceListDynamicFieldRepaints = 0U;
+    wifiDeviceListContentClears = 0U;
+    wifiDeviceListSlotClears = 0U;
+    liveListAtomicRowPushes = 0U;
+    liveListAtomicFieldPushes = 0U;
+    liveListDirectFallbacks = 0U;
     wifiDeviceDetailContentClears = 0U;
     wifiDeviceRadarFullRepaints = 0U;
     wifiDeviceRadarDeltaRepaints = 0U;
     liveTextRowPushes = 0U;
     liveTextRowAllocationFailures = 0U;
     liveTextRowDirectFallbacks = 0U;
+    if (!prepareLiveUiCompositors()) {
+        wifiProductView = WifiProductView::Devices;
+        lastRuntimeEvent = "wifi_ui_memory_unavailable";
+        return true;
+    }
     std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     if (startedUs == 0U) startedUs = 1U;
@@ -40755,7 +41133,16 @@ void emitWifiNetworkDetailState(Stream& reply) {
         "\"frequency_khz\":%lu,\"rssi_dbm\":%d,"
         "\"signal_samples\":%u,\"minimum_rssi_dbm\":%d,"
         "\"maximum_rssi_dbm\":%d,\"rssi_trend_db\":%d,"
-        "\"catalog_revision\":%lu}",
+        "\"catalog_revision\":%lu,"
+        "\"list_row_repaints\":%lu,"
+        "\"list_row_full_repaints\":%lu,"
+        "\"list_identity_replacements\":%lu,"
+        "\"list_dynamic_field_repaints\":%lu,"
+        "\"list_content_clears\":%lu,\"list_slot_clears\":%lu,"
+        "\"live_list_atomic_row_pushes\":%lu,"
+        "\"live_list_atomic_field_pushes\":%lu,"
+        "\"live_list_row_allocation_failures\":%lu,"
+        "\"live_list_direct_fallbacks\":%lu}",
         live ? "true" : "false",
         static_cast<unsigned long>(wifiNetworkNavigationOrder.identityHash(
             wifiNetworkCatalog, wifiNetworkSelection)),
@@ -40785,7 +41172,17 @@ void emitWifiNetworkDetailState(Stream& reply) {
         static_cast<int>(signal.minimumRssiDbm),
         static_cast<int>(signal.maximumRssiDbm),
         static_cast<int>(signal.rssiTrendDb),
-        static_cast<unsigned long>(wifiNetworkCatalog.revision()));
+        static_cast<unsigned long>(wifiNetworkCatalog.revision()),
+        static_cast<unsigned long>(wifiNetworkListRowRepaints),
+        static_cast<unsigned long>(wifiNetworkListRowFullRepaints),
+        static_cast<unsigned long>(wifiNetworkListIdentityReplacements),
+        static_cast<unsigned long>(wifiNetworkListDynamicFieldRepaints),
+        static_cast<unsigned long>(wifiNetworkListContentClears),
+        static_cast<unsigned long>(wifiNetworkListSlotClears),
+        static_cast<unsigned long>(liveListAtomicRowPushes),
+        static_cast<unsigned long>(liveListAtomicFieldPushes),
+        static_cast<unsigned long>(liveListRowAllocationFailures),
+        static_cast<unsigned long>(liveListDirectFallbacks));
     reply.println(line);
 }
 
@@ -40811,6 +41208,15 @@ void emitWifiDeviceDetailState(Stream& reply) {
         "\"rssi_dbm\":%d,\"signal_samples\":%lu,"
         "\"minimum_rssi_dbm\":%d,\"maximum_rssi_dbm\":%d,"
         "\"rssi_trend_db\":%d,\"catalog_revision\":%lu,"
+        "\"list_row_repaints\":%lu,"
+        "\"list_row_full_repaints\":%lu,"
+        "\"list_identity_replacements\":%lu,"
+        "\"list_dynamic_field_repaints\":%lu,"
+        "\"list_content_clears\":%lu,\"list_slot_clears\":%lu,"
+        "\"live_list_atomic_row_pushes\":%lu,"
+        "\"live_list_atomic_field_pushes\":%lu,"
+        "\"live_list_row_allocation_failures\":%lu,"
+        "\"live_list_direct_fallbacks\":%lu,"
         "\"detail_content_clears\":%lu,"
         "\"radar_full_repaints\":%lu,\"radar_delta_repaints\":%lu,"
         "\"atomic_text_row_pushes\":%lu,"
@@ -40825,6 +41231,16 @@ void emitWifiDeviceDetailState(Stream& reply) {
         static_cast<int>(device.maximumRssiDbm),
         static_cast<int>(device.rssiTrendDb),
         static_cast<unsigned long>(wifiDeviceCatalog.revision()),
+        static_cast<unsigned long>(wifiDeviceListRowRepaints),
+        static_cast<unsigned long>(wifiDeviceListRowFullRepaints),
+        static_cast<unsigned long>(wifiDeviceListIdentityReplacements),
+        static_cast<unsigned long>(wifiDeviceListDynamicFieldRepaints),
+        static_cast<unsigned long>(wifiDeviceListContentClears),
+        static_cast<unsigned long>(wifiDeviceListSlotClears),
+        static_cast<unsigned long>(liveListAtomicRowPushes),
+        static_cast<unsigned long>(liveListAtomicFieldPushes),
+        static_cast<unsigned long>(liveListRowAllocationFailures),
+        static_cast<unsigned long>(liveListDirectFallbacks),
         static_cast<unsigned long>(wifiDeviceDetailContentClears),
         static_cast<unsigned long>(wifiDeviceRadarFullRepaints),
         static_cast<unsigned long>(wifiDeviceRadarDeltaRepaints),
@@ -41625,6 +42041,11 @@ void emitBleDeviceDetailState(Stream& reply) {
         "\"list_signal_delta_repaints\":%lu,"
         "\"list_atomic_note_pushes\":%lu,"
         "\"list_content_clears\":%lu,"
+        "\"list_slot_clears\":%lu,"
+        "\"live_list_atomic_row_pushes\":%lu,"
+        "\"live_list_atomic_field_pushes\":%lu,"
+        "\"live_list_row_allocation_failures\":%lu,"
+        "\"live_list_direct_fallbacks\":%lu,"
         "\"list_refreshes\":%lu,\"list_refreshes_deferred\":%lu,"
         "\"list_static_churn_suppressed\":%lu,"
         "\"list_refresh_period_us\":%llu,"
@@ -41676,6 +42097,11 @@ void emitBleDeviceDetailState(Stream& reply) {
         static_cast<unsigned long>(bleDeviceListSignalDeltaRepaints),
         static_cast<unsigned long>(bleDeviceListAtomicNotePushes),
         static_cast<unsigned long>(bleDeviceListContentClears),
+        static_cast<unsigned long>(bleDeviceListSlotClears),
+        static_cast<unsigned long>(liveListAtomicRowPushes),
+        static_cast<unsigned long>(liveListAtomicFieldPushes),
+        static_cast<unsigned long>(liveListRowAllocationFailures),
+        static_cast<unsigned long>(liveListDirectFallbacks),
         static_cast<unsigned long>(bleDeviceListRefreshes),
         static_cast<unsigned long>(bleDeviceListRefreshesDeferred),
         static_cast<unsigned long>(bleDeviceListStaticChurnSuppressed),
@@ -43555,6 +43981,10 @@ void setup() {
               interfaceSettingsController.brightnessDuty());
     display.init();
     display.setRotation(2);
+    // Reserve the shared retained-list compositors before Wi-Fi/BLE/storage
+    // workers fragment the internal heap.  Every later live-list entry reuses
+    // these exact buffers and therefore never allocates on a scan callback.
+    (void)prepareLiveUiCompositors();
     boardTouchInput.begin(display, millis());
     touchCalibrationRequiredAtBoot =
         boardTouchInput.calibrationSource() ==
