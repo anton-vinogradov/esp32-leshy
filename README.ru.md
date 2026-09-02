@@ -12,14 +12,14 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 >
 > Закрыто этапов: 5 из 9.
 >
-> Пользовательские функции: **24/62 готовы** · 16 в работе · 6 заблокированы · 16 запланированы.
+> Пользовательские функции: **24/62 готовы** · 17 в работе · 6 заблокированы · 15 запланированы.
 
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline из 62 capabilities, знаменатель зафиксирован. Повторный аудит конкурентов и product decision от 1 сентября завершены: все ценные принятые outcomes входят в знаменатель, а отложенные integrations и три жёсткие продуктовые границы явно перечислены в [пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
 
-- **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
+- **Текущая фаза:** `S6.5 — functional-first пользовательские срезы над общими Actions, safety и schemas`; активен bounded IR replay `FF-5`.
 - **Режим поставки:** `functional-first`: пользовательские вертикальные срезы идут перед дополнительной невидимой инфраструктурой; для каждого среза запускается затронутый delta-HIL, а широкая matrix — на границе блока/этапа, RC, cross-cutting change или cadence.
-- **Проверенный checkpoint:** `E-BUILD-242`/`E-AUTO-221`/`E-HIL-239`/`E-UX-091`/`RB-M255` принимают исправление общей focus-frame live-списков на exact physical `1.0.0-dev.372`. Wi-Fi «Сети рядом» доказывает два полных passive lifecycle: рамка выбранной строки непрерывна до и после live-сортировки, focus остаётся привязан к identity, изменённые pixels остаются внутри строк списка и bounded signal card detail, изменения chrome равны zero. Тот же focus-last compositor обслуживает Wi-Fi Networks, Wi-Fi Devices и BLE Devices. Оба warm endpoint точно равны 143 428/60 512/18 896 B total/free/minimum heap; input/driver drops и storage writes равны zero, cleanup достигает Home/none/lease 0. Два fail-closed precursor с устаревшими oracle остаются hash-bound. Exact dev.357 остаётся periodic full anchor.
-- **Следующий gate:** progress остаётся **24/62**, отдельный фиксированный Wi-Fi track теперь **17/21 готово, 4/21 осталось**. `WF-11` завершён для поддерживаемого пути WPA2 PMKID/EAPOL; WPA3/key-version 3 остаётся явно открытым расширением `FUNC-61`, а не скрытой completion claim. `WF-18…WF-21` — оставшиеся Wi-Fi outcomes, они остаются queued до явного admission изолированного fixture/второй платы; RF TX запрещён.
+- **Проверенный checkpoint:** `E-BUILD-243`/`E-AUTO-222`/`E-UX-092`/`E-SAFETY-087`/`RB-M256` принимают host/build основу bounded IR replay на exact `1.0.0-dev.373`. К Preview → отдельному Confirmation → одной hardware-bounded передаче допускается только один persistent exact-current-generation immutable IR Capture NEC/NEC Extended; raw/repeat/temporary/simulated/recovered/truncated/stale/invalid записи fail closed. Device Lock, exclusive radio lease, deadline 100 ms, очередь RMT из одного frame, loop count zero, end-low output, Stop и quiesce Safety Supervisor связаны source/tests. Плата не прошивалась, IR/RF/network/storage output не заявляется. Exact physical dev.372 остаётся принятым live-list baseline, dev.357 — periodic full anchor.
+- **Следующий gate:** progress остаётся **24/62**, отдельный фиксированный Wi-Fi track — **17/21 готово, 4/21 осталось**. Для `FF-5` второй исправный DIV должен наблюдать exact candidate dev.373: один выбранный owned Capture, один подтверждённый IR frame, Stop/timeout, output-low и final Home/none/lease 0. Этот physical gate отложен до приезда replacement DIV и не превращается в software-only completion claim. `WF-18…WF-21` также остаются queued до явного admission изолированного fixture/второй платы; RF TX запрещён.
 
 ### Functional-first очередь поставки
 
@@ -29,8 +29,8 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | FF-1 | Radar Wi-Fi/BLE и Targets плюс согласованный cross-radio interaction review `FUNC-17` | ✅ готово |
 | FF-2 | Поставить `FUNC-43` screenshot устройства → Library → export с provenance build/state/time | ✅ готово |
 | FF-3 | Завершить `FUNC-37` Protocol Workbench над immutable Captures; waveform, task-first разметка, comparison и truthful derived-decode screens физически приняты; protected commit/cold reopen по решению владельца отложен до появления второго исправного DIV | ⏸️ безопасно заморожен |
-| FF-4 | Завершить `FUNC-38` local USB/Web browse, search, compare и export, не делая сеть зависимостью устройства; dev.361 завершает двуязычную task-first host/build presentation и local preview, а tooling source `0ca7181` готовит external-client verifier без настройки сети и exact binder parity USB; остаётся physical run с dedicated client | 🟡 в работе |
-| FF-5 | Поставить `FUNC-34` IR replay из одного выбранного immutable Capture с preview, confirmation и доказанным Stop/timeout | ⬜ в очереди |
+| FF-4 | Завершить `FUNC-38` local USB/Web browse, search, compare и export, не делая сеть зависимостью устройства; dev.361 завершает двуязычную task-first host/build presentation и local preview, а tooling source `0ca7181` готовит external-client verifier без настройки сети и exact binder parity USB; physical run с dedicated client по решению владельца отложен до второго исправного DIV | ⏸️ безопасно заморожен |
+| FF-5 | Поставить `FUNC-34` IR replay из одного выбранного immutable Capture с preview, confirmation и доказанным Stop/timeout; host/build основа принята на dev.373, exact two-board physical acceptance отложена до приезда replacement DIV | 🟡 в работе |
 | FF-6 | Вернуться к classification/execution signed packages `FUNC-54`, затем к отдельно допускаемым действиям Safe Lab; Automation/HID остаётся zero-output до активации этой строки | ⏸️ безопасно заморожен |
 
 ### Фазы текущего этапа
@@ -86,7 +86,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | Scoped Wi-Fi/USB setup изолирует secrets, не экспортирует их и не делает сеть условием Survey/Library | S6 + S8 | ✅ готово |
 | Отдельная Лаборатория показывает разрешённый scope, source, frequency, power, duration и постоянно видимый TX state | S7 | ⬜ дальше |
 | Назад, timeout, panic, fault или потеря control/telemetry физически прекращает каждый TX path | S7 | ⬜ дальше |
-| IR replay использует selected immutable Capture или ready signed multi-button/favorite remote/TV profile после preview и confirmation | S7 | ⬜ дальше |
+| IR replay использует selected immutable Capture или ready signed multi-button/favorite remote/TV profile после preview и confirmation | S7 | 🟡 в работе |
 | Sub-GHz replay/TX из immutable Capture проходит ResourceBroker, bounds, confirm, countdown и stop result | S7 | ⬜ дальше |
 | NFC write/restore поддерживаемой собственной метки показывает preview, verify и исходный dump для восстановления | S7, conditional hardware | ⬜ дальше |
 | Protocol Workbench сравнивает pulses/waveforms, аннотирует поля и сохраняет derived decode без изменения raw source | S7 | 🟡 в работе |

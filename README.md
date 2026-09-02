@@ -12,14 +12,14 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 >
 > Stage gates complete: 5 of 9.
 >
-> User functionality: **24/62 done** · 16 active · 6 blocked · 16 planned.
+> User functionality: **24/62 done** · 17 active · 6 blocked · 15 planned.
 
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts. The checklist is complete for the currently frozen 62-capability 1.x baseline. The 1 September competitor re-audit and product decision are complete: every valuable accepted outcome is inside this denominator, while deferred integrations and the three hard product boundaries remain explicit in the [feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
 
-- **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
+- **Current phase:** `S6.5 — functional-first user slices over shared Actions, safety and schemas`; `FF-5` bounded IR replay is active.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
-- **Verified checkpoint:** `E-BUILD-242`/`E-AUTO-221`/`E-HIL-239`/`E-UX-091`/`RB-M255` accept the shared live-list focus-frame repair on exact physical `1.0.0-dev.372`. Wi-Fi Networks proves two complete passive lifecycles: the selected frame is continuous before and after live sorting, focus remains bound to identity, changed pixels stay inside list rows and the bounded detail signal card, and chrome changes are zero. The same focus-last compositor serves Wi-Fi Networks, Wi-Fi Devices and BLE Devices. Both warm endpoints are exactly 143,428/60,512/18,896 B total/free/minimum heap; input/driver drops and storage writes are zero, and cleanup reaches Home/none/lease 0. Two fail-closed stale-oracle precursors remain hash-bound. Exact dev.357 remains the periodic full anchor.
-- **Next gate:** progress remains **24/62**, while the fixed Wi-Fi track is now **17/21 done, 4/21 remaining**. `WF-11` is complete for the supported WPA2 PMKID/EAPOL path; WPA3/key-version 3 remains an explicit wider `FUNC-61` refinement rather than a hidden completion claim. `WF-18…WF-21` are the remaining Wi-Fi outcomes and stay queued behind explicit isolated-fixture/second-board admission; RF TX remains forbidden.
+- **Verified checkpoint:** `E-BUILD-243`/`E-AUTO-222`/`E-UX-092`/`E-SAFETY-087`/`RB-M256` accept the host/build foundation of bounded IR replay on exact `1.0.0-dev.373`. Only one persistent exact-current-generation immutable NEC/NEC Extended IR Capture can reach Preview → separate Confirmation → one hardware-bounded emission; raw/repeat/temporary/simulated/recovered/truncated/stale/invalid records fail closed. Device Lock, exclusive radio lease, 100 ms deadline, one-frame RMT queue, loop count zero, end-low output, Stop and Safety Supervisor quiesce are source- and test-bound. No board was flashed and no IR/RF/network/storage output is claimed. Exact physical dev.372 remains the accepted live-list baseline and dev.357 the periodic full anchor.
+- **Next gate:** progress remains **24/62**, while the fixed Wi-Fi track is **17/21 done, 4/21 remaining**. For `FF-5`, a second working DIV must observe the exact dev.373 candidate: one selected owned Capture, one confirmed IR frame, Stop/timeout, output-low and final Home/none/lease 0. This physical gate remains deferred until the replacement DIV arrives; it is not converted into a software-only completion claim. `WF-18…WF-21` likewise stay queued behind explicit isolated-fixture/second-board admission; RF TX remains forbidden.
 
 ### Functional-first delivery queue
 
@@ -29,8 +29,8 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | FF-1 | Wi-Fi/BLE and Targets Radar plus the coherent cross-radio interaction review for `FUNC-17` | ✅ complete |
 | FF-2 | Deliver `FUNC-43` on-device screenshot → Library → export with build/state/time provenance | ✅ complete |
 | FF-3 | Complete `FUNC-37` Protocol Workbench over immutable Captures; waveform, task-first marking, comparison and truthful derived-decode screens are physically accepted; protected commit/cold reopen is deferred by owner decision until the second working DIV arrives | ⏸️ safely parked |
-| FF-4 | Finish `FUNC-38` local USB/Web browse, search, compare and export without making network access a device dependency; dev.361 completes bilingual task-first host/build presentation and local preview, and tooling source `0ca7181` prepares a no-network-configuration external-client verifier plus exact USB parity binder; the dedicated-client physical run remains | 🟡 active |
-| FF-5 | Deliver `FUNC-34` IR replay from one selected immutable Capture with preview, confirmation and proven Stop/timeout | ⬜ queued |
+| FF-4 | Finish `FUNC-38` local USB/Web browse, search, compare and export without making network access a device dependency; dev.361 completes bilingual task-first host/build presentation and local preview, and tooling source `0ca7181` prepares a no-network-configuration external-client verifier plus exact USB parity binder; the dedicated-client physical run is deferred by owner decision until the second working DIV arrives | ⏸️ safely parked |
+| FF-5 | Deliver `FUNC-34` IR replay from one selected immutable Capture with preview, confirmation and proven Stop/timeout; host/build foundation is accepted on dev.373 and exact two-board physical acceptance is deferred until the replacement DIV arrives | 🟡 active |
 | FF-6 | Resume signed-package classification/execution for `FUNC-54`, then individually admitted Safe Lab actions; Automation/HID remains zero-output until this row becomes active | ⏸️ safely parked |
 
 ### Current stage phases
@@ -86,7 +86,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | Scoped Wi-Fi/USB setup isolates secrets, never exports them and never makes networking a Survey/Library prerequisite | S6 + S8 | ✅ complete |
 | Separate Lab exposes authorized scope, source, frequency, power, duration and permanently visible TX state | S7 | ⬜ later |
 | Back, timeout, panic, fault or loss of control/telemetry physically stops every TX path | S7 | ⬜ later |
-| IR replay uses selected immutable Capture or a ready signed multi-button/favorite remote/TV profile after preview and explicit confirmation | S7 | ⬜ later |
+| IR replay uses selected immutable Capture or a ready signed multi-button/favorite remote/TV profile after preview and explicit confirmation | S7 | 🟡 in progress |
 | Sub-GHz replay/TX from an immutable Capture passes ResourceBroker, bounds, confirmation, countdown and stop result | S7 | ⬜ later |
 | NFC write/restore of a supported owned tag exposes preview, verify and the original recovery dump | S7, conditional hardware | ⬜ later |
 | Protocol Workbench compares pulses/waveforms, annotates fields and stores a derived decode without changing raw source | S7 | 🟡 in progress |

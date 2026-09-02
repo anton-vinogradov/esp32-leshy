@@ -2245,3 +2245,20 @@ SHA-256 firmware/factory/ELF/map —
 zero. Atomic row compositing 4-bpp/1-bpp после preallocated buffers остаётся
 bounded и allocation-free; repaint list/detail выходит в zero chrome pixels.
 Это двигает focused cadence до 9/15 и не заявляет instrumented RF silence.
+
+Bound основы bounded IR replay `RB-M256`: exact host/build
+`1.0.0-dev.373` на source
+`e124bffa0d838dae1314b786783265fdcb5d3e77` использует 235 760 B static RAM,
+3 667 284 B linked flash и 3 667 792/3 733 328 B app/factory images,
+оставляя 526 512 B actual application-image headroom в OTA slot 4 MiB.
+SHA-256 firmware/factory/ELF/map —
+`91522af7d492dce53d947fa95b527d87c9f2f5a7ef7f4a501e29750eb00643bb`/
+`23c534bf86e7747832aa4f2c39a3188a35d080bf9c611ed81152927a878d6d32`/
+`0ac7d6467f0d2f42455cba932795151dc7f142b9f1dfbaa33b1373bac2c417f7`/
+`8a0b5dfebfb04d764f684053f7e3552d4f6559a898cc48732a78687cd5e7ed99`.
+Относительно dev.372 static RAM растёт на 384 B, linked flash — на 6 584 B,
+обе app/factory images — на 6 592 B. Headroom уменьшается на 6 592 B и
+остаётся лишь на 2 224 B выше floor 512 KiB, поэтому следующие срезы обязаны
+считать размер image активным optimization pressure. Adapter RMT остаётся
+one-frame, loop-zero и allocation-free после initialization. Этот host
+checkpoint не заявляет physical heap, board, output, progress или cadence.

@@ -2255,3 +2255,20 @@ above the 512 KiB floor. Two complete passive Wi-Fi lifecycles return exactly to
 Atomic 4-bpp/1-bpp row compositing remains bounded and allocation-free after its
 preallocated row buffers; list and detail repaint escape zero chrome pixels.
 This moves focused cadence to 9/15 and does not claim instrumented RF silence.
+
+Bounded IR replay foundation bound `RB-M256`: exact host/build
+`1.0.0-dev.373` at source
+`e124bffa0d838dae1314b786783265fdcb5d3e77` uses 235,760 B static RAM,
+3,667,284 B linked flash and 3,667,792/3,733,328 B app/factory images,
+leaving 526,512 B actual application-image headroom in the 4 MiB OTA slot.
+Firmware/factory/ELF/map SHA-256 are
+`91522af7d492dce53d947fa95b527d87c9f2f5a7ef7f4a501e29750eb00643bb`/
+`23c534bf86e7747832aa4f2c39a3188a35d080bf9c611ed81152927a878d6d32`/
+`0ac7d6467f0d2f42455cba932795151dc7f142b9f1dfbaa33b1373bac2c417f7`/
+`8a0b5dfebfb04d764f684053f7e3552d4f6559a898cc48732a78687cd5e7ed99`.
+Relative to dev.372, static RAM rises by 384 B, linked flash by 6,584 B and
+both app/factory images by 6,592 B. Headroom shrinks by 6,592 B and remains
+only 2,224 B above the 512 KiB floor, so subsequent slices must treat image
+size as active optimization pressure. The RMT adapter remains one-frame,
+loop-zero and allocation-free after initialization. This host checkpoint has
+no physical heap, board, output, progress or cadence claim.

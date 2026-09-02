@@ -1,0 +1,86 @@
+{
+  "schema": "leshy.infrared_replay.host_acceptance.v1",
+  "status": "pass_host_bounded_infrared_replay_foundation",
+  "evidence_ids": [
+    "E-BUILD-243",
+    "E-AUTO-222",
+    "E-UX-092",
+    "E-SAFETY-087",
+    "RB-M256"
+  ],
+  "candidate": {
+    "version": "1.0.0-dev.373",
+    "source_commit": "e124bffa0d838dae1314b786783265fdcb5d3e77",
+    "firmware_sha256": "91522af7d492dce53d947fa95b527d87c9f2f5a7ef7f4a501e29750eb00643bb",
+    "factory_sha256": "23c534bf86e7747832aa4f2c39a3188a35d080bf9c611ed81152927a878d6d32",
+    "elf_sha256": "0ac7d6467f0d2f42455cba932795151dc7f142b9f1dfbaa33b1373bac2c417f7",
+    "map_sha256": "8a0b5dfebfb04d764f684053f7e3552d4f6559a898cc48732a78687cd5e7ed99",
+    "firmware_bytes": 3667792,
+    "factory_bytes": 3733328,
+    "elf_bytes": 25407920,
+    "map_bytes": 18970063,
+    "linked_flash_bytes": 3667284,
+    "static_ram_bytes": 235760,
+    "ota_headroom_bytes": 526512
+  },
+  "tooling": {
+    "contract_checker_sha256": "c0b13d1527011ac48e4bb9ffdbc5714daa3f076ae3ac42291785f7ed595ae829",
+    "focused_test_runner_sha256": "5b811af122d3d88f400b5e22c79b37994f18f94bfa7265e6e1447c10d58a692b",
+    "native_tests_sha256": "6f9c3ef65a55637581a1120d668c560ee150aedabf21f5de0b12f478347da9e3",
+    "replay_controller_source_sha256": "b060e9b04be8414984a3795e34227244691aef7820355533272e1c038635b948",
+    "ui_controller_source_sha256": "40d91197e83969ac474d4abc99a20464b67ee1cc1a275a7dca321edaf5f24c97",
+    "board_adapter_source_sha256": "225e7462d733eb81b90cedb0379eaec68473c0c597a5fc34448aa8b8a1d859ea"
+  },
+  "verified": {
+    "allowed_protocols": [
+      "nec",
+      "nec_extended"
+    ],
+    "raw_pulse_replay_allowed": false,
+    "nec_repeat_allowed": false,
+    "persistent_exact_generation_required": true,
+    "simulated_source_allowed": false,
+    "recovered_fallback_allowed": false,
+    "truncated_source_allowed": false,
+    "integrity_required": true,
+    "preview_required": true,
+    "separate_confirmation_required": true,
+    "single_emission_only": true,
+    "carrier_hz": 38000,
+    "duty_percent": 33,
+    "pulse_count": 67,
+    "maximum_emission_us": 100000,
+    "hardware_queue_depth": 1,
+    "hardware_loop_count": 0,
+    "hardware_eot_level_low": true,
+    "nonblocking_service": true,
+    "radio_spi_lease_required": true,
+    "protected_ui_admission_required": true,
+    "safety_supervisor_quiesce_connected": true,
+    "user_stop_connected": true,
+    "terminal_output_inactive_required": true,
+    "task_first_bilingual_ui": true,
+    "all_1243_ui_strings_fit": true,
+    "focused_native_tests_passed": true,
+    "clean_target_tests_passed": true,
+    "production_build_passed": true,
+    "git_diff_check_passed": true
+  },
+  "side_effects": {
+    "board_flash_count": 0,
+    "serial_ports_opened": 0,
+    "radio_transmissions": 0,
+    "host_network_changed": false,
+    "mac_wifi_changed": false,
+    "cardputer_touched": false,
+    "storage_writes": 0
+  },
+  "not_claimed": {
+    "physical_ir_emission": true,
+    "physical_stop_or_timeout": true,
+    "two_board_loopback": true,
+    "physical_screen_fit": true,
+    "func_34_complete": true,
+    "progress_or_hil_cadence_advanced": true
+  }
+}
