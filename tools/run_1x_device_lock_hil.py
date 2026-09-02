@@ -117,9 +117,11 @@ def device_lock_page(device: PassiveSerial) -> dict[str, Any]:
         raise RuntimeError(f"Device menu did not open: {current}")
     while int(current.get("device_selection", -1)) > 0:
         current = action(device, "up")
-    while int(current.get("device_selection", -1)) < 2:
+    # Connectivity was inserted before Device Lock in the task-first Device
+    # tree.  Keep every shared HIL caller aligned with the production menu.
+    while int(current.get("device_selection", -1)) < 3:
         current = action(device, "down")
-    if int(current.get("device_selection", -1)) != 2:
+    if int(current.get("device_selection", -1)) != 3:
         raise RuntimeError(f"Device Lock item not reachable: {current}")
     current = action(device, "right")
     if current.get("page") != "device_lock":
