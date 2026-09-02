@@ -150,7 +150,9 @@ def main() -> int:
     require(failures,
             detail_first.get("wifi_device_oui_database_available") is True and
             detail_first.get("wifi_device_oui_records") == 39984 and
-            detail_first.get("wifi_device_navigation_locked") is True,
+            detail_first.get("wifi_device_navigation_locked") is False and
+            run.get("scope", {}).get("live_list_order_not_frozen") is True and
+            run.get("scope", {}).get("detail_identity_pinned_by_hash") is True,
             "device intelligence/OUI/navigation contract mismatch")
     detail_oracle_first = run.get("detail_oracle_first", {})
     detail_oracle_second = run.get("detail_oracle_second", {})

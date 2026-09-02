@@ -299,7 +299,10 @@ def main() -> int:
                         "wifi_device_channel_locked": True,
                         "wifi_device_oui_database_available": True,
                         "wifi_device_oui_records": 39984,
-                        "wifi_device_navigation_locked": True,
+                        # Keep the strongest-first catalog live.  Detail
+                        # identity is pinned by MAC/identity_hash instead of
+                        # freezing the list order after the first input.
+                        "wifi_device_navigation_locked": False,
                     }, "wifi_device_live_detail")
                     screens["wifi_device_detail_first"] = capture(
                         device, frames, "wifi-device-live-detail-first")
@@ -559,6 +562,8 @@ def main() -> int:
             "channels_listened": list(range(1, 14)),
             "live_redraw_data_rows_only": True,
             "integrated_live_device_detail": True,
+            "live_list_order_not_frozen": True,
+            "detail_identity_pinned_by_hash": True,
             "device_identity_region_stable": True,
             "embedded_ieee_oui_records": 39984,
             "passive_probe_association_wps_fingerprint": True,
