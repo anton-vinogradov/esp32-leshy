@@ -109,7 +109,9 @@ def main() -> int:
             first.get("survey_scan_status") == "valid" and
             first.get("survey_scan_accepted") == first.get("survey_scan_read") and
             first.get("survey_scan_dropped") == 0 and
-            first.get("survey_dropped") == 0,
+            first.get("survey_dropped") == 0 and
+            first.get("survey_product_store_open_attempted") is False and
+            first.get("survey_product_store_bytes_written") == 0,
             "first live Wi-Fi scan mismatch")
     require(failures,
             isinstance(second.get("survey_product_wifi_scan_cycles"), int) and
@@ -125,6 +127,16 @@ def main() -> int:
                 "chrome_changed_pixels") == 0,
             "live redraw escaped the data region")
     scope = run.get("scope", {})
+    focus_frames = run.get("list_focus_frames", {})
+    require(failures,
+            focus_frames.get("first", {}).get("continuous") is True and
+            focus_frames.get("first", {}).get("background_distinct") is True and
+            focus_frames.get("first", {}).get("mismatches") == [] and
+            focus_frames.get("second", {}).get("continuous") is True and
+            focus_frames.get("second", {}).get("background_distinct") is True and
+            focus_frames.get("second", {}).get("mismatches") == [] and
+            scope.get("selected_focus_frame_continuous") is True,
+            "selected live-list focus frame is incomplete")
     intelligence = scope.get("network_intelligence") is True
     live_radar = scope.get("network_live_radar") is True
     if intelligence:
@@ -203,25 +215,28 @@ def main() -> int:
     navigation_second = run.get("navigation_second", {})
     require(failures,
             navigation_first.get("wifi_product_view") == "networks" and
-            navigation_first.get("wifi_network_navigation_locked") is True and
-            isinstance(navigation_first.get("wifi_network_order_hash"), int) and
+            navigation_first.get("wifi_network_focus_user_owned") is True and
+            navigation_first.get("wifi_network_navigation_locked") is False and
+            navigation_first.get("wifi_networks_strongest_first") is True and
+            navigation_first.get("wifi_network_selection", 0) > 0 and
             isinstance(navigation_first.get(
                 "wifi_network_selected_identity_hash"), int) and
             navigation_first.get("wifi_network_selected_identity_hash", 0) != 0,
-            "navigation lock was not established")
+            "user-owned live navigation was not established")
     require(failures,
-            navigation_second.get("wifi_network_navigation_locked") is True and
+            navigation_second.get("wifi_network_focus_user_owned") is True and
+            navigation_second.get("wifi_network_navigation_locked") is False and
+            navigation_second.get("wifi_networks_strongest_first") is True and
             navigation_second.get("survey_product_wifi_scan_cycles", 0) >=
                 navigation_first.get("survey_product_wifi_scan_cycles", 0) + 2 and
             navigation_second.get("wifi_network_catalog_revision", 0) >
-                navigation_first.get("wifi_network_catalog_revision", 0),
-            "live scans did not advance while navigation was locked")
-    for field in (
-            "wifi_network_selection", "wifi_network_visible_size",
-            "wifi_network_order_hash", "wifi_network_selected_identity_hash"):
-        require(failures, navigation_second.get(field) ==
-                navigation_first.get(field),
-                f"locked navigation field changed: {field}")
+                navigation_first.get("wifi_network_catalog_revision", 0) and
+            navigation_second.get("wifi_network_selection", 0) > 0 and
+            navigation_second.get("wifi_network_selection", 0) <
+                navigation_second.get("wifi_network_visible_size", 0) and
+            navigation_second.get("wifi_network_selected_identity_hash") ==
+                navigation_first.get("wifi_network_selected_identity_hash"),
+            "selected identity did not survive strongest-first live scans")
 
     first_heap = run.get("metrics_after_first", {})
     final_heap = run.get("metrics_after", {})
@@ -237,11 +252,14 @@ def main() -> int:
             scope.get("screenshots_automatic") is True and
             scope.get("passive_wifi_only") is True and
             scope.get("storage_write_authorized") is False and
+            scope.get("storage_untouched_during_live_list") is True and
+            scope.get("selected_focus_frame_continuous") is True and
             ((isinstance(scope.get("navigation_press_count"), int) and
               scope.get("navigation_press_count", 0) >= 8)
              if intelligence else scope.get("navigation_press_count") == 8) and
-            scope.get("identity_order_locked_during_navigation") is True and
-            scope.get("live_rssi_updates_in_place") is True,
+            scope.get("live_order_remains_strongest_first") is True and
+            scope.get("cursor_not_reset_after_user_navigation") is True and
+            scope.get("selected_identity_preserved_during_live_sort") is True,
             "automation/passive scope mismatch")
     if intelligence:
         require(failures, scope.get("network_vendor_lookup") is True and
@@ -250,11 +268,11 @@ def main() -> int:
         if live_radar:
             require(failures,
                     scope.get("detail_live_radar_only") is True and
-                    scope.get("detail_live_rssi_line_only") is False,
+                    scope.get("detail_live_signal_card_only") is False,
                     "network live-radar scope mismatch")
         else:
             require(failures,
-                    scope.get("detail_live_rssi_line_only") is True,
+                    scope.get("detail_live_signal_card_only") is True,
                     "network RSSI-line scope mismatch")
 
     before = run.get("recovery_before", {})

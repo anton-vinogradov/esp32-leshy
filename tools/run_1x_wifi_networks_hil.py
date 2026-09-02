@@ -246,10 +246,12 @@ def main() -> int:
                     "survey_product_active_source_mask": 1,
                     "survey_scan_status": "valid",
                     "survey_scan_dropped": 0,
+                    # Nearby Networks is live/read-only.  The supervised
+                    # storage worker opens only for an explicit terminal
+                    # commit; merely viewing the list must not touch it.
+                    "survey_product_store_open_attempted": False,
                     "survey_product_store_bytes_written": 0,
                 }
-                if not args.security_advisor:
-                    live_expected["survey_product_store_open_attempted"] = True
                 require_exact(live_first, live_expected, "wifi_networks_live")
                 screens["wifi_networks_first"] = capture(
                     device, frames, "wifi-networks-first")
@@ -714,6 +716,10 @@ def main() -> int:
             "passive_wifi_only": True,
             "unique_bssid_rows": True,
             "live_redraw_data_rows_only": True,
+            "storage_untouched_during_live_list": (
+                live_first.get("survey_product_store_open_attempted") is False
+                and live_first.get("survey_product_store_bytes_written") == 0
+            ),
             "selected_focus_frame_continuous": (
                 list_focus_frames.get("first", {}).get("continuous") is True
                 and list_focus_frames.get("second", {}).get("continuous")
