@@ -14,3 +14,4 @@ trap 'rm -rf "$test_tmp"' EXIT
 
 "$test_tmp/live_list_render_cache_tests"
 python3 "$repo_dir/tools/check_live_list_rendering_contract.py"
+python3 "$repo_dir/tools/check_live_list_focus_frame_hil_acceptance.py"

@@ -1,0 +1,138 @@
+{
+  "schema": "leshy.live_list_focus_frame_hil.acceptance.v1",
+  "status": "pass_live_list_focus_frame",
+  "board": "board-01",
+  "evidence_ids": [
+    "E-BUILD-242",
+    "E-AUTO-221",
+    "E-HIL-239",
+    "E-UX-091",
+    "RB-M255"
+  ],
+  "candidate": {
+    "version": "1.0.0-dev.372",
+    "cid": "FE343253440000002000000055019CB7",
+    "render_fix_commit": "f74f34c10671056dcdf8f6eb606ceef09b075f13",
+    "accepted_source_commit": "f4cb03580a92ae573f6eb0499f090adc8aa23a6e",
+    "firmware_sha256": "e6f4420dc7514f93c09063329bf35fdf887aaa506fef61402df71bfe8ece2dd9",
+    "factory_sha256": "77e5d1bc0df5a7f3565d333c0b9ed791dbaad6a56d1767f380e52c2b38b887e8",
+    "elf_sha256": "78a8d251d3b67c59bea1efca9de249a4d005471f5b72fd3a1fcbecf1a5b8f145",
+    "map_sha256": "ed17a463841c335ec679a709f39eed9ef807d1a4d061cca92e6598c06ab326fc",
+    "firmware_bytes": 3661200,
+    "factory_bytes": 3726736,
+    "elf_bytes": 25339920,
+    "fresh_flashes": 1,
+    "exact_image_reuse_runs": 2
+  },
+  "host_tooling": {
+    "runner_sha256": "c02f1e5e392a8f38a9ae9e52686e44017fed99030eb128b9c652a0c5a976560e",
+    "run_checker_sha256": "e540f4e77b664524a1a13a06414150bb24708783a8e8f532613b572f48e5c21a",
+    "render_contract_checker_sha256": "24e4660b5a0392bb2f7b24e1831bb6e218acb705400333b142acd7524f8e507c",
+    "daemon_or_service_installed": false
+  },
+  "accepted_run": {
+    "run_sha256": "bb9c535a3dde1318be5cf9e4efc45c1f64a606a952cffe9aef52b1004019702e",
+    "passed": true,
+    "gate_eligible": true,
+    "flash_mode": "reuse_exact",
+    "wifi_lifecycles": 2,
+    "navigation_presses": 8,
+    "maximum_unique_networks": 25,
+    "manual_button_presses": 0
+  },
+  "rendering": {
+    "shared_lists": [
+      "wifi_networks",
+      "wifi_devices",
+      "ble_devices"
+    ],
+    "selection_overlay_composited_last": true,
+    "first_focus_frame_continuous": true,
+    "second_focus_frame_continuous": true,
+    "focus_frame_mismatches": 0,
+    "focus_distinct_from_background": true,
+    "list_content_changed_pixels": 667,
+    "list_chrome_changed_pixels": 0,
+    "detail_signal_card_changed_pixels": 55,
+    "detail_chrome_changed_pixels": 0,
+    "detail_outside_signal_card_changed_pixels": 0,
+    "live_order_strongest_first": true,
+    "selected_identity_preserved": true,
+    "cursor_reset_after_user_navigation": false
+  },
+  "runtime": {
+    "first_heap_total_bytes": 143428,
+    "first_heap_free_bytes": 60512,
+    "first_heap_min_free_bytes": 18896,
+    "second_heap_total_bytes": 143428,
+    "second_heap_free_bytes": 60512,
+    "second_heap_min_free_bytes": 18896,
+    "heap_drift_after_warmup_bytes": 0,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "ambiguous_presses": 0,
+    "wifi_driver_drops_during_list_capture": 0
+  },
+  "storage": {
+    "generation": 13,
+    "mounted_read_only": true,
+    "store_open_attempted_during_live_list": false,
+    "physical_write_calls": 0,
+    "blocked_write_attempts": 0,
+    "cleanup_complete": true
+  },
+  "policy": {
+    "passive_wifi_only": true,
+    "host_network_tools_invoked": false,
+    "active_host_wifi_touched": false,
+    "raw_radio_tx_commands_invoked_by_runner": 0,
+    "instrumented_rf_silence_claimed": false,
+    "buzzer_inactive": true,
+    "nrf_ce_inactive": true,
+    "software_quiesce_complete": true
+  },
+  "cleanup": {
+    "complete": true,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "final_lease_mask": 0
+  },
+  "precursors": [
+    {
+      "accepted": false,
+      "run_sha256": "ab23027d573217080e1aa9c3c2b5284777fe04cb40ffadcd78caaed154192d2a",
+      "source_commit": "f74f34c10671056dcdf8f6eb606ceef09b075f13",
+      "flash_mode": "fresh",
+      "reason": "stale oracle expected a store open during the read-only live list",
+      "cleanup_complete": true,
+      "final_page": "home",
+      "final_runtime_owner": "none",
+      "final_lease_mask": 0
+    },
+    {
+      "accepted": false,
+      "run_sha256": "4499f9824ddb9b524b4b0a44db95d731802a0f6cb18e29404f2177c92d5b695b",
+      "source_commit": "0379fe18070aa155180ed03ae670992aba8c80b3",
+      "flash_mode": "reuse_exact",
+      "reason": "stale oracle expected a static detail screen instead of the bounded live signal card",
+      "cleanup_complete": true,
+      "final_page": "home",
+      "final_runtime_owner": "none",
+      "final_lease_mask": 0
+    }
+  ],
+  "privacy": {
+    "ambient_identifiers_retained": false,
+    "raw_run_retained": false,
+    "screenshots_retained": false,
+    "exact_device_port_retained": false
+  },
+  "resources": {
+    "static_ram_bytes": 235376,
+    "linked_flash_bytes": 3660700,
+    "application_image_bytes": 3661200,
+    "factory_image_bytes": 3726736,
+    "free_ota_bytes": 533104,
+    "required_free_ota_bytes": 524288
+  }
+}

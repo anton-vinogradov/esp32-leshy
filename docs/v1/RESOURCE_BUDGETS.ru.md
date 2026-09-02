@@ -2227,3 +2227,21 @@ cleanup проходят. Computer checker отдельно ограничен c
 candidates и 3 600 секундами, с checkpoint по exact hashes. Retained acceptance не
 содержит raw export, пароль или identity сети. Это закрывает `WF-11`, двигает
 cadence до 8/15 и не добавляет delta firmware, heap, storage schema или OTA.
+
+Bound общего compositor live-списков `RB-M255`: exact physical/build
+`1.0.0-dev.372` на accepted source
+`f4cb03580a92ae573f6eb0499f090adc8aa23a6e` использует 235 376 B static RAM,
+3 660 700 B linked flash и 3 661 200/3 726 736 B app/factory images,
+оставляя 533 104 B actual application-image headroom в OTA slot 4 MiB.
+SHA-256 firmware/factory/ELF/map —
+`e6f4420dc7514f93c09063329bf35fdf887aaa506fef61402df71bfe8ece2dd9`/
+`77e5d1bc0df5a7f3565d333c0b9ed791dbaad6a56d1767f380e52c2b38b887e8`/
+`78a8d251d3b67c59bea1efca9de249a4d005471f5b72fd3a1fcbecf1a5b8f145`/
+`ed17a463841c335ec679a709f39eed9ef807d1a4d061cca92e6598c06ab326fc`.
+Относительно dev.369 static RAM растёт на 376 B; linked/app/factory — на
+4 312/4 304/4 304 B, OTA headroom уменьшается на 4 304 B, оставаясь на 8 816 B
+выше floor 512 KiB. Два полных passive Wi-Fi lifecycle возвращаются точно к
+143 428/60 512/18 896 B total/free/minimum heap, поэтому post-warm drift равен
+zero. Atomic row compositing 4-bpp/1-bpp после preallocated buffers остаётся
+bounded и allocation-free; repaint list/detail выходит в zero chrome pixels.
+Это двигает focused cadence до 9/15 и не заявляет instrumented RF silence.

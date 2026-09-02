@@ -2237,3 +2237,21 @@ pass. The computer checker is separately bounded to 64 MiB corpus, 1,000,000
 candidates and 3,600 seconds, with an exact-hash checkpoint. Retained acceptance
 contains no raw export, password or network identity. This closes `WF-11`, moves
 cadence to 8/15 and introduces no firmware, heap, storage-schema or OTA delta.
+
+Shared live-list compositor bound `RB-M255`: exact physical/build
+`1.0.0-dev.372` at accepted source
+`f4cb03580a92ae573f6eb0499f090adc8aa23a6e` uses 235,376 B static RAM,
+3,660,700 B linked flash and 3,661,200/3,726,736 B app/factory images,
+leaving 533,104 B actual application-image headroom in the 4 MiB OTA slot.
+Firmware/factory/ELF/map SHA-256 values are
+`e6f4420dc7514f93c09063329bf35fdf887aaa506fef61402df71bfe8ece2dd9`/
+`77e5d1bc0df5a7f3565d333c0b9ed791dbaad6a56d1767f380e52c2b38b887e8`/
+`78a8d251d3b67c59bea1efca9de249a4d005471f5b72fd3a1fcbecf1a5b8f145`/
+`ed17a463841c335ec679a709f39eed9ef807d1a4d061cca92e6598c06ab326fc`.
+Against dev.369, static RAM grows 376 B; linked/app/factory grow
+4,312/4,304/4,304 B and OTA headroom shrinks 4,304 B while remaining 8,816 B
+above the 512 KiB floor. Two complete passive Wi-Fi lifecycles return exactly to
+143,428/60,512/18,896 B total/free/minimum heap, so post-warm drift is zero.
+Atomic 4-bpp/1-bpp row compositing remains bounded and allocation-free after its
+preallocated row buffers; list and detail repaint escape zero chrome pixels.
+This moves focused cadence to 9/15 and does not claim instrumented RF silence.
