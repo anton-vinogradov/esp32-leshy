@@ -207,9 +207,12 @@ def main() -> int:
             require(failures, facts_second.get(field) == facts_first.get(field),
                     f"network passport changed identity/fact: {field}")
     else:
-        require(failures, run.get("detail_pixel_changes") == {
-                    "content_changed_pixels": 0, "chrome_changed_pixels": 0},
-                "network detail changed during background scan")
+        require(failures,
+                run.get("detail_pixel_changes", {}).get(
+                    "chrome_changed_pixels") == 0 and
+                run.get("detail_outside_signal_pixels") == 0 and
+                scope.get("detail_live_signal_card_only") is True,
+                "network detail redraw escaped the live signal card")
 
     navigation_first = run.get("navigation_first", {})
     navigation_second = run.get("navigation_second", {})

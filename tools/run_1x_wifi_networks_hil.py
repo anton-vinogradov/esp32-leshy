@@ -514,11 +514,13 @@ def main() -> int:
                         "live network passport redrew outside the RSSI line: "
                         f"{detail_pixel_changes}, outside="
                         f"{detail_outside_signal_pixels}")
-                if not args.network_intelligence and detail_pixel_changes != {
-                        "content_changed_pixels": 0,
-                        "chrome_changed_pixels": 0}:
+                if not args.network_intelligence and (
+                        detail_pixel_changes["chrome_changed_pixels"] != 0 or
+                        detail_outside_signal_pixels != 0):
                     raise RuntimeError(
-                        f"stable detail screen changed: {detail_pixel_changes}")
+                        "live network detail redrew outside its signal card: "
+                        f"{detail_pixel_changes}, outside="
+                        f"{detail_outside_signal_pixels}")
 
                 if args.security_advisor:
                     security_first = action(device, "right")
@@ -725,8 +727,7 @@ def main() -> int:
                 and list_focus_frames.get("second", {}).get("continuous")
                     is True
             ),
-            "detail_screen_stable_during_background_scan":
-                not args.network_intelligence,
+            "detail_screen_stable_during_background_scan": False,
             "network_intelligence": args.network_intelligence,
             "network_vendor_lookup": args.network_intelligence,
             "network_driver_facts": args.network_intelligence,
@@ -737,8 +738,7 @@ def main() -> int:
                     "content_changed_pixels": 0,
                     "chrome_changed_pixels": 0,
                 }),
-            "detail_live_signal_card_only": (
-                args.network_intelligence and not args.network_live_radar),
+            "detail_live_signal_card_only": not args.network_live_radar,
             "detail_live_radar_only": args.network_live_radar,
             "two_complete_wifi_lifecycles": True,
             "navigation_press_count": navigation_press_count,
