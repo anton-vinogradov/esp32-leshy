@@ -40,14 +40,17 @@ if [[ $# -gt 0 ]]; then
         if [[ "$2" == "live-list-rendering" ]]; then
             exec "$(cd "$(dirname "$0")" && pwd)/test-live-list-rendering.sh"
         fi
+        if [[ "$2" == "infrared-replay" ]]; then
+            exec "$(cd "$(dirname "$0")" && pwd)/test-infrared-replay.sh"
+        fi
         if [[ "$2" == "clean-target" ]]; then
             only_clean_target=true
         else
-            echo "usage: $0 [--only automation-hid|clean-target|device-lock|live-companion|live-list-rendering|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar|wifi-security]" >&2
+            echo "usage: $0 [--only automation-hid|clean-target|device-lock|infrared-replay|live-companion|live-list-rendering|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar|wifi-security]" >&2
             exit 2
         fi
     else
-        echo "usage: $0 [--only automation-hid|clean-target|device-lock|live-companion|live-list-rendering|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar|wifi-security]" >&2
+        echo "usage: $0 [--only automation-hid|clean-target|device-lock|infrared-replay|live-companion|live-list-rendering|owned-wifi-evidence|protocol-workbench|screenshot-store|serial-console|target-radar|wifi-security]" >&2
         exit 2
     fi
 fi
@@ -178,6 +181,7 @@ run_opaque_evidence_check() {
 
 "$repo_dir/tools/test-screenshot-store.sh"
 "$repo_dir/tools/test-protocol-workbench.sh"
+"$repo_dir/tools/test-infrared-replay.sh"
 
 if [[ "$only_clean_target" == "true" ]]; then
     exit 0
@@ -605,6 +609,16 @@ python3 "$repo_dir/tools/check_field_survey_trusted_context_acceptance.py"
 
 "$test_tmp/ir_fixture_tests"
 python3 "$repo_dir/tools/check_ir_fixture_contract.py"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/infrared_replay_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/lab/InfraredReplay.cpp" \
+    -o "$test_tmp/infrared_replay_tests"
+
+"$test_tmp/infrared_replay_tests"
 
 "${CXX:-c++}" \
     -std=c++17 \

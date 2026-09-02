@@ -104,6 +104,7 @@ const char* probePageName(std::uint8_t page) {
         case 15: return "automation_trust";
         case 16: return "protocol_workbench";
         case 17: return "connectivity";
+        case 18: return "infrared_replay";
         default: return "unknown";
     }
 }

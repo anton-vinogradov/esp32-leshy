@@ -34,6 +34,7 @@
 #include <freertos/task.h>
 
 #include "apps/library/LibraryController.h"
+#include "apps/lab/InfraredReplay.h"
 #include "apps/library/SessionCatalog.h"
 #include "apps/protocol/ProtocolWorkbench.h"
 #include "apps/protocol/ProtocolAnnotationController.h"
@@ -98,6 +99,7 @@
 #include "platform/arduino/BoardSafeOutputs.h"
 #include "platform/arduino/BoardAntennaStatusLeds.h"
 #include "platform/arduino/BoardInfraredReceiver.h"
+#include "platform/arduino/BoardInfraredTransmitter.h"
 #include "platform/arduino/BoardCc1101PassiveSpectrum.h"
 #include "platform/arduino/BoardNrf24PassiveSpectrum.h"
 #include "platform/arduino/BoardShieldReceiverProbe.h"
@@ -437,6 +439,11 @@ using leshy1::platform::arduino::BoardAntennaStatusLeds;
 using leshy1::platform::arduino::BoardInfraredReceiver;
 using leshy1::platform::arduino::InfraredReceiverReport;
 using leshy1::platform::arduino::InfraredReceiverStatus;
+using leshy1::platform::arduino::BoardInfraredTransmitter;
+using leshy1::platform::arduino::InfraredTransmitterReport;
+using leshy1::apps::lab::InfraredReplayController;
+using leshy1::apps::lab::InfraredReplaySource;
+using leshy1::apps::lab::InfraredReplayState;
 using leshy1::platform::arduino::BoardCc1101PassiveSpectrum;
 using leshy1::platform::arduino::BoardNrf24PassiveSpectrum;
 using leshy1::platform::arduino::BoardShieldReceiverProbe;
@@ -1266,6 +1273,7 @@ constexpr std::uint8_t kAutomationInspectorPage = 14;
 constexpr std::uint8_t kAutomationTrustPage = 15;
 constexpr std::uint8_t kProtocolWorkbenchPage = 16;
 constexpr std::uint8_t kConnectivityPage = 17;
+constexpr std::uint8_t kInfraredReplayPage = 18;
 constexpr std::uint16_t kAutomationActionApiVersion = 1U;
 constexpr std::uint8_t kDeviceItemCount = 9;
 std::uint8_t deviceSelection = 0;
@@ -1448,7 +1456,8 @@ bool deviceLockOperationAllowed(
 bool deviceLockProtectedPage(std::uint8_t page) {
     return page == 2U || page == 3U || page == 4U || page == 5U ||
         page == 7U || page == 8U || page == kAutomationInspectorPage ||
-        page == kAutomationTrustPage || page == kProtocolWorkbenchPage;
+        page == kAutomationTrustPage || page == kProtocolWorkbenchPage ||
+        page == kInfraredReplayPage;
 }
 
 void noteDeviceLockAdmissionBlocked() {
@@ -2526,6 +2535,9 @@ InfraredCapture infraredCapture;
 constexpr InfraredCapturePlan kProductInfraredCapturePlan{};
 BoardInfraredReceiver boardInfraredReceiver;
 InfraredReceiverReport infraredReceiverReport;
+InfraredReplayController infraredReplayController;
+BoardInfraredTransmitter boardInfraredTransmitter;
+InfraredTransmitterReport infraredTransmitterReport;
 enum class CapturePersistState : std::uint8_t {
     Result,
     Confirm,
@@ -14137,6 +14149,28 @@ NavigationFooter navigationFooterForCurrentState() {
         }
     }
 
+    if (uiController.page() == kInfraredReplayPage) {
+        switch (infraredReplayController.report().state) {
+            case InfraredReplayState::Preview:
+                return {back, {},
+                        {NavigationKey::RightAndSelect,
+                         UiTextId::NavNext}};
+            case InfraredReplayState::Confirmation:
+                return {{NavigationKey::Left, UiTextId::NavCancel}, {},
+                        {NavigationKey::RightAndSelect,
+                         UiTextId::NavSend}};
+            case InfraredReplayState::Running:
+                return {{NavigationKey::Left, UiTextId::NavStop}, {}, {}};
+            case InfraredReplayState::Idle:
+            case InfraredReplayState::Complete:
+            case InfraredReplayState::Stopped:
+            case InfraredReplayState::TimedOut:
+            case InfraredReplayState::Refused:
+            case InfraredReplayState::Fault:
+                return {back, {}, {}};
+        }
+    }
+
     if (uiController.page() == 4) {
         if (captureView == CaptureView::SourceMenu) {
             return {back, choose, enter};
@@ -15272,8 +15306,8 @@ void renderConnectivityPage(bool clearContent) {
             privatePerSession ? Tone::Neutral : Tone::Positive);
         renderMenuRow(
             Components::homeRow(2),
-            tr(UiTextId::ConnectivityPrivacyOnlyLeshy),
-            tr(UiTextId::ConnectivityPrivacyOnlyLeshyNote), false, false,
+            tr(UiTextId::ConnectivityPrivacyOnlyDevice),
+            tr(UiTextId::ConnectivityPrivacyOnlyDeviceNote), false, false,
             Tone::Muted);
         renderMenuRow(
             Components::homeRow(3),
@@ -21300,23 +21334,31 @@ bool selectedLibraryHasInfraredCapture() {
 }
 
 std::uint8_t libraryDetailActionCount() {
-    return selectedLibraryHasInfraredCapture() ? 2U : 1U;
+    return selectedLibraryHasInfraredCapture() ? 3U : 1U;
 }
 
 bool libraryActionIsAnalyze(std::uint8_t index) {
     return selectedLibraryHasInfraredCapture() && index == 0U;
 }
 
+bool libraryActionIsInfraredReplay(std::uint8_t index) {
+    return selectedLibraryHasInfraredCapture() && index == 1U;
+}
+
 void renderLibraryActionRow(std::uint8_t index) {
     if (index >= libraryDetailActionCount()) return;
     const bool analyze = libraryActionIsAnalyze(index);
+    const bool replay = libraryActionIsInfraredReplay(index);
     renderMenuRow(
         Components::choiceRow(index),
         tr(analyze ? UiTextId::LibraryActionAnalyze
+                   : replay ? UiTextId::LibraryActionReplay
                    : UiTextId::LibraryActionExport),
         tr(analyze ? UiTextId::LibraryActionAnalyzeNote
+                   : replay ? UiTextId::LibraryActionReplayNote
                    : UiTextId::LibraryActionExportNote),
-        libraryDetailActionSelection == index, true, Tone::Positive);
+        libraryDetailActionSelection == index, true,
+        replay ? Tone::Warning : Tone::Positive);
 }
 
 void renderLibraryActions(bool clearContent) {
@@ -21559,6 +21601,165 @@ bool openSelectedProtocolWorkbench() {
     }
     protocolWorkbenchTaskController.enter();
     return uiController.openChild(kProtocolWorkbenchPage);
+}
+
+void releaseInfraredReplayResource() {
+    resourceBroker.release(
+        AppRuntime::kForegroundOwner,
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi));
+}
+
+bool openSelectedInfraredReplay() {
+    const LibraryEntry* selected = libraryController.selected();
+    if (selected == nullptr || selected->session == nullptr) return false;
+    const auto& capture = selected->session->captureMetadata();
+    InfraredReplaySource source{};
+    source.capturePresent = capture.infraredRawCaptured;
+    source.persistent = selected->persistent;
+    source.simulated = selected->simulated;
+    source.recoveredFallback = selected->integrity ==
+        leshy1::apps::library::SessionIntegrity::RecoveredFallback;
+    source.truncated = capture.infraredTruncated;
+    source.generation =
+        selected->generation == sessionStoreWorkspace().generation
+        ? selected->generation : 0U;
+    source.decode = capture.infraredDecode;
+    boardInfraredTransmitter.stop();
+    releaseInfraredReplayResource();
+    infraredTransmitterReport = {};
+    infraredReplayController.reset();
+    infraredReplayController.prepare(source);
+    const bool opened = uiController.openChild(kInfraredReplayPage);
+    if (!opened) infraredReplayController.reset();
+    return opened;
+}
+
+bool startSelectedInfraredReplay() {
+    if (infraredReplayController.report().state !=
+            InfraredReplayState::Confirmation ||
+        safetySupervisor.latched() ||
+        !deviceLockOperationAllowed(
+            leshy1::services::security::DeviceLockOperation::ProtectedUi)) {
+        return false;
+    }
+    const auto radioSpi =
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    const bool resourceOwned = resourceBroker.acquire(
+        AppRuntime::kForegroundOwner, radioSpi) &&
+        resourceBroker.ownerOf(Resource::RadioSpi) ==
+            AppRuntime::kForegroundOwner;
+    const bool safetyArmed = !safetySupervisor.latched() &&
+        BoardSafeOutputs::buzzerHeldInactive() &&
+        BoardSafeOutputs::radioTransmitPathsHeldInactive();
+    boardInfraredTransmitter.admit(
+        resourceOwned, safetyArmed, &infraredTransmitterReport);
+    std::uint64_t startedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (startedUs == 0U) startedUs = 1U;
+    const bool started = infraredReplayController.confirmAndStart(
+        boardInfraredTransmitter, startedUs);
+    if (!started) releaseInfraredReplayResource();
+    lastRuntimeEvent = started ? "infrared_replay_running"
+                               : "infrared_replay_start_refused";
+    return true;
+}
+
+bool stopInfraredReplay() {
+    std::uint64_t nowUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0U) nowUs = 1U;
+    const bool stopped = infraredReplayController.stop(
+        boardInfraredTransmitter, nowUs);
+    releaseInfraredReplayResource();
+    lastRuntimeEvent = stopped ? "infrared_replay_stopped"
+                               : "infrared_replay_stop_failed";
+    return true;
+}
+
+void serviceInfraredReplay() {
+    if (infraredReplayController.report().state !=
+        InfraredReplayState::Running) {
+        return;
+    }
+    std::uint64_t nowUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0U) nowUs = 1U;
+    if (!infraredReplayController.service(boardInfraredTransmitter, nowUs)) {
+        return;
+    }
+    releaseInfraredReplayResource();
+    lastRuntimeEvent = infraredReplayController.report().state ==
+            InfraredReplayState::Complete
+        ? "infrared_replay_complete"
+        : infraredReplayController.report().state ==
+                  InfraredReplayState::TimedOut
+              ? "infrared_replay_timed_out"
+              : "infrared_replay_fault";
+    if (uiController.page() == kInfraredReplayPage) {
+        renderInteractiveScreen(true);
+    }
+}
+
+void quiesceInfraredReplayOnSafetyStop() {
+    if (infraredReplayController.report().state ==
+        InfraredReplayState::Running) {
+        stopInfraredReplay();
+    } else {
+        boardInfraredTransmitter.stop();
+        releaseInfraredReplayResource();
+    }
+}
+
+void renderInfraredReplayPage(bool clearContent) {
+    char line[72] = {};
+    const auto& report = infraredReplayController.report();
+    const auto& plan = infraredReplayController.plan();
+    if (report.state == InfraredReplayState::Preview ||
+        report.state == InfraredReplayState::Confirmation) {
+        renderHeader(tr(report.state == InfraredReplayState::Preview
+                            ? UiTextId::IrReplayTitle
+                            : UiTextId::IrReplayConfirmTitle),
+                     clearContent);
+        std::snprintf(line, sizeof(line), tr(UiTextId::IrReplayProtocolFormat),
+                      static_cast<unsigned>(plan.address));
+        renderMetric(0, line, Tone::Positive);
+        std::snprintf(line, sizeof(line), tr(UiTextId::IrReplayButtonFormat),
+                      static_cast<unsigned>(plan.command));
+        renderMetric(1, line);
+        renderMetric(2, tr(UiTextId::IrReplayOneSignal), Tone::Warning);
+        renderMetric(3, tr(UiTextId::IrReplayAim), Tone::Positive);
+        renderMetric(4,
+                     tr(report.state == InfraredReplayState::Preview
+                            ? UiTextId::IrReplayOwnership
+                            : UiTextId::IrReplayConfirmHint),
+                     Tone::Warning);
+        return;
+    }
+
+    renderHeader(tr(UiTextId::IrReplayTitle), clearContent);
+    if (report.state == InfraredReplayState::Running) {
+        renderMetric(0, tr(UiTextId::IrReplayRunning), Tone::Danger);
+        renderMetric(2, tr(UiTextId::IrReplayOneSignal), Tone::Warning);
+        renderMetric(4, tr(UiTextId::IrReplayStopReady), Tone::Danger);
+        return;
+    }
+    UiTextId outcome = UiTextId::IrReplayFault;
+    Tone tone = Tone::Danger;
+    if (report.state == InfraredReplayState::Complete) {
+        outcome = UiTextId::IrReplayComplete;
+        tone = Tone::Positive;
+    } else if (report.state == InfraredReplayState::Stopped) {
+        outcome = UiTextId::IrReplayStopped;
+        tone = Tone::Warning;
+    } else if (report.state == InfraredReplayState::TimedOut) {
+        outcome = UiTextId::IrReplayTimedOut;
+        tone = Tone::Warning;
+    } else if (report.state == InfraredReplayState::Refused) {
+        outcome = UiTextId::IrReplayRefused;
+        tone = Tone::Warning;
+    }
+    renderMetric(0, tr(outcome), tone);
+    renderMetric(2, tr(UiTextId::IrReplayOutputSafe), Tone::Positive);
 }
 
 const leshy1::domain::captures::InfraredRawSource&
@@ -24529,6 +24730,8 @@ void renderInteractiveScreen(bool clearContent) {
             renderAutomationTrustPage(clearContent);
         } else if (uiController.page() == kProtocolWorkbenchPage) {
             renderProtocolWorkbenchPage(clearContent);
+        } else if (uiController.page() == kInfraredReplayPage) {
+            renderInfraredReplayPage(clearContent);
         } else if (uiController.page() == kDevicePage) {
             renderDevicePage(clearContent);
         } else if (uiController.page() == kConnectivityPage) {
@@ -31480,6 +31683,46 @@ bool applyUiAction(UiAction action, bool render = true) {
             return finish(changed);
         }
     }
+    if (!wasRoot && uiController.page() == kInfraredReplayPage) {
+        bool changed = false;
+        bool controllerRecorded = false;
+        const InfraredReplayState state =
+            infraredReplayController.report().state;
+        if (action == UiAction::Back || action == UiAction::Left) {
+            if (state == InfraredReplayState::Running) {
+                changed = stopInfraredReplay();
+            } else if (state == InfraredReplayState::Confirmation) {
+                changed = infraredReplayController.cancelConfirmation();
+                lastRuntimeEvent = changed
+                    ? "infrared_replay_confirmation_cancelled"
+                    : "infrared_replay_confirmation_cancel_failed";
+            } else {
+                boardInfraredTransmitter.stop();
+                releaseInfraredReplayResource();
+                infraredReplayController.reset();
+                changed = uiController.apply(
+                    action, static_cast<std::uint8_t>(appCatalog.size()),
+                    true, kInfraredReplayPage);
+                controllerRecorded = true;
+                lastRuntimeEvent = changed
+                    ? "infrared_replay_library"
+                    : "infrared_replay_back_rejected";
+            }
+        } else if (action == UiAction::Select || action == UiAction::Right) {
+            if (state == InfraredReplayState::Preview) {
+                changed = infraredReplayController.requestConfirmation();
+                lastRuntimeEvent = changed
+                    ? "infrared_replay_confirmation"
+                    : "infrared_replay_confirmation_failed";
+            } else if (state == InfraredReplayState::Confirmation) {
+                changed = startSelectedInfraredReplay();
+            }
+        }
+        if (!controllerRecorded && action != UiAction::Unknown) {
+            uiController.recordHandledAction(action);
+        }
+        return finish(changed);
+    }
     if (!wasRoot && uiController.page() == kProtocolWorkbenchPage) {
         bool handled = false;
         bool changed = false;
@@ -31631,6 +31874,12 @@ bool applyUiAction(UiAction action, bool render = true) {
                 lastRuntimeEvent = changed
                     ? "protocol_workbench_opened"
                     : "protocol_workbench_open_failed";
+            } else if (selectedLibraryHasInfraredCapture() &&
+                       libraryDetailActionSelection == 1U) {
+                changed = openSelectedInfraredReplay();
+                lastRuntimeEvent = changed
+                    ? "infrared_replay_opened"
+                    : "infrared_replay_open_failed";
             } else {
                 changed = deviceLockOperationAllowed(
                               leshy1::services::security::
@@ -44454,6 +44703,7 @@ void loop() {
         quiesceAirspaceGuardOnSafetyStop();
         quiesceWifiAuthenticationOnSafetyStop();
         quiesceBleGattOnSafetyStop();
+        quiesceInfraredReplayOnSafetyStop();
         requestTargetRadarStop();
     }
     if (!safetySupervisor.latched()) {
@@ -44476,6 +44726,7 @@ void loop() {
         serviceCc1101Finder();
         serviceSubGhzRawCapture();
         serviceInfraredCapture();
+        serviceInfraredReplay();
         serviceSpectrumWaterfallCadence();
     }
     if (serviceWebCompanion() && uiController.page() == 7) {
