@@ -13617,17 +13617,32 @@ void beginLiveListRow(bool selected) {
     liveListRowSprite.fillRoundRect(
         0, 0, kLiveListRowWidth, kLiveListRowHeight, Layout::Radius,
         background);
-    if (selected) {
-        liveListRowSprite.drawRoundRect(
-            0, 0, kLiveListRowWidth, kLiveListRowHeight, Layout::Radius,
-            liveListColor(LiveListPaletteIndex::Focus));
-        const Rect marker = Components::focusMarker(
-            {0, 0, kLiveListRowWidth, kLiveListRowHeight});
-        liveListRowSprite.fillTriangle(
-            marker.x, marker.y, marker.x, marker.y + marker.height,
-            marker.x + marker.width, marker.y + marker.height / 2,
-            liveListColor(LiveListPaletteIndex::Focus));
-    }
+}
+
+// Selection is a foreground overlay.  Keep it last in every row update so a
+// changing note or RSSI band can never erase the right or bottom edge.
+void drawLiveListSelectionOverlay(bool selected) {
+    if (!selected) return;
+    liveListRowSprite.drawRoundRect(
+        0, 0, kLiveListRowWidth, kLiveListRowHeight, Layout::Radius,
+        liveListColor(LiveListPaletteIndex::Focus));
+    const Rect marker = Components::focusMarker(
+        {0, 0, kLiveListRowWidth, kLiveListRowHeight});
+    liveListRowSprite.fillTriangle(
+        marker.x, marker.y, marker.x, marker.y + marker.height,
+        marker.x + marker.width, marker.y + marker.height / 2,
+        liveListColor(LiveListPaletteIndex::Focus));
+}
+
+void drawLiveListSelectionOverlay(const Rect& bounds, bool selected) {
+    if (!selected) return;
+    display.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                          Layout::Radius, Palette::Focus);
+    const Rect marker = Components::focusMarker(bounds);
+    display.fillTriangle(
+        marker.x, marker.y, marker.x, marker.y + marker.height,
+        marker.x + marker.width, marker.y + marker.height / 2,
+        Palette::Focus);
 }
 
 void setLiveListRowCursor(UiTextRole role, std::int16_t x,
@@ -13690,18 +13705,6 @@ bool pushLiveListRow(const Rect& bounds, bool selected, const char* label,
             display.fillRoundRect(
                 bounds.x, bounds.y, bounds.width, bounds.height,
                 Layout::Radius, background);
-            if (selected) {
-                display.drawRoundRect(bounds.x, bounds.y, bounds.width,
-                                      bounds.height, Layout::Radius,
-                                      Palette::Focus);
-                const Rect marker = Components::focusMarker(bounds);
-                display.fillTriangle(
-                    marker.x, marker.y,
-                    marker.x, marker.y + marker.height,
-                    marker.x + marker.width,
-                    marker.y + marker.height / 2,
-                    Palette::Focus);
-            }
         }
         const std::int16_t labelTop = menuRowTextTop(
             {0, 0, kLiveListRowWidth, kLiveListRowHeight});
@@ -13717,6 +13720,7 @@ bool pushLiveListRow(const Rect& bounds, bool selected, const char* label,
             bounds, selected, UiTextRole::Meta, note, noteTone,
             noteTop, 0);
         if (signalBars) renderWifiSignalBars(bounds, rssiDbm, background);
+        drawLiveListSelectionOverlay(bounds, selected);
         if (labelPushed && notePushed) return true;
 
         // This is the only genuinely unsafe fallback: both off-screen paths
@@ -13735,11 +13739,13 @@ bool pushLiveListRow(const Rect& bounds, bool selected, const char* label,
                     bounds.x + kInteractiveRowTextInset,
                     bounds.y + noteTop);
         display.print(note);
+        drawLiveListSelectionOverlay(bounds, selected);
         return false;
     }
     beginLiveListRow(selected);
     drawLiveListRowText(
         selected, label, note, noteTone, signalBars, rssiDbm);
+    drawLiveListSelectionOverlay(selected);
     liveListRowSprite.pushSprite(bounds.x, bounds.y);
     ++liveListAtomicRowPushes;
     return true;
@@ -13760,6 +13766,7 @@ bool pushLiveListDynamicFields(
             bounds, selected, UiTextRole::Meta, note, noteTone,
             textTop, 0);
         if (signalBars) renderWifiSignalBars(bounds, rssiDbm, background);
+        drawLiveListSelectionOverlay(bounds, selected);
         if (pushed) return true;
         ++liveListDirectFallbacks;
         display.fillRect(
@@ -13772,6 +13779,7 @@ bool pushLiveListDynamicFields(
                     bounds.y + textTop);
         display.print(note);
         if (signalBars) renderWifiSignalBars(bounds, rssiDbm, background);
+        drawLiveListSelectionOverlay(bounds, selected);
         return false;
     }
     const std::int16_t labelTop = menuRowTextTop(
@@ -13794,6 +13802,7 @@ bool pushLiveListDynamicFields(
     setLiveListRowCursor(UiTextRole::Meta, kInteractiveRowTextInset, textTop);
     liveListRowSprite.print(note);
     if (signalBars) drawLiveListSignalBars(rssiDbm);
+    drawLiveListSelectionOverlay(selected);
     liveListRowSprite.pushSprite(
         bounds.x + kInteractiveRowTextInset, bounds.y + sourceY,
         kInteractiveRowTextInset, sourceY,

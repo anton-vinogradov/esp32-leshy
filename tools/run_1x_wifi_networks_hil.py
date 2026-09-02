@@ -91,6 +91,43 @@ def changed_outside_region(frames: Path, before_name: str, after_name: str,
     return outside
 
 
+def selected_row_focus_frame(frames: Path, name: str) -> dict[str, Any]:
+    """Verify the complete selected-row outline without assuming a theme."""
+    frame = (frames / f"{name}.rgb565").read_bytes()
+    expected = 240 * 320 * 2
+    if len(frame) != expected:
+        raise RuntimeError("focus-frame check requires a complete TFT frame")
+
+    def pixel(x: int, y: int) -> bytes:
+        offset = (y * 240 + x) * 2
+        return frame[offset:offset + 2]
+
+    # Nearby Networks starts at Components::homeRow(0): x=12, y=32,
+    # width=216, height=60, radius=4.  Straight segments must retain the
+    # exact same focus color after every dynamic RSSI update.
+    reference = pixel(120, 32)
+    probes = {
+        "top_left": pixel(30, 32),
+        "top_middle": reference,
+        "top_right": pixel(210, 32),
+        "right_upper": pixel(227, 45),
+        "right_middle": pixel(227, 65),
+        "right_lower": pixel(227, 80),
+        "bottom_left": pixel(30, 91),
+        "bottom_middle": pixel(120, 91),
+        "bottom_right": pixel(210, 91),
+    }
+    mismatches = [key for key, value in probes.items()
+                  if value != reference]
+    background_distinct = pixel(120, 33) != reference
+    return {
+        "continuous": not mismatches and background_distinct,
+        "reference_rgb565_bytes": reference.hex(),
+        "background_distinct": background_distinct,
+        "mismatches": mismatches,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
@@ -140,6 +177,7 @@ def main() -> int:
     cleanup_before: dict[str, Any] = {"attempted": False}
     cleanup_after: dict[str, Any] = {"attempted": False}
     list_pixel_changes: dict[str, int] = {}
+    list_focus_frames: dict[str, Any] = {}
     detail_pixel_changes: dict[str, int] = {}
     live_first: dict[str, Any] = {}
     live_second: dict[str, Any] = {}
@@ -215,6 +253,12 @@ def main() -> int:
                 require_exact(live_first, live_expected, "wifi_networks_live")
                 screens["wifi_networks_first"] = capture(
                     device, frames, "wifi-networks-first")
+                list_focus_frames["first"] = selected_row_focus_frame(
+                    frames, "wifi-networks-first")
+                if not list_focus_frames["first"]["continuous"]:
+                    raise RuntimeError(
+                        "selected Wi-Fi row focus frame is incomplete: "
+                        f"{list_focus_frames['first']}")
                 first_revision = int(live_first["wifi_network_catalog_revision"])
                 first_cycle = int(live_first["survey_product_wifi_scan_cycles"])
                 live_second = wait_ui_state(
@@ -227,6 +271,13 @@ def main() -> int:
                     ), 45.0, "live Wi-Fi catalog did not advance")
                 screens["wifi_networks_second"] = capture(
                     device, frames, "wifi-networks-second")
+                list_focus_frames["second"] = selected_row_focus_frame(
+                    frames, "wifi-networks-second")
+                if not list_focus_frames["second"]["continuous"]:
+                    raise RuntimeError(
+                        "selected Wi-Fi row focus frame was damaged by a "
+                        "dynamic update: "
+                        f"{list_focus_frames['second']}")
                 list_pixel_changes = changed_pixels(
                     frames, "wifi-networks-first", "wifi-networks-second")
                 if list_pixel_changes["content_changed_pixels"] <= 0 or \
@@ -646,6 +697,7 @@ def main() -> int:
         "detail_facts_first": detail_facts_first,
         "detail_facts_second": detail_facts_second,
         "list_pixel_changes": list_pixel_changes,
+        "list_focus_frames": list_focus_frames,
         "detail_pixel_changes": detail_pixel_changes,
         "detail_outside_signal_pixels": detail_outside_signal_pixels,
         "detail_outside_radar_pixels": detail_outside_radar_pixels,
@@ -662,6 +714,11 @@ def main() -> int:
             "passive_wifi_only": True,
             "unique_bssid_rows": True,
             "live_redraw_data_rows_only": True,
+            "selected_focus_frame_continuous": (
+                list_focus_frames.get("first", {}).get("continuous") is True
+                and list_focus_frames.get("second", {}).get("continuous")
+                    is True
+            ),
             "detail_screen_stable_during_background_scan":
                 not args.network_intelligence,
             "network_intelligence": args.network_intelligence,

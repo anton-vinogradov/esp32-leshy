@@ -27,6 +27,8 @@ def main() -> int:
         "pushLiveListTextBand(",
         "pushLiveListRow(bounds",
         "pushLiveListDynamicFields(",
+        "drawLiveListSelectionOverlay(bool selected)",
+        "drawLiveListSelectionOverlay(const Rect& bounds, bool selected)",
         "wifiNetworkListRenderCache.classify",
         "wifiDeviceListRenderCache.classify",
         "bleDeviceListRenderCache.classify",
@@ -47,13 +49,31 @@ def main() -> int:
         if "Layout::FooterDividerY - Layout::ContentTop" in branch:
             failures.append(f"{view} still clears the full content area")
 
+    full_row = body(source, "bool pushLiveListRow(",
+                    "bool pushLiveListDynamicFields(")
+    full_text = full_row.rfind("drawLiveListRowText(")
+    full_overlay = full_row.rfind("drawLiveListSelectionOverlay(selected);")
+    full_push = full_row.rfind("liveListRowSprite.pushSprite(")
+    if not (0 <= full_text < full_overlay < full_push):
+        failures.append("full live-list row does not composite focus last")
+
+    dynamic = body(source, "bool pushLiveListDynamicFields(",
+                   "enum class NavigationKey")
+    dynamic_bars = dynamic.rfind("drawLiveListSignalBars(rssiDbm);")
+    dynamic_overlay = dynamic.rfind(
+        "drawLiveListSelectionOverlay(selected);")
+    dynamic_push = dynamic.rfind("liveListRowSprite.pushSprite(")
+    if not (0 <= dynamic_bars < dynamic_overlay < dynamic_push):
+        failures.append("dynamic live-list row does not composite focus last")
+
     if failures:
         print("live-list rendering contract failed:", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
     print("live-list rendering contract passed: retained row diff + adaptive "
-          "4-bpp/1-bpp atomic compositing, no live page clears")
+          "4-bpp/1-bpp atomic compositing, focus overlay last, no live page "
+          "clears")
     return 0
 
 
