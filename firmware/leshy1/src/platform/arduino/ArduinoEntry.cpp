@@ -1238,10 +1238,15 @@ TFT_eSprite liveTextRowSprite(&display);
 // without clearing either the whole card or the neighbouring row first.
 TFT_eSprite liveMetaTextRowSprite(&display);
 // One retained 4-bpp row compositor is shared by every live/sorted discovery
-// list.  It costs 216*60/2 = 6480 bytes and retains the exact semantic theme
-// colours in a 16-entry palette.  A reordered identity is therefore replaced
-// by one opaque TFT transfer rather than a visible erase-then-draw sequence.
+// list while enough internal heap is available. It costs 216*60/2 = 6480
+// bytes and retains the exact semantic theme colours in a 16-entry palette.
+// BLE releases it before NimBLE admission and uses the persistent 1-bpp text
+// compositor for atomic label/note bands instead; this keeps the no-PSRAM
+// board above the proven controller-init floor without returning to visible
+// erase-then-draw updates.
 TFT_eSprite liveListRowSprite(&display);
+bool liveListFullColorCompositorAllowed = false;
+void releaseLiveListRowSprite();
 BoardTouchInput boardTouchInput;
 bool touchCalibrationRequiredAtBoot = false;
 bool touchCalibrationSucceededAtBoot = false;
@@ -5823,6 +5828,11 @@ bool restoreBleProductSurveyMemory();
 bool prepareBleProductSurveyMemory(
         std::uint32_t* freeHeapOut = nullptr,
         std::uint32_t* largestHeapOut = nullptr) {
+    // The full-colour list row is valuable for Wi-Fi but costs 6480 bytes of
+    // DMA-capable internal RAM. NimBLE needs that contiguous arena more than
+    // it needs a four-colour row: BLE rows retain flicker-free label/note
+    // updates through the shared 1-bpp band compositor below.
+    releaseLiveListRowSprite();
     if (!resizeProductSurveyObservationQueue(
             kBleProductSurveyObservationCapacity)) {
         if (freeHeapOut != nullptr) {
@@ -13532,6 +13542,7 @@ void refreshLiveListRowPalette() {
 }
 
 bool prepareLiveListRowSprite() {
+    if (!liveListFullColorCompositorAllowed) return false;
     if (!liveListRowSprite.created()) {
         liveListRowSprite.setColorDepth(4);
         if (liveListRowSprite.createSprite(
@@ -13542,6 +13553,54 @@ bool prepareLiveListRowSprite() {
         liveListRowSprite.setTextWrap(false, false);
     }
     refreshLiveListRowPalette();
+    return true;
+}
+
+void releaseLiveListRowSprite() {
+    liveListFullColorCompositorAllowed = false;
+    if (liveListRowSprite.created()) liveListRowSprite.deleteSprite();
+}
+
+std::uint16_t liveListPaletteColor16(LiveListPaletteIndex index) {
+    switch (index) {
+        case LiveListPaletteIndex::Canvas: return Palette::Canvas;
+        case LiveListPaletteIndex::Surface: return Palette::Surface;
+        case LiveListPaletteIndex::SurfaceFocus:
+            return Palette::SurfaceFocus;
+        case LiveListPaletteIndex::Focus: return Palette::Focus;
+        case LiveListPaletteIndex::TextSecondary:
+            return Palette::TextSecondary;
+        case LiveListPaletteIndex::TextMuted: return Palette::TextMuted;
+        case LiveListPaletteIndex::Positive: return Palette::Positive;
+        case LiveListPaletteIndex::Warning: return Palette::Warning;
+        case LiveListPaletteIndex::Danger: return Palette::Danger;
+        case LiveListPaletteIndex::TextPrimary:
+            return Palette::TextPrimary;
+    }
+    return Palette::TextSecondary;
+}
+
+bool pushLiveListTextBand(const Rect& bounds, bool selected,
+                          UiTextRole role, const char* text,
+                          LiveListPaletteIndex tone,
+                          std::int16_t destinationTop,
+                          std::int16_t textTop) {
+    const std::uint16_t background = selected
+        ? Palette::SurfaceFocus : Palette::Surface;
+    if (!beginLiveTextRow(
+            role, liveListPaletteColor16(tone), background)) {
+        return false;
+    }
+    setLiveTextRowCursor(role, 0, textTop);
+    liveTextRowSprite.print(text);
+    constexpr std::int16_t kRightInset = 4;
+    const std::int16_t width = bounds.width -
+        kInteractiveRowTextInset - kRightInset;
+    liveTextRowSprite.pushSprite(
+        bounds.x + kInteractiveRowTextInset,
+        bounds.y + destinationTop,
+        0, 0, width, kLiveTextRowHeight);
+    ++liveListAtomicFieldPushes;
     return true;
 }
 
@@ -13622,42 +13681,60 @@ void drawLiveListRowText(bool selected, const char* label, const char* note,
 
 bool pushLiveListRow(const Rect& bounds, bool selected, const char* label,
                      const char* note, LiveListPaletteIndex noteTone,
-                     bool signalBars, std::int16_t rssiDbm) {
+                     bool signalBars, std::int16_t rssiDbm,
+                     bool repaintStructure = true) {
     if (!prepareLiveListRowSprite()) {
-        ++liveListDirectFallbacks;
         const std::uint16_t background = selected
             ? Palette::SurfaceFocus : Palette::Surface;
-        display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
-                              Layout::Radius, background);
-        if (selected) {
-            display.drawRoundRect(bounds.x, bounds.y, bounds.width,
-                                  bounds.height, Layout::Radius,
-                                  Palette::Focus);
-            const Rect marker = Components::focusMarker(bounds);
-            display.fillTriangle(
-                marker.x, marker.y, marker.x, marker.y + marker.height,
-                marker.x + marker.width, marker.y + marker.height / 2,
-                Palette::Focus);
+        if (repaintStructure) {
+            display.fillRoundRect(
+                bounds.x, bounds.y, bounds.width, bounds.height,
+                Layout::Radius, background);
+            if (selected) {
+                display.drawRoundRect(bounds.x, bounds.y, bounds.width,
+                                      bounds.height, Layout::Radius,
+                                      Palette::Focus);
+                const Rect marker = Components::focusMarker(bounds);
+                display.fillTriangle(
+                    marker.x, marker.y,
+                    marker.x, marker.y + marker.height,
+                    marker.x + marker.width,
+                    marker.y + marker.height / 2,
+                    Palette::Focus);
+            }
         }
-        const std::int16_t labelTop = menuRowTextTop(bounds);
+        const std::int16_t labelTop = menuRowTextTop(
+            {0, 0, kLiveListRowWidth, kLiveListRowHeight});
+        const std::int16_t noteTop = labelTop +
+            kRobotoCondensedBodyAscent + kRobotoCondensedBodyDescent + 1;
+        constexpr std::int16_t kLabelBandTop = 8;
+        const bool labelPushed = pushLiveListTextBand(
+            bounds, selected, UiTextRole::Body, label,
+            selected ? LiveListPaletteIndex::Focus
+                     : LiveListPaletteIndex::TextSecondary,
+            kLabelBandTop, labelTop - kLabelBandTop);
+        const bool notePushed = pushLiveListTextBand(
+            bounds, selected, UiTextRole::Meta, note, noteTone,
+            noteTop, 0);
+        if (signalBars) renderWifiSignalBars(bounds, rssiDbm, background);
+        if (labelPushed && notePushed) return true;
+
+        // This is the only genuinely unsafe fallback: both off-screen paths
+        // failed. Keep it visible in diagnostics instead of hiding the loss
+        // of the flicker-free contract.
+        ++liveListDirectFallbacks;
         display.setTextColor(selected ? Palette::Focus
                                       : Palette::TextSecondary,
                              background);
         setUiCursor(UiTextRole::Body,
-                    bounds.x + kInteractiveRowTextInset, labelTop);
+                    bounds.x + kInteractiveRowTextInset,
+                    bounds.y + labelTop);
         display.print(label);
-        const std::uint16_t noteColor = noteTone ==
-                LiveListPaletteIndex::Warning
-            ? Palette::Warning
-            : (noteTone == LiveListPaletteIndex::Danger
-                ? Palette::Danger : Palette::Positive);
-        display.setTextColor(noteColor, background);
-        setUiCursor(
-            UiTextRole::Meta, bounds.x + kInteractiveRowTextInset,
-            labelTop + kRobotoCondensedBodyAscent +
-                kRobotoCondensedBodyDescent + 1);
+        display.setTextColor(liveListPaletteColor16(noteTone), background);
+        setUiCursor(UiTextRole::Meta,
+                    bounds.x + kInteractiveRowTextInset,
+                    bounds.y + noteTop);
         display.print(note);
-        if (signalBars) renderWifiSignalBars(bounds, rssiDbm, background);
         return false;
     }
     beginLiveListRow(selected);
@@ -13673,25 +13750,26 @@ bool pushLiveListDynamicFields(
         LiveListPaletteIndex noteTone, bool signalBars,
         std::int16_t rssiDbm) {
     if (!prepareLiveListRowSprite()) {
-        ++liveListDirectFallbacks;
         const std::uint16_t background = selected
             ? Palette::SurfaceFocus : Palette::Surface;
-        const std::int16_t labelTop = menuRowTextTop(bounds);
+        const std::int16_t labelTop = menuRowTextTop(
+            {0, 0, kLiveListRowWidth, kLiveListRowHeight});
         const std::int16_t textTop = labelTop +
             kRobotoCondensedBodyAscent + kRobotoCondensedBodyDescent + 1;
+        const bool pushed = pushLiveListTextBand(
+            bounds, selected, UiTextRole::Meta, note, noteTone,
+            textTop, 0);
+        if (signalBars) renderWifiSignalBars(bounds, rssiDbm, background);
+        if (pushed) return true;
+        ++liveListDirectFallbacks;
         display.fillRect(
-            bounds.x + kInteractiveRowTextInset, textTop - 2,
+            bounds.x + kInteractiveRowTextInset, bounds.y + textTop,
             bounds.width - kInteractiveRowTextInset,
-            kRobotoCondensedMetaAscent + kRobotoCondensedMetaDescent + 5,
-            background);
-        const std::uint16_t noteColor = noteTone ==
-                LiveListPaletteIndex::Warning
-            ? Palette::Warning
-            : (noteTone == LiveListPaletteIndex::Danger
-                ? Palette::Danger : Palette::Positive);
-        display.setTextColor(noteColor, background);
+            kLiveTextRowHeight, background);
+        display.setTextColor(liveListPaletteColor16(noteTone), background);
         setUiCursor(UiTextRole::Meta,
-                    bounds.x + kInteractiveRowTextInset, textTop);
+                    bounds.x + kInteractiveRowTextInset,
+                    bounds.y + textTop);
         display.print(note);
         if (signalBars) renderWifiSignalBars(bounds, rssiDbm, background);
         return false;
@@ -17341,11 +17419,16 @@ bool renderWifiNetworkRow(std::size_t index, std::size_t firstVisible,
         wifiNetworkListRenderCache.valid(slot) &&
         wifiNetworkListRenderCache.row(slot).present && visual.present &&
         !wifiNetworkListRenderCache.row(slot).sameIdentity(visual);
+    const bool repaintStructure = force ||
+        !wifiNetworkListRenderCache.valid(slot) ||
+        !wifiNetworkListRenderCache.row(slot).present ||
+        wifiNetworkListRenderCache.row(slot).selected != visual.selected;
     ++wifiNetworkListRowFullRepaints;
     if (identityReplacement) ++wifiNetworkListIdentityReplacements;
     (void)pushLiveListRow(
         bounds, visual.selected, visual.label.data(), note,
-        LiveListPaletteIndex::Positive, true, visual.rssiDbm);
+        LiveListPaletteIndex::Positive, true, visual.rssiDbm,
+        repaintStructure);
     wifiNetworkListRenderCache.publish(slot, visual);
     return true;
 }
@@ -17873,16 +17956,19 @@ BleDeviceRowVisual composeBleDeviceRowVisual(
     return visual;
 }
 
-bool prepareLiveUiCompositors() {
-    // Allocate every persistent UI sprite before the Survey queue is compacted
-    // and before NimBLE claims its arena. Creating one while NimBLE is alive
-    // pins a tiny block in the middle of the released controller heap and can
-    // make an otherwise healthy second BLE entry fail admission.
+bool prepareLiveUiCompositors(bool includeFullColorListRow = false) {
+    // The two compact 1-bpp text compositors remain persistent. They total
+    // about 1.2 KiB and are the no-PSRAM BLE path. The 6.48 KiB 4-bpp row is
+    // admitted only for Wi-Fi and released before NimBLE claims its arena.
     const bool bodyReady = beginLiveTextRow(
         UiTextRole::Body, Palette::TextSecondary, Palette::Canvas);
     const bool metaReady = beginLiveMetaTextRow(
         Palette::TextSecondary, Palette::Canvas);
-    const bool listRowReady = prepareLiveListRowSprite();
+    bool listRowReady = true;
+    if (includeFullColorListRow) {
+        liveListFullColorCompositorAllowed = true;
+        listRowReady = prepareLiveListRowSprite();
+    }
     return bodyReady && metaReady && listRowReady;
 }
 
@@ -17958,6 +18044,10 @@ bool renderBleDeviceRow(std::size_t index, std::size_t firstVisible,
         bleDeviceListRenderCache.valid(slot) &&
         bleDeviceListRenderCache.row(slot).present && visual.present &&
         !bleDeviceListRenderCache.row(slot).sameIdentity(visual);
+    const bool repaintStructure = force ||
+        !bleDeviceListRenderCache.valid(slot) ||
+        !bleDeviceListRenderCache.row(slot).present ||
+        bleDeviceListRenderCache.row(slot).selected != visual.selected;
     ++bleDeviceListRowFullRepaints;
     if (identityReplacement) ++bleDeviceListIdentityReplacements;
     char note[64] = {};
@@ -17965,8 +18055,10 @@ bool renderBleDeviceRow(std::size_t index, std::size_t firstVisible,
                   visual.descriptor.data(), static_cast<int>(visual.rssiDbm));
     const LiveListPaletteIndex tone = visual.tracker
         ? LiveListPaletteIndex::Warning : LiveListPaletteIndex::Positive;
-    (void)pushLiveListRow(bounds, visual.selected, visual.label.data(), note,
-                          tone, true, visual.rssiDbm);
+    if (pushLiveListRow(bounds, visual.selected, visual.label.data(), note,
+                        tone, true, visual.rssiDbm, repaintStructure)) {
+        ++bleDeviceListAtomicNotePushes;
+    }
     bleDeviceListRenderCache.publish(slot, visual);
     return true;
 }
@@ -18696,11 +18788,16 @@ bool renderWifiDeviceRow(std::size_t index, std::size_t firstVisible,
         wifiDeviceListRenderCache.valid(slot) &&
         wifiDeviceListRenderCache.row(slot).present && visual.present &&
         !wifiDeviceListRenderCache.row(slot).sameIdentity(visual);
+    const bool repaintStructure = force ||
+        !wifiDeviceListRenderCache.valid(slot) ||
+        !wifiDeviceListRenderCache.row(slot).present ||
+        wifiDeviceListRenderCache.row(slot).selected != visual.selected;
     ++wifiDeviceListRowFullRepaints;
     if (identityReplacement) ++wifiDeviceListIdentityReplacements;
     (void)pushLiveListRow(
         bounds, visual.selected, visual.label.data(), note,
-        LiveListPaletteIndex::Positive, false, visual.rssiDbm);
+        LiveListPaletteIndex::Positive, false, visual.rssiDbm,
+        repaintStructure);
     wifiDeviceListRenderCache.publish(slot, visual);
     return true;
 }
@@ -29299,7 +29396,7 @@ bool startWifiNetworksProduct() {
     liveListAtomicRowPushes = 0U;
     liveListAtomicFieldPushes = 0U;
     liveListDirectFallbacks = 0U;
-    if (!prepareLiveUiCompositors()) {
+    if (!prepareLiveUiCompositors(true)) {
         productSurveyRuntime = {};
         productSurveyRuntime.selected = true;
         productSurveyRuntime.status = "wifi_ui_memory_unavailable";
@@ -29628,7 +29725,7 @@ bool startWifiDevicesProduct() {
     liveTextRowPushes = 0U;
     liveTextRowAllocationFailures = 0U;
     liveTextRowDirectFallbacks = 0U;
-    if (!prepareLiveUiCompositors()) {
+    if (!prepareLiveUiCompositors(true)) {
         wifiProductView = WifiProductView::Devices;
         lastRuntimeEvent = "wifi_ui_memory_unavailable";
         return true;
@@ -43981,9 +44078,9 @@ void setup() {
               interfaceSettingsController.brightnessDuty());
     display.init();
     display.setRotation(2);
-    // Reserve the shared retained-list compositors before Wi-Fi/BLE/storage
-    // workers fragment the internal heap.  Every later live-list entry reuses
-    // these exact buffers and therefore never allocates on a scan callback.
+    // Reserve the two compact 1-bpp compositors before Wi-Fi/BLE/storage
+    // workers fragment internal heap. Wi-Fi admits its larger 4-bpp row on
+    // entry; BLE deliberately keeps only these bands for NimBLE headroom.
     (void)prepareLiveUiCompositors();
     boardTouchInput.begin(display, millis());
     touchCalibrationRequiredAtBoot =

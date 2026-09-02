@@ -23,6 +23,8 @@ def main() -> int:
         '#include "ui/LiveListRenderCache.h"',
         "TFT_eSprite liveListRowSprite(&display);",
         "liveListRowSprite.setColorDepth(4);",
+        "releaseLiveListRowSprite();",
+        "pushLiveListTextBand(",
         "pushLiveListRow(bounds",
         "pushLiveListDynamicFields(",
         "wifiNetworkListRenderCache.classify",
@@ -50,8 +52,8 @@ def main() -> int:
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print("live-list rendering contract passed: retained row diff + atomic "
-          "row/field pushes, no live page clears")
+    print("live-list rendering contract passed: retained row diff + adaptive "
+          "4-bpp/1-bpp atomic compositing, no live page clears")
     return 0
 
 
