@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import struct
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,7 +17,7 @@ from esp_app_identity import app_elf_sha256
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CURRENT_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
+RUNNER_SOURCE_PATH = "tools/run_1x_airspace_guard_hil.py"
 DEFAULT_POSITIVE = (
     ROOT / "tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.242"
 )
@@ -111,6 +112,17 @@ SCREEN_FILES = {
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def committed_runner_sha256(commit: str) -> str:
+    result = subprocess.run(
+        ["git", "show", f"{commit}:{RUNNER_SOURCE_PATH}"], cwd=ROOT,
+        check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        raise OSError(detail or "cannot read committed runner")
+    return hashlib.sha256(result.stdout).hexdigest()
 
 
 def require(failures: list[str], condition: bool, message: str) -> None:
@@ -1225,14 +1237,16 @@ def check(args: argparse.Namespace) -> list[str]:
                 require(failures, expectations.get(field) == value,
                         f"expectations.{field}: CLI pin mismatch")
         try:
-            current_runner_sha256 = digest(CURRENT_RUNNER)
+            source_runner_sha256 = committed_runner_sha256(
+                expectations["source_commit"]
+            )
         except OSError as error:
-            failures.append(f"current runner: {error}")
+            failures.append(f"source-commit runner: {error}")
         else:
             require(failures,
                     expectations.get("runner_source_sha256") ==
-                    current_runner_sha256,
-                    "expectations.runner_source_sha256: current runner "
+                    source_runner_sha256,
+                    "expectations.runner_source_sha256: source-commit runner "
                     "binding mismatch")
     bundle, run_path = resolve_positive(args.positive, failures)
     entries = verify_manifest(bundle, failures) if bundle.is_dir() else {}

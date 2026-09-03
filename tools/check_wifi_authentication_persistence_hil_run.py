@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import struct
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,17 @@ PRIVATE_KEYS = frozenset({
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def committed_file_sha256(commit: str, path: str) -> str:
+    result = subprocess.run(
+        ["git", "show", f"{commit}:{path}"], cwd=ROOT, check=False,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        raise OSError(detail or f"cannot read {path} from source commit")
+    return hashlib.sha256(result.stdout).hexdigest()
 
 
 def require(failures: list[str], condition: bool, message: str) -> None:
@@ -337,15 +349,21 @@ def check(expectations: Path, positive: Path) -> list[str]:
             SESSION.fullmatch(str(marker.get("run_id", ""))) is not None and
             all(SHA256.fullmatch(str(marker.get(field, ""))) is not None
                 for field in ("firmware_sha256", "app_elf_sha256",
-                              "runner_source_sha256", "positive_run_sha256",
+                              "checker_source_sha256", "runner_source_sha256",
+                              "positive_run_sha256",
                               "positive_artifact_index_sha256")),
             "expectations: exact pinned field contract required")
-    require(failures, RUNNER.is_file() and
-            digest(RUNNER) == marker.get("runner_source_sha256"),
-            "expectations: current runner hash mismatch")
-    require(failures, CHECKER.is_file() and
-            digest(CHECKER) == marker.get("checker_source_sha256"),
-            "expectations: current checker hash mismatch")
+    try:
+        source_runner_sha256 = committed_file_sha256(
+            str(marker.get("source_commit", "")),
+            RUNNER.relative_to(ROOT).as_posix(),
+        )
+    except OSError as error:
+        failures.append(f"expectations: source-commit runner: {error}")
+    else:
+        require(failures,
+                source_runner_sha256 == marker.get("runner_source_sha256"),
+                "expectations: source-commit runner hash mismatch")
     entries = verify_manifest(positive, failures)
     run_path = positive / "run.json"
     index_path = positive / "artifacts.sha256"

@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ENTRY = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
+LIVE_LIST_CACHE = ROOT / "firmware/leshy1/src/ui/LiveListRenderCache.h"
 
 
 def function_body(source: str, signature: str) -> str:
@@ -33,6 +34,7 @@ def function_body(source: str, signature: str) -> str:
 
 def main() -> int:
     source = ENTRY.read_text(encoding="utf-8")
+    live_list_cache = LIVE_LIST_CACHE.read_text(encoding="utf-8")
     failures: list[str] = []
 
     try:
@@ -146,20 +148,32 @@ def main() -> int:
             failures.append(
                 "render caller did not explicitly choose full or dirty-only scope")
         for marker in (
-            "staticFieldsEqual(visual)",
-            "renderBleDeviceRowNote(visual, bounds, background);",
+            "LiveListRowChange::DynamicFields",
+            "renderBleDeviceRowNote(visual, bounds);",
             "++bleDeviceListSignalDeltaRepaints;",
-            "bleDeviceRenderedRows[slot].sameIdentity(visual)",
+            "bleDeviceListRenderCache.row(slot).sameIdentity(visual)",
             "++bleDeviceListStaticChurnSuppressed;",
         ):
             if marker not in ble_list_row:
                 failures.append(
                     f"BLE list signal-only dirty repaint missing: {marker}")
-        if "fillRoundRect" in ble_list_row[
-                ble_list_row.find("if (canRenderSignalDelta)"):
-                ble_list_row.find("++bleDeviceListRowFullRepaints")]:
+        dynamic_begin = ble_list_row.find(
+            "if (change == leshy1::ui::LiveListRowChange::DynamicFields)")
+        full_begin = ble_list_row.find("++bleDeviceListRowFullRepaints")
+        if not (0 <= dynamic_begin < full_begin):
+            failures.append(
+                "BLE list dynamic/full repaint boundaries are missing")
+        elif "fillRoundRect" in ble_list_row[dynamic_begin:full_begin]:
             failures.append(
                 "BLE signal delta still erases the complete menu row")
+        for marker in (
+            "previous.sameIdentity(next)",
+            "previous.staticFieldsEqual(next)",
+            "return LiveListRowChange::DynamicFields;",
+        ):
+            if marker not in live_list_cache:
+                failures.append(
+                    f"shared live-list classification missing: {marker}")
         if "renderBleDeviceStaticFields(live, true);" in selection_delta:
             failures.append(
                 "BLE detail still republishes alternating static facts")

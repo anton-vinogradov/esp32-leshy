@@ -45,6 +45,7 @@
 #include "drivers/wifi/WifiPassiveContract.h"
 #include "kernel/runtime/AppRuntime.h"
 #include "kernel/runtime/ResourceBroker.h"
+#include "kernel/safety/RuntimeWatchdogJournal.h"
 #include "kernel/safety/SafetySupervisor.h"
 #include "kernel/safety/WorkerDeadlineSupervisor.h"
 #include "platform/arduino/RamSessionStoreIo.h"
@@ -1861,6 +1862,62 @@ void testSafetySupervisorLatchesOnlyExactUntornEvidence() {
         app, SafetyReason::SupervisorUnavailable, 1, 1);
     supervisor.restore(unavailable, app, false);
     CHECK(supervisor.latched());
+}
+
+void testRuntimeWatchdogJournalRejectsTornAndFormatsCause() {
+    using namespace leshy1::kernel::safety;
+    constexpr const char* sha =
+        "0123456789abcdef0123456789abcdef"
+        "0123456789abcdef0123456789abcdef";
+    const RuntimeWatchdogJournalRecord record =
+        makeRuntimeWatchdogJournalRecord(
+            7U, 0x10203040U, 6U,
+            static_cast<std::uint32_t>(SafetyReason::RuntimeWatchdog),
+            2U, 4U, 3U, 2U, 1U, 1U, "1.0.0-dev.375", sha);
+    CHECK(validateRuntimeWatchdogJournalRecord(record, 13U, 9U));
+    CHECK(sameRuntimeWatchdogIncident(
+        record, 7U, 0x10203040U,
+        6U,
+        static_cast<std::uint32_t>(SafetyReason::RuntimeWatchdog),
+        2U, 4U, 3U, 2U, 1U, 1U, "1.0.0-dev.375", sha));
+    CHECK(!sameRuntimeWatchdogIncident(
+        record, 7U, 0x10203040U,
+        6U,
+        static_cast<std::uint32_t>(SafetyReason::RuntimeWatchdog),
+        2U, 5U, 3U, 2U, 1U, 1U, "1.0.0-dev.375", sha));
+    CHECK(!sameRuntimeWatchdogIncident(
+        record, 8U, 0x10203040U,
+        6U,
+        static_cast<std::uint32_t>(SafetyReason::RuntimeWatchdog),
+        2U, 4U, 3U, 2U, 1U, 1U, "1.0.0-dev.375", sha));
+
+    RuntimeWatchdogJournalRecord torn = record;
+    ++torn.stage;
+    CHECK(!validateRuntimeWatchdogJournalRecord(torn, 13U, 9U));
+    torn = record;
+    torn.appElfSha256[4] = 'Z';
+    CHECK(!validateRuntimeWatchdogJournalRecord(torn, 13U, 9U));
+    torn = record;
+    std::memset(torn.version, 'x', sizeof(torn.version));
+    CHECK(!validateRuntimeWatchdogJournalRecord(torn, 13U, 9U));
+
+    char json[512] = {};
+    CHECK(formatRuntimeWatchdogJournalJson(
+        record, "wifi_devices", "devices", json, sizeof(json)));
+    CHECK(std::strstr(json,
+        "\"schema\":\"leshy.runtime_watchdog.crash.v1\"") != nullptr);
+    CHECK(std::strstr(json, "\"sequence\":7") != nullptr);
+    CHECK(std::strstr(json, "\"reset_reason_code\":6") != nullptr);
+    CHECK(std::strstr(json, "\"stage\":\"wifi_devices\"") != nullptr);
+    CHECK(std::strstr(json, "\"wifi_view\":\"devices\"") != nullptr);
+    CHECK(json[std::strlen(json) - 1U] == '\n');
+
+    CHECK(makeRuntimeWatchdogJournalRecord(
+              0U, 1U, 6U, 1U, 0U, 0U, 0U, 0U, 1U, 1U,
+              "1.0.0-dev.375", sha).magic == 0U);
+    CHECK(makeRuntimeWatchdogJournalRecord(
+              1U, 1U, 6U, 1U, 0U, 0U, 0U, 0U, 1U, 1U,
+              "bad version", sha).magic == 0U);
 }
 
 void testWorkerDeadlineSupervisorTripsOnceAndRetainsEvidence() {
@@ -6755,6 +6812,7 @@ int main() {
     testSpectrumViewportKeepsBoundedRingHistory();
     testProductBootRetryIsNarrowAndBounded();
     testSafetySupervisorLatchesOnlyExactUntornEvidence();
+    testRuntimeWatchdogJournalRejectsTornAndFormatsCause();
     testWorkerDeadlineSupervisorTripsOnceAndRetainsEvidence();
     testProductStartIdentityRetryStopsBeforeFilesystem();
     testProductStartFilesystemRetryRequiresCleanQuiescentLifecycle();

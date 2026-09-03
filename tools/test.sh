@@ -133,6 +133,7 @@ run_opaque_evidence_check() {
     "$repo_dir/firmware/leshy1/src/drivers/wifi/WifiPassiveContract.cpp" \
     "$repo_dir/firmware/leshy1/src/kernel/runtime/AppRuntime.cpp" \
     "$repo_dir/firmware/leshy1/src/kernel/runtime/ResourceBroker.cpp" \
+    "$repo_dir/firmware/leshy1/src/kernel/safety/RuntimeWatchdogJournal.cpp" \
     "$repo_dir/firmware/leshy1/src/kernel/safety/SafetySupervisor.cpp" \
     "$repo_dir/firmware/leshy1/src/kernel/safety/WorkerDeadlineSupervisor.cpp" \
     "$repo_dir/firmware/leshy1/src/platform/arduino/RamSessionStoreIo.cpp" \
@@ -878,6 +879,7 @@ run_opaque_evidence_check tools/check_subghz_raw_acceptance.py
 python3 "$repo_dir/tools/check_subghz_fsk_contract.py"
 python3 "$repo_dir/tools/check_subghz_fsk_delta_acceptance.py"
 python3 "$repo_dir/tools/check_early_boot_watchdog_contract.py"
+python3 "$repo_dir/tools/check_runtime_watchdog_journal_contract.py"
 run_opaque_evidence_check tools/check_safety_watchdog_acceptance.py
 python3 "$repo_dir/tools/check_worker_preparation_deadline_acceptance.py"
 python3 "$repo_dir/tools/check_capture_store_deadline_acceptance.py"

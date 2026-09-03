@@ -94,6 +94,7 @@
 #include "drivers/wifi/WifiPassiveContract.h"
 #include "kernel/runtime/AppRuntime.h"
 #include "kernel/runtime/ResourceBroker.h"
+#include "kernel/safety/RuntimeWatchdogJournal.h"
 #include "kernel/safety/SafetySupervisor.h"
 #include "kernel/safety/WorkerDeadlineSupervisor.h"
 #include "platform/arduino/BoardSafeOutputs.h"
@@ -102,6 +103,7 @@
 #include "platform/arduino/BoardInfraredTransmitter.h"
 #include "platform/arduino/BoardCc1101PassiveSpectrum.h"
 #include "platform/arduino/BoardNrf24PassiveSpectrum.h"
+#include "platform/arduino/BoardRuntimeWatchdogJournal.h"
 #include "platform/arduino/BoardShieldReceiverProbe.h"
 #include "platform/arduino/ArduinoFsSessionStoreIo.h"
 #include "platform/arduino/ArduinoCompanionWebService.h"
@@ -381,6 +383,10 @@ using leshy1::kernel::runtime::LaunchStatus;
 using leshy1::kernel::runtime::Resource;
 using leshy1::kernel::runtime::ResourceBroker;
 using leshy1::kernel::safety::SafetyReason;
+using leshy1::kernel::safety::RuntimeWatchdogJournalRecord;
+using leshy1::platform::arduino::BoardRuntimeWatchdogJournal;
+using leshy1::platform::arduino::RuntimeWatchdogJournalLoadStatus;
+using leshy1::platform::arduino::RuntimeWatchdogJournalSdWriteStatus;
 using leshy1::kernel::safety::SafetyRetainedRecord;
 using leshy1::kernel::safety::SafetyState;
 using leshy1::kernel::safety::SafetySupervisor;
@@ -531,6 +537,7 @@ constexpr leshy1::kernel::runtime::ResourceOwner kBootCatalogOwner = 4;
 constexpr leshy1::kernel::runtime::ResourceOwner kLittleFsHilOwner = 5;
 constexpr leshy1::kernel::runtime::ResourceOwner kScreenshotOwner = 6;
 constexpr leshy1::kernel::runtime::ResourceOwner kBleGattHilConflictOwner = 7;
+constexpr leshy1::kernel::runtime::ResourceOwner kCrashJournalOwner = 8;
 constexpr leshy1::kernel::runtime::ResourceOwner kProtocolAnnotationOwner = 9;
 constexpr std::size_t kSdThroughputSamples = 32;
 constexpr std::size_t kWifiIngressMaxSamples = 32;
@@ -2716,7 +2723,7 @@ constexpr std::uint32_t kEarlyBootGuardRtcMagic = 0x4C424747U;
 constexpr std::uint32_t kEarlyBootGuardTripRtcMagic = 0x4C424754U;
 constexpr std::uint32_t kEarlyBootGuardTimeoutMs = 5000U;
 constexpr std::uint32_t kRuntimeWatchdogTraceRtcMagic = 0x4C575431U;
-constexpr std::uint32_t kRuntimeWatchdogTraceSchema = 1U;
+constexpr std::uint32_t kRuntimeWatchdogTraceSchema = 3U;
 
 enum class RuntimeWatchdogStage : std::uint32_t {
     Unknown = 0,
@@ -2732,6 +2739,7 @@ enum class RuntimeWatchdogStage : std::uint32_t {
     Console = 10,
     Input = 11,
     Yield = 12,
+    CrashJournalSd = 13,
 };
 
 const char* runtimeWatchdogStageName(RuntimeWatchdogStage stage) {
@@ -2750,6 +2758,7 @@ const char* runtimeWatchdogStageName(RuntimeWatchdogStage stage) {
         case RuntimeWatchdogStage::Console: return "console";
         case RuntimeWatchdogStage::Input: return "input";
         case RuntimeWatchdogStage::Yield: return "yield";
+        case RuntimeWatchdogStage::CrashJournalSd: return "crash_journal_sd";
         case RuntimeWatchdogStage::Unknown:
         default: return "unknown";
     }
@@ -2758,8 +2767,16 @@ const char* runtimeWatchdogStageName(RuntimeWatchdogStage stage) {
 struct RuntimeWatchdogTraceRecord final {
     std::uint32_t magic = 0;
     std::uint32_t schema = 0;
+    // Allocated from the verified durable sequence before the WDT is armed.
+    // It identifies one incident across all recovery reboots without making
+    // the ISR touch flash, and prevents two otherwise-identical later trips
+    // from being mistaken for one another.
+    std::uint32_t journalSequence = 0;
+    std::uint32_t journalSequenceInverse = 0;
     std::uint32_t appIdentity = 0;
     std::uint32_t appIdentityInverse = 0;
+    std::uint32_t resetReason = 0;
+    std::uint32_t resetReasonInverse = 0;
     std::uint32_t triggeredCpuMask = 0;
     std::uint32_t triggeredCpuMaskInverse = 0;
     std::uint32_t stage = 0;
@@ -2768,6 +2785,10 @@ struct RuntimeWatchdogTraceRecord final {
     std::uint32_t pageInverse = 0;
     std::uint32_t wifiView = 0;
     std::uint32_t wifiViewInverse = 0;
+    // The ISR preloads ~1 and task context confirms persistence with one
+    // aligned store. This keeps the trace valid across a reset during NVS I/O.
+    std::uint32_t journalCommitted = 0;
+    std::uint32_t journalCommittedInverse = 0;
 };
 
 RTC_NOINIT_ATTR std::uint32_t productBootRetryRtcMagic;
@@ -2786,6 +2807,7 @@ bool earlyBootGuardActive = false;
 bool earlyBootGuardTrippedAtBoot = false;
 volatile std::uint32_t runtimeSafetyWatchdogArmed = 0;
 volatile std::uint32_t runtimeSafetyAppIdentity = 0;
+volatile std::uint32_t runtimeSafetyNextJournalSequence = 0;
 volatile std::uint32_t runtimeSafetyNextTripCount = 1;
 volatile std::uint32_t runtimeSafetyNextQuiesceCount = 1;
 volatile std::uint32_t runtimeWatchdogCurrentStage =
@@ -2796,6 +2818,19 @@ volatile std::uint32_t runtimeWatchdogCurrentWifiView =
 SafetySupervisor safetySupervisor;
 std::uint32_t runningAppIdentity = 0;
 bool runtimeSafetyWatchdogReady = false;
+BoardRuntimeWatchdogJournal runtimeWatchdogJournalStore;
+RuntimeWatchdogJournalRecord runtimeWatchdogJournalRecord;
+RuntimeWatchdogJournalLoadStatus runtimeWatchdogJournalLoadStatus =
+    RuntimeWatchdogJournalLoadStatus::Missing;
+RuntimeWatchdogJournalSdWriteStatus runtimeWatchdogJournalSdWriteStatus =
+    RuntimeWatchdogJournalSdWriteStatus::InvalidInput;
+const char* runtimeWatchdogJournalPersistStatus = "not_checked";
+const char* runtimeWatchdogJournalSdStatus = "not_checked";
+std::uint32_t runtimeWatchdogJournalSdMirroredSequence = 0;
+bool runtimeWatchdogJournalValid = false;
+bool runtimeWatchdogJournalNvsWriteAttempted = false;
+bool runtimeWatchdogJournalNvsWriteVerified = false;
+bool runtimeWatchdogJournalSdWriteAttempted = false;
 
 void updateRuntimeWatchdogContext(RuntimeWatchdogStage stage) {
     runtimeWatchdogCurrentPage = uiController.page();
@@ -11302,15 +11337,22 @@ bool IRAM_ATTR runtimeWatchdogTraceAlreadyRetained(
     std::uint32_t appIdentity) {
     return runtimeWatchdogTraceRtc.magic == kRuntimeWatchdogTraceRtcMagic &&
         runtimeWatchdogTraceRtc.schema == kRuntimeWatchdogTraceSchema &&
+        runtimeWatchdogTraceRtc.journalSequence != 0U &&
+        runtimeWatchdogTraceRtc.journalSequenceInverse ==
+            ~runtimeWatchdogTraceRtc.journalSequence &&
         runtimeWatchdogTraceRtc.appIdentity == appIdentity &&
         runtimeWatchdogTraceRtc.appIdentityInverse == ~appIdentity &&
+        runtimeWatchdogTraceRtc.resetReasonInverse ==
+            ~runtimeWatchdogTraceRtc.resetReason &&
         runtimeWatchdogTraceRtc.triggeredCpuMaskInverse ==
             ~runtimeWatchdogTraceRtc.triggeredCpuMask &&
         runtimeWatchdogTraceRtc.stageInverse ==
             ~runtimeWatchdogTraceRtc.stage &&
         runtimeWatchdogTraceRtc.pageInverse == ~runtimeWatchdogTraceRtc.page &&
         runtimeWatchdogTraceRtc.wifiViewInverse ==
-            ~runtimeWatchdogTraceRtc.wifiView;
+            ~runtimeWatchdogTraceRtc.wifiView &&
+        runtimeWatchdogTraceRtc.journalCommitted <= 1U &&
+        runtimeWatchdogTraceRtc.journalCommittedInverse == ~1U;
 }
 
 bool IRAM_ATTR recordRuntimeSafetyWatchdogTrip(
@@ -11321,6 +11363,7 @@ bool IRAM_ATTR recordRuntimeSafetyWatchdogTrip(
     }
     quiesceEmergencyGpioFromIsr();
     const std::uint32_t appIdentity = runtimeSafetyAppIdentity;
+    const std::uint32_t journalSequence = runtimeSafetyNextJournalSequence;
     const std::uint32_t reason =
         static_cast<std::uint32_t>(SafetyReason::RuntimeWatchdog);
     const std::uint32_t tripCount = runtimeSafetyNextTripCount;
@@ -11335,8 +11378,14 @@ bool IRAM_ATTR recordRuntimeSafetyWatchdogTrip(
         const std::uint32_t wifiView = runtimeWatchdogCurrentWifiView;
         runtimeWatchdogTraceRtc.magic = 0;
         runtimeWatchdogTraceRtc.schema = kRuntimeWatchdogTraceSchema;
+        runtimeWatchdogTraceRtc.journalSequence = journalSequence;
+        runtimeWatchdogTraceRtc.journalSequenceInverse = ~journalSequence;
         runtimeWatchdogTraceRtc.appIdentity = appIdentity;
         runtimeWatchdogTraceRtc.appIdentityInverse = ~appIdentity;
+        runtimeWatchdogTraceRtc.resetReason =
+            static_cast<std::uint32_t>(ESP_RST_TASK_WDT);
+        runtimeWatchdogTraceRtc.resetReasonInverse =
+            ~runtimeWatchdogTraceRtc.resetReason;
         runtimeWatchdogTraceRtc.triggeredCpuMask = triggeredCpuMask;
         runtimeWatchdogTraceRtc.triggeredCpuMaskInverse = ~triggeredCpuMask;
         runtimeWatchdogTraceRtc.stage = stage;
@@ -11345,6 +11394,8 @@ bool IRAM_ATTR recordRuntimeSafetyWatchdogTrip(
         runtimeWatchdogTraceRtc.pageInverse = ~page;
         runtimeWatchdogTraceRtc.wifiView = wifiView;
         runtimeWatchdogTraceRtc.wifiViewInverse = ~wifiView;
+        runtimeWatchdogTraceRtc.journalCommitted = 0U;
+        runtimeWatchdogTraceRtc.journalCommittedInverse = ~1U;
         __atomic_thread_fence(__ATOMIC_RELEASE);
         runtimeWatchdogTraceRtc.magic = kRuntimeWatchdogTraceRtcMagic;
     }
@@ -11469,8 +11520,13 @@ RuntimeWatchdogTraceRecord snapshotRuntimeWatchdogTrace() {
     RuntimeWatchdogTraceRecord record{};
     record.magic = runtimeWatchdogTraceRtc.magic;
     record.schema = runtimeWatchdogTraceRtc.schema;
+    record.journalSequence = runtimeWatchdogTraceRtc.journalSequence;
+    record.journalSequenceInverse =
+        runtimeWatchdogTraceRtc.journalSequenceInverse;
     record.appIdentity = runtimeWatchdogTraceRtc.appIdentity;
     record.appIdentityInverse = runtimeWatchdogTraceRtc.appIdentityInverse;
+    record.resetReason = runtimeWatchdogTraceRtc.resetReason;
+    record.resetReasonInverse = runtimeWatchdogTraceRtc.resetReasonInverse;
     record.triggeredCpuMask = runtimeWatchdogTraceRtc.triggeredCpuMask;
     record.triggeredCpuMaskInverse =
         runtimeWatchdogTraceRtc.triggeredCpuMaskInverse;
@@ -11480,30 +11536,297 @@ RuntimeWatchdogTraceRecord snapshotRuntimeWatchdogTrace() {
     record.pageInverse = runtimeWatchdogTraceRtc.pageInverse;
     record.wifiView = runtimeWatchdogTraceRtc.wifiView;
     record.wifiViewInverse = runtimeWatchdogTraceRtc.wifiViewInverse;
+    record.journalCommitted = runtimeWatchdogTraceRtc.journalCommitted;
+    record.journalCommittedInverse =
+        runtimeWatchdogTraceRtc.journalCommittedInverse;
     return record;
 }
 
-bool runtimeWatchdogTraceValid(const RuntimeWatchdogTraceRecord& record,
-                               std::uint32_t appIdentity) {
+bool runtimeWatchdogTraceSelfValid(const RuntimeWatchdogTraceRecord& record) {
     return record.magic == kRuntimeWatchdogTraceRtcMagic &&
         record.schema == kRuntimeWatchdogTraceSchema &&
-        record.appIdentity == appIdentity &&
+        record.journalSequence != 0U &&
+        record.journalSequenceInverse == ~record.journalSequence &&
+        record.appIdentity != 0U &&
         record.appIdentityInverse == ~record.appIdentity &&
+        safetyWatchdogResetReason(record.resetReason) &&
+        record.resetReasonInverse == ~record.resetReason &&
         record.triggeredCpuMaskInverse == ~record.triggeredCpuMask &&
         record.stageInverse == ~record.stage &&
         record.pageInverse == ~record.page &&
         record.wifiViewInverse == ~record.wifiView &&
         record.stage <= static_cast<std::uint32_t>(
-            RuntimeWatchdogStage::Yield) &&
+            RuntimeWatchdogStage::CrashJournalSd) &&
         record.wifiView <= static_cast<std::uint32_t>(
-            WifiProductView::AirspaceGuard);
+            WifiProductView::AirspaceGuard) &&
+        record.journalCommitted <= 1U &&
+        record.journalCommittedInverse == ~1U;
+}
+
+bool runtimeWatchdogTraceValid(const RuntimeWatchdogTraceRecord& record,
+                               std::uint32_t appIdentity) {
+    return runtimeWatchdogTraceSelfValid(record) &&
+        record.appIdentity == appIdentity;
+}
+
+bool durableRuntimeWatchdogJournalValid(
+    const RuntimeWatchdogJournalRecord& record) {
+    return leshy1::kernel::safety::validateRuntimeWatchdogJournalRecord(
+               record,
+               static_cast<std::uint32_t>(
+                   RuntimeWatchdogStage::CrashJournalSd),
+               static_cast<std::uint32_t>(WifiProductView::AirspaceGuard)) &&
+        record.safetyReason ==
+            static_cast<std::uint32_t>(SafetyReason::RuntimeWatchdog) &&
+        safetyWatchdogResetReason(record.resetReason);
+}
+
+void loadRuntimeWatchdogJournal() {
+    runtimeWatchdogJournalRecord = {};
+    runtimeWatchdogJournalLoadStatus = runtimeWatchdogJournalStore.load(
+        &runtimeWatchdogJournalRecord);
+    runtimeWatchdogJournalValid =
+        runtimeWatchdogJournalLoadStatus ==
+            RuntimeWatchdogJournalLoadStatus::Valid &&
+        durableRuntimeWatchdogJournalValid(runtimeWatchdogJournalRecord);
+    if (runtimeWatchdogJournalLoadStatus ==
+            RuntimeWatchdogJournalLoadStatus::Valid &&
+        !runtimeWatchdogJournalValid) {
+        runtimeWatchdogJournalLoadStatus =
+            RuntimeWatchdogJournalLoadStatus::Invalid;
+    }
+    runtimeWatchdogJournalSdMirroredSequence = runtimeWatchdogJournalValid
+        ? runtimeWatchdogJournalStore.loadSdMirroredSequence() : 0U;
+    if (runtimeWatchdogJournalValid &&
+        runtimeWatchdogJournalSdMirroredSequence >
+            runtimeWatchdogJournalRecord.sequence) {
+        runtimeWatchdogJournalSdMirroredSequence = 0U;
+    }
+    runtimeWatchdogJournalNvsWriteVerified = runtimeWatchdogJournalValid;
+    runtimeWatchdogJournalPersistStatus = runtimeWatchdogJournalValid
+        ? "retained_verified"
+        : (runtimeWatchdogJournalLoadStatus ==
+                   RuntimeWatchdogJournalLoadStatus::Missing
+               ? "empty" : "load_invalid");
+    runtimeWatchdogJournalSdStatus = runtimeWatchdogJournalValid
+        ? (runtimeWatchdogJournalSdMirroredSequence ==
+                   runtimeWatchdogJournalRecord.sequence
+               ? "already_mirrored" : "pending")
+        : "no_valid_record";
+}
+
+void confirmRuntimeWatchdogJournalCommitted() {
+    if (runtimeWatchdogTraceRtc.journalCommitted == 1U) return;
+    runtimeWatchdogTraceRtc.journalCommitted = 1U;
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+}
+
+void persistRuntimeWatchdogJournalAtBoot() {
+    loadRuntimeWatchdogJournal();
+    const RuntimeWatchdogTraceRecord trace = snapshotRuntimeWatchdogTrace();
+    if (!safetySupervisor.latched() ||
+        safetySupervisor.reason() != SafetyReason::RuntimeWatchdog ||
+        !runtimeWatchdogTraceValid(trace, runningAppIdentity)) {
+        runtimeWatchdogJournalPersistStatus = "no_matching_rtc_trace";
+        return;
+    }
+
+    const auto encodedReason = static_cast<std::uint32_t>(
+        SafetyReason::RuntimeWatchdog);
+    if (runtimeWatchdogJournalValid &&
+        leshy1::kernel::safety::sameRuntimeWatchdogIncident(
+            runtimeWatchdogJournalRecord, trace.journalSequence,
+            trace.appIdentity,
+            trace.resetReason, encodedReason,
+            trace.triggeredCpuMask, trace.stage, trace.page, trace.wifiView,
+            safetySupervisor.tripCount(), safetySupervisor.quiesceCount(),
+            LESHY1_VERSION, runningAppElfSha256)) {
+        confirmRuntimeWatchdogJournalCommitted();
+        runtimeWatchdogJournalPersistStatus = "already_persisted";
+        runtimeWatchdogJournalNvsWriteVerified = true;
+        runtimeWatchdogJournalSdStatus =
+            runtimeWatchdogJournalSdMirroredSequence ==
+                    runtimeWatchdogJournalRecord.sequence
+                ? "already_mirrored" : "deferred_safe_mode";
+        return;
+    }
+
+    if (runtimeWatchdogJournalValid &&
+        runtimeWatchdogJournalRecord.sequence == UINT32_MAX) {
+        runtimeWatchdogJournalPersistStatus = "sequence_exhausted";
+        return;
+    }
+    const std::uint32_t expectedSequence = runtimeWatchdogJournalValid
+        ? runtimeWatchdogJournalRecord.sequence + 1U : 1U;
+    if (trace.journalSequence != expectedSequence) {
+        runtimeWatchdogJournalPersistStatus = "sequence_mismatch";
+        return;
+    }
+    const RuntimeWatchdogJournalRecord candidate =
+        leshy1::kernel::safety::makeRuntimeWatchdogJournalRecord(
+            trace.journalSequence, trace.appIdentity, trace.resetReason,
+            encodedReason,
+            trace.triggeredCpuMask, trace.stage, trace.page, trace.wifiView,
+            safetySupervisor.tripCount(), safetySupervisor.quiesceCount(),
+            LESHY1_VERSION, runningAppElfSha256);
+    if (!durableRuntimeWatchdogJournalValid(candidate)) {
+        runtimeWatchdogJournalPersistStatus = "candidate_invalid";
+        return;
+    }
+    runtimeWatchdogJournalNvsWriteAttempted = true;
+    if (!runtimeWatchdogJournalStore.save(candidate)) {
+        runtimeWatchdogJournalPersistStatus = "nvs_write_failed";
+        return;
+    }
+    runtimeWatchdogJournalRecord = candidate;
+    runtimeWatchdogJournalLoadStatus = RuntimeWatchdogJournalLoadStatus::Valid;
+    runtimeWatchdogJournalValid = true;
+    runtimeWatchdogJournalNvsWriteVerified = true;
+    runtimeWatchdogJournalPersistStatus = "written_verified";
+    runtimeWatchdogJournalSdStatus = "deferred_safe_mode";
+    confirmRuntimeWatchdogJournalCommitted();
+}
+
+void mirrorRuntimeWatchdogJournalToSdAtBoot() {
+    if (!runtimeWatchdogJournalValid) {
+        runtimeWatchdogJournalSdStatus = "no_valid_record";
+        return;
+    }
+    if (runtimeWatchdogJournalSdMirroredSequence ==
+        runtimeWatchdogJournalRecord.sequence) {
+        runtimeWatchdogJournalSdStatus = "already_mirrored";
+        return;
+    }
+    if (safetySupervisor.latched()) {
+        runtimeWatchdogJournalSdStatus = "deferred_safe_mode";
+        return;
+    }
+    if (!productBootRecovery.enrolled ||
+        !exactCidFingerprint(productBootRecovery.expectedFingerprint)) {
+        runtimeWatchdogJournalSdStatus = "deferred_unenrolled";
+        return;
+    }
+    if (!productBootRecovery.fingerprintMatched ||
+        !exactCidFingerprint(productBootRecovery.observedFingerprint) ||
+        std::strcmp(productBootRecovery.expectedFingerprint,
+                    productBootRecovery.observedFingerprint) != 0 ||
+        !productBootRecovery.cleanupComplete) {
+        runtimeWatchdogJournalSdStatus = "deferred_sd_unavailable";
+        return;
+    }
+    if (powerSafetyPolicy.writeDisposition() ==
+        leshy1::services::power::PowerWriteDisposition::ProhibitedLowVoltage) {
+        runtimeWatchdogJournalSdStatus = "deferred_power_unsafe";
+        return;
+    }
+
+    constexpr auto required = leshy1::storage::kSdIdentificationResources;
+    if (!resourceBroker.acquire(kCrashJournalOwner, required)) {
+        runtimeWatchdogJournalSdStatus = "deferred_resources_busy";
+        return;
+    }
+    updateRuntimeWatchdogContext(RuntimeWatchdogStage::CrashJournalSd);
+    const auto owned = resourceBroker.ownedBy(kCrashJournalOwner);
+    BoardSdSpiTransport identityTransport;
+    const bool identityBegun = identityTransport.begin();
+    leshy1::storage::SdTransportRunResult identity;
+    if (identityBegun) {
+        leshy1::storage::SdTransportRunPolicy policy;
+        policy.allowPhysical = true;
+        // Exact retained enrollment is the explicit target for this one-shot
+        // automatic diagnostic mirror; no ambient/removable card is accepted.
+        policy.explicitlySelected = true;
+        policy.identificationOnly = true;
+        policy.ownedResources = owned;
+        identity = leshy1::storage::runSdIdentificationStateMachine(
+            leshy1::storage::defaultSdIdentificationPlan(), identityTransport,
+            policy);
+        identityTransport.end();
+    }
+    const bool identityCleanup = identityTransport.cleanupComplete();
+    char observedFingerprint[33] = {};
+    formatCidFingerprint(identity.identity, observedFingerprint,
+                         sizeof(observedFingerprint));
+    feedRuntimeSafetyWatchdog();
+    if (!identityBegun || !identityCleanup ||
+        identity.status != leshy1::storage::SdTransportRunStatus::Valid ||
+        std::strcmp(productBootRecovery.expectedFingerprint,
+                    observedFingerprint) != 0) {
+        runtimeWatchdogJournalSdStatus = "deferred_identity_mismatch";
+        resourceBroker.releaseAll(kCrashJournalOwner);
+        return;
+    }
+
+    BoardSdFilesystem filesystem;
+    const bool mounted = filesystem.begin();
+    feedRuntimeSafetyWatchdog();
+    if (!mounted || filesystem.cardCapacityBytes() == 0U ||
+        filesystem.cardCapacityBytes() != identity.identity.capacityBytes ||
+        filesystem.cachedFreeBytes() < 4096U) {
+        runtimeWatchdogJournalSdStatus = mounted
+            ? "deferred_space_unavailable" : "deferred_mount_failed";
+        if (mounted) filesystem.end();
+        resourceBroker.releaseAll(kCrashJournalOwner);
+        return;
+    }
+
+    char json[512] = {};
+    const auto stage = static_cast<RuntimeWatchdogStage>(
+        runtimeWatchdogJournalRecord.stage);
+    const auto wifiView = static_cast<WifiProductView>(
+        runtimeWatchdogJournalRecord.wifiView);
+    const bool formatted =
+        leshy1::kernel::safety::formatRuntimeWatchdogJournalJson(
+            runtimeWatchdogJournalRecord, runtimeWatchdogStageName(stage),
+            wifiProductViewName(wifiView), json, sizeof(json));
+    runtimeWatchdogJournalSdWriteAttempted = formatted;
+    runtimeWatchdogJournalSdWriteStatus = formatted
+        ? runtimeWatchdogJournalStore.writeSd(
+              filesystem.driveNumber(), runtimeWatchdogJournalRecord.sequence,
+              json, std::strlen(json))
+        : RuntimeWatchdogJournalSdWriteStatus::InvalidInput;
+    filesystem.end();
+    const bool cleanup = filesystem.cleanupComplete();
+    resourceBroker.releaseAll(kCrashJournalOwner);
+    const bool leaseReleased =
+        resourceBroker.ownedBy(kCrashJournalOwner) == 0U;
+    feedRuntimeSafetyWatchdog();
+
+    const bool sdWritten =
+        runtimeWatchdogJournalSdWriteStatus ==
+            RuntimeWatchdogJournalSdWriteStatus::Written ||
+        runtimeWatchdogJournalSdWriteStatus ==
+            RuntimeWatchdogJournalSdWriteStatus::AlreadyPresent;
+    if (!formatted || !sdWritten || !cleanup || !leaseReleased) {
+        runtimeWatchdogJournalSdStatus = !cleanup || !leaseReleased
+            ? "sd_cleanup_failed"
+            : leshy1::platform::arduino::
+                  runtimeWatchdogJournalSdWriteStatusName(
+                      runtimeWatchdogJournalSdWriteStatus);
+        return;
+    }
+    if (!runtimeWatchdogJournalStore.saveSdMirroredSequence(
+            runtimeWatchdogJournalRecord.sequence)) {
+        runtimeWatchdogJournalSdStatus = "sd_written_marker_failed";
+        return;
+    }
+    runtimeWatchdogJournalSdMirroredSequence =
+        runtimeWatchdogJournalRecord.sequence;
+    runtimeWatchdogJournalSdStatus =
+        runtimeWatchdogJournalSdWriteStatus ==
+                RuntimeWatchdogJournalSdWriteStatus::AlreadyPresent
+            ? "already_present_verified" : "written_verified";
 }
 
 void clearRuntimeWatchdogTrace() {
     runtimeWatchdogTraceRtc.magic = 0;
     runtimeWatchdogTraceRtc.schema = 0;
+    runtimeWatchdogTraceRtc.journalSequence = 0;
+    runtimeWatchdogTraceRtc.journalSequenceInverse = 0;
     runtimeWatchdogTraceRtc.appIdentity = 0;
     runtimeWatchdogTraceRtc.appIdentityInverse = 0;
+    runtimeWatchdogTraceRtc.resetReason = 0;
+    runtimeWatchdogTraceRtc.resetReasonInverse = 0;
     runtimeWatchdogTraceRtc.triggeredCpuMask = 0;
     runtimeWatchdogTraceRtc.triggeredCpuMaskInverse = 0;
     runtimeWatchdogTraceRtc.stage = 0;
@@ -11512,6 +11835,8 @@ void clearRuntimeWatchdogTrace() {
     runtimeWatchdogTraceRtc.pageInverse = 0;
     runtimeWatchdogTraceRtc.wifiView = 0;
     runtimeWatchdogTraceRtc.wifiViewInverse = 0;
+    runtimeWatchdogTraceRtc.journalCommitted = 0;
+    runtimeWatchdogTraceRtc.journalCommittedInverse = 0;
 }
 
 void clearSafetyRetainedRecord() {
@@ -11664,6 +11989,11 @@ bool armRuntimeSafetyWatchdog() {
     }
     if (esp_task_wdt_reset() != ESP_OK) return false;
     runtimeSafetyAppIdentity = runningAppIdentity;
+    runtimeSafetyNextJournalSequence =
+        runtimeWatchdogJournalValid &&
+                runtimeWatchdogJournalRecord.sequence != UINT32_MAX
+            ? runtimeWatchdogJournalRecord.sequence + 1U
+            : (runtimeWatchdogJournalValid ? 0U : 1U);
     runtimeSafetyNextTripCount = safetySupervisor.tripCount() + 1U;
     runtimeSafetyNextQuiesceCount = safetySupervisor.quiesceCount() + 1U;
     __atomic_store_n(&runtimeSafetyWatchdogArmed, 1, __ATOMIC_RELEASE);
@@ -13238,6 +13568,14 @@ void emitSafetyState(Stream& reply) {
     const auto watchdogWifiView = watchdogTraceValid
         ? static_cast<WifiProductView>(watchdogTrace.wifiView)
         : WifiProductView::None;
+    const auto journalStage = runtimeWatchdogJournalValid
+        ? static_cast<RuntimeWatchdogStage>(
+              runtimeWatchdogJournalRecord.stage)
+        : RuntimeWatchdogStage::Unknown;
+    const auto journalWifiView = runtimeWatchdogJournalValid
+        ? static_cast<WifiProductView>(
+              runtimeWatchdogJournalRecord.wifiView)
+        : WifiProductView::None;
     std::uint64_t preparationNowUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     if (preparationNowUs < preparation.stageStartedUs) {
@@ -13246,8 +13584,8 @@ void emitSafetyState(Stream& reply) {
     const std::uint64_t preparationStageAgeMs =
         preparation.stageStartedUs == 0
             ? 0 : (preparationNowUs - preparation.stageStartedUs) / 1000ULL;
-    char line[1700] = {};
-    std::snprintf(
+    char line[2400] = {};
+    const int written = std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.safety.v1\",\"kind\":\"state\","
         "\"state\":\"%s\",\"reason\":\"%s\",\"armed\":%s,"
@@ -13256,6 +13594,7 @@ void emitSafetyState(Stream& reply) {
         "\"emergency_quiesce_count\":%lu,\"reset_reason_code\":%lu,"
         "\"watchdog_trace_valid\":%s,"
         "\"watchdog_triggered_cpu_mask\":%lu,"
+        "\"watchdog_incident_sequence\":%lu,"
         "\"watchdog_trip_stage\":\"%s\","
         "\"watchdog_trip_page\":%lu,"
         "\"watchdog_trip_wifi_view\":\"%s\","
@@ -13270,6 +13609,23 @@ void emitSafetyState(Stream& reply) {
         "\"worker_heartbeat_count\":%lu,\"worker_trip_count\":%lu,"
         "\"product_survey_preparation_stage\":\"%s\","
         "\"product_survey_preparation_stage_age_ms\":%llu,"
+        "\"watchdog_journal_present\":%s,"
+        "\"watchdog_journal_load_status\":\"%s\","
+        "\"watchdog_journal_persist_status\":\"%s\","
+        "\"watchdog_journal_nvs_write_attempted\":%s,"
+        "\"watchdog_journal_nvs_verified\":%s,"
+        "\"watchdog_journal_sequence\":%lu,"
+        "\"watchdog_journal_version\":\"%s\","
+        "\"watchdog_journal_app_elf_sha256\":\"%s\","
+        "\"watchdog_journal_reset_reason_code\":%lu,"
+        "\"watchdog_journal_triggered_cpu_mask\":%lu,"
+        "\"watchdog_journal_stage\":\"%s\","
+        "\"watchdog_journal_page\":%lu,"
+        "\"watchdog_journal_wifi_view\":\"%s\","
+        "\"watchdog_journal_sd_status\":\"%s\","
+        "\"watchdog_journal_sd_write_attempted\":%s,"
+        "\"watchdog_journal_sd_write_status\":\"%s\","
+        "\"watchdog_journal_sd_mirrored_sequence\":%lu,"
         "\"software_only\":true,\"physical_rail_kill_available\":false,"
         "\"thermal_sensor_available\":false,"
         "\"cc1101_hard_kill_available\":false,"
@@ -13287,6 +13643,8 @@ void emitSafetyState(Stream& reply) {
         watchdogTraceValid ? "true" : "false",
         static_cast<unsigned long>(
             watchdogTraceValid ? watchdogTrace.triggeredCpuMask : 0U),
+        static_cast<unsigned long>(
+            watchdogTraceValid ? watchdogTrace.journalSequence : 0U),
         runtimeWatchdogStageName(watchdogStage),
         static_cast<unsigned long>(
             watchdogTraceValid ? watchdogTrace.page : 0U),
@@ -13307,7 +13665,40 @@ void emitSafetyState(Stream& reply) {
         static_cast<unsigned long>(worker.heartbeatCount),
         static_cast<unsigned long>(worker.tripCount),
         preparation.stage,
-        static_cast<unsigned long long>(preparationStageAgeMs));
+        static_cast<unsigned long long>(preparationStageAgeMs),
+        runtimeWatchdogJournalValid ? "true" : "false",
+        leshy1::platform::arduino::runtimeWatchdogJournalLoadStatusName(
+            runtimeWatchdogJournalLoadStatus),
+        runtimeWatchdogJournalPersistStatus,
+        runtimeWatchdogJournalNvsWriteAttempted ? "true" : "false",
+        runtimeWatchdogJournalNvsWriteVerified ? "true" : "false",
+        static_cast<unsigned long>(runtimeWatchdogJournalValid
+            ? runtimeWatchdogJournalRecord.sequence : 0U),
+        runtimeWatchdogJournalValid
+            ? runtimeWatchdogJournalRecord.version : "",
+        runtimeWatchdogJournalValid
+            ? runtimeWatchdogJournalRecord.appElfSha256 : "",
+        static_cast<unsigned long>(runtimeWatchdogJournalValid
+            ? runtimeWatchdogJournalRecord.resetReason : 0U),
+        static_cast<unsigned long>(runtimeWatchdogJournalValid
+            ? runtimeWatchdogJournalRecord.triggeredCpuMask : 0U),
+        runtimeWatchdogStageName(journalStage),
+        static_cast<unsigned long>(runtimeWatchdogJournalValid
+            ? runtimeWatchdogJournalRecord.page : 0U),
+        wifiProductViewName(journalWifiView),
+        runtimeWatchdogJournalSdStatus,
+        runtimeWatchdogJournalSdWriteAttempted ? "true" : "false",
+        leshy1::platform::arduino::runtimeWatchdogJournalSdWriteStatusName(
+            runtimeWatchdogJournalSdWriteStatus),
+        static_cast<unsigned long>(
+            runtimeWatchdogJournalSdMirroredSequence));
+    if (written <= 0 ||
+        static_cast<std::size_t>(written) >= sizeof(line)) {
+        reply.println(
+            "{\"schema\":\"leshy.safety.v1\",\"kind\":\"error\","
+            "\"reason\":\"state_encoding_overflow\"}");
+        return;
+    }
     reply.println(line);
 }
 
@@ -44514,8 +44905,12 @@ void setup() {
         safetyWatchdogResetReason(bootMetrics.resetReason));
     if (safetySupervisor.latched()) {
         confirmRetainedSafetyLatch(retainedSafety);
+        feedEarlyBootGuard();
+        persistRuntimeWatchdogJournalAtBoot();
+        feedEarlyBootGuard();
     } else {
         clearSafetyRetainedRecord();
+        loadRuntimeWatchdogJournal();
     }
     bootMetrics.flashBytes = ESP.getFlashChipSize();
     bootMetrics.psramFound = psramFound();
@@ -44593,6 +44988,7 @@ void setup() {
         surveyDemoReady = prepareSurveyDemo();
         libraryDemoReady = prepareLibraryDemo();
         recoverProductCatalogAtBoot();
+        mirrorRuntimeWatchdogJournalToSdAtBoot();
         storageDiscovery = boardStorageAdapter.discoverReadOnly();
         storageDiscoveryReady =
             leshy1::storage::validateMediaDiscovery(storageDiscovery) ==

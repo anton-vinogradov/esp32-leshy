@@ -79,8 +79,8 @@ def main() -> int:
                 f"{name} applies identity only after radio start")
 
     for token in (
-        "ONLY THIS DEVICE CHANGES",
-        "NEARBY DEVICES UNTOUCHED",
+        "THIS DEVICE ONLY",
+        "OTHER DEVICES UNCHANGED",
         "RAM ONLY · RECOMMENDED",
         "NO EMULATION · NO EXPORT",
     ):

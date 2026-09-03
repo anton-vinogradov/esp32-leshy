@@ -71,6 +71,8 @@ class AirspaceRetentionTests(unittest.TestCase):
         self.app = positive_fixture.APP
         self.source = positive_fixture.SOURCE
         self.runner = positive_fixture.RUNNER_SHA
+        self.committed_runner_sha256 = acceptance.committed_runner_sha256
+        acceptance.committed_runner_sha256 = lambda _commit: self.runner
         self.failed_source = "a" * 40
         self.failed_241_source = "b" * 40
         self.delta = self.root / "delta239"
@@ -109,6 +111,7 @@ class AirspaceRetentionTests(unittest.TestCase):
             patcher.start()
 
     def tearDown(self) -> None:
+        acceptance.committed_runner_sha256 = self.committed_runner_sha256
         for patcher in reversed(self.patchers):
             patcher.stop()
         self.positive_case.tearDown()

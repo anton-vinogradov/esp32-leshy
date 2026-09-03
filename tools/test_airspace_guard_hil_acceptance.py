@@ -536,6 +536,8 @@ def run_record(firmware: str) -> dict[str, Any]:
 
 class AirspaceAcceptanceTests(unittest.TestCase):
     def setUp(self) -> None:
+        self.committed_runner_sha256 = CHECKER.committed_runner_sha256
+        CHECKER.committed_runner_sha256 = lambda _commit: RUNNER_SHA
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         self.bundle = self.root / "bundle"
@@ -551,6 +553,7 @@ class AirspaceAcceptanceTests(unittest.TestCase):
         self.screen_state_overrides: dict[str, dict[str, Any]] = {}
 
     def tearDown(self) -> None:
+        CHECKER.committed_runner_sha256 = self.committed_runner_sha256
         self.temporary.cleanup()
 
     def write_bundle(self) -> None:
@@ -809,7 +812,7 @@ class AirspaceAcceptanceTests(unittest.TestCase):
             "runner_source_sha256"] = stale
         self.write_bundle()
         failures = "\n".join(CHECKER.check(self.args()))
-        self.assertIn("current runner binding mismatch", failures)
+        self.assertIn("source-commit runner binding mismatch", failures)
 
     def test_missing_expectations_marker_fails_closed(self) -> None:
         self.write_bundle()

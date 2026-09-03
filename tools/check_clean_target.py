@@ -63,6 +63,10 @@ def main() -> int:
         TARGET / "src" / "platform" / "arduino" /
         "BoardInfraredReceiver.cpp"
     )
+    infrared_transmitter_adapter = (
+        TARGET / "src" / "platform" / "arduino" /
+        "BoardInfraredTransmitter.cpp"
+    )
     safe_outputs_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSafeOutputs.cpp"
     keypad_frontend_path = TARGET / "src" / "ui" / "Pcf8574ButtonInput.cpp"
     arduino_entry = TARGET / "src" / "platform" / "arduino" / "ArduinoEntry.cpp"
@@ -104,6 +108,7 @@ def main() -> int:
             nrf24_spectrum_adapter,
             cc1101_spectrum_adapter,
             infrared_receiver_adapter,
+            infrared_transmitter_adapter,
             safe_outputs_adapter,
         )
     )

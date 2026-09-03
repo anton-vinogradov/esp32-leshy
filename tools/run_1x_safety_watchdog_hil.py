@@ -28,9 +28,70 @@ from run_1x_product_survey_hil import (
 )
 
 
-RUN_SCHEMA = "leshy.safety_watchdog_hil.run.v1"
+RUN_SCHEMA = "leshy.safety_watchdog_hil.run.v2"
 WATCHDOG_RESET_REASONS = {4, 5, 6, 7}
 SOFTWARE_RESET_REASON = 3
+
+
+def journal_latched_failures(
+        state: dict[str, Any], expected_version: str,
+        app_identity: str, expected_sequence: int,
+        first_boot: bool) -> list[str]:
+    failures = expect(state, {
+        "watchdog_trace_valid": True,
+        "watchdog_incident_sequence": expected_sequence,
+        "watchdog_trip_stage": "console",
+        "watchdog_trip_wifi_view": "none",
+        "watchdog_journal_present": True,
+        "watchdog_journal_load_status": "valid",
+        "watchdog_journal_persist_status": (
+            "written_verified" if first_boot else "already_persisted"
+        ),
+        "watchdog_journal_nvs_write_attempted": first_boot,
+        "watchdog_journal_nvs_verified": True,
+        "watchdog_journal_sequence": expected_sequence,
+        "watchdog_journal_version": expected_version,
+        "watchdog_journal_app_elf_sha256": app_identity,
+        "watchdog_journal_reset_reason_code": 6,
+        "watchdog_journal_stage": "console",
+        "watchdog_journal_wifi_view": "none",
+        "watchdog_journal_sd_status": "deferred_safe_mode",
+        "watchdog_journal_sd_write_attempted": False,
+    }, "watchdog_journal_latched")
+    if state.get("watchdog_journal_triggered_cpu_mask", 0) == 0:
+        failures.append(
+            "watchdog_journal_latched.triggered_cpu_mask: expected nonzero"
+        )
+    if (state.get("watchdog_trip_page") !=
+            state.get("watchdog_journal_page")):
+        failures.append("watchdog journal changed the retained page")
+    if state.get("watchdog_journal_sd_mirrored_sequence") == expected_sequence:
+        failures.append("Safe Mode unexpectedly marked the incident on SD")
+    return failures
+
+
+def journal_final_failures(
+        state: dict[str, Any], expected_version: str,
+        app_identity: str, expected_sequence: int) -> list[str]:
+    return expect(state, {
+        "watchdog_trace_valid": False,
+        "watchdog_incident_sequence": 0,
+        "watchdog_journal_present": True,
+        "watchdog_journal_load_status": "valid",
+        "watchdog_journal_persist_status": "retained_verified",
+        "watchdog_journal_nvs_write_attempted": False,
+        "watchdog_journal_nvs_verified": True,
+        "watchdog_journal_sequence": expected_sequence,
+        "watchdog_journal_version": expected_version,
+        "watchdog_journal_app_elf_sha256": app_identity,
+        "watchdog_journal_reset_reason_code": 6,
+        "watchdog_journal_stage": "console",
+        "watchdog_journal_wifi_view": "none",
+        "watchdog_journal_sd_status": "written_verified",
+        "watchdog_journal_sd_write_attempted": True,
+        "watchdog_journal_sd_write_status": "written",
+        "watchdog_journal_sd_mirrored_sequence": expected_sequence,
+    }, "watchdog_journal_final")
 
 
 def main() -> int:
@@ -61,10 +122,12 @@ def main() -> int:
         parser.error(
             f"--source-commit {args.source_commit} does not match HEAD {head}"
         )
-    for diff_args in (["git", "diff", "--quiet"],
-                      ["git", "diff", "--cached", "--quiet"]):
-        if subprocess.run(diff_args, cwd=source_root, check=False).returncode != 0:
-            parser.error("tracked source changes must be committed before exact HIL")
+    source_status = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=source_root, check=True, stdout=subprocess.PIPE, text=True,
+    ).stdout.strip()
+    if source_status:
+        parser.error("source tree must be clean before exact HIL")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -80,10 +143,12 @@ def main() -> int:
     watchdog_raw = b""
     restart_raw = b""
     clear_raw = b""
+    flash_completed = False
 
     try:
         if args.flash:
             flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            flash_completed = True
             time.sleep(0.5)
 
         before_ready, before_recovery, before_timing = reset_capture(
@@ -111,6 +176,14 @@ def main() -> int:
             records["safety_before"] = query(
                 device, b"safety.state", "leshy.safety.v1", "state"
             )
+            prior_sequence = int(
+                records["safety_before"].get(
+                    "watchdog_journal_sequence", 0
+                )
+            )
+            expected_sequence = prior_sequence + 1
+            if prior_sequence >= 0xFFFFFFFF:
+                failures.append("watchdog journal sequence exhausted")
             records["ui_before"] = query(
                 device, b"ui.state", "leshy.ui.v1", "state"
             )
@@ -130,6 +203,12 @@ def main() -> int:
                 "cc1101_hard_kill_available": False,
                 "automatic_clear": False,
             }, "safety_before"))
+            if records["safety_before"].get(
+                    "watchdog_journal_present", False):
+                failures.extend(expect(records["safety_before"], {
+                    "watchdog_journal_load_status": "valid",
+                    "watchdog_journal_nvs_verified": True,
+                }, "journal_before"))
             failures.extend(expect(records["ui_before"], {
                 "page": "home", "safety_latched": False,
                 "runtime_owner": "none", "lease_mask": 0,
@@ -181,6 +260,10 @@ def main() -> int:
                 "runtime_owner": "none", "lease_mask": 0,
                 "automatic_clear": False,
             }, "safety_latched"))
+            failures.extend(journal_latched_failures(
+                records["safety_latched"], args.expected_version,
+                app_identity, expected_sequence, True,
+            ))
             failures.extend(expect(records["ui_latched"], {
                 "page": "safe_mode", "safety_latched": True,
                 "runtime_owner": "none", "lease_mask": 0,
@@ -238,6 +321,10 @@ def main() -> int:
                 "runtime_owner": "none", "lease_mask": 0,
                 "automatic_clear": False,
             }, "safety_after_latched_restart"))
+            failures.extend(journal_latched_failures(
+                records["safety_after_latched_restart"],
+                args.expected_version, app_identity, expected_sequence, False,
+            ))
             failures.extend(expect(
                 records["recovery_after_latched_restart"], {
                     "status": "safety_latched", "cleanup_complete": True,
@@ -289,6 +376,10 @@ def main() -> int:
             "trip_count": 0, "emergency_quiesce_count": 0,
             "runtime_owner": "none", "lease_mask": 0,
         }, "safety_final"))
+        failures.extend(journal_final_failures(
+            records["safety_final"], args.expected_version,
+            app_identity, expected_sequence,
+        ))
         failures.extend(expect(records["ui_final"], {
             "page": "home", "safety_latched": False,
             "runtime_owner": "none", "lease_mask": 0,
@@ -304,7 +395,7 @@ def main() -> int:
     result = {
         "schema": RUN_SCHEMA,
         "passed": not failures,
-        "gate_eligible": bool(args.flash) and not failures,
+        "gate_eligible": flash_completed and not failures,
         "failures": failures,
         "candidate": {
             "firmware_sha256": firmware_sha,
@@ -312,7 +403,8 @@ def main() -> int:
             "version": args.expected_version,
             "source_commit": args.source_commit,
             "runner_sha256": runner_sha,
-            "flashed": args.flash,
+            "flash_requested": args.flash,
+            "flashed": flash_completed,
         },
         "expected_cid": expected_cid,
         "watchdog_raw": {
