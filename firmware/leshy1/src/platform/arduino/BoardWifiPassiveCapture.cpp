@@ -415,6 +415,7 @@ bool BoardWifiPassiveCapture::beginDeviceMonitor(
     deviceQueueTail_ = 0;
     deviceQueueSize_ = 0;
     deviceStats_ = {};
+    nextDeviceDataInspectUs_ = startedUs;
     deviceStats_.cleanupComplete = false;
     deviceMonitor_ = true;
     deviceChannelLocked_ = false;
@@ -814,6 +815,7 @@ void BoardWifiPassiveCapture::reset() {
     currentChannel_ = 0;
     nextChannelUs_ = 0;
     channelLandedUs_ = 0;
+    nextDeviceDataInspectUs_ = 0;
     channelDwellMs_ = 0;
     lastError_ = 0;
     resetBeginDiagnostics();
@@ -1026,12 +1028,31 @@ void BoardWifiPassiveCapture::accept(void* buffer,
         return;
     }
     if (deviceMonitor_) {
+        std::uint64_t receivedUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (receivedUs == 0U) receivedUs = 1U;
+        // Management advertisements are sparse and carry the richest device
+        // identity, so inspect every one. Dense data traffic can otherwise
+        // keep the ESP-IDF Wi-Fi task continuously busy and starve IDLE0 long
+        // enough to trip the hardware Task WDT; sample that class at a fixed
+        // 1 kHz ceiling instead.
+        if (type == WIFI_PKT_DATA && receivedUs < nextDeviceDataInspectUs_) {
+            portENTER_CRITICAL(&mux_);
+            ++deviceStats_.framesReported;
+            ++deviceStats_.dataFramesThrottled;
+            portEXIT_CRITICAL(&mux_);
+            return;
+        }
+        if (type == WIFI_PKT_DATA) {
+            nextDeviceDataInspectUs_ =
+                receivedUs + kDeviceDataInspectIntervalUs;
+        }
         apps::wifi::WifiDeviceObservation observation{};
         const bool decoded = receiveValid &&
             apps::wifi::decodeWifiClientFrame(
                 packet->payload, packet->rx_ctrl.sig_len,
                 packet->rx_ctrl.rssi, packet->rx_ctrl.channel,
-                static_cast<std::uint64_t>(esp_timer_get_time()),
+                receivedUs,
                 &observation);
         portENTER_CRITICAL(&mux_);
         ++deviceStats_.framesReported;

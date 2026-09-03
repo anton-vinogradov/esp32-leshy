@@ -2715,6 +2715,61 @@ constexpr std::uint32_t kEarlyBootWatchdogTestRtcMagic = 0x4C425745U;
 constexpr std::uint32_t kEarlyBootGuardRtcMagic = 0x4C424747U;
 constexpr std::uint32_t kEarlyBootGuardTripRtcMagic = 0x4C424754U;
 constexpr std::uint32_t kEarlyBootGuardTimeoutMs = 5000U;
+constexpr std::uint32_t kRuntimeWatchdogTraceRtcMagic = 0x4C575431U;
+constexpr std::uint32_t kRuntimeWatchdogTraceSchema = 1U;
+
+enum class RuntimeWatchdogStage : std::uint32_t {
+    Unknown = 0,
+    LoopStart = 1,
+    WorkerDeadline = 2,
+    ProductSurveyWorker = 3,
+    WifiDevices = 4,
+    WifiChannels = 5,
+    AirspaceGuard = 6,
+    WifiAuthentication = 7,
+    WifiCapture = 8,
+    OtherServices = 9,
+    Console = 10,
+    Input = 11,
+    Yield = 12,
+};
+
+const char* runtimeWatchdogStageName(RuntimeWatchdogStage stage) {
+    switch (stage) {
+        case RuntimeWatchdogStage::LoopStart: return "loop_start";
+        case RuntimeWatchdogStage::WorkerDeadline: return "worker_deadline";
+        case RuntimeWatchdogStage::ProductSurveyWorker:
+            return "product_survey_worker";
+        case RuntimeWatchdogStage::WifiDevices: return "wifi_devices";
+        case RuntimeWatchdogStage::WifiChannels: return "wifi_channels";
+        case RuntimeWatchdogStage::AirspaceGuard: return "airspace_guard";
+        case RuntimeWatchdogStage::WifiAuthentication:
+            return "wifi_authentication";
+        case RuntimeWatchdogStage::WifiCapture: return "wifi_capture";
+        case RuntimeWatchdogStage::OtherServices: return "other_services";
+        case RuntimeWatchdogStage::Console: return "console";
+        case RuntimeWatchdogStage::Input: return "input";
+        case RuntimeWatchdogStage::Yield: return "yield";
+        case RuntimeWatchdogStage::Unknown:
+        default: return "unknown";
+    }
+}
+
+struct RuntimeWatchdogTraceRecord final {
+    std::uint32_t magic = 0;
+    std::uint32_t schema = 0;
+    std::uint32_t appIdentity = 0;
+    std::uint32_t appIdentityInverse = 0;
+    std::uint32_t triggeredCpuMask = 0;
+    std::uint32_t triggeredCpuMaskInverse = 0;
+    std::uint32_t stage = 0;
+    std::uint32_t stageInverse = 0;
+    std::uint32_t page = 0;
+    std::uint32_t pageInverse = 0;
+    std::uint32_t wifiView = 0;
+    std::uint32_t wifiViewInverse = 0;
+};
+
 RTC_NOINIT_ATTR std::uint32_t productBootRetryRtcMagic;
 RTC_NOINIT_ATTR volatile std::uint32_t productBootRetryRestarts;
 RTC_NOINIT_ATTR std::uint32_t productBootRetryAppIdentity;
@@ -2726,15 +2781,29 @@ RTC_NOINIT_ATTR volatile std::uint32_t earlyBootGuardRtcStateInverse;
 RTC_NOINIT_ATTR volatile std::uint32_t earlyBootGuardTripRtcState;
 RTC_NOINIT_ATTR volatile std::uint32_t earlyBootGuardTripRtcStateInverse;
 RTC_NOINIT_ATTR volatile SafetyRetainedRecord safetyRetainedRtc;
+RTC_NOINIT_ATTR volatile RuntimeWatchdogTraceRecord runtimeWatchdogTraceRtc;
 bool earlyBootGuardActive = false;
 bool earlyBootGuardTrippedAtBoot = false;
 volatile std::uint32_t runtimeSafetyWatchdogArmed = 0;
 volatile std::uint32_t runtimeSafetyAppIdentity = 0;
 volatile std::uint32_t runtimeSafetyNextTripCount = 1;
 volatile std::uint32_t runtimeSafetyNextQuiesceCount = 1;
+volatile std::uint32_t runtimeWatchdogCurrentStage =
+    static_cast<std::uint32_t>(RuntimeWatchdogStage::Unknown);
+volatile std::uint32_t runtimeWatchdogCurrentPage = 0;
+volatile std::uint32_t runtimeWatchdogCurrentWifiView =
+    static_cast<std::uint32_t>(WifiProductView::None);
 SafetySupervisor safetySupervisor;
 std::uint32_t runningAppIdentity = 0;
 bool runtimeSafetyWatchdogReady = false;
+
+void updateRuntimeWatchdogContext(RuntimeWatchdogStage stage) {
+    runtimeWatchdogCurrentPage = uiController.page();
+    runtimeWatchdogCurrentWifiView =
+        static_cast<std::uint32_t>(wifiProductView);
+    __atomic_store_n(&runtimeWatchdogCurrentStage,
+                     static_cast<std::uint32_t>(stage), __ATOMIC_RELEASE);
+}
 
 bool earlyBootGuardWatchdogReset(esp_reset_reason_t reason) {
     return reason == ESP_RST_PANIC || reason == ESP_RST_INT_WDT ||
@@ -3173,6 +3242,14 @@ struct ProductSurveyPreparationSnapshot final {
 constexpr UBaseType_t kProductSurveyWorkerEventCapacity = 8;
 constexpr UBaseType_t kProductSurveyObservationCapacity =
     leshy1::services::survey::SurveySession::kObservationCapacity;
+// Foreground work must always return to loop() before the 5 s hardware
+// watchdog window. Producers run concurrently, so "drain until empty" is not
+// a finite operation under sustained RF traffic even when each queue is
+// individually bounded.
+constexpr UBaseType_t kProductSurveyWorkerEventDrainBudget =
+    kProductSurveyWorkerEventCapacity;
+constexpr UBaseType_t kProductSurveyObservationDrainBudget = 16;
+constexpr std::size_t kWifiDeviceObservationDrainBudget = 16;
 // NimBLE's first process-lifetime initialization consumes roughly 71.8 KiB
 // of the no-PSRAM DIV's internal heap.  Product Survey historically kept a
 // 64-record ingress queue alive at the same time even though physical BLE HIL
@@ -4783,7 +4860,10 @@ FieldSurveyStationCaptureResult captureFieldSurveyStations() {
     while (nowUs < deadlineUs && !productSurveyStopRequested()) {
         wifiFrameCapture.service(nowUs);
         WifiDeviceObservation observation{};
-        while (wifiFrameCapture.pollDevice(&observation)) {
+        for (std::size_t drained = 0U;
+             drained < kWifiDeviceObservationDrainBudget &&
+             wifiFrameCapture.pollDevice(&observation);
+             ++drained) {
             retainFieldSurveyStationObservation(observation, &catalogDrops);
             observation = {};
         }
@@ -4792,14 +4872,20 @@ FieldSurveyStationCaptureResult captureFieldSurveyStations() {
         nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
         if (nowUs == 0U) nowUs = 1U;
     }
+    const auto monitor = wifiFrameCapture.deviceMonitorStats();
+    // Stop the producer before the final finite drain. This gives the retained
+    // queue a stable upper bound and prevents a busy environment from refilling
+    // it forever while the survey worker tries to finish a scan cycle.
+    result.cleanupComplete = wifiFrameCapture.stop(nowUs) &&
+        wifiFrameCapture.cleanupComplete();
     WifiDeviceObservation observation{};
-    while (wifiFrameCapture.pollDevice(&observation)) {
+    for (std::size_t drained = 0U;
+         drained < BoardWifiPassiveCapture::kDeviceQueueCapacity &&
+         wifiFrameCapture.pollDevice(&observation);
+         ++drained) {
         retainFieldSurveyStationObservation(observation, &catalogDrops);
         observation = {};
     }
-    const auto monitor = wifiFrameCapture.deviceMonitorStats();
-    result.cleanupComplete = wifiFrameCapture.stop(nowUs) &&
-        wifiFrameCapture.cleanupComplete();
     result.uniqueStations = static_cast<std::uint16_t>(
         wifiDeviceCatalog.size());
     result.durationUs = nowUs >= startedUs ? nowUs - startedUs : 0U;
@@ -6533,14 +6619,18 @@ bool recordProductSurveyTimelineDrops(RadioKind source, std::uint16_t count,
     return true;
 }
 
-bool drainProductSurveyWorkerObservations() {
+bool drainProductSurveyWorkerObservations(
+    UBaseType_t budget = kProductSurveyObservationDrainBudget) {
     if (productSurveyObservations == nullptr ||
         surveyWorkflow.state() != SurveyWorkflowState::Running) {
         return false;
     }
     bool changed = false;
     Observation observation;
-    while (xQueueReceive(productSurveyObservations, &observation, 0) == pdTRUE) {
+    for (UBaseType_t drained = 0U;
+         drained < budget &&
+         xQueueReceive(productSurveyObservations, &observation, 0) == pdTRUE;
+         ++drained) {
         const Observation* selectedWifi =
             wifiNetworkFocus.userOwned()
                 ? wifiNetworkAt(wifiNetworkSelection) : nullptr;
@@ -6612,7 +6702,8 @@ bool closeProductSurveyScanWindow(
     if (event.scanStartedUs == 0 || event.scanEndedUs < event.scanStartedUs) {
         return true;
     }
-    drainProductSurveyWorkerObservations();
+    drainProductSurveyWorkerObservations(
+        kProductSurveyObservationCapacity);
     if (!productSurveyRuntime.timelineHealthy) return false;
     if (!recordProductSurveyTimelineDrops(event.source, event.scanDropped,
                                           event.scanEndedUs)) {
@@ -7693,7 +7784,10 @@ void serviceProductSurveyWorker() {
     expireWifiAuthenticationSurveyTerminalHold();
     bool render = false;
     ProductSurveyWorkerEvent event;
-    while (xQueuePeek(productSurveyWorkerEvents, &event, 0) == pdTRUE) {
+    for (UBaseType_t drained = 0U;
+         drained < kProductSurveyWorkerEventDrainBudget &&
+         xQueuePeek(productSurveyWorkerEvents, &event, 0) == pdTRUE;
+         ++drained) {
         const bool terminalEvent =
             event.kind == ProductSurveyWorkerEventKind::Paused ||
             event.kind == ProductSurveyWorkerEventKind::Stopped ||
@@ -11204,7 +11298,23 @@ void IRAM_ATTR quiesceEmergencyGpioFromIsr() {
     GPIO.out1_w1tc.val = (1U << (47U - 32U));
 }
 
-bool IRAM_ATTR recordRuntimeSafetyWatchdogTrip() {
+bool IRAM_ATTR runtimeWatchdogTraceAlreadyRetained(
+    std::uint32_t appIdentity) {
+    return runtimeWatchdogTraceRtc.magic == kRuntimeWatchdogTraceRtcMagic &&
+        runtimeWatchdogTraceRtc.schema == kRuntimeWatchdogTraceSchema &&
+        runtimeWatchdogTraceRtc.appIdentity == appIdentity &&
+        runtimeWatchdogTraceRtc.appIdentityInverse == ~appIdentity &&
+        runtimeWatchdogTraceRtc.triggeredCpuMaskInverse ==
+            ~runtimeWatchdogTraceRtc.triggeredCpuMask &&
+        runtimeWatchdogTraceRtc.stageInverse ==
+            ~runtimeWatchdogTraceRtc.stage &&
+        runtimeWatchdogTraceRtc.pageInverse == ~runtimeWatchdogTraceRtc.page &&
+        runtimeWatchdogTraceRtc.wifiViewInverse ==
+            ~runtimeWatchdogTraceRtc.wifiView;
+}
+
+bool IRAM_ATTR recordRuntimeSafetyWatchdogTrip(
+    std::uint32_t triggeredCpuMask) {
     if (__atomic_exchange_n(&runtimeSafetyWatchdogArmed, 0,
                             __ATOMIC_ACQ_REL) == 0) {
         return false;
@@ -11215,6 +11325,29 @@ bool IRAM_ATTR recordRuntimeSafetyWatchdogTrip() {
         static_cast<std::uint32_t>(SafetyReason::RuntimeWatchdog);
     const std::uint32_t tripCount = runtimeSafetyNextTripCount;
     const std::uint32_t quiesceCount = runtimeSafetyNextQuiesceCount;
+    // Preserve the first valid trip for this exact app. A second watchdog in
+    // the post-reset safe screen must not erase the page and stage that caused
+    // the original failure.
+    if (!runtimeWatchdogTraceAlreadyRetained(appIdentity)) {
+        const std::uint32_t stage = __atomic_load_n(
+            &runtimeWatchdogCurrentStage, __ATOMIC_ACQUIRE);
+        const std::uint32_t page = runtimeWatchdogCurrentPage;
+        const std::uint32_t wifiView = runtimeWatchdogCurrentWifiView;
+        runtimeWatchdogTraceRtc.magic = 0;
+        runtimeWatchdogTraceRtc.schema = kRuntimeWatchdogTraceSchema;
+        runtimeWatchdogTraceRtc.appIdentity = appIdentity;
+        runtimeWatchdogTraceRtc.appIdentityInverse = ~appIdentity;
+        runtimeWatchdogTraceRtc.triggeredCpuMask = triggeredCpuMask;
+        runtimeWatchdogTraceRtc.triggeredCpuMaskInverse = ~triggeredCpuMask;
+        runtimeWatchdogTraceRtc.stage = stage;
+        runtimeWatchdogTraceRtc.stageInverse = ~stage;
+        runtimeWatchdogTraceRtc.page = page;
+        runtimeWatchdogTraceRtc.pageInverse = ~page;
+        runtimeWatchdogTraceRtc.wifiView = wifiView;
+        runtimeWatchdogTraceRtc.wifiViewInverse = ~wifiView;
+        __atomic_thread_fence(__ATOMIC_RELEASE);
+        runtimeWatchdogTraceRtc.magic = kRuntimeWatchdogTraceRtcMagic;
+    }
     // Invalidate first and publish magic last. Complements reject a reset in
     // the middle of this bounded RTC write sequence.
     safetyRetainedRtc.magic = 0;
@@ -11234,12 +11367,21 @@ bool IRAM_ATTR recordRuntimeSafetyWatchdogTrip() {
     return true;
 }
 
+void IRAM_ATTR ignoreTaskWatchdogMessage(void*, const char*) {}
+
 extern "C" void IRAM_ATTR esp_task_wdt_isr_user_handler() {
     // The Task WDT ISR is the last-resort path when the scheduler-based
     // watchdog cannot run. Only claim the already armed recovery attempt and
     // retain its reason; the configured panic path performs the reset.
     if (!recordProductBootRecoveryTimeout()) {
-        recordRuntimeSafetyWatchdogTrip();
+        // Safety outputs take priority over diagnostic enrichment. Quiesce
+        // before asking ESP-IDF which subscribed CPU missed its deadline.
+        quiesceEmergencyGpioFromIsr();
+        int triggeredCpuMask = 0;
+        (void)esp_task_wdt_print_triggered_tasks(
+            ignoreTaskWatchdogMessage, nullptr, &triggeredCpuMask);
+        recordRuntimeSafetyWatchdogTrip(
+            static_cast<std::uint32_t>(triggeredCpuMask));
     }
 }
 
@@ -11323,6 +11465,55 @@ SafetyRetainedRecord snapshotSafetyRetainedRecord() {
     return record;
 }
 
+RuntimeWatchdogTraceRecord snapshotRuntimeWatchdogTrace() {
+    RuntimeWatchdogTraceRecord record{};
+    record.magic = runtimeWatchdogTraceRtc.magic;
+    record.schema = runtimeWatchdogTraceRtc.schema;
+    record.appIdentity = runtimeWatchdogTraceRtc.appIdentity;
+    record.appIdentityInverse = runtimeWatchdogTraceRtc.appIdentityInverse;
+    record.triggeredCpuMask = runtimeWatchdogTraceRtc.triggeredCpuMask;
+    record.triggeredCpuMaskInverse =
+        runtimeWatchdogTraceRtc.triggeredCpuMaskInverse;
+    record.stage = runtimeWatchdogTraceRtc.stage;
+    record.stageInverse = runtimeWatchdogTraceRtc.stageInverse;
+    record.page = runtimeWatchdogTraceRtc.page;
+    record.pageInverse = runtimeWatchdogTraceRtc.pageInverse;
+    record.wifiView = runtimeWatchdogTraceRtc.wifiView;
+    record.wifiViewInverse = runtimeWatchdogTraceRtc.wifiViewInverse;
+    return record;
+}
+
+bool runtimeWatchdogTraceValid(const RuntimeWatchdogTraceRecord& record,
+                               std::uint32_t appIdentity) {
+    return record.magic == kRuntimeWatchdogTraceRtcMagic &&
+        record.schema == kRuntimeWatchdogTraceSchema &&
+        record.appIdentity == appIdentity &&
+        record.appIdentityInverse == ~record.appIdentity &&
+        record.triggeredCpuMaskInverse == ~record.triggeredCpuMask &&
+        record.stageInverse == ~record.stage &&
+        record.pageInverse == ~record.page &&
+        record.wifiViewInverse == ~record.wifiView &&
+        record.stage <= static_cast<std::uint32_t>(
+            RuntimeWatchdogStage::Yield) &&
+        record.wifiView <= static_cast<std::uint32_t>(
+            WifiProductView::AirspaceGuard);
+}
+
+void clearRuntimeWatchdogTrace() {
+    runtimeWatchdogTraceRtc.magic = 0;
+    runtimeWatchdogTraceRtc.schema = 0;
+    runtimeWatchdogTraceRtc.appIdentity = 0;
+    runtimeWatchdogTraceRtc.appIdentityInverse = 0;
+    runtimeWatchdogTraceRtc.triggeredCpuMask = 0;
+    runtimeWatchdogTraceRtc.triggeredCpuMaskInverse = 0;
+    runtimeWatchdogTraceRtc.stage = 0;
+    runtimeWatchdogTraceRtc.stageInverse = 0;
+    runtimeWatchdogTraceRtc.page = 0;
+    runtimeWatchdogTraceRtc.pageInverse = 0;
+    runtimeWatchdogTraceRtc.wifiView = 0;
+    runtimeWatchdogTraceRtc.wifiViewInverse = 0;
+}
+
 void clearSafetyRetainedRecord() {
     safetyRetainedRtc.magic = 0;
     safetyRetainedRtc.schema = 0;
@@ -11336,6 +11527,7 @@ void clearSafetyRetainedRecord() {
     safetyRetainedRtc.quiesceCountInverse = 0;
     safetyRetainedRtc.latchConfirmed = 0;
     safetyRetainedRtc.latchConfirmedInverse = 0;
+    clearRuntimeWatchdogTrace();
 }
 
 void persistSafetyStop(SafetyReason reason, std::uint32_t tripCount,
@@ -13036,6 +13228,16 @@ void emitSafetyState(Stream& reply) {
     const WorkerDeadlineSnapshot worker = workerDeadlineSnapshot();
     const ProductSurveyPreparationSnapshot preparation =
         productSurveyPreparationSnapshot();
+    const RuntimeWatchdogTraceRecord watchdogTrace =
+        snapshotRuntimeWatchdogTrace();
+    const bool watchdogTraceValid = runtimeWatchdogTraceValid(
+        watchdogTrace, runningAppIdentity);
+    const auto watchdogStage = watchdogTraceValid
+        ? static_cast<RuntimeWatchdogStage>(watchdogTrace.stage)
+        : RuntimeWatchdogStage::Unknown;
+    const auto watchdogWifiView = watchdogTraceValid
+        ? static_cast<WifiProductView>(watchdogTrace.wifiView)
+        : WifiProductView::None;
     std::uint64_t preparationNowUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     if (preparationNowUs < preparation.stageStartedUs) {
@@ -13044,7 +13246,7 @@ void emitSafetyState(Stream& reply) {
     const std::uint64_t preparationStageAgeMs =
         preparation.stageStartedUs == 0
             ? 0 : (preparationNowUs - preparation.stageStartedUs) / 1000ULL;
-    char line[1400] = {};
+    char line[1700] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.safety.v1\",\"kind\":\"state\","
@@ -13052,6 +13254,12 @@ void emitSafetyState(Stream& reply) {
         "\"latched\":%s,\"clear_pending\":%s,"
         "\"watchdog_timeout_ms\":%lu,\"trip_count\":%lu,"
         "\"emergency_quiesce_count\":%lu,\"reset_reason_code\":%lu,"
+        "\"watchdog_trace_valid\":%s,"
+        "\"watchdog_triggered_cpu_mask\":%lu,"
+        "\"watchdog_trip_stage\":\"%s\","
+        "\"watchdog_trip_page\":%lu,"
+        "\"watchdog_trip_wifi_view\":\"%s\","
+        "\"watchdog_first_trip_preserved\":true,"
         "\"startup_guard_tripped\":%s,"
         "\"buzzer_inactive\":%s,\"nrf_ce_inactive\":%s,"
         "\"runtime_owner\":\"%s\",\"lease_mask\":%lu,"
@@ -13076,6 +13284,13 @@ void emitSafetyState(Stream& reply) {
         static_cast<unsigned long>(safetySupervisor.tripCount()),
         static_cast<unsigned long>(safetySupervisor.quiesceCount()),
         static_cast<unsigned long>(bootMetrics.resetReason),
+        watchdogTraceValid ? "true" : "false",
+        static_cast<unsigned long>(
+            watchdogTraceValid ? watchdogTrace.triggeredCpuMask : 0U),
+        runtimeWatchdogStageName(watchdogStage),
+        static_cast<unsigned long>(
+            watchdogTraceValid ? watchdogTrace.page : 0U),
+        wifiProductViewName(watchdogWifiView),
         earlyBootGuardTrippedAtBoot ? "true" : "false",
         BoardSafeOutputs::buzzerHeldInactive() ? "true" : "false",
         BoardSafeOutputs::radioTransmitPathsHeldInactive() ? "true" : "false",
@@ -29980,7 +30195,10 @@ void serviceWifiDevicesProduct() {
         ? std::array<std::uint8_t, 6>{} : selected->address;
     const bool selectionAnchored = selected != nullptr;
     WifiDeviceObservation observation{};
-    while (wifiFrameCapture.pollDevice(&observation)) {
+    for (std::size_t drained = 0U;
+         drained < kWifiDeviceObservationDrainBudget &&
+         wifiFrameCapture.pollDevice(&observation);
+         ++drained) {
         const std::size_t existingIndex =
             wifiDeviceCatalog.indexOfAddress(observation.address);
         if (wifiDeviceNavigationOrder.locked() &&
@@ -44682,6 +44900,7 @@ void setup() {
 void loop() {
     const std::uint64_t loopStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
+    updateRuntimeWatchdogContext(RuntimeWatchdogStage::LoopStart);
     if (activeReceiveSampling()) {
         if (spectrumLoopPreviousUs != 0) {
             const std::uint64_t intervalUs =
@@ -44694,6 +44913,7 @@ void loop() {
         spectrumLoopPreviousUs = loopStartedUs;
         ++spectrumLoopCount;
     }
+    updateRuntimeWatchdogContext(RuntimeWatchdogStage::WorkerDeadline);
     serviceWorkerDeadlineSupervisor();
     serviceDeviceLock();
     serviceSerialConsoleAction();
@@ -44708,15 +44928,24 @@ void loop() {
     }
     if (!safetySupervisor.latched()) {
         serviceAutomationPackageUi();
+        updateRuntimeWatchdogContext(
+            RuntimeWatchdogStage::ProductSurveyWorker);
         serviceProductSurveyWorker();
         serviceBleDeviceUiRefresh();
         serviceBleGattProduct();
+        updateRuntimeWatchdogContext(RuntimeWatchdogStage::WifiDevices);
         serviceWifiDevicesProduct();
+        updateRuntimeWatchdogContext(RuntimeWatchdogStage::WifiChannels);
         serviceWifiChannelsProduct();
+        updateRuntimeWatchdogContext(RuntimeWatchdogStage::AirspaceGuard);
         serviceAirspaceGuardProduct();
+        updateRuntimeWatchdogContext(
+            RuntimeWatchdogStage::WifiAuthentication);
         serviceWifiAuthenticationCapture();
+        updateRuntimeWatchdogContext(RuntimeWatchdogStage::WifiCapture);
         serviceWifiFrameCapture();
         serviceWifiFrameCapturePersist();
+        updateRuntimeWatchdogContext(RuntimeWatchdogStage::OtherServices);
         serviceSubGhzRawCapturePersist();
         serviceInfraredRawCapturePersist();
         serviceTargetsMutationWorker();
@@ -44748,6 +44977,7 @@ void loop() {
     // fake pulse. Commands remain buffered by USB/UART and are answered after
     // the terminal gap; no evidence path is allowed to perturb the waveform.
     if (!rawPulseTimingCritical) {
+        updateRuntimeWatchdogContext(RuntimeWatchdogStage::Console);
         poll(Serial, usbCommand, usbLength, sizeof(usbCommand), true,
              usbCommandOverflow);
         poll(Serial0, uartCommand, uartLength, sizeof(uartCommand), false,
@@ -44756,6 +44986,7 @@ void loop() {
     TouchPoint touchPress;
     const std::uint64_t touchStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
+    updateRuntimeWatchdogContext(RuntimeWatchdogStage::Input);
     // The RAW page has no touch action. Avoid sharing the display/touch SPI
     // path while the receiver is waiting for or timing a burst.
     const bool touchPressed = !safetySupervisor.latched() &&
@@ -44810,8 +45041,10 @@ void loop() {
     if (activeReceiveSampling()) {
         // The receiver itself now clocks the waterfall: yield to the RTOS but
         // do not add an artificial per-bin delay to a physical sweep.
+        updateRuntimeWatchdogContext(RuntimeWatchdogStage::Yield);
         yield();
     } else {
+        updateRuntimeWatchdogContext(RuntimeWatchdogStage::Yield);
         delay(2);
     }
 }

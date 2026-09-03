@@ -38,11 +38,18 @@ const char* boardWifiPassiveBeginFailureStageName(
 
 class BoardWifiPassiveCapture final {
 public:
+    // The producer lives in the ESP-IDF Wi-Fi task. Keep its retained queue
+    // finite and expose the exact bound so every consumer can drain it with a
+    // finite budget as well.
+    static constexpr std::size_t kDeviceQueueCapacity = 64;
+    static constexpr std::uint64_t kDeviceDataInspectIntervalUs = 1000ULL;
+
     struct DeviceMonitorStats final {
         std::uint32_t framesReported = 0;
         std::uint32_t clientsAccepted = 0;
         std::uint32_t clientsDropped = 0;
         std::uint32_t ignoredFrames = 0;
+        std::uint32_t dataFramesThrottled = 0;
         std::uint32_t channelHops = 0;
         bool active = false;
         bool cleanupComplete = true;
@@ -183,7 +190,6 @@ private:
     static std::uint32_t callbacksInFlight_;
     mutable portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
     apps::capture::WifiFrameCapture capture_{};
-    static constexpr std::size_t kDeviceQueueCapacity = 64;
     std::array<apps::wifi::WifiDeviceObservation,
                kDeviceQueueCapacity> deviceQueue_{};
     DeviceMonitorStats deviceStats_{};
@@ -214,6 +220,7 @@ private:
     std::uint8_t currentChannel_ = 0;
     std::uint64_t nextChannelUs_ = 0;
     std::uint64_t channelLandedUs_ = 0;
+    std::uint64_t nextDeviceDataInspectUs_ = 0;
     std::uint16_t channelDwellMs_ = 0;
     int lastError_ = 0;
     int beginDriverError_ = 0;

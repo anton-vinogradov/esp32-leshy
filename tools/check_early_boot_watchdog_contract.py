@@ -43,8 +43,15 @@ def main() -> int:
         '\\"stage\\":\\"before_setup\\"',
         "earlyBootWatchdogTestRtcState = 0",
         "while (true) esp_rom_delay_us(100000)",
-        "recordRuntimeSafetyWatchdogTrip()",
+        "recordRuntimeSafetyWatchdogTrip(",
         "quiesceEmergencyGpioFromIsr()",
+        "RTC_NOINIT_ATTR volatile RuntimeWatchdogTraceRecord",
+        "esp_task_wdt_print_triggered_tasks(",
+        "watchdog_triggered_cpu_mask",
+        "watchdog_trip_stage",
+        "watchdog_trip_page",
+        "watchdog_trip_wifi_view",
+        "watchdog_first_trip_preserved",
     ):
         require(token in text, f"missing {token!r}")
     print(

@@ -29,8 +29,8 @@ def main() -> int:
         "WifiProductView::DeviceDetail",
         "startWifiDevicesProduct()",
         "serviceWifiDevicesProduct()",
-        "renderWifiDevicesData();",
-        "renderWifiDeviceRow(index, currentFirst);",
+        "renderWifiDevicesData(bool force = false)",
+        "renderWifiDeviceRow(first + slot, first, force)",
         "wifiProductView == WifiProductView::Devices",
         "wifi_device_monitor_active",
         "wifi_devices_strongest_first",
@@ -50,6 +50,8 @@ def main() -> int:
         "wifiFrameCapture.unlockDeviceChannel(nowUs)",
         "wifiOuiDatabase.lookup(",
         "wifi_device_detail_wps_identity_known",
+        "kWifiDeviceObservationDrainBudget = 16",
+        "drained < kWifiDeviceObservationDrainBudget",
     )
     required_catalog = (
         "static constexpr std::size_t kCapacity = 32",
@@ -82,6 +84,9 @@ def main() -> int:
         "WIFI_STORAGE_RAM",
         "lockDeviceChannel",
         "deviceChannelLocked_",
+        "kDeviceDataInspectIntervalUs = 1000ULL",
+        "dataFramesThrottled",
+        "receivedUs < nextDeviceDataInspectUs_",
     )
     forbidden_adapter = (
         "esp_wifi_connect(",
@@ -118,6 +123,8 @@ def main() -> int:
         f"adapter contains active/TX path: {token}"
         for token in forbidden_adapter if token in adapter_cpp
     )
+    if "while (wifiFrameCapture.pollDevice(&observation))" in renderer:
+        failures.append("renderer contains an unbounded live device queue drain")
     failures.extend(
         f"string token missing: {token}"
         for token in required_strings if token not in strings
