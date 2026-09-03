@@ -69,13 +69,17 @@ bool BoardTouchInput::poll(std::uint32_t nowMs, ui::TouchPoint* press) {
     // that stalls the foreground loop for about 13 ms, which is longer than
     // one pixel-row period of the live waterfall.  A single raw-Z transaction
     // is enough to reject the overwhelmingly common idle case.  Keep the
-    // library's full validation for every plausible press, and use its lower
-    // continuation threshold while a press is already debounced.
-    const std::uint16_t threshold = input_.pressed()
-        ? 20U : kPressureThreshold;
-    const bool pressurePresent = display_->getTouchRawZ() > threshold;
+    // library's full validation for every plausible press. A new contact can
+    // ramp through 20..80 between loop iterations, so the cheap candidate
+    // gate must be lower than the acceptance gate. Coordinates still require
+    // the original 80 threshold; only a validated ongoing press uses the
+    // library's 20 continuation threshold.
+    const std::uint16_t validationThreshold = input_.pressed()
+        ? kCandidatePressureThreshold : kPressureThreshold;
+    const bool pressurePresent =
+        display_->getTouchRawZ() > kCandidatePressureThreshold;
     const bool touched = pressurePresent &&
-        display_->getTouch(&x, &y, kPressureThreshold) != 0;
+        display_->getTouch(&x, &y, validationThreshold) != 0;
     return input_.sample(touched, x, y, nowMs, press);
 }
 

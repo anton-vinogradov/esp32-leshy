@@ -30,6 +30,9 @@ public:
     static constexpr std::uint16_t pressureThreshold() {
         return kPressureThreshold;
     }
+    static constexpr std::uint16_t candidatePressureThreshold() {
+        return kCandidatePressureThreshold;
+    }
     const std::uint16_t* calibration() const { return calibration_; }
     TouchCalibrationSource calibrationSource() const { return source_; }
     const ui::TouchInputMetrics& metrics() const { return input_.metrics(); }
@@ -42,6 +45,12 @@ private:
     // Board-01 idle pressure is 3..14. Calibration uses 175 internally; 80
     // retains ample noise margin while accepting normal finger pressure.
     static constexpr std::uint16_t kPressureThreshold = 80;
+    // A fresh resistive contact ramps through values below the validation
+    // threshold. Use 20 only to start TFT_eSPI's bounded five-sample
+    // validator; no coordinate or action is accepted below 80. This preserves
+    // the idle fast path while preventing a light first tap after a long idle
+    // from being discarded before validation has a chance to observe it.
+    static constexpr std::uint16_t kCandidatePressureThreshold = 20;
     static constexpr std::uint16_t kDefaultCalibration[5] = {
         300, 3600, 300, 3600, 3,
     };

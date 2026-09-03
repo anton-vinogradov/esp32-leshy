@@ -68,6 +68,9 @@ def main() -> int:
         "BoardInfraredTransmitter.cpp"
     )
     safe_outputs_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSafeOutputs.cpp"
+    touch_adapter_path = (
+        TARGET / "src" / "platform" / "arduino" / "BoardTouchInput.cpp"
+    )
     keypad_frontend_path = TARGET / "src" / "ui" / "Pcf8574ButtonInput.cpp"
     arduino_entry = TARGET / "src" / "platform" / "arduino" / "ArduinoEntry.cpp"
     survey_workflow_path = TARGET / "src" / "apps" / "survey" / "SurveyWorkflow.cpp"
@@ -365,6 +368,23 @@ def main() -> int:
                                    loop_body.find("delay(2);")]
         if "broadcast(" in input_dispatch or "println(" in input_dispatch:
             errors.append("physical keypad hot path contains blocking serial output")
+
+    if not touch_adapter_path.is_file():
+        errors.append("physical touch adapter is missing")
+    else:
+        touch_adapter = touch_adapter_path.read_text(encoding="utf-8")
+        touch_header = touch_adapter_path.with_suffix(".h").read_text(
+            encoding="utf-8")
+        for marker in (
+            "kPressureThreshold = 80",
+            "kCandidatePressureThreshold = 20",
+            "getTouchRawZ() > kCandidatePressureThreshold",
+            "display_->getTouch(&x, &y, validationThreshold)",
+            "input_.pressed()",
+        ):
+            if marker not in touch_adapter + "\n" + touch_header:
+                errors.append(
+                    f"physical touch first-contact contract is missing: {marker}")
 
     if not survey_workflow_path.is_file():
         errors.append("product Survey workflow is missing")

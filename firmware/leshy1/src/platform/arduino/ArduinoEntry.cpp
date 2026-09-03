@@ -34173,14 +34173,15 @@ void emitTouchState(Stream& reply) {
     const auto& metrics = boardTouchInput.metrics();
     const std::uint16_t rawPressure = boardTouchInput.rawPressure();
     const std::uint16_t* calibration = boardTouchInput.calibration();
-    char line[640] = {};
+    char line[704] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.touch.frontend.v1\",\"kind\":\"state\","
         "\"status\":\"%s\",\"calibration_source\":\"%s\","
         "\"calibration_required_at_boot\":%s,"
         "\"calibration_succeeded_at_boot\":%s,"
-        "\"pressure_threshold\":%u,\"raw_pressure\":%u,"
+        "\"pressure_threshold\":%u,"
+        "\"candidate_pressure_threshold\":%u,\"raw_pressure\":%u,"
         "\"calibration\":[%u,%u,%u,%u,%u],"
         "\"release_debounce_ms\":%lu,"
         "\"samples\":%lu,\"touched_samples\":%lu,"
@@ -34196,6 +34197,8 @@ void emitTouchState(Stream& reply) {
         touchCalibrationRequiredAtBoot ? "true" : "false",
         touchCalibrationSucceededAtBoot ? "true" : "false",
         static_cast<unsigned>(BoardTouchInput::pressureThreshold()),
+        static_cast<unsigned>(
+            BoardTouchInput::candidatePressureThreshold()),
         static_cast<unsigned>(rawPressure),
         static_cast<unsigned>(calibration[0]),
         static_cast<unsigned>(calibration[1]),
