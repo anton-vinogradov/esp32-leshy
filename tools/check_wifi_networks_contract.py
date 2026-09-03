@@ -125,6 +125,20 @@ def main() -> int:
         f"string token missing: {token}"
         for token in required_strings if token not in strings
     )
+    if 'LESHY_UI_TEXT(AppWifi, Body, 196, "WI-FI", u8"WI-FI")' not in strings:
+        failures.append(
+            "Home must name the Wi-Fi section, not duplicate its Nearby "
+            "Networks child task"
+        )
+    if (
+        'LESHY_UI_TEXT(NoteWifiReady, Meta, 196, '
+        '"NETWORKS · DEVICES · CHANNELS", '
+        'u8"СЕТИ · УСТРОЙСТВА · КАНАЛЫ")'
+    ) not in strings:
+        failures.append(
+            "Home Wi-Fi note must preview the section tree so its first "
+            "Select cannot look ignored"
+        )
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}")

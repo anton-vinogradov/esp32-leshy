@@ -241,10 +241,11 @@ def main() -> int:
                 preparing = action(device, "right")
                 trace.append(preparing)
                 require_exact(preparing, {
+                    "action": "right", "changed": True,
                     "page": "survey", "runtime_owner": "wifi",
                     "lease_mask": 15, "wifi_product_view": "networks",
                     "survey_product_selected_source_mask": 1,
-                }, "wifi_networks_preparing")
+                }, "wifi_networks_single_press_entry")
                 live_first = wait_ui_state(
                     device,
                     lambda state: (

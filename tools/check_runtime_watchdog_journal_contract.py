@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -138,8 +139,9 @@ def main() -> int:
         "watchdog_journal_sd_mirrored_sequence",
     ):
         require(token in entry, f"missing observable state field {token!r}")
-    require('LESHY1_VERSION=\\"1.0.0-dev.376\\"' in config,
-            "candidate version must be 1.0.0-dev.376")
+    version = re.search(r'LESHY1_VERSION=\\"1\.0\.0-dev\.(\d+)\\"', config)
+    require(version is not None and int(version.group(1)) >= 376,
+            "candidate version must preserve the dev.376 watchdog journal")
     require("[[gnu::noinline]] bool exactFile" in adapter,
             "SD verification must keep its bounded buffer out of writeSd")
     require("-fno-exceptions" in config,
