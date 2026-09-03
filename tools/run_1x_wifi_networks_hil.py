@@ -141,6 +141,10 @@ def main() -> int:
     parser.add_argument("--network-intelligence", action="store_true")
     parser.add_argument("--network-live-radar", action="store_true")
     parser.add_argument("--security-advisor", action="store_true")
+    parser.add_argument("--endurance-seconds", type=int, default=0)
+    parser.add_argument("--endurance-minimum-cycles", type=int, default=0)
+    parser.add_argument("--endurance-max-cycle-gap-seconds", type=float,
+                        default=15.0)
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
     if not args.firmware.is_file():
@@ -155,6 +159,10 @@ def main() -> int:
         parser.error("choose exactly one of --flash or --reuse-exact-flash")
     if args.network_live_radar and not args.network_intelligence:
         parser.error("--network-live-radar requires --network-intelligence")
+    if args.endurance_seconds < 0 or args.endurance_minimum_cycles < 0:
+        parser.error("endurance duration and cycle floor must be non-negative")
+    if args.endurance_max_cycle_gap_seconds <= 0:
+        parser.error("--endurance-max-cycle-gap-seconds must be positive")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -191,6 +199,13 @@ def main() -> int:
     detail_outside_signal_pixels = 0
     detail_outside_radar_pixels = 0
     security_pixel_changes: dict[str, int] = {}
+    endurance: dict[str, Any] = {
+        "requested_seconds": args.endurance_seconds,
+        "minimum_cycles": args.endurance_minimum_cycles,
+        "max_cycle_gap_seconds": args.endurance_max_cycle_gap_seconds,
+        "completed": args.endurance_seconds == 0,
+        "checkpoints": [],
+    }
 
     try:
         if args.flash:
@@ -286,6 +301,114 @@ def main() -> int:
                         list_pixel_changes["chrome_changed_pixels"] != 0:
                     raise RuntimeError(
                         f"live list redraw escaped data rows: {list_pixel_changes}")
+
+                if args.endurance_seconds:
+                    endurance_start = time.monotonic()
+                    endurance_deadline = (
+                        endurance_start + args.endurance_seconds)
+                    endurance_start_cycle = int(live_second.get(
+                        "survey_product_wifi_scan_cycles", 0))
+                    endurance_last_cycle = endurance_start_cycle
+                    endurance_last_progress = endurance_start
+                    endurance_next_checkpoint = endurance_start
+                    endurance_heap_total: int | None = None
+                    endurance_final_state = live_second
+                    while time.monotonic() < endurance_deadline:
+                        endurance_final_state = query(
+                            device, b"ui.state", "leshy.ui.v1", "state")
+                        require_exact(endurance_final_state, {
+                            "wifi_product_view": "networks",
+                            "survey_workflow_state": "running",
+                            "runtime_owner": "wifi", "lease_mask": 15,
+                            "survey_product_active_source_mask": 1,
+                            "survey_scan_status": "valid",
+                            "survey_scan_dropped": 0,
+                            "safety_latched": False,
+                            "safety_reason": "none",
+                        }, "wifi_networks_endurance")
+                        now = time.monotonic()
+                        cycle = int(endurance_final_state.get(
+                            "survey_product_wifi_scan_cycles", 0))
+                        if cycle > endurance_last_cycle:
+                            endurance_last_cycle = cycle
+                            endurance_last_progress = now
+                        elif now - endurance_last_progress > \
+                                args.endurance_max_cycle_gap_seconds:
+                            raise RuntimeError(
+                                "Wi-Fi scan cycle stalled for "
+                                f"{now - endurance_last_progress:.1f}s at "
+                                f"cycle {cycle}")
+                        if now >= endurance_next_checkpoint:
+                            safety = query(
+                                device, b"safety.state",
+                                "leshy.safety.v1", "state")
+                            require_exact(safety, {
+                                "state": "armed", "reason": "none",
+                                "armed": True, "latched": False,
+                                "clear_pending": False,
+                                "watchdog_trace_valid": False,
+                                "watchdog_triggered_cpu_mask": 0,
+                                "watchdog_trip_stage": "unknown",
+                                "watchdog_trip_page": 0,
+                                "watchdog_trip_wifi_view": "none",
+                                "watchdog_first_trip_preserved": True,
+                            }, "wifi_networks_endurance_safety")
+                            metrics = query(
+                                device, b"metrics", "leshy.boot.v1", "ready")
+                            if metrics.get("version") != args.expected_version:
+                                raise RuntimeError(
+                                    "candidate version changed during endurance")
+                            if metrics.get("app_elf_sha256") != app_identity:
+                                raise RuntimeError(
+                                    "candidate app identity changed during endurance")
+                            heap_total = int(metrics.get("heap_total", -1))
+                            if endurance_heap_total is None:
+                                endurance_heap_total = heap_total
+                            elif heap_total != endurance_heap_total:
+                                raise RuntimeError(
+                                    "heap total changed during endurance")
+                            checkpoint = {
+                                "elapsed_seconds": round(now - endurance_start, 3),
+                                "scan_cycle": cycle,
+                                "catalog_revision": int(endurance_final_state.get(
+                                    "wifi_network_catalog_revision", 0)),
+                                "networks": int(endurance_final_state.get(
+                                    "wifi_networks_unique", 0)),
+                                "heap_total": heap_total,
+                                "heap_free": int(metrics.get("heap_free", -1)),
+                                "heap_min_free": int(metrics.get(
+                                    "heap_min_free", -1)),
+                                "safety_latched": endurance_final_state.get(
+                                    "safety_latched"),
+                                "watchdog_trace_valid": safety.get(
+                                    "watchdog_trace_valid"),
+                                "scan_dropped": int(endurance_final_state.get(
+                                    "survey_scan_dropped", -1)),
+                            }
+                            endurance["checkpoints"].append(checkpoint)
+                            print(json.dumps({
+                                "status": "in_progress",
+                                "endurance": checkpoint,
+                            }, sort_keys=True), flush=True)
+                            endurance_next_checkpoint = now + 15.0
+                        time.sleep(0.25)
+                    endurance_end = time.monotonic()
+                    endurance_cycles = (
+                        endurance_last_cycle - endurance_start_cycle)
+                    endurance.update({
+                        "completed": True,
+                        "elapsed_seconds": round(
+                            endurance_end - endurance_start, 3),
+                        "start_cycle": endurance_start_cycle,
+                        "end_cycle": endurance_last_cycle,
+                        "cycles_completed": endurance_cycles,
+                        "final_state": endurance_final_state,
+                    })
+                    if endurance_cycles < args.endurance_minimum_cycles:
+                        raise RuntimeError(
+                            "Wi-Fi endurance cycle floor missed: "
+                            f"{endurance_cycles} < "
+                            f"{args.endurance_minimum_cycles}")
 
                 # Exercise real navigation before opening detail. The list must
                 # keep sorting by current signal, but once the user has acted
@@ -707,6 +830,7 @@ def main() -> int:
         "detail_outside_radar_pixels": detail_outside_radar_pixels,
         "security_pixel_changes": (
             security_pixel_changes if args.security_advisor else {}),
+        "endurance": endurance,
         "screens": screens,
         "trace": trace,
         "cleanup_before": cleanup_before,
@@ -741,6 +865,11 @@ def main() -> int:
             "detail_live_signal_card_only": not args.network_live_radar,
             "detail_live_radar_only": args.network_live_radar,
             "two_complete_wifi_lifecycles": True,
+            "continuous_wifi_cycle_endurance": (
+                args.endurance_seconds > 0 and endurance.get("completed") is True
+                and int(endurance.get("cycles_completed", 0)) >=
+                    args.endurance_minimum_cycles
+            ),
             "navigation_press_count": navigation_press_count,
             "live_order_remains_strongest_first": True,
             "cursor_not_reset_after_user_navigation": (

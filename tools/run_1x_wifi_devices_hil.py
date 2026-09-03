@@ -158,6 +158,10 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash", action="store_true")
     parser.add_argument("--reuse-exact-flash", action="store_true")
+    parser.add_argument("--endurance-seconds", type=int, default=0)
+    parser.add_argument("--endurance-minimum-hops", type=int, default=0)
+    parser.add_argument("--endurance-max-hop-gap-seconds", type=float,
+                        default=10.0)
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
     if not args.firmware.is_file():
@@ -170,6 +174,10 @@ def main() -> int:
         parser.error("--source-commit must be a full Git commit ID")
     if args.flash == args.reuse_exact_flash:
         parser.error("choose exactly one of --flash or --reuse-exact-flash")
+    if args.endurance_seconds < 0 or args.endurance_minimum_hops < 0:
+        parser.error("endurance duration and hop floor must be non-negative")
+    if args.endurance_max_hop_gap_seconds <= 0:
+        parser.error("--endurance-max-hop-gap-seconds must be positive")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -207,6 +215,13 @@ def main() -> int:
     detail_pixel_changes: dict[str, int] = {}
     detail_visual_input_changed = False
     detail_attempts: list[dict[str, Any]] = []
+    endurance: dict[str, Any] = {
+        "requested_seconds": args.endurance_seconds,
+        "minimum_hops": args.endurance_minimum_hops,
+        "max_hop_gap_seconds": args.endurance_max_hop_gap_seconds,
+        "completed": args.endurance_seconds == 0,
+        "checkpoints": [],
+    }
 
     try:
         if args.flash:
@@ -274,12 +289,163 @@ def main() -> int:
                     raise RuntimeError(
                         f"live device redraw escaped data rows: {list_pixel_changes}")
 
+                if args.endurance_seconds:
+                    endurance_start = time.monotonic()
+                    endurance_deadline = (
+                        endurance_start + args.endurance_seconds)
+                    endurance_start_hops = int(live_second.get(
+                        "wifi_device_channel_hops", 0))
+                    endurance_last_hops = endurance_start_hops
+                    endurance_last_progress = endurance_start
+                    endurance_next_checkpoint = endurance_start
+                    endurance_heap_total: int | None = None
+                    endurance_final_state = live_second
+                    while time.monotonic() < endurance_deadline:
+                        endurance_final_state = query(
+                            device, b"ui.state", "leshy.ui.v1", "state")
+                        require_exact(endurance_final_state, {
+                            "wifi_product_view": "devices",
+                            "runtime_owner": "wifi", "lease_mask": 15,
+                            "wifi_device_monitor_active": True,
+                            "wifi_device_channel_locked": False,
+                            "wifi_device_clients_dropped": 0,
+                            "wifi_device_nvs_disabled": True,
+                            "wifi_device_volatile_storage_only": True,
+                            "safety_latched": False,
+                            "safety_reason": "none",
+                        }, "wifi_devices_endurance")
+                        now = time.monotonic()
+                        hops = int(endurance_final_state.get(
+                            "wifi_device_channel_hops", 0))
+                        if hops > endurance_last_hops:
+                            endurance_last_hops = hops
+                            endurance_last_progress = now
+                        elif now - endurance_last_progress > \
+                                args.endurance_max_hop_gap_seconds:
+                            raise RuntimeError(
+                                "Wi-Fi passive monitor stalled for "
+                                f"{now - endurance_last_progress:.1f}s at "
+                                f"hop {hops}")
+                        if now >= endurance_next_checkpoint:
+                            safety = query(
+                                device, b"safety.state",
+                                "leshy.safety.v1", "state")
+                            require_exact(safety, {
+                                "state": "armed", "reason": "none",
+                                "armed": True, "latched": False,
+                                "clear_pending": False,
+                                "watchdog_trace_valid": False,
+                                "watchdog_triggered_cpu_mask": 0,
+                                "watchdog_trip_stage": "unknown",
+                                "watchdog_trip_page": 0,
+                                "watchdog_trip_wifi_view": "none",
+                                "watchdog_first_trip_preserved": True,
+                            }, "wifi_devices_endurance_safety")
+                            metrics = query(
+                                device, b"metrics", "leshy.boot.v1", "ready")
+                            if metrics.get("version") != args.expected_version:
+                                raise RuntimeError(
+                                    "candidate version changed during endurance")
+                            if metrics.get("app_elf_sha256") != app_identity:
+                                raise RuntimeError(
+                                    "candidate app identity changed during endurance")
+                            heap_total = int(metrics.get("heap_total", -1))
+                            if endurance_heap_total is None:
+                                endurance_heap_total = heap_total
+                            elif heap_total != endurance_heap_total:
+                                raise RuntimeError(
+                                    "heap total changed during endurance")
+                            checkpoint = {
+                                "elapsed_seconds": round(now - endurance_start, 3),
+                                "channel_hops": hops,
+                                "channel": int(endurance_final_state.get(
+                                    "wifi_device_current_channel", 0)),
+                                "catalog_revision": int(endurance_final_state.get(
+                                    "wifi_device_catalog_revision", 0)),
+                                "devices": int(endurance_final_state.get(
+                                    "wifi_devices_unique", 0)),
+                                "frames_reported": int(endurance_final_state.get(
+                                    "wifi_device_frames_reported", 0)),
+                                "clients_accepted": int(endurance_final_state.get(
+                                    "wifi_device_clients_accepted", 0)),
+                                "clients_dropped": int(endurance_final_state.get(
+                                    "wifi_device_clients_dropped", -1)),
+                                "heap_total": heap_total,
+                                "heap_free": int(metrics.get("heap_free", -1)),
+                                "heap_min_free": int(metrics.get(
+                                    "heap_min_free", -1)),
+                                "safety_latched": endurance_final_state.get(
+                                    "safety_latched"),
+                                "watchdog_trace_valid": safety.get(
+                                    "watchdog_trace_valid"),
+                            }
+                            endurance["checkpoints"].append(checkpoint)
+                            print(json.dumps({
+                                "status": "in_progress",
+                                "endurance": checkpoint,
+                            }, sort_keys=True), flush=True)
+                            endurance_next_checkpoint = now + 15.0
+                        time.sleep(0.25)
+                    endurance_end = time.monotonic()
+                    endurance_hops = endurance_last_hops - endurance_start_hops
+                    endurance.update({
+                        "completed": True,
+                        "elapsed_seconds": round(
+                            endurance_end - endurance_start, 3),
+                        "start_hops": endurance_start_hops,
+                        "end_hops": endurance_last_hops,
+                        "hops_completed": endurance_hops,
+                        "final_state": endurance_final_state,
+                    })
+                    if endurance_hops < args.endurance_minimum_hops:
+                        raise RuntimeError(
+                            "Wi-Fi device endurance hop floor missed: "
+                            f"{endurance_hops} < {args.endurance_minimum_hops}")
+
+                    # A bounded catalog intentionally retains identities after
+                    # they leave the air.  After a long hold, restart the
+                    # passive monitor before testing Detail so the candidate
+                    # matrix contains recently observed clients rather than a
+                    # stale strongest-ever row.
+                    endurance_cleanup = action(device, "left")
+                    trace.append(endurance_cleanup)
+                    require_exact(endurance_cleanup, {
+                        "wifi_product_view": "menu",
+                        "wifi_product_selection": 1,
+                        "wifi_device_monitor_active": False,
+                        "wifi_device_monitor_cleanup_complete": True,
+                    }, "wifi_devices_endurance_cleanup")
+                    endurance_restart = action(device, "right")
+                    trace.append(endurance_restart)
+                    require_exact(endurance_restart, {
+                        "wifi_product_view": "devices",
+                        "wifi_device_monitor_active": True,
+                        "wifi_device_channel_locked": False,
+                        "wifi_device_clients_dropped": 0,
+                    }, "wifi_devices_endurance_restart")
+                    detail_list_state = wait_ui_state(
+                        device,
+                        lambda state: (
+                            state.get("wifi_product_view") == "devices" and
+                            state.get("wifi_device_monitor_active") is True and
+                            int(state.get("wifi_device_visible_size", 0)) >= 1 and
+                            int(state.get("wifi_device_clients_accepted", 0)) >= 1
+                        ), 90.0,
+                        "fresh passive clients did not appear after endurance")
+                    trace.append(detail_list_state)
+                    endurance["cleanup"] = endurance_cleanup
+                    endurance["restart"] = endurance_restart
+                    endurance["fresh_detail_list"] = detail_list_state
+                else:
+                    detail_list_state = live_second
+
                 # Passive client identities can legitimately disappear after
                 # one frame.  Do not spend the whole gate waiting on whichever
                 # ephemeral identity happened to sort first: try up to three
                 # already-visible rows within the same 90-second total budget.
                 visible_candidates = max(
-                    1, int(live_second.get("wifi_device_visible_size", 0)))
+                    1, int(detail_list_state.get(
+                        "wifi_device_visible_size", 0)))
                 candidate_attempts = min(3, visible_candidates)
                 for candidate_index in range(candidate_attempts):
                     if candidate_index > 0:
@@ -292,6 +458,15 @@ def main() -> int:
                         }, f"wifi_device_candidate_{candidate_index}")
                     detail_first = action(device, "right")
                     trace.append(detail_first)
+                    if detail_first.get("wifi_product_view") != "device_detail":
+                        detail_attempts.append({
+                            "candidate_index": candidate_index,
+                            "identity_hash": 0,
+                            "outcome": "identity_expired_before_detail",
+                            "timeout_seconds": 0,
+                        })
+                        detail_second = {}
+                        continue
                     require_exact(detail_first, {
                         "wifi_product_view": "device_detail",
                         "runtime_owner": "wifi", "lease_mask": 15,
@@ -576,6 +751,7 @@ def main() -> int:
         "detail_pixel_changes": detail_pixel_changes,
         "detail_visual_input_changed": detail_visual_input_changed,
         "detail_attempts": detail_attempts,
+        "endurance": endurance,
         "screens": screens,
         "trace": trace,
         "cleanup_before": cleanup_before,
@@ -604,6 +780,11 @@ def main() -> int:
             "live_detail_atomic_rows": True,
             "live_detail_no_full_repaint_after_entry": True,
             "two_complete_wifi_lifecycles": True,
+            "continuous_wifi_device_endurance": (
+                args.endurance_seconds > 0 and endurance.get("completed") is True
+                and int(endurance.get("hops_completed", 0)) >=
+                    args.endurance_minimum_hops
+            ),
             "zero_heap_drift_after_warmup": (
                 metrics_after.get("heap_free") ==
                 metrics_after_first.get("heap_free")
