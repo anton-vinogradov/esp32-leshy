@@ -2293,3 +2293,21 @@ free with zero drift. Devices advances 1,477 channel hops in 180.122 s and
 Networks completes 66 scans in 180.008 s, with zero receiver drops or watchdog
 recurrence. The low transient minimum remains tracked under `R-007`; stable
 recovery is evidence against a leak, not permission to grow resident memory.
+
+Durable runtime-watchdog journal bound `RB-M258`: exact physical
+`1.0.0-dev.376` at firmware/runner source
+`7c0bee4292dff8ebedd62c1fa5009d263e662870` uses 236,008 B static RAM,
+3,612,980 B linked flash and 3,613,488/3,679,024 B app/factory images,
+leaving 580,816 B actual application-image headroom in the 4 MiB OTA slot.
+Firmware/factory/ELF/map SHA-256 are
+`7f0dbccf345c10333eaf49421f2c9e2d000e7fbb358658e1bd862a22be02d833`/
+`07587ad6748ea5a2599053fc0cca7ccff213016d9679bb6764e03d9da719039c`/
+`a4923e57639c78537f22b0eb5872e1c6fde8cbbefc9f6e8ae13c026eedb3fa9f`/
+`667e007e47df3357522ae3e924c9507067ffa68695afbc733080ee01a167e2e7`.
+Compared with dev.374, static RAM rises 216 B while linked flash and the app
+image fall 56,216/56,208 B, restoring 56,528 B margin above the 512 KiB OTA
+floor. The failed dev.375 incident measured a 4,496 B `writeSd` stack frame and
+triggered the 8 KiB loopTask canary under nested FatFS work. Dev.376 reuses one
+nothrow heap `SdWriteWorkspace`; disassembly measures 384 B for `writeSd` and
+160 B for `exactFile`. Allocation failure is bounded and reported, while the
+mandatory NVS journal remains available independently of SD.

@@ -43,8 +43,9 @@ startup ── WDT и outputs исправны ──> armed
 - Обычный UI использует тот же Action path, что physical keys: первое OK/вправо
   запрашивает разблокировку, второе подтверждает; влево только отменяет pending.
 - Последующий software/EN/USB reset не очищает принятую exact fault record.
-- Полное снятие питания удаляет и RTC retention, поэтому является physical
-  intervention; software-only плата не может сохранить latch без питания.
+- Полное снятие питания удаляет RTC latch и поэтому является physical intervention.
+  Durable журнал incident в NVS переживает снятие питания, но это диагностическая
+  история: она не восстанавливает и не заменяет живую safety latch.
 
 ## Runtime watchdog
 
@@ -67,6 +68,26 @@ startup ── WDT и outputs исправны ──> armed
    Actions. Разрешены diagnostics, TFT capture, evidence-session commands,
    двухшаговый UI clear и exact console clear.
 
+## Durable журнал incident
+
+- ISR не трогает flash или filesystem. Он только quiesce-ит outputs и публикует
+  bounded exact-app RTC record, описанную выше.
+- На первом безопасном task-context boot валидный watchdog-class RTC incident один
+  раз пишется во внутреннюю NVS и проверяется чтением. Маркер sequence не позволяет
+  следующим reset дублировать тот же incident.
+- Для текущего device profile NVS обязательна. Её verified record сохраняет reset
+  reason, triggered CPU mask, firmware identity, page, stage и активный Wi-Fi view,
+  даже если SD отсутствует, недоступна, чужая, заполнена или не принимает запись.
+- Safe Mode никогда не mount-ит и не пишет карту. Только после явного two-step clear
+  и нормального admission exact-CID storage тот же retained incident может быть
+  зеркалирован в `/leshy/diagnostics/v1/watchdog-%08lx.json`.
+- Зеркало SD выполняется по возможности и атомарно: temporary file записывается,
+  sync-ится, закрывается, точно сверяется чтением, rename-ится, снова sync-ится и
+  проверяется. Ошибка оставляет NVS record целой и показывает reasoned status; она
+  не скрывает исходную причину.
+- File и verification buffers FatFS делят один nothrow heap workspace. Ошибка
+  allocation сообщает `workspace_unavailable`; unbounded retry отсутствует.
+
 ## Контракт outputs
 
 | Output/domain | Действие ISR | Evidence при boot/Safe Mode | Текущая гарантия |
@@ -74,7 +95,7 @@ startup ── WDT и outputs исправны ──> armed
 | buzzer GPIO2 | direct LOW | pad читается LOW | software sound path неактивен |
 | nRF CE GPIO14/15/47 | direct LOW | все pads читаются LOW | все объявленные nRF transmit enable неактивны |
 | CC1101 | ISR не вызывает scheduler/SPI | в текущем firmware нет TX path; boot возвращает receive/idle adapters только после clear | независимого hard stop нет; будущий TX запрещён без hardware/physical-stop evidence |
-| SD/product data | ISR не трогает filesystem | Safe Mode не запускает catalog/mount workers; read-only reopen только после explicit clear/restart | safety trip ничего не пишет и не мутирует recovery |
+| SD/product data | ISR не трогает filesystem | Safe Mode не запускает catalog/mount workers; после explicit clear/restart обычный admission exact-CID разрешает одно atomic зеркало диагностики | safety trip ничего не пишет и не мутирует recovery; NVS остаётся authoritative при недоступной SD |
 | power rails | нет действия | `physical_rail_kill_available=false` | rails остаются под питанием |
 | thermal/voltage/current | нет действия | availability остаётся false | нет claim over-temperature/undervoltage |
 
@@ -112,6 +133,17 @@ Task-WDT reset произошёл через 5 810,775 ms с reason 6; один 
 не изменились, explicit clear завершился на Home с lease zero. В
 [machine-checked artifact](../../tests/hil/evidence/board-01-safety-watchdog-0.103.json)
 также связаны все negative hardware claims ниже.
+
+Exact physical `1.0.0-dev.376`, `E-BUILD-245`/`E-AUTO-224`/`E-HIL-241`/
+`E-SAFETY-089`/`RB-M258`, принимает расширение durable journal. Сохранённый
+отклонённый run dev.375 доказывает first-boot persistence NVS и dedup после restart,
+затем честно сохраняет отказ stack-canary loopTask в SD path. Dev.376 переносит
+workspace FatFS со стека loopTask (`writeSd` 4 496 → 384 B), записывает один incident
+reset-reason-6 как sequence 2, откладывает SD в Safe Mode, сохраняет sequence без
+второй записи NVS после restart и atomically проверяет одно зеркало на
+зарегистрированной exact-CID карте после explicit clear. Run завершается в
+Home/armed/none/lease 0. Incident и исправление source-bound в
+[privacy-minimal machine-checked artifact](../../tests/hil/evidence/board-01-runtime-watchdog-journal-1.0.0-dev.376.json).
 
 ## Принятый калиброванный checkpoint дедлайна Wi-Fi+BLE worker Product Survey
 

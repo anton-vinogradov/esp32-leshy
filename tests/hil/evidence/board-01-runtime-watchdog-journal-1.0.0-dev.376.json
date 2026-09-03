@@ -1,0 +1,124 @@
+{
+  "accepted_run": {
+    "artifact_manifest_sha256": "4a7c0292bac3307e48a15d60a6ce913171f7b8aa4d4887cd4d2ecebde403a866",
+    "deduplicated_restart": {
+      "watchdog_journal_nvs_write_attempted": false,
+      "watchdog_journal_persist_status": "already_persisted",
+      "watchdog_journal_sequence": 2
+    },
+    "final": {
+      "lease_mask": 0,
+      "reason": "none",
+      "runtime_owner": "none",
+      "state": "armed",
+      "watchdog_journal_nvs_verified": true,
+      "watchdog_journal_persist_status": "retained_verified",
+      "watchdog_journal_sd_mirrored_sequence": 2,
+      "watchdog_journal_sd_status": "written_verified",
+      "watchdog_journal_sd_write_attempted": true,
+      "watchdog_journal_sd_write_status": "written",
+      "watchdog_journal_sequence": 2
+    },
+    "journal": {
+      "watchdog_journal_app_elf_sha256": "a4923e57639c78537f22b0eb5872e1c6fde8cbbefc9f6e8ae13c026eedb3fa9f",
+      "watchdog_journal_nvs_verified": true,
+      "watchdog_journal_page": 0,
+      "watchdog_journal_persist_status": "written_verified",
+      "watchdog_journal_reset_reason_code": 6,
+      "watchdog_journal_sd_status": "deferred_safe_mode",
+      "watchdog_journal_sequence": 2,
+      "watchdog_journal_stage": "console",
+      "watchdog_journal_triggered_cpu_mask": 2,
+      "watchdog_journal_version": "1.0.0-dev.376",
+      "watchdog_journal_wifi_view": "none"
+    },
+    "ready_ms": {
+      "clear": 4637.421,
+      "restart": 1049.802,
+      "watchdog": 6193.34
+    },
+    "run_sha256": "1bde0d094a6c5cc752ee7aff06ad55addbcc2a7dd3fd38524560256ad9db68fa",
+    "watchdog_reset_reason_code": 6
+  },
+  "board": "board-01",
+  "build": {
+    "app_image_bytes": 3613488,
+    "factory_sha256": "07587ad6748ea5a2599053fc0cca7ccff213016d9679bb6764e03d9da719039c",
+    "linked_flash_bytes": 3612980,
+    "map_sha256": "667e007e47df3357522ae3e924c9507067ffa68695afbc733080ee01a167e2e7",
+    "ota_free_bytes": 580816,
+    "static_ram_bytes": 236008
+  },
+  "candidate": {
+    "app_elf_sha256": "a4923e57639c78537f22b0eb5872e1c6fde8cbbefc9f6e8ae13c026eedb3fa9f",
+    "firmware_sha256": "7f0dbccf345c10333eaf49421f2c9e2d000e7fbb358658e1bd862a22be02d833",
+    "flash_requested": true,
+    "flashed": true,
+    "runner_sha256": "c30a627071546176ac92849ac076c1ecc13529af0c5cc1e9ded48abb15016bdc",
+    "source_commit": "7c0bee4292dff8ebedd62c1fa5009d263e662870",
+    "version": "1.0.0-dev.376"
+  },
+  "correction": {
+    "exact_file_stack_bytes_after": 160,
+    "fatfs_workspace": "heap_nothrow_single_reused_workspace",
+    "nvs_required_sd_opportunistic": true,
+    "usb_reconnect_after_every_restart": true,
+    "write_sd_stack_bytes_after": 384,
+    "write_sd_stack_bytes_before": 4496
+  },
+  "evidence_ids": [
+    "E-BUILD-245",
+    "E-AUTO-224",
+    "E-HIL-241",
+    "E-SAFETY-089",
+    "RB-M258"
+  ],
+  "media": {
+    "cid": "FE343253440000002000000055019CB7",
+    "generation": 13,
+    "observations": 0
+  },
+  "privacy": {
+    "ambient_bssid_retained": false,
+    "ambient_ssid_retained": false,
+    "device_port_retained": false,
+    "raw_wifi_frames_retained": false
+  },
+  "retained_failure": {
+    "artifact_manifest_sha256": "03627fafc01bce048bceaa789c45567d1dc038379c77c4ecce0716e8e966be2d",
+    "candidate": {
+      "app_elf_sha256": "3121fc970e0c9cfa8bd50ee4b8872f62dbcb79c02dfba9d70983a4d52e00932e",
+      "firmware_sha256": "d633d02727e97426b44113ba21ed00d2f50f032eefde7231080820a9d172c489",
+      "flash_requested": true,
+      "flashed": true,
+      "runner_sha256": "0d046cf370f75428bbbf2eae39cdda46f1cad778b4b6885e6f6d029d31f5cd9c",
+      "source_commit": "fa6e043b56aaa3ac25c2c189d380856a5eb580f6",
+      "version": "1.0.0-dev.375"
+    },
+    "failure": "loopTask_stack_canary_during_sd_mirror",
+    "failures": [
+      "TimeoutError: timed out synchronizing the firmware console"
+    ],
+    "gate_eligible": false,
+    "journal_sequence": 1,
+    "nvs_first_boot_status": "written_verified",
+    "nvs_restart_status": "already_persisted",
+    "panic_bytes": 5814,
+    "panic_sha256": "042413bceb562b4c88ea7e347a93449f0e311cc3a7c513f3b88d671b5972d69f",
+    "run_sha256": "4a9bf9f82a2ee388affa86ee4702c8521a6b7bcca12656ea20e9cf86af1e1db6",
+    "sd_status": "deferred_safe_mode"
+  },
+  "schema": "leshy.runtime_watchdog_journal.acceptance.v1",
+  "status": "pass_with_retained_negative_evidence",
+  "trust_status": "unsigned_local_result",
+  "verified": {
+    "cause_available_without_reproduction": true,
+    "exact_cid_sd_mirror_atomic_and_verified": true,
+    "final_home_none_zero_lease": true,
+    "mac_wifi_untouched": true,
+    "nvs_survives_reset": true,
+    "rf_transmit_invoked": false,
+    "safe_mode_defers_sd": true,
+    "same_incident_not_duplicated": true
+  }
+}

@@ -2283,3 +2283,21 @@ Bound исправления sustained Wi-Fi runtime/watchdog `RB-M257`: exact p
 за 180,122 с, Networks — 66 scan за 180,008 с, без receiver drops или повторения
 watchdog. Низкий transient minimum остаётся под наблюдением `R-007`; стабильное
 восстановление доказывает отсутствие leak, но не разрешает рост resident memory.
+
+Bound durable журнала runtime-watchdog `RB-M258`: exact physical
+`1.0.0-dev.376` на firmware/runner source
+`7c0bee4292dff8ebedd62c1fa5009d263e662870` использует 236 008 B static RAM,
+3 612 980 B linked flash и 3 613 488/3 679 024 B app/factory images,
+оставляя 580 816 B actual application-image headroom в OTA slot 4 MiB.
+SHA-256 firmware/factory/ELF/map —
+`7f0dbccf345c10333eaf49421f2c9e2d000e7fbb358658e1bd862a22be02d833`/
+`07587ad6748ea5a2599053fc0cca7ccff213016d9679bb6764e03d9da719039c`/
+`a4923e57639c78537f22b0eb5872e1c6fde8cbbefc9f6e8ae13c026eedb3fa9f`/
+`667e007e47df3357522ae3e924c9507067ffa68695afbc733080ee01a167e2e7`.
+Относительно dev.374 static RAM растёт на 216 B, а linked flash и app image
+уменьшаются на 56 216/56 208 B, возвращая 56 528 B запаса над OTA floor 512 KiB.
+Отклонённый incident dev.375 измерил frame `writeSd` 4 496 B и вызвал canary
+8 KiB loopTask под вложенной работой FatFS. Dev.376 переиспользует один nothrow
+heap `SdWriteWorkspace`; disassembly измеряет 384 B для `writeSd` и 160 B для
+`exactFile`. Allocation failure bounded и показывается явно, а обязательный NVS
+journal остаётся доступен независимо от SD.

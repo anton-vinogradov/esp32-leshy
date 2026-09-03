@@ -43,8 +43,9 @@ startup ── successful WDT/output checks ──> armed
 - The normal UI uses the same Action path as physical keys: first OK/Right requests
   unlock, the second confirms; Left only cancels the pending clear.
 - A later software/EN/USB reset does not clear an accepted exact fault record.
-- A complete loss of power also removes RTC retention and therefore acts as physical
-  intervention; this software-only board cannot preserve the latch without power.
+- A complete loss of power removes the RTC latch and therefore acts as physical
+  intervention. The durable NVS incident journal survives power loss, but it is
+  diagnostic history and cannot recreate or substitute for the live safety latch.
 
 ## Runtime watchdog sequence
 
@@ -67,6 +68,25 @@ startup ── successful WDT/output checks ──> armed
    Actions. It permits only diagnostics, TFT capture, evidence-session commands,
    the two-step UI clear, and the exact console clear.
 
+## Durable incident journal
+
+- The ISR performs no flash or filesystem work. It only quiesces outputs and
+  publishes the bounded exact-app RTC record described above.
+- On the first safe task-context boot, a valid watchdog-class RTC incident is
+  written once to internal NVS and read back for verification. A sequence marker
+  prevents later resets from duplicating the same incident.
+- NVS is mandatory for the current device profile. Its verified record preserves
+  reset reason, triggered CPU mask, firmware identity, page, stage and active Wi-Fi
+  view even if the SD card is absent, unavailable, wrong, full or unwritable.
+- Safe Mode never mounts or writes the card. Only after explicit two-step clear and
+  normal exact-CID storage admission may the same retained incident be mirrored to
+  `/leshy/diagnostics/v1/watchdog-%08lx.json`.
+- The SD mirror is opportunistic and atomic: a temporary file is written, synced,
+  closed, read back exactly, renamed, synced and verified. Failure leaves the NVS
+  record intact and exposes a reasoned status; it never hides the original cause.
+- The FatFS file and verification buffers share one nothrow heap workspace. An
+  allocation failure reports `workspace_unavailable`; there is no unbounded retry.
+
 ## Output contract
 
 | Output/domain | ISR action | Boot/Safe Mode evidence | Current guarantee |
@@ -74,7 +94,7 @@ startup ── successful WDT/output checks ──> armed
 | buzzer GPIO2 | direct LOW | pad reads LOW | software-controlled sound path inactive |
 | nRF CE GPIO14/15/47 | direct LOW | all pads read LOW | all declared nRF transmit enables inactive |
 | CC1101 | no scheduler/SPI call in ISR | current firmware has no TX path; boot re-establishes receive/idle adapters only after clear | no independent hard stop; future TX is forbidden without hardware/physical-stop evidence |
-| SD/product data | no ISR filesystem work | Safe Mode skips catalog/mount workers; catalog is re-opened read-only only after explicit clear/restart | no safety-trip write or implicit recovery mutation |
+| SD/product data | no ISR filesystem work | Safe Mode skips catalog/mount workers; after explicit clear/restart normal exact-CID admission permits one atomic diagnostic mirror | no safety-trip write or implicit recovery mutation; NVS remains authoritative if SD is unavailable |
 | power rails | none | `physical_rail_kill_available=false` | rails remain energized |
 | thermal/voltage/current | none | availability remains false | no over-temperature/undervoltage claim |
 
@@ -112,6 +132,17 @@ survived a reason-3 software restart, three TFT states were captured, catalog 95
 and exact CID remained unchanged, and explicit clear ended at Home with lease zero.
 The [machine-checked artifact](../../tests/hil/evidence/board-01-safety-watchdog-0.103.json)
 also binds all negative hardware claims below.
+
+Exact physical `1.0.0-dev.376`, `E-BUILD-245`/`E-AUTO-224`/`E-HIL-241`/
+`E-SAFETY-089`/`RB-M258`, accepts the durable-journal extension. The retained
+rejected dev.375 run proves first-boot NVS persistence and restart deduplication,
+then honestly retains its loopTask stack-canary failure in the SD path. Dev.376
+moves the FatFS workspace off the loopTask stack (`writeSd` 4,496 → 384 B), records
+one reset-reason-6 incident as sequence 2, defers SD in Safe Mode, preserves that
+sequence without a second NVS write across restart, and atomically verifies one
+mirror on the enrolled exact-CID card after explicit clear. The run ends at
+Home/armed/none/lease 0. Both incident and correction are source-bound in the
+[privacy-minimal machine-checked artifact](../../tests/hil/evidence/board-01-runtime-watchdog-journal-1.0.0-dev.376.json).
 
 ## Accepted calibrated Product Survey Wi-Fi+BLE worker deadline checkpoint
 
