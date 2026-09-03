@@ -25,6 +25,18 @@ def main() -> int:
     strings = (
         ROOT / "firmware/leshy1/src/ui/UiStrings.def"
     ).read_text(encoding="utf-8")
+    runner = (
+        ROOT / "tools/run_1x_wifi_networks_hil.py"
+    ).read_text(encoding="utf-8")
+    run_checker = (
+        ROOT / "tools/check_wifi_networks_run.py"
+    ).read_text(encoding="utf-8")
+    heap_policy = (
+        ROOT / "tools/wifi_heap_plateau_policy.py"
+    ).read_text(encoding="utf-8")
+    heap_policy_test = (
+        ROOT / "tools/test_wifi_heap_plateau_policy.py"
+    ).read_text(encoding="utf-8")
     required_renderer = (
         "WifiProductView::Menu",
         "WifiProductView::Networks",
@@ -125,6 +137,29 @@ def main() -> int:
         f"string token missing: {token}"
         for token in required_strings if token not in strings
     )
+    for name, source in (("runner", runner), ("run checker", run_checker)):
+        for token in (
+            "MAX_ONE_TIME_WIFI_INITIALIZATION_BYTES",
+            "wifi_heap_plateau_failures(",
+            "one_time_heap_initialization_ceiling_bytes",
+        ):
+            if token not in source:
+                failures.append(f"{name} heap-policy token missing: {token}")
+    for token in (
+        "MAX_ONE_TIME_WIFI_INITIALIZATION_BYTES = 8 * 1024",
+        "if final_free != first_free:",
+        "if final_total != first_total:",
+        "Wi-Fi one-time heap initialization is unbounded",
+    ):
+        if token not in heap_policy:
+            failures.append(f"heap policy token missing: {token}")
+    for token in (
+        "66_664, 59_320, 59_320, 142_284, 142_284",
+        "MAX_ONE_TIME_WIFI_INITIALIZATION_BYTES - 1",
+        "test_rejects_post_warm_leak_and_total_change",
+    ):
+        if token not in heap_policy_test:
+            failures.append(f"heap policy regression missing: {token}")
     if 'LESHY_UI_TEXT(AppWifi, Body, 196, "WI-FI", u8"WI-FI")' not in strings:
         failures.append(
             "Home must name the Wi-Fi section, not duplicate its Nearby "

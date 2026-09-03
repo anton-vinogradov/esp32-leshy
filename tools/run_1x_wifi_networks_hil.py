@@ -26,6 +26,10 @@ from run_1x_product_survey_hil import (
     valid_cid,
     wait_ui_state,
 )
+from wifi_heap_plateau_policy import (
+    MAX_ONE_TIME_WIFI_INITIALIZATION_BYTES,
+    wifi_heap_plateau_failures,
+)
 
 
 RUN_SCHEMA = "leshy.wifi_networks_hil.run.v1"
@@ -764,24 +768,13 @@ def main() -> int:
                         failures.append(f"persistent {key} changed")
                 if recovery_after.get("physical_write_calls") != 0:
                     failures.append("physical SD write observed")
-                boot_free = boot.get("heap_free")
-                first_free = metrics_after_first.get("heap_free")
-                final_free = metrics_after.get("heap_free")
-                if not all(isinstance(value, int)
-                           for value in (boot_free, first_free, final_free)):
-                    failures.append("heap measurements are incomplete")
-                else:
-                    warmup_bytes = boot_free - first_free
-                    if warmup_bytes < 0 or warmup_bytes > 2048:
-                        failures.append(
-                            f"Wi-Fi one-time heap warm-up is unbounded: "
-                            f"{warmup_bytes} bytes")
-                    if final_free != first_free:
-                        failures.append(
-                            "heap changed after the second complete Wi-Fi cycle")
-                if metrics_after.get("heap_total") != \
-                        metrics_after_first.get("heap_total"):
-                    failures.append("heap total changed between Wi-Fi cycles")
+                failures.extend(wifi_heap_plateau_failures(
+                    boot.get("heap_free"),
+                    metrics_after_first.get("heap_free"),
+                    metrics_after.get("heap_free"),
+                    metrics_after_first.get("heap_total"),
+                    metrics_after.get("heap_total"),
+                ))
             except Exception as error:
                 failures.append(f"workflow: {type(error).__name__}: {error}")
             finally:
@@ -887,6 +880,8 @@ def main() -> int:
                 boot.get("heap_free", 0) -
                 metrics_after_first.get("heap_free", 0)
             ),
+            "one_time_heap_initialization_ceiling_bytes":
+                MAX_ONE_TIME_WIFI_INITIALIZATION_BYTES,
             "zero_heap_drift_after_warmup": (
                 metrics_after.get("heap_free") ==
                 metrics_after_first.get("heap_free")

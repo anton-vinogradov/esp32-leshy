@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from esp_app_identity import app_elf_sha256
+from wifi_heap_plateau_policy import (
+    MAX_ONE_TIME_WIFI_INITIALIZATION_BYTES,
+    wifi_heap_plateau_failures,
+)
 
 
 SCHEMA = "leshy.wifi_networks_hil.run.v1"
@@ -244,9 +248,18 @@ def main() -> int:
     first_heap = run.get("metrics_after_first", {})
     final_heap = run.get("metrics_after", {})
     warmup = scope.get("bounded_one_time_heap_warmup_bytes")
-    require(failures, isinstance(warmup, int) and 0 <= warmup <= 2048,
-            "bounded Wi-Fi heap warm-up proof missing")
-    require(failures, first_heap.get("heap_total") == final_heap.get("heap_total") and
+    require(failures,
+            scope.get("one_time_heap_initialization_ceiling_bytes") ==
+                MAX_ONE_TIME_WIFI_INITIALIZATION_BYTES and
+            isinstance(warmup, int) and
+            0 <= warmup <= MAX_ONE_TIME_WIFI_INITIALIZATION_BYTES,
+            "bounded Wi-Fi heap initialization proof missing")
+    failures.extend(wifi_heap_plateau_failures(
+        run.get("boot", {}).get("heap_free"),
+        first_heap.get("heap_free"), final_heap.get("heap_free"),
+        first_heap.get("heap_total"), final_heap.get("heap_total")))
+    require(failures,
+            first_heap.get("heap_total") == final_heap.get("heap_total") and
             first_heap.get("heap_free") == final_heap.get("heap_free") and
             scope.get("two_complete_wifi_lifecycles") is True and
             scope.get("zero_heap_drift_after_warmup") is True,
