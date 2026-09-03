@@ -146,6 +146,15 @@ def main() -> int:
             if token not in source:
                 failures.append(f"{name} heap-policy token missing: {token}")
     for token in (
+        'select_entry = action(device, "select")',
+        '"action": "select", "changed": True',
+        'right_entry = action(device, "right")',
+        '"single_select_entry"',
+        '"single_right_entry"',
+    ):
+        if token not in runner and token not in run_checker:
+            failures.append(f"single-entry regression missing: {token}")
+    for token in (
         "MAX_ONE_TIME_WIFI_INITIALIZATION_BYTES = 8 * 1024",
         "if final_free != first_free:",
         "if final_total != first_total:",

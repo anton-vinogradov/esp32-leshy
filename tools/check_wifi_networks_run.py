@@ -267,6 +267,8 @@ def main() -> int:
     require(failures, scope.get("manual_button_presses") == 0 and
             scope.get("screenshots_automatic") is True and
             scope.get("passive_wifi_only") is True and
+            scope.get("single_select_entry") is True and
+            scope.get("single_right_entry") is True and
             scope.get("storage_write_authorized") is False and
             scope.get("storage_untouched_during_live_list") is True and
             scope.get("selected_focus_frame_continuous") is True and

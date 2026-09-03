@@ -195,6 +195,8 @@ def main() -> int:
     live_second: dict[str, Any] = {}
     navigation_first: dict[str, Any] = {}
     navigation_second: dict[str, Any] = {}
+    select_entry: dict[str, Any] = {}
+    right_entry: dict[str, Any] = {}
     navigation_press_count = 0
     detail_first: dict[str, Any] = {}
     detail_second: dict[str, Any] = {}
@@ -242,14 +244,14 @@ def main() -> int:
                 }, "wifi_menu")
                 screens["wifi_menu"] = capture(device, frames, "wifi-menu")
 
-                preparing = action(device, "right")
-                trace.append(preparing)
-                require_exact(preparing, {
-                    "action": "right", "changed": True,
+                select_entry = action(device, "select")
+                trace.append(select_entry)
+                require_exact(select_entry, {
+                    "action": "select", "changed": True,
                     "page": "survey", "runtime_owner": "wifi",
                     "lease_mask": 15, "wifi_product_view": "networks",
                     "survey_product_selected_source_mask": 1,
-                }, "wifi_networks_single_press_entry")
+                }, "wifi_networks_single_select_entry")
                 live_first = wait_ui_state(
                     device,
                     lambda state: (
@@ -719,8 +721,14 @@ def main() -> int:
                 home_wifi(device)
                 warm_menu = action(device, "right")
                 trace.append(warm_menu)
-                warm_preparing = action(device, "right")
-                trace.append(warm_preparing)
+                right_entry = action(device, "right")
+                trace.append(right_entry)
+                require_exact(right_entry, {
+                    "action": "right", "changed": True,
+                    "page": "survey", "runtime_owner": "wifi",
+                    "lease_mask": 15, "wifi_product_view": "networks",
+                    "survey_product_selected_source_mask": 1,
+                }, "wifi_networks_single_right_entry")
                 warm_live = wait_ui_state(
                     device,
                     lambda state: (
@@ -831,6 +839,16 @@ def main() -> int:
         "cleanup_after": cleanup_after,
         "scope": {
             "single_flash": True,
+            "single_select_entry": (
+                select_entry.get("action") == "select" and
+                select_entry.get("changed") is True and
+                select_entry.get("wifi_product_view") == "networks"
+            ),
+            "single_right_entry": (
+                right_entry.get("action") == "right" and
+                right_entry.get("changed") is True and
+                right_entry.get("wifi_product_view") == "networks"
+            ),
             "manual_button_presses": 0,
             "screenshots_automatic": True,
             "passive_wifi_only": True,
