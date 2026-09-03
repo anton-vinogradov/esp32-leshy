@@ -2,6 +2,8 @@
 
 #include <cstdio>
 #include <cstring>
+#include <memory>
+#include <new>
 
 #include <ff.h>
 #include <nvs.h>
@@ -16,6 +18,15 @@ constexpr const char* kRoot = "/leshy";
 constexpr const char* kDiagnostics = "/leshy/diagnostics";
 constexpr const char* kDiagnosticsV1 = "/leshy/diagnostics/v1";
 constexpr std::size_t kMaximumJsonBytes = 512U;
+
+// ESP-IDF configures FIL with a sector-sized private buffer.  Keeping even one
+// FIL on Arduino's loopTask stack consumes about 4 KiB before FatFS itself is
+// entered.  The one-shot boot mirror therefore owns one heap workspace and
+// reuses it for write/readback verification.
+struct SdWriteWorkspace final {
+    FIL file{};
+    char verification[kMaximumJsonBytes] = {};
+};
 
 class ScopedNvsHandle final {
 public:
@@ -64,25 +75,31 @@ bool ensureDirectory(std::uint8_t driveNumber, const char* path) {
         (information.fattrib & AM_DIR) != 0U;
 }
 
-bool exactFile(std::uint8_t driveNumber, const char* path,
-               const char* expected, std::size_t size) {
+// writeSd() calls this verifier at several transactional boundaries.  Letting
+// the optimizer inline every call reserves a separate 512-byte read buffer in
+// writeSd's frame and canary-overflows Arduino's 8 KiB loopTask stack while
+// FatFS is below it.  Keep one bounded child frame instead.
+[[gnu::noinline]] bool exactFile(std::uint8_t driveNumber, const char* path,
+                                const char* expected, std::size_t size,
+                                SdWriteWorkspace& workspace) {
     char fullPath[96] = {};
     if (!formatVolumePath(driveNumber, path, fullPath, sizeof(fullPath))) {
         return false;
     }
-    FIL file{};
-    if (f_open(&file, fullPath, FA_READ) != FR_OK) return false;
+    workspace.file = {};
+    if (f_open(&workspace.file, fullPath, FA_READ) != FR_OK) return false;
     const bool exactSize =
-        static_cast<std::size_t>(f_size(&file)) == size;
-    char buffer[kMaximumJsonBytes] = {};
+        static_cast<std::size_t>(f_size(&workspace.file)) == size;
+    std::memset(workspace.verification, 0, sizeof(workspace.verification));
     UINT read = 0;
     const FRESULT readStatus = exactSize
-        ? f_read(&file, buffer, static_cast<UINT>(size), &read)
+        ? f_read(&workspace.file, workspace.verification,
+                 static_cast<UINT>(size), &read)
         : FR_INVALID_OBJECT;
-    const FRESULT closeStatus = f_close(&file);
+    const FRESULT closeStatus = f_close(&workspace.file);
     return exactSize && readStatus == FR_OK && closeStatus == FR_OK &&
         static_cast<std::size_t>(read) == size &&
-        std::memcmp(buffer, expected, size) == 0;
+        std::memcmp(workspace.verification, expected, size) == 0;
 }
 
 }  // namespace
@@ -106,6 +123,8 @@ const char* runtimeWatchdogJournalSdWriteStatusName(
             return "already_present";
         case RuntimeWatchdogJournalSdWriteStatus::InvalidInput:
             return "invalid_input";
+        case RuntimeWatchdogJournalSdWriteStatus::WorkspaceUnavailable:
+            return "workspace_unavailable";
         case RuntimeWatchdogJournalSdWriteStatus::DirectoryFailed:
             return "directory_failed";
         case RuntimeWatchdogJournalSdWriteStatus::OpenFailed:
@@ -188,6 +207,11 @@ RuntimeWatchdogJournalSdWriteStatus BoardRuntimeWatchdogJournal::writeSd(
         json == nullptr || size == 0U || size > kMaximumJsonBytes) {
         return RuntimeWatchdogJournalSdWriteStatus::InvalidInput;
     }
+    std::unique_ptr<SdWriteWorkspace> workspace(
+        new (std::nothrow) SdWriteWorkspace{});
+    if (!workspace) {
+        return RuntimeWatchdogJournalSdWriteStatus::WorkspaceUnavailable;
+    }
     if (!ensureDirectory(driveNumber, kRoot) ||
         !ensureDirectory(driveNumber, kDiagnostics) ||
         !ensureDirectory(driveNumber, kDiagnosticsV1)) {
@@ -209,7 +233,7 @@ RuntimeWatchdogJournalSdWriteStatus BoardRuntimeWatchdogJournal::writeSd(
         static_cast<std::size_t>(temporaryLength) >= sizeof(relativeTemporary)) {
         return RuntimeWatchdogJournalSdWriteStatus::InvalidInput;
     }
-    if (exactFile(driveNumber, relativeFinal, json, size)) {
+    if (exactFile(driveNumber, relativeFinal, json, size, *workspace)) {
         return RuntimeWatchdogJournalSdWriteStatus::AlreadyPresent;
     }
 
@@ -222,36 +246,37 @@ RuntimeWatchdogJournalSdWriteStatus BoardRuntimeWatchdogJournal::writeSd(
         return RuntimeWatchdogJournalSdWriteStatus::InvalidInput;
     }
     (void)f_unlink(fullTemporary);
-    FIL file{};
-    if (f_open(&file, fullTemporary, FA_WRITE | FA_CREATE_ALWAYS) != FR_OK) {
+    workspace->file = {};
+    if (f_open(&workspace->file, fullTemporary,
+               FA_WRITE | FA_CREATE_ALWAYS) != FR_OK) {
         return RuntimeWatchdogJournalSdWriteStatus::OpenFailed;
     }
     UINT written = 0U;
     const FRESULT writeStatus = f_write(
-        &file, json, static_cast<UINT>(size), &written);
+        &workspace->file, json, static_cast<UINT>(size), &written);
     if (writeStatus != FR_OK ||
         static_cast<std::size_t>(written) != size) {
-        (void)f_close(&file);
+        (void)f_close(&workspace->file);
         (void)f_unlink(fullTemporary);
         return RuntimeWatchdogJournalSdWriteStatus::WriteFailed;
     }
-    const FRESULT syncStatus = f_sync(&file);
-    const FRESULT closeStatus = f_close(&file);
+    const FRESULT syncStatus = f_sync(&workspace->file);
+    const FRESULT closeStatus = f_close(&workspace->file);
     if (syncStatus != FR_OK || closeStatus != FR_OK) {
         (void)f_unlink(fullTemporary);
         return RuntimeWatchdogJournalSdWriteStatus::SyncFailed;
     }
-    if (!exactFile(driveNumber, relativeTemporary, json, size)) {
+    if (!exactFile(driveNumber, relativeTemporary, json, size, *workspace)) {
         (void)f_unlink(fullTemporary);
         return RuntimeWatchdogJournalSdWriteStatus::VerifyFailed;
     }
     if (f_rename(fullTemporary, fullFinal) != FR_OK) {
         (void)f_unlink(fullTemporary);
-        return exactFile(driveNumber, relativeFinal, json, size)
+        return exactFile(driveNumber, relativeFinal, json, size, *workspace)
             ? RuntimeWatchdogJournalSdWriteStatus::AlreadyPresent
             : RuntimeWatchdogJournalSdWriteStatus::RenameFailed;
     }
-    return exactFile(driveNumber, relativeFinal, json, size)
+    return exactFile(driveNumber, relativeFinal, json, size, *workspace)
         ? RuntimeWatchdogJournalSdWriteStatus::Written
         : RuntimeWatchdogJournalSdWriteStatus::VerifyFailed;
 }

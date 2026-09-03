@@ -18,6 +18,7 @@ enum class RuntimeWatchdogJournalSdWriteStatus : std::uint8_t {
     Written,
     AlreadyPresent,
     InvalidInput,
+    WorkspaceUnavailable,
     DirectoryFailed,
     OpenFailed,
     WriteFailed,

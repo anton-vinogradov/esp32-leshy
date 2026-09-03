@@ -13,9 +13,10 @@ from pathlib import Path
 from typing import Any
 
 from capture_1x_ui import PassiveSerial, read_json, synchronize_console
+from capture_1x_boot import capture_reconnecting_until_ready
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
-from run_1x_product_boot_watchdog_hil import capture_until_ready, parse_ready
+from run_1x_product_boot_watchdog_hil import parse_ready
 from run_1x_product_survey_hil import (
     action,
     artifact_manifest,
@@ -219,10 +220,16 @@ def main() -> int:
                 records["injection"] = read_json(
                     device, "leshy.safety.watchdog_test.v1", "armed", 5.0
                 )
-                watchdog_raw, ready_ms = capture_until_ready(
-                    device, args.watchdog_seconds
-                )
-                records["watchdog_ready_marker_ms"] = ready_ms
+        if "injection" in records:
+            (watchdog_raw, ready_ms, watchdog_disconnects,
+             watchdog_open_attempts) = capture_reconnecting_until_ready(
+                args.port, args.watchdog_seconds
+            )
+            records["watchdog_ready_marker_ms"] = ready_ms
+            records["watchdog_usb_disconnects"] = watchdog_disconnects
+            records["watchdog_usb_open_attempts"] = watchdog_open_attempts
+            if ready_ms is None:
+                failures.append("watchdog_boot.ready_marker: missing")
         (args.output / "watchdog-reset.ndjson").write_bytes(watchdog_raw)
         watchdog_ready = parse_ready(watchdog_raw)
         records["watchdog_ready"] = watchdog_ready
@@ -287,10 +294,15 @@ def main() -> int:
             records["latched_restart_request"] = read_json(
                 device, "leshy.safety.restart_test.v1", "restart", 5.0
             )
-            restart_raw, restart_ready_ms = capture_until_ready(
-                device, args.boot_seconds
-            )
-            records["latched_restart_ready_marker_ms"] = restart_ready_ms
+        (restart_raw, restart_ready_ms, restart_disconnects,
+         restart_open_attempts) = capture_reconnecting_until_ready(
+            args.port, args.boot_seconds
+        )
+        records["latched_restart_ready_marker_ms"] = restart_ready_ms
+        records["latched_restart_usb_disconnects"] = restart_disconnects
+        records["latched_restart_usb_open_attempts"] = restart_open_attempts
+        if restart_ready_ms is None:
+            failures.append("latched_restart_boot.ready_marker: missing")
         (args.output / "latched-restart.ndjson").write_bytes(restart_raw)
         latched_restart_ready = parse_ready(restart_raw)
         records["latched_restart_ready"] = latched_restart_ready
@@ -341,10 +353,15 @@ def main() -> int:
             )
             device.write(b"ui.key right\n")
             device.flush()
-            clear_raw, clear_ready_ms = capture_until_ready(
-                device, args.boot_seconds
-            )
-            records["clear_ready_marker_ms"] = clear_ready_ms
+        (clear_raw, clear_ready_ms, clear_disconnects,
+         clear_open_attempts) = capture_reconnecting_until_ready(
+            args.port, args.boot_seconds
+        )
+        records["clear_ready_marker_ms"] = clear_ready_ms
+        records["clear_usb_disconnects"] = clear_disconnects
+        records["clear_usb_open_attempts"] = clear_open_attempts
+        if clear_ready_ms is None:
+            failures.append("clear_boot.ready_marker: missing")
         (args.output / "clear-restart.ndjson").write_bytes(clear_raw)
         clear_ready = parse_ready(clear_raw)
         records["clear_ready"] = clear_ready

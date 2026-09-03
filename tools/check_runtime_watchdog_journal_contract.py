@@ -110,10 +110,11 @@ def main() -> int:
         'constexpr const char* kNamespace = "leshy1-crash"',
         '"/leshy/diagnostics/v1/watchdog-%08lx.json"',
         '"/leshy/diagnostics/v1/watchdog-%08lx.tmp"',
-        "f_sync(&file)",
-        "exactFile(driveNumber, relativeTemporary, json, size)",
+        "new (std::nothrow) SdWriteWorkspace{}",
+        "f_sync(&workspace->file)",
+        "exactFile(driveNumber, relativeTemporary, json, size, *workspace)",
         "f_rename(fullTemporary, fullFinal)",
-        "exactFile(driveNumber, relativeFinal, json, size)",
+        "exactFile(driveNumber, relativeFinal, json, size, *workspace)",
     ):
         require(token in adapter, f"missing atomic SD writer guard {token!r}")
 
@@ -137,8 +138,10 @@ def main() -> int:
         "watchdog_journal_sd_mirrored_sequence",
     ):
         require(token in entry, f"missing observable state field {token!r}")
-    require('LESHY1_VERSION=\\"1.0.0-dev.375\\"' in config,
-            "candidate version must be 1.0.0-dev.375")
+    require('LESHY1_VERSION=\\"1.0.0-dev.376\\"' in config,
+            "candidate version must be 1.0.0-dev.376")
+    require("[[gnu::noinline]] bool exactFile" in adapter,
+            "SD verification must keep its bounded buffer out of writeSd")
     require("-fno-exceptions" in config,
             "status-return firmware must omit unused exception metadata")
     for token in (
@@ -147,6 +150,8 @@ def main() -> int:
         '"written_verified" if first_boot else "already_persisted"',
         '"watchdog_journal_sd_status": "written_verified"',
         '"watchdog_journal_sd_mirrored_sequence": expected_sequence',
+        "capture_reconnecting_until_ready(",
+        '"clear_usb_disconnects"',
         '"git", "status", "--porcelain", "--untracked-files=all"',
     ):
         require(token in runner,
