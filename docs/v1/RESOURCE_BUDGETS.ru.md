@@ -2301,3 +2301,22 @@ SHA-256 firmware/factory/ELF/map —
 heap `SdWriteWorkspace`; disassembly измеряет 384 B для `writeSd` и 160 B для
 `exactFile`. Allocation failure bounded и показывается явно, а обязательный NVS
 journal остаётся доступен независимо от SD.
+
+Bound входа в Wi-Fi одним действием `RB-M259`: exact physical
+`1.0.0-dev.377` на firmware source
+`53cc36c4a45fb72cabbf171b8fa828788d776025` использует 236 008 B static RAM,
+3 612 708 B linked flash и 3 613 216/3 678 752 B app/factory images,
+оставляя 581 088 B actual application-image headroom в OTA slot 4 MiB.
+SHA-256 firmware/factory/ELF/map —
+`ec140e78bac945e6d067dfb2ba2707722f13c86a6f32ce061e3bb4fe5507300a`/
+`2c1223fc2b283e5177863917aebc1e822cc2abaf75ad54b129362a617d3622b7`/
+`555abc7f46c1d7d244a9d45a591274c2eaea04ba068a0afae2649286fcdd27a8`/
+`5f37093a792b9550c5f8537fefc12309f16c79ae7875a8eb61817884934455a8`.
+Относительно dev.376 static RAM не меняется, linked flash и обе app/factory
+images уменьшаются на 272 B. OTA margin растёт на 272 B до 56 800 B над floor
+512 KiB. Physical heap равен 142 284 B total: однократный cold-переход Wi-Fi
+66 664 → 59 320 B расходует 7 344 B в пределах явного ceiling 8 192 B; оба
+post-warm endpoint точно равны 59 320 B free, transient minimum — 17 940 B.
+Этот focused passive Wi-Fi прогон не затрагивал активный Wi-Fi хоста и
+отключённый Cardputer, выполнил zero storage writes и двигает focused cadence
+до 12/15.

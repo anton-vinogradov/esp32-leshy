@@ -2311,3 +2311,22 @@ triggered the 8 KiB loopTask canary under nested FatFS work. Dev.376 reuses one
 nothrow heap `SdWriteWorkspace`; disassembly measures 384 B for `writeSd` and
 160 B for `exactFile`. Allocation failure is bounded and reported, while the
 mandatory NVS journal remains available independently of SD.
+
+One-action Wi-Fi menu-entry bound `RB-M259`: exact physical
+`1.0.0-dev.377` at firmware source
+`53cc36c4a45fb72cabbf171b8fa828788d776025` uses 236,008 B static RAM,
+3,612,708 B linked flash and 3,613,216/3,678,752 B app/factory images,
+leaving 581,088 B actual application-image headroom in the 4 MiB OTA slot.
+Firmware/factory/ELF/map SHA-256 are
+`ec140e78bac945e6d067dfb2ba2707722f13c86a6f32ce061e3bb4fe5507300a`/
+`2c1223fc2b283e5177863917aebc1e822cc2abaf75ad54b129362a617d3622b7`/
+`555abc7f46c1d7d244a9d45a591274c2eaea04ba068a0afae2649286fcdd27a8`/
+`5f37093a792b9550c5f8537fefc12309f16c79ae7875a8eb61817884934455a8`.
+Relative to dev.376, static RAM is unchanged while linked flash and app/factory
+images each fall 272 B. OTA margin grows 272 B to 56,800 B above the 512 KiB
+floor. Physical heap is 142,284 B total: the one-time cold Wi-Fi transition is
+66,664 → 59,320 B, consuming 7,344 B within the explicit 8,192 B ceiling; both
+post-warm endpoints are exactly 59,320 B free, and the transient minimum is
+17,940 B. This focused passive Wi-Fi run touched neither active host Wi-Fi nor
+the disconnected Cardputer, performed zero storage writes and advances focused
+cadence to 12/15.

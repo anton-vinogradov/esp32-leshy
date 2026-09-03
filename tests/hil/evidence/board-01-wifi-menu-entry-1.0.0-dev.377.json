@@ -1,0 +1,143 @@
+{
+  "accepted_run": {
+    "artifact_manifest_sha256": "d19fd437e6e117b4a6b03c4fb408399ed6ffce497d43d08770a74bfe28624170",
+    "flash_mode": "reuse_exact",
+    "gate_eligible": true,
+    "manual_button_presses": 0,
+    "maximum_unique_networks": 26,
+    "navigation_presses": 8,
+    "passed": true,
+    "run_sha256": "75c0518819816e50a451e852ec94b40cc03130bb14aac26d4fd0cb67886264ca",
+    "single_press_entries": [
+      {
+        "action": "select",
+        "changed": true,
+        "lease_mask": 15,
+        "page": "survey",
+        "runtime_event": "wifi_networks_preparing",
+        "runtime_owner": "wifi"
+      },
+      {
+        "action": "right",
+        "changed": true,
+        "lease_mask": 15,
+        "page": "survey",
+        "runtime_event": "wifi_networks_preparing",
+        "runtime_owner": "wifi"
+      }
+    ],
+    "wifi_lifecycles": 2
+  },
+  "board": "board-01",
+  "candidate": {
+    "cid": "FE343253440000002000000055019CB7",
+    "elf_bytes": 25225012,
+    "elf_sha256": "555abc7f46c1d7d244a9d45a591274c2eaea04ba068a0afae2649286fcdd27a8",
+    "exact_image_reuse_runs": 1,
+    "factory_bytes": 3678752,
+    "factory_sha256": "2c1223fc2b283e5177863917aebc1e822cc2abaf75ad54b129362a617d3622b7",
+    "firmware_bytes": 3613216,
+    "firmware_sha256": "ec140e78bac945e6d067dfb2ba2707722f13c86a6f32ce061e3bb4fe5507300a",
+    "firmware_source_commit": "53cc36c4a45fb72cabbf171b8fa828788d776025",
+    "fresh_flashes": 1,
+    "map_bytes": 18947140,
+    "map_sha256": "5f37093a792b9550c5f8537fefc12309f16c79ae7875a8eb61817884934455a8",
+    "tooling_source_commit": "975fb844a7f0eb5783fddc1c47dd0037b571e70e",
+    "version": "1.0.0-dev.377"
+  },
+  "cleanup": {
+    "complete": true,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none"
+  },
+  "evidence_ids": [
+    "E-BUILD-246",
+    "E-AUTO-225",
+    "E-HIL-242",
+    "E-UX-093",
+    "RB-M259"
+  ],
+  "host_tooling": {
+    "contract_checker_sha256": "6ee9e2ff184da532e13b08adc4fe49e30a81805a8f3092daf5b8a1cfeee62cdf",
+    "daemon_or_service_installed": false,
+    "heap_policy_sha256": "b3e341b62d1ad78858682a0717d71ae5ed91894096244e6c2ed7422cd33be18c",
+    "run_checker_sha256": "c36b873a742841aa5da18ab44f4cddd83a73099108d9e6c1029eba2fc56c6e0f",
+    "runner_sha256": "8e1284871609a9d648aa439ccecf124a119a4e7c847eeff7f5eb4d757be228c1"
+  },
+  "policy": {
+    "active_host_wifi_touched": false,
+    "buzzer_inactive": true,
+    "cardputer_connected_or_opened": false,
+    "host_network_tools_invoked": false,
+    "nrf_ce_inactive": true,
+    "passive_wifi_only": true,
+    "raw_radio_tx_commands_invoked_by_runner": 0,
+    "software_quiesce_complete": true
+  },
+  "privacy": {
+    "ambient_identifiers_retained": false,
+    "exact_device_port_retained": false,
+    "raw_run_retained": false,
+    "screenshots_retained": false
+  },
+  "rendering": {
+    "cursor_reset_after_user_navigation": false,
+    "list_chrome_changed_pixels": 0,
+    "list_content_changed_pixels": 217,
+    "live_order_strongest_first": true,
+    "live_rows_only": true,
+    "selected_focus_frame_continuous": true,
+    "selected_identity_preserved": true
+  },
+  "resources": {
+    "application_image_bytes": 3613216,
+    "factory_image_bytes": 3678752,
+    "free_ota_bytes": 581088,
+    "linked_flash_bytes": 3612708,
+    "required_free_ota_bytes": 524288,
+    "static_ram_bytes": 236008
+  },
+  "retained_failure": {
+    "accepted": false,
+    "artifact_manifest_sha256": "d6e3674f751bb90e79e555c8ef77df63647448e37aaeb12f29cceef2109a4a6a",
+    "boot_heap_free_bytes": 66664,
+    "cleanup_complete": true,
+    "cold_initialization_bytes": 7344,
+    "corrected_ceiling_bytes": 8192,
+    "final_heap_free_bytes": 59320,
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "first_heap_free_bytes": 59320,
+    "flash_mode": "fresh",
+    "heap_total_bytes": 142284,
+    "post_warm_heap_drift_bytes": 0,
+    "reason": "stale_2048_byte_cold_wifi_heap_oracle",
+    "reported_failure": "Wi-Fi one-time heap warm-up is unbounded: 7344 bytes",
+    "run_sha256": "b6416b0736e5e1b299139f848867eaf83d2c5f5d6e784cd05d43567af758fad6"
+  },
+  "runtime": {
+    "ambiguous_presses": 0,
+    "final_heap_free_bytes": 59320,
+    "first_heap_free_bytes": 59320,
+    "heap_drift_after_warmup_bytes": 0,
+    "heap_total_bytes": 142284,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "minimum_heap_free_bytes": 17940,
+    "one_time_initialization_ceiling_bytes": 8192
+  },
+  "schema": "leshy.wifi_menu_entry_hil.acceptance.v1",
+  "status": "pass_with_retained_heap_oracle_correction",
+  "storage": {
+    "blocked_write_attempts": 0,
+    "cid": "FE343253440000002000000055019CB7",
+    "cleanup_complete": true,
+    "generation": 13,
+    "mounted_read_only": true,
+    "observations": 0,
+    "physical_write_calls": 0
+  },
+  "trust_status": "unsigned_local_result"
+}
