@@ -1,0 +1,139 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "006dd7ce41ea58e857078c2c2c6c3e030cdb33a0cf2fb4358af3ec778862906f",
+    "cid": "FE343253440000002000000055019CB7",
+    "firmware_sha256": "cac4f4df882576bd4784f286cf16b0e2948ce9db36ee98abacfca1f032a7d4bc",
+    "firmware_source_commit": "57c7bb5cdf5cdbad2f595c8e1af0699cf5c0e6c8",
+    "flash_mode": "reuse_exact",
+    "flashed": true,
+    "runner_commit": "32694d7e9ccdc12044577516ded5635f5010b6cc",
+    "source_commit": "57c7bb5cdf5cdbad2f595c8e1af0699cf5c0e6c8",
+    "version": "1.0.0-dev.374"
+  },
+  "diagnostic_stress": {
+    "devices": {
+      "drops_observed": false,
+      "elapsed_seconds": 600.174,
+      "hops_completed": 4928,
+      "post_hold_runner_failures": [
+        "workflow: RuntimeError: wifi_device_live_detail.wifi_product_view: 'devices' != 'device_detail'; wifi_device_live_detail.wifi_device_channel_locked: False != True"
+      ],
+      "provenance_eligible": false,
+      "reason": "incorrect_full_source_commit_argument",
+      "run_sha256": "22ad110a829c0e128c419d2322b1c698bf6a1780a975be951001b6265a7513c8",
+      "safety_latched": false,
+      "stress_hold_completed": true,
+      "watchdog_trace_observed": false
+    },
+    "networks": {
+      "cycles_completed": 220,
+      "drops_observed": false,
+      "elapsed_seconds": 600.217,
+      "post_hold_runner_failures": [],
+      "provenance_eligible": false,
+      "reason": "incorrect_full_source_commit_argument",
+      "run_sha256": "38ed23691c6372eecae92c0f2f2c16030986c59b85930698e74f914e09153c1f",
+      "safety_latched": false,
+      "stress_hold_completed": true,
+      "watchdog_trace_observed": false
+    }
+  },
+  "evidence_ids": [
+    "E-BUILD-244",
+    "E-AUTO-223",
+    "E-HIL-240",
+    "E-SAFETY-088",
+    "RB-M257"
+  ],
+  "exact_runs": {
+    "devices": {
+      "catalog_within_capacity": true,
+      "checkpoint_count": 12,
+      "clients_accepted_first": 78,
+      "clients_accepted_last": 1042,
+      "clients_dropped": 0,
+      "elapsed_seconds": 180.122,
+      "final_home_none_zero_lease": true,
+      "frames_reported_first": 925,
+      "frames_reported_last": 12401,
+      "heap_free_checkpoint": 21512,
+      "heap_min_free": 2980,
+      "heap_total": 142756,
+      "hops_completed": 1477,
+      "run_sha256": "f00bf1d62a7669ce9c5d9f91a033a534d763e9c6800752fb999b0639e609dc1d",
+      "runner_sha256": "0a0ad681d05d1aa6b9d9ec4bdf22fc2e38fdfb3657b96262dac8532147695438",
+      "two_complete_lifecycles": true,
+      "watchdog_trace_observed": false,
+      "zero_heap_drift_after_warmup": true
+    },
+    "networks": {
+      "catalog_within_capacity": true,
+      "checkpoint_count": 12,
+      "cycles_completed": 66,
+      "elapsed_seconds": 180.008,
+      "final_home_none_zero_lease": true,
+      "heap_free_max": 59684,
+      "heap_min_free": 2980,
+      "heap_total": 142756,
+      "run_sha256": "d2f6e1548c6d65257d7fb5b4c807eeaf25cf2c1879694ea072227e37268ba097",
+      "runner_sha256": "398ad60ea591cf777775074d9da79d69ad23669b7dfda774914f2b75aed85294",
+      "scan_dropped": 0,
+      "two_complete_lifecycles": true,
+      "watchdog_trace_observed": false,
+      "zero_heap_drift_after_warmup": true
+    }
+  },
+  "incident": {
+    "app_elf_sha256": "78a8d251d3b67c59bea1efca9de249a4d005471f5b72fd3a1fcbecf1a5b8f145",
+    "captured_at_utc": "2026-09-03T12:17:12Z",
+    "heap_exhaustion_observed": false,
+    "input_failure_observed": false,
+    "physical_write_calls": 0,
+    "post_reset_stable_ms": 54224580,
+    "pre_reset_page_known": false,
+    "raw_sha256": "2f3d9bd8e36d06d82687b4e7656993a298719c882d0c1d3cfa4b8447eb046bec",
+    "reset_reason_code": 6,
+    "safe_outputs_quiesced": true,
+    "safety_reason": "runtime_watchdog",
+    "screen_sha256": "7318f550c43235e7958c8fc7ca8e2750b4cb5bf99f7125c17a3f90ee545c149d",
+    "screen_state_sha256": "3d90e1084da5e86da2bf48c99d6c7379200c9bff49b5696ee2193ca9f474343e",
+    "source_commit": "f4cb03580a92ae573f6eb0499f090adc8aa23a6e",
+    "trip_count": 2,
+    "version": "1.0.0-dev.372",
+    "worker_deadline_expired": false
+  },
+  "mitigation": {
+    "finite_product_observation_drain": 16,
+    "finite_product_worker_event_drain": 8,
+    "finite_wifi_device_observation_drain": 16,
+    "retained_first_watchdog_trace": true,
+    "safety_quiesce_precedes_diagnostic": true,
+    "wifi_data_inspect_interval_us": 1000,
+    "wifi_device_queue_capacity": 64
+  },
+  "privacy": {
+    "ambient_bssid_retained": false,
+    "ambient_device_address_retained": false,
+    "ambient_ssid_retained": false,
+    "device_port_retained": false,
+    "raw_wifi_frames_retained": false
+  },
+  "schema": "leshy.wifi_runtime_watchdog.acceptance.v1",
+  "status": "pass_wifi_runtime_watchdog_mitigation",
+  "tools": {
+    "device_runner_sha256": "0a0ad681d05d1aa6b9d9ec4bdf22fc2e38fdfb3657b96262dac8532147695438",
+    "network_runner_sha256": "398ad60ea591cf777775074d9da79d69ad23669b7dfda774914f2b75aed85294"
+  },
+  "verified": {
+    "both_exact_runs_pass": true,
+    "continuous_progress": true,
+    "final_home_none_zero_lease": true,
+    "mac_wifi_untouched": true,
+    "read_only_storage_continuity": true,
+    "rf_transmit_invoked": false,
+    "zero_post_warm_heap_drift": true,
+    "zero_radio_drops": true,
+    "zero_watchdog_recurrence": true
+  }
+}

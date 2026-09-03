@@ -2262,3 +2262,24 @@ SHA-256 firmware/factory/ELF/map —
 считать размер image активным optimization pressure. Adapter RMT остаётся
 one-frame, loop-zero и allocation-free после initialization. Этот host
 checkpoint не заявляет physical heap, board, output, progress или cadence.
+
+Bound исправления sustained Wi-Fi runtime/watchdog `RB-M257`: exact physical
+`1.0.0-dev.374` на firmware source
+`57c7bb5cdf5cdbad2f595c8e1af0699cf5c0e6c8` использует 235 792 B static RAM,
+3 669 196 B linked flash и 3 669 696/3 735 232 B app/factory images,
+оставляя 524 608 B actual application-image headroom в OTA slot 4 MiB.
+Принятые SHA-256 firmware/factory/ELF/map —
+`cac4f4df882576bd4784f286cf16b0e2948ce9db36ee98abacfca1f032a7d4bc`/
+`c8cc669daa79e82444c0d6619f8a9d93ba676ce2fac443495c4e78f9a7b13b23`/
+`006dd7ce41ea58e857078c2c2c6c3e030cdb33a0cf2fb4358af3ec778862906f`/
+`09c1f83973fd8855ffd846bd8bb369f45b09b48c9387b2a76a69e80b9f9fa854`.
+Относительно dev.373 static RAM растёт на 32 B, linked flash — на 1 912 B,
+обе app/factory images — на 1 904 B. OTA headroom уменьшается на 1 904 B и
+остаётся лишь на 320 B выше floor 512 KiB, поэтому оптимизация image size теперь
+немедленный pressure. Physical heap равен 142 756 B total. «Устройства Wi-Fi»
+доходит до 21 512 B free на checkpoint, а общий исторический minimum — до 2 980 B
+под transient pressure; «Сети рядом» и оба post-warm lifecycle endpoint
+возвращаются к 59 684 B free с zero drift. Devices выполняет 1 477 channel hops
+за 180,122 с, Networks — 66 scan за 180,008 с, без receiver drops или повторения
+watchdog. Низкий transient minimum остаётся под наблюдением `R-007`; стабильное
+восстановление доказывает отсутствие leak, но не разрешает рост resident memory.

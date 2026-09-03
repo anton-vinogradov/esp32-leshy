@@ -2272,3 +2272,24 @@ only 2,224 B above the 512 KiB floor, so subsequent slices must treat image
 size as active optimization pressure. The RMT adapter remains one-frame,
 loop-zero and allocation-free after initialization. This host checkpoint has
 no physical heap, board, output, progress or cadence claim.
+
+Sustained Wi-Fi runtime/watchdog correction bound `RB-M257`: exact physical
+`1.0.0-dev.374` at firmware source
+`57c7bb5cdf5cdbad2f595c8e1af0699cf5c0e6c8` uses 235,792 B static RAM,
+3,669,196 B linked flash and 3,669,696/3,735,232 B app/factory images,
+leaving 524,608 B actual application-image headroom in the 4 MiB OTA slot.
+Accepted firmware/factory/ELF/map SHA-256 are
+`cac4f4df882576bd4784f286cf16b0e2948ce9db36ee98abacfca1f032a7d4bc`/
+`c8cc669daa79e82444c0d6619f8a9d93ba676ce2fac443495c4e78f9a7b13b23`/
+`006dd7ce41ea58e857078c2c2c6c3e030cdb33a0cf2fb4358af3ec778862906f`/
+`09c1f83973fd8855ffd846bd8bb369f45b09b48c9387b2a76a69e80b9f9fa854`.
+Relative to dev.373, static RAM rises 32 B, linked flash 1,912 B and both
+app/factory images 1,904 B. OTA headroom shrinks 1,904 B and is only 320 B
+above the 512 KiB floor, so image-size optimization is now immediate pressure.
+Physical heap is 142,756 B total. Wi-Fi Devices reaches 21,512 B free at a
+checkpoint and the shared historical minimum reaches 2,980 B under transient
+pressure; Networks and both post-warm lifecycle endpoints return to 59,684 B
+free with zero drift. Devices advances 1,477 channel hops in 180.122 s and
+Networks completes 66 scans in 180.008 s, with zero receiver drops or watchdog
+recurrence. The low transient minimum remains tracked under `R-007`; stable
+recovery is evidence against a leak, not permission to grow resident memory.
