@@ -176,8 +176,9 @@ def main() -> int:
         require(forbidden not in serialized,
                 f"privacy-minimal evidence contains {forbidden!r}")
     print(
-        "wifi_menu_entry_hil_acceptance: PASS; Select and Right each enter "
-        "Nearby Networks in one press, cold Wi-Fi init is bounded, warm heap "
+        "wifi_menu_entry_hil_acceptance: PASS; Home enters the Wi-Fi task "
+        "menu in one action, then Select and Right each enter Nearby Networks "
+        "from that menu in one action; cold Wi-Fi init is bounded, warm heap "
         "is invariant, storage is read-only and final lease is zero")
     return 0
 

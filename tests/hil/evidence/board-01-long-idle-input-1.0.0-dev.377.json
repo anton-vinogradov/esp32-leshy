@@ -1,0 +1,80 @@
+{
+  "schema": "leshy.long_idle_input.observation.v1",
+  "status": "diagnostic_observation_not_acceptance",
+  "observed_at_utc": "2026-09-03T20:51:58Z",
+  "candidate": {
+    "version": "1.0.0-dev.377",
+    "firmware_source_commit": "53cc36c4a45fb72cabbf171b8fa828788d776025",
+    "firmware_sha256": "ec140e78bac945e6d067dfb2ba2707722f13c86a6f32ce061e3bb4fe5507300a"
+  },
+  "capture": {
+    "tooling_commit": "0add687352cc38c845f5bfe9915abec3426f19b2",
+    "capture_tool_sha256": "ce5feacdae6ff89c2358b3029df43f1b9888893891c976f2dc154ddff54d5c7e",
+    "read_only": true,
+    "device_reset": false,
+    "device_reflashed": false,
+    "cardputer_connected_or_opened": false,
+    "active_host_wifi_touched": false,
+    "ambient_identifiers_retained": false,
+    "raw_capture_retained": false
+  },
+  "operator_report": {
+    "route_started_from_home_after_reboot_and_idle": true,
+    "two_select_presses_were_perceived_as_required": true,
+    "idle_duration_machine_measured": false
+  },
+  "physical_input": {
+    "task_started": true,
+    "poll_period_ms": 5,
+    "debounce_ms": 12,
+    "valid_samples": 893282,
+    "read_errors": 0,
+    "raw_transitions": 8,
+    "stable_transitions": 8,
+    "press_events": 4,
+    "release_events": 4,
+    "ambiguous_presses": 0,
+    "select_presses": 2,
+    "up_presses": 1,
+    "down_presses": 1,
+    "left_presses": 0,
+    "right_presses": 0,
+    "dispatched_press_events": 4,
+    "last_dispatched_action": "select",
+    "last_dispatched_changed": true,
+    "queue_capacity": 64,
+    "queue_high_water": 1,
+    "queue_drops": 0,
+    "last_queue_latency_us": 366,
+    "maximum_queue_latency_us": 5251,
+    "last_end_to_end_us": 59481,
+    "maximum_end_to_end_us": 107174,
+    "hot_path_serial_writes": 0
+  },
+  "touch_input": {
+    "status": "ready",
+    "press_events": 0,
+    "release_events": 0,
+    "rejected_coordinates": 0,
+    "pressed": false,
+    "missed_presses": 0,
+    "synthetic_presses": 0
+  },
+  "final_ui": {
+    "page": "survey",
+    "parent_page": "home",
+    "selected_id": "wifi",
+    "wifi_product_view": "networks",
+    "runtime_owner": "wifi",
+    "lease_mask": 15,
+    "workflow_state": "running",
+    "network_count": 32,
+    "wifi_scan_cycles": 237
+  },
+  "interpretation": {
+    "input_loss_observed": false,
+    "two_level_route_consistent_with_observation": true,
+    "home_to_wifi_menu_then_networks_provenance_complete": false,
+    "reason": "All four physical presses have matching stable transitions, releases and dispatches with zero read errors, ambiguity or queue drops. The two Select presses and final live Networks view are consistent with Home to Wi-Fi task menu to Nearby Networks. Firmware dev.377 does not retain a per-action page-before/page-after ring, so this read-only snapshot cannot prove the individual intermediate page transition."
+  }
+}

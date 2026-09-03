@@ -153,7 +153,8 @@ def main() -> int:
             scope.get("storage_write_authorized") is False,
             "accepted run scope mismatch")
     require([entry["action"] for entry in entries] == ["select", "right"],
-            "accepted run did not exercise one Select then one Right entry")
+            "accepted run did not exercise one Select then one Right entry "
+            "from the Wi-Fi task menu")
     for entry in entries:
         require(entry == {
             "action": entry["action"],
