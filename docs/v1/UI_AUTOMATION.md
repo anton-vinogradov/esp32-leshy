@@ -53,6 +53,14 @@ safe default so buttons, UI and diagnostics stay available. `ui.touch` is useful
 repeatable hit/miss geometry tests, but it cannot replace at least one real panel tap
 in physical acceptance evidence.
 
+The raw-Z value `20` is only the candidate threshold that admits a sample to the
+bounded TFT_eSPI validation path. A fresh accepted coordinate still requires the
+public pressure threshold `80`; this lets a slowly rising real contact reach the
+validator without lowering the acceptance contract. A 60 s idle guard produced no
+false press even when one raw sample reached 181 because the full validator rejected
+it. Exact dev.378 has source/build and long-idle keypad evidence, but no physical
+panel touch was captured, so physical touch acceptance remains explicitly open.
+
 ### Actual display capture
 
 `ui.capture` reads the ILI9341 display GRAM in four-row tiles and returns:

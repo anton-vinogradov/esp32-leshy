@@ -862,6 +862,7 @@ run_opaque_evidence_check tools/check_full_guided_artifact_acceptance.py
 run_opaque_evidence_check tools/check_full_guided_disposable_acceptance.py
 run_opaque_evidence_check tools/check_full_guided_heap_budget_acceptance.py
 run_opaque_evidence_check tools/check_touch_input_acceptance.py
+python3 "$repo_dir/tools/check_long_idle_first_action_observation.py"
 python3 "$repo_dir/tools/check_product_menu_acceptance.py"
 run_opaque_evidence_check tools/check_clean_status_acceptance.py
 run_opaque_evidence_check tools/check_spectrum_views_acceptance.py

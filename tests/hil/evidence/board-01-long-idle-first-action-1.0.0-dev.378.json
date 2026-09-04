@@ -1,0 +1,97 @@
+{
+  "candidate": {
+    "app_elf_sha256": "709c213c5a9f6ef989dd9f38bb7db0f707bfd09093ff87f3230c98cd50ce8a86",
+    "elf_file_sha256": "709c213c5a9f6ef989dd9f38bb7db0f707bfd09093ff87f3230c98cd50ce8a86",
+    "factory_sha256": "ac69d0ea1ba383f60048d1e9147f4ff5b50a7139060a684ab2492e9cee701c08",
+    "firmware_sha256": "8c1c0bd62aa4b6807b78153afb6493f6c8e258e4754970467738a23dd85a4e83",
+    "firmware_source_commit": "c4293a4adaabb1c46ca3cc66f84805dd2938a8d3",
+    "version": "1.0.0-dev.378"
+  },
+  "capture": {
+    "active_host_wifi_touched": false,
+    "ambient_identifiers_retained": false,
+    "capture_tool_sha256": "0762ac9a5159cf07a2a173366a4830efcf2952c817ff97d1e6554d6aa5c085fd",
+    "cardputer_connected_or_opened": false,
+    "device_reflashed": false,
+    "device_reset": false,
+    "raw_capture_retained": false,
+    "read_only": true
+  },
+  "final_state": {
+    "safety": {
+      "armed": true,
+      "buzzer_inactive": true,
+      "latched": false,
+      "lease_mask": 0,
+      "nrf_ce_inactive": true,
+      "reason": "none",
+      "runtime_owner": "none",
+      "state": "armed"
+    },
+    "ui": {
+      "lease_mask": 0,
+      "page": "home",
+      "runtime_event": "wifi_home",
+      "runtime_owner": "none",
+      "safety_reason": "none",
+      "safety_state": "armed",
+      "selected_id": "wifi"
+    }
+  },
+  "interpretation": {
+    "input_loss_observed": false,
+    "physical_first_action_changed_ui": true,
+    "physical_first_action_observed": true,
+    "reason": "The sole physical Select since boot was debounced, dispatched and changed UI after a machine-counted minimum 42,551,505 ms (11 h 49 min) of 5 ms samples. Touch counters remained zero, so this observation does not claim physical acceptance of the touch-path change.",
+    "touch_fix_physical_acceptance": false
+  },
+  "observed_at_utc": "2026-09-04T09:56:57.308724+00:00",
+  "operator_report": {
+    "operator_confirmed_fixed": true,
+    "original_symptom": "first_action_ignored_after_very_long_home_idle",
+    "screen_touch_claimed": false
+  },
+  "physical_input": {
+    "ambiguous_presses": 0,
+    "debounce_ms": 12,
+    "dispatched_press_events": 1,
+    "hot_path_serial_writes": 0,
+    "last_dispatched_action": "select",
+    "last_dispatched_changed": true,
+    "last_end_to_end_us": 109756,
+    "last_queue_latency_us": 2248,
+    "last_repaint_us": 107052,
+    "maximum_end_to_end_us": 109756,
+    "maximum_queue_latency_us": 2248,
+    "maximum_sample_gap_ms": 5,
+    "minimum_sample_coverage_ms": 42551505,
+    "poll_period_ms": 5,
+    "press_events": 1,
+    "queue_capacity": 64,
+    "queue_drops": 0,
+    "queue_high_water": 1,
+    "raw_transitions": 2,
+    "read_errors": 0,
+    "release_events": 1,
+    "select_presses": 1,
+    "stable_transitions": 2,
+    "status": "ready",
+    "task_started": true,
+    "valid_samples": 8510301
+  },
+  "schema": "leshy.long_idle_first_action.observation.v1",
+  "status": "pass_physical_key_observation",
+  "touch_input": {
+    "candidate_pressure_threshold": 20,
+    "handled_presses": 0,
+    "missed_presses": 0,
+    "press_events": 0,
+    "pressed": false,
+    "pressure_threshold": 80,
+    "raw_pressure": 17,
+    "rejected_coordinates": 0,
+    "release_events": 0,
+    "status": "ready",
+    "synthetic_presses": 0
+  }
+}

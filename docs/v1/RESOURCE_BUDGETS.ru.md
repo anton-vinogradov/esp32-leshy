@@ -2320,3 +2320,20 @@ post-warm endpoint точно равны 59 320 B free, transient minimum — 17
 Этот focused passive Wi-Fi прогон не затрагивал активный Wi-Fi хоста и
 отключённый Cardputer, выполнил zero storage writes и двигает focused cadence
 до 12/15.
+
+Bound исправления первого действия после долгого простоя `RB-M260`: exact
+`1.0.0-dev.378` на firmware source
+`c4293a4adaabb1c46ca3cc66f84805dd2938a8d3` использует 236 008 B static RAM,
+3 612 752 B linked flash и 3 613 248/3 678 784 B app/factory images, оставляя
+581 056 B actual application-image headroom в OTA slot 4 MiB. SHA-256
+firmware/factory/ELF/map —
+`8c1c0bd62aa4b6807b78153afb6493f6c8e258e4754970467738a23dd85a4e83`/
+`ac69d0ea1ba383f60048d1e9147f4ff5b50a7139060a684ab2492e9cee701c08`/
+`709c213c5a9f6ef989dd9f38bb7db0f707bfd09093ff87f3230c98cd50ce8a86`/
+`269bc7cd5d89f69ec4e9b02fbada6491784976a55612afe6408f3a02238c2505`.
+Относительно dev.377 static RAM не меняется, linked flash растёт на 44 B, обе
+app/factory images — на 32 B. OTA margin равен 56 768 B над floor 512 KiB.
+Retained physical-key observation покрывает minimum 42 551 505 ms и
+8 510 301 valid sample до ровно одного успешного Select, с zero input errors,
+ambiguity, queue drops и hot-path writes. Touch counters равны zero, поэтому
+physical touch acceptance и focused cadence не продвигаются дальше 12/15.

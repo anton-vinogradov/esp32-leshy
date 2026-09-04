@@ -52,6 +52,14 @@ CRC-проверяет собственную NVS record, может импор�
 подходит для воспроизводимых geometry hit/miss tests, но не заменяет хотя бы один
 real panel tap в physical acceptance evidence.
 
+Raw-Z `20` служит только candidate threshold, допускающим sample в bounded validation
+path TFT_eSPI. Новый accepted coordinate по-прежнему требует public pressure
+threshold `80`; медленно растущий реальный контакт успевает попасть в validator без
+ослабления acceptance-контракта. Idle guard 60 s не создал false press даже при одном
+raw sample 181, потому что полный validator его отклонил. Exact dev.378 имеет
+source/build и long-idle keypad evidence, но physical panel touch не был записан,
+поэтому physical touch acceptance явно остаётся открыта.
+
 ### Захват реального дисплея
 
 `ui.capture` читает GRAM ILI9341 тайлами по четыре строки и возвращает:
