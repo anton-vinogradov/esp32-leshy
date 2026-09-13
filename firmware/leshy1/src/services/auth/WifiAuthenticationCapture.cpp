@@ -385,7 +385,7 @@ bool analyzeWifiAuthenticationCapture(
     const WifiAuthenticationCaptureInput& input,
     WifiAuthenticationCaptureReport* output) {
     if (output == nullptr) return false;
-    std::memset(output, 0, sizeof(*output));
+    std::memset(static_cast<void*>(output), 0, sizeof(*output));
     output->counters.captureFramesReported = input.framesReported;
     output->counters.captureFramesAccepted = input.framesAccepted;
     output->counters.captureFramesDroppedCapacity =

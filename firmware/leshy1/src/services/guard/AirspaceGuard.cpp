@@ -1,6 +1,7 @@
 #include "AirspaceGuard.h"
 
 #include <cstring>
+#include <type_traits>
 
 namespace leshy1::services::guard {
 
@@ -11,6 +12,12 @@ using domain::captures::WifiFrameView;
 using domain::observations::BleAdvertisementFacts;
 using domain::observations::Observation;
 using domain::observations::RadioKind;
+
+// These in-place writers deliberately zero the unused report slots, then set
+// every active finding and its sentinels. Avoid a report-sized stack temporary.
+// Make byte clearing explicit for GCC; adding a nontrivial owner must fail here.
+static_assert(std::is_trivially_copyable<AirspaceGuardReport>::value,
+              "in-place report clearing requires a trivially copyable value");
 
 enum class DisconnectSubtype : std::uint8_t {
     Deauthentication,
@@ -905,7 +912,7 @@ bool AirspaceGuard::writeWifiReport(
     std::size_t noiseSamplesObserved,
     AirspaceGuardReport* output) const {
     if (output == nullptr) return false;
-    std::memset(output, 0, sizeof(*output));
+    std::memset(static_cast<void*>(output), 0, sizeof(*output));
     AirspaceGuardReport& report = *output;
     report.status = AirspaceGuardStatus::Inconclusive;
     if (!validateAirspaceGuardPolicy(policy)) {
@@ -1397,7 +1404,7 @@ bool AirspaceGuard::writeBleReport(
     std::size_t sourceRecordsObserved,
     AirspaceGuardReport* output) const {
     if (output == nullptr) return false;
-    std::memset(output, 0, sizeof(*output));
+    std::memset(static_cast<void*>(output), 0, sizeof(*output));
     AirspaceGuardReport& report = *output;
     report.status = AirspaceGuardStatus::Inconclusive;
     if (!validateAirspaceGuardPolicy(policy)) {
