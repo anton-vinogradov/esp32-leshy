@@ -7,6 +7,13 @@ lives in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md).
 
 ## Top-level goals
 
+Latest UI refinement: `E-BUILD-251 / E-AUTO-230 / E-HIL-247 / E-UX-098`
+bind PR-004/011 and NFR-010 to the [dev.384 Wi-Fi digest](../../tests/hil/evidence/wifi-ui-1.0.0-dev.384.json),
+the host-tested navigation/text/bar components, 8192 bar transitions and six
+evidence-checker negatives/fixtures. The [dev.382 false positive](../../tests/hil/evidence/wifi-ui-1.0.0-dev.382-review-failure.json)
+is retained. This refines WF-01/03/05/06/09; it closes no additional capability
+and does not accept hidden-name provenance, full Lab or the due broad matrix.
+
 | Goal | User outcome | Jobs | Requirements | Stages | Final evidence |
 |---|---|---|---|---|---|
 | G-001 | One autonomous cross-radio session | J-01, J-03 | PR-001…PR-007, NFR-002…NFR-009 | S1–S4 | integration traces, storage fault tests, ≥45-minute/≥8-cycle HIL within one hour |
@@ -295,6 +302,11 @@ UX-01…UX-07 close the S2 visual/interaction gate; UX-08 repeats in every
 
 | Long-idle first physical action and evidence separation | After arbitrarily long Home idle, the first physical key action must debounce, dispatch and change the UI without ambiguity, queue loss or hot-path persistence. Keypad evidence and real-panel touch acceptance must remain separate claims | `E-BUILD-247`/`E-AUTO-226`/[`E-DIAG-243`](../../tests/hil/evidence/board-01-long-idle-first-action-1.0.0-dev.378.json)/`E-UX-094`/`RB-M260` bind exact source `c4293a4adaabb1c46ca3cc66f84805dd2938a8d3`. After at least 42,551,505 ms and 8,510,301 valid input samples, exactly one physical Select press/release/dispatch changes Home to the Wi-Fi menu with zero input errors, ambiguity, drops or hot-path writes; the owner confirms the symptom fixed. Final state is Home/armed/none/lease 0. Touch counters are zero, so direct physical touch acceptance remains open and cadence stays 12/15 |
 
+| Device Lock denied-entry remedy | CAP-052 / PR-024 / UX-S33: denied Home or sensitive Device entry must explain setup/unlock, preserve Back focus and never grant access or auto-launch | `E-BUILD-248`/`E-AUTO-227`/[`E-HIL-244`](../../tests/hil/evidence/board-03-lock-entry-1.0.0-dev.379.json)/`E-UX-095`/`RB-M261`: exact dev.379 on board-03; three Home and two Device roundtrips, explicit editor cancel, unchanged generation 0/unconfigured, stable pixels/repaint counters, zero input errors/drops and final Home/none/lease 0. Nine tampered-evidence cases reject offline. Hardware test uses production ui.key; physical keypad/touch and unlocked radio acceptance are not claimed |
+| Optional first-boot PIN | CAP-052 / PR-024 / UX-S33 / ADR-007: admission only after successful key initialization; no bypass of enrolled PIN/retry/recovery/fault | `E-BUILD-249`/`E-AUTO-228`/[`E-HIL-245`](../../tests/hil/evidence/board-03-optional-pin-1.0.0-dev.380.json)/`E-UX-096`/`RB-M262`: exact dev.380 board-03, seven admission classes, optional-editor cancel, two resets retaining generation 0, stable pixels, three nRF24/CC1101 RX, final Home/none/lease 0; 13 tamper negatives. Wi-Fi RX is not accepted: unenrolled SD still yields source_plan_empty. Configured PIN/key faults are host-tested; no PIN enrollment, SD writes or RF TX |
+
+| Live browsing without SD | ADR-008 / PR-003/004/005 / CAP-009/010/011: Live Wi-Fi without SD admission: networks/detail, device frames, all 13 channels; three equal heap endpoints 142284/61000 B, PIN generation 0 and zero SD operations/drops. Cold BLE receives 32 devices; warm BLE safely rejects largest block 14324 < 28000 B. Partial acceptance, not full matrix. | E-BUILD-250 / E-AUTO-229 / [E-HIL-246](../../tests/hil/evidence/board-03-live-radio-1.0.0-dev.381.json) / E-UX-097 / RB-M263; 15 tamper negatives |
+
 ## ADR coverage
 
 | ADR | Requirements / risks | Implementation owner | Verification gates |
@@ -304,6 +316,8 @@ UX-01…UX-07 close the S2 visual/interaction gate; UX-08 repeats in every
 | [ADR-003](adr/ADR-003-storage-schema.md) | PR-003/005…008/012, NFR-007…009; R-006/010/014/016 | storage/session/library | S3 slice; S5/S8 fault/endurance |
 | [ADR-004](adr/ADR-004-action-boundary.md) | PR-002/009/012/013, NFR-002/003/006; R-008/009/014/016 | SDK/kernel/services | S2 dispatcher; S6/S7/S8 transports/safety |
 | [ADR-005](adr/ADR-005-pre-release-hil.md) | PR-002/010/011/012/014/015, NFR-001…003/005/007/010; R-004/006/011/012/014/016 | platform/verification/firmware | S1/S2 device-smoke; S8 signed immutable release gate |
+| [ADR-007](adr/ADR-007-optional-device-lock.md) | PR-024 / CAP-052 | services/security / Device Lock UI | shared host regression; dev.380 scoped physical optional-PIN delta |
+| [ADR-008](adr/ADR-008-live-radio-without-sd.md) | PR-003/004/005 / CAP-009/010/011 | apps/survey / Wi-Fi / BLE | Host admission and commit guards; scoped dev.381 Wi-Fi HIL; warm BLE failed |
 
-All five decisions are accepted design constraints; none marks a requirement
+These decisions are accepted design constraints; none marks a requirement
 implemented or verified.

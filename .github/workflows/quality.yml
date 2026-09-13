@@ -10,6 +10,18 @@ permissions:
   contents: read
 
 jobs:
+  change-scope:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: scope
+        run: python3 tools/ci_change_scope.py
+
   documentation:
     runs-on: ubuntu-latest
     steps:
@@ -17,9 +29,14 @@ jobs:
         with:
           persist-credentials: false
       - name: Validate documentation source of truth
-        run: python3 tools/check_docs.py
+        run: |
+          python3 tools/check_docs.py
+          python3 tools/test_wifi_map_export.py
+          python3 tools/test_ci_change_scope.py
 
   native-tests:
+    needs: change-scope
+    if: needs.change-scope.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     env:
       # Git carries run/provenance/source/frame evidence but intentionally ignores
@@ -36,6 +53,8 @@ jobs:
         run: tools/test.sh
 
   firmware-build:
+    needs: change-scope
+    if: needs.change-scope.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

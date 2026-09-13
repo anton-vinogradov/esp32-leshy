@@ -11,6 +11,13 @@ copy, and future TFT snapshots; it does not claim that a state is implemented.
   animation.
 - `Unavailable` appears before lease/start with reason, evidence, and one safe next
   action: Diagnostics, another source, or cancel.
+- Device Lock denial from Home or sensitive Device settings opens the Lock status
+  page with an explicit unlock/recovery remedy before any feature starts. A virgin
+  device with initialized local key opens features directly without PIN onboarding.
+  Voluntary PIN setup is available from Device → Lock. That first denied-entry
+  action neither enters a PIN nor changes security state. Left returns to the
+  original menu selection; retry/recovery/fault states remain fail-closed. Successful
+  setup or unlock never auto-starts the originally requested radio or operation.
 - `Loading/Starting` is bounded, exposes cancel, and never blocks the input callback.
 - `Degraded` names the missing part and impact; continuation follows a reviewed
   policy rather than silent substitution.

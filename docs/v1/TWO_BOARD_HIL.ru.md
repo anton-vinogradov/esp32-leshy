@@ -5,6 +5,30 @@
 Статус: **принятый physical IR checkpoint S5; bounded positive paths nRF24 и
 Sub-GHz реализованы и ожидают qualified вторую RF board**.
 
+## Входная проверка замены — 13 сентября 2026 года
+
+Новая board-03 — не прежняя неисправная board-02. Её
+приватный локальный intake (сырые идентификаторы не публикуются)
+подтвердила корректные receiver identities, RX operations всех трёх nRF24 и CC1101,
+а также реальный пассивный приём Wi-Fi/BLE. Офлайн-проверка:
+`python3 tools/check_replacement_div_intake.py`. До прошивки сохранён приватный
+заводской backup 16 MiB с проверкой digest; exact dev.378 восстановлен без активного
+owner/lease и с неактивными передающими outputs.
+
+Это **не допуск к fixture TX и не полное acceptance платы**. SD вернула timeout при
+неподтверждённом наличии карты; Full/Guided прошёл receiver subplan, но завершился
+fail-closed на artifact stage с unenrolled media. ИК polling не увидел transitions.
+Подтверждение assembly/антенн, физические кнопки/тач/экран/звук, positive optical IR
+и известный RF-сигнал ещё открыты. ROM сообщает 8 MiB PSRAM, но product оставляет её
+отключённой, целостность памяти не проверялась. Отказы старой board-02 сохраняются
+как историческое evidence и не переносятся на board-03.
+
+Повторная SD-проверка: владелец вставил карту оригинала; exact CID identification
+и read-only mount проходят, существующий product root найден, writes/enrollment
+не было, cleanup завершён. Это закрывает только первоначальный SD timeout;
+остальные physical gates выше остаются открыты. См.
+[проверенную сводку](../../tests/hil/evidence/board-03-sd-readonly-20260913.json).
+
 ## Роли и граница доверия
 
 | Роль | Прошивка | Полномочия |

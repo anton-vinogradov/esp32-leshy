@@ -41,7 +41,7 @@ explicit release-boundary change.
 | ID | 1.0 capability | Commitment | Requirements | Ready stage |
 |---|---|---|---|---|
 | CAP-009 | Start/Stop creates a bounded Survey Session with explicit configuration and provenance | P0 | PR-003 | S3 |
-| CAP-010 | Passive Wi-Fi scan publishes normalized Observations | P0 | PR-003 | S3 |
+| CAP-010 | Passive Wi-Fi scan publishes normalized Observations Live network/device/graph browsing requires no SD; saving requires separate storage admission (ADR-008). | P0 | PR-003 | S3 |
 | CAP-011 | Passive BLE scan/sniff publishes normalized Observations | P0 | PR-003 | S4 |
 | CAP-012 | Three nRF24 receivers provide passive 2.4 GHz activity without hidden TX | P0, conditional RF shield | PR-003, PR-014 | S4/S5 |
 | CAP-013 | CC1101 provides passive Sub-GHz spectrum/activity and RSSI/frequency evidence | P0, conditional RF shield | PR-003, PR-014 | S4/S5 |
@@ -194,7 +194,7 @@ receiver, calibrated range, historical Target tracking or proof of packet traffi
 | CAP-049 | Focused Wi-Fi authentication Capture identifies EAPOL/PMKID and complete/incomplete handshakes, then exports immutable PCAP and `hc22000` evidence | P1 | J-03, J-07, PR-015, PR-021 | S7 |
 | CAP-050 | Offline Field Survey joins Wi-Fi AP/station and BLE observations with optional GPS track/per-satellite diagnostics, POI/notes, deduplication, revisit comparison, and WiGLE-compatible local export | P1, GPS conditional | J-01, J-07, PR-022 | S7 |
 | CAP-051 | BLE Inspector preserves compatible raw packets and offers an explicit permissioned connected-GATT mode with deterministic disconnect and provenance | P1 | J-02, J-07, PR-023 | S7 |
-| CAP-052 | [Device Lock](DEVICE_LOCK.md) provides local PIN setup, bounded retry/recovery and a lock overlay that lets an already-started safe Capture continue while controls/data stay protected | P0 before sensitive data ships | J-05, J-08, PR-017, PR-024 | S7 |
+| CAP-052 | [Device Lock](DEVICE_LOCK.md) provides local PIN setup, bounded retry/recovery and a lock overlay that lets an already-started safe Capture continue while controls/data stay protected  PIN is optional from first boot on a genuinely virgin device; existing protection cannot be skipped.| P0 before sensitive data ships | J-05, J-08, PR-017, PR-024 | S7 |
 | CAP-053 | [Device → Serial Console](SERIAL_CONSOLE.md) provides a bounded UART bridge and shared Actions CLI under explicit configuration, permissions, leases, and cleanup | P1 | J-05, J-08, PR-012, PR-025 | S7 |
 | CAP-054 | [Automation/HID](AUTOMATION_HID.md) runs signed permissioned scripts with preview, ceilings, finite runtime and scoped USB/BLE HID; defensive BadUSB inspection is passive by default | P1 | J-08, PR-013, PR-026 | S7 |
 | CAP-055 | Owned Lab contains only named, individually accepted Wi-Fi/BLE/nRF/IR fixture recipes: targeted handshake-assist, iBeacon/identity emulation, MouseJack injection, a selected-channel RF-interference robustness test, other bounded robustness/crash tests and IR-camera tests; an interference recipe may use any explicit qualified power profile including full hardware output, but requires a qualified isolated fixture/interlock and declares target/fixture, region, channel/frequency, requested radio setting versus independently measured power when available, duration, evidence and physical stop | P0 for any shipped active output | J-06, J-08, PR-013, PR-027, NFR-011…013 | S7 |

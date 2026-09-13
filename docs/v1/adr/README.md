@@ -13,6 +13,8 @@ Changing one requires a new ADR that supersedes it; history is not rewritten.
 | [ADR-004](ADR-004-action-boundary.md) | accepted | one typed Action dispatcher for UI, CLI, companion, and tests | PR-002/012/013, NFR-002/003/006, R-008/009/016 |
 | [ADR-005](ADR-005-pre-release-hil.md) | accepted | hybrid host runner + safe firmware evidence plane; build once, test and publish exact bytes | PR-010/014/015, NFR-001…003/005/010 |
 | [ADR-006](ADR-006-bounded-signal-fixture.md) | accepted | separate source-bound fixture with fixed, minimum-power and hard-time-bounded signal vectors | PR-009/014, NFR-001/002/005/006, R-018 |
+| [ADR-007](ADR-007-optional-device-lock.md) | accepted | optional PIN on initialized virgin devices; existing protection cannot be skipped | PR-024, CAP-052 |
+| [ADR-008](ADR-008-live-radio-without-sd.md) | accepted | Live RX browsing without SD; durable Save remains separate | PR-003/004/005, CAP-009/010/011 |
 
 Acceptance selects the design and tests to build. It does not mark its requirements
 implemented or verified.

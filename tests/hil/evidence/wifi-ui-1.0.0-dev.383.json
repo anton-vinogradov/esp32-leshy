@@ -1,0 +1,46 @@
+{
+  "app_elf_sha256": "8adf69ba9e4fa61c12e3b49996f8907837ea944b8bb985c8580cb0529cf18fe4",
+  "app_sha256": "e26b33615f018ecb8cd73ab76455d241318ea720d7eae651a9577fcdefa1a9df",
+  "channel_pixels": {
+    "dynamic_changed_pixels": 1343,
+    "static_changed_pixels": 0
+  },
+  "channels": {
+    "wifi_channel_completed_sweeps": 1,
+    "wifi_channel_measured_mask": 8191,
+    "wifi_channel_monitor_active": true
+  },
+  "failures": [],
+  "final": {
+    "lease_mask": 0,
+    "page": "home",
+    "runtime_owner": "none",
+    "survey_dropped": 0,
+    "survey_product_filesystem_mount_attempts": 0,
+    "survey_product_store_bytes_written": 0,
+    "survey_scan_dropped": 0,
+    "survey_timeline_overflow": 0
+  },
+  "frames_count": 13,
+  "heap_final": {
+    "heap_free": 59448,
+    "heap_min_free": 17116,
+    "heap_total": 140940
+  },
+  "limits": "Not physical finger/optical flicker acceptance, hidden-name fixture, full matrix or endurance.",
+  "pages": [
+    "actions",
+    "identity",
+    "information",
+    "observed",
+    "protection",
+    "radar",
+    "radio",
+    "summary"
+  ],
+  "run_sha256": "bff170d83a89cb31022a1834d83dd41af639e2386afe19098b37e338dc1e99c8",
+  "schema": "leshy.wifi_ui_delta.acceptance.v1",
+  "scope": "board-03 RX-only keys and synthetic touch through product dispatch; no password recording",
+  "status": "passed",
+  "version": "1.0.0-dev.383"
+}

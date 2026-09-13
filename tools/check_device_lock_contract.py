@@ -55,6 +55,25 @@ def main() -> int:
     recovery_acceptance = RECOVERY_ACCEPTANCE.read_text(encoding="utf-8")
     failures: list[str] = []
 
+    launch = entry[entry.index("const bool wantsLaunch = wasRoot"):
+                   entry.index("const bool changed = uiController.apply(",
+                               entry.index("const bool wantsLaunch = wasRoot"))]
+    denied = launch[launch.index("if (!admissionAllowed) {"):
+                    launch.index("launchStatus = selected")]
+    for marker in ("showDeviceLockAdmission(", "noteDeviceLockAdmissionBlocked();",
+                   "return finish(shown);"):
+        require(denied, marker, "visible denied-entry remedy before launch", failures)
+    for forbidden in ("appRuntime.launch(", "deviceLock.configure(",
+                      "deviceLock.disable(", "deviceLockController.activate(",
+                      "requestDeviceLockWorker("):
+        if forbidden in denied:
+            failures.append("denied entry must only navigate: " + forbidden)
+    require(entry, "UiTextId::DeviceLockOptionalNote", "optional PIN copy", failures)
+    require(entry, "UiTextId::DeviceLockUnlockRequired", "unlock remedy copy", failures)
+    require(controller_tests,
+            "testDeniedEntryShowsRemedyWithoutGrantOrAutomaticActivation",
+            "denied admission navigation/cancel coverage", failures)
+
     for marker, label in (
         ("kDeviceLockMinimumPinDigits = 6", "six-digit minimum"),
         ("kDeviceLockMaximumPinDigits = 12", "bounded PIN input"),
@@ -86,7 +105,7 @@ def main() -> int:
         ("enterLockedForCredential(nowUs)", "post-persistence backoff"),
         ("failedAttempts >= kDeviceLockMaximumFailures",
          "recovery-only admission"),
-        ("DeviceLockAccess::SetupRequired", "fail-closed virgin access"),
+        ("dataKeyAvailable_ ? DeviceLockAccess::Allowed", "initialized no-PIN access only"),
         ("operationAlwaysAvailable(operation)", "safe operation bypass"),
         ("eraser.eraseProtectedData()", "erase protected data first"),
         ("store_.clearCredentialAndLatch()", "clear credential second"),
@@ -220,7 +239,8 @@ def main() -> int:
         failures.append("PIN disable transaction is not ordered fail closed")
 
     for marker, label in (
-        ("testPinPolicyAndSetupRequiredDefault", "default access matrix"),
+        ("testPinPolicyAndOptionalDefault", "default access matrix"),
+        ("testOptionalPinColdKeyContinuityAndFailClosedOrigins", "virgin provenance, key continuity and enrollment protection"),
         ("testWrongPinPersistsBackoffAcrossResetAndEndsRecoveryOnly",
          "persistent retry/recovery test"),
         ("testSuccessfulUnlockClearsPersistentFailuresOnlyAfterSave",

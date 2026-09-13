@@ -177,8 +177,11 @@ run_opaque_evidence_check() {
     -o "$test_tmp/clean_target_tests"
 
 "$test_tmp/clean_target_tests"
+python3 "$repo_dir/tools/check_live_radio_without_sd_contract.py"
+python3 "$repo_dir/tools/check_live_radio_without_sd_hil.py"
 
 "$repo_dir/tools/test-live-list-rendering.sh"
+bash "$repo_dir/tools/test-wifi-ui.sh"
 
 "$repo_dir/tools/test-screenshot-store.sh"
 "$repo_dir/tools/test-protocol-workbench.sh"

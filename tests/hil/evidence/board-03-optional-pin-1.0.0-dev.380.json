@@ -1,0 +1,1427 @@
+{
+  "app_elf_sha256": "2a41a35a6dc0c29d354667e048b5ee8cdb89c243dc91c2d0ebed302b5ba230e1",
+  "app_sha256": "a0f9483bb31341dd73505b9df09f0f6cfbb8ad312d6bff6c286bca1b76bd2158",
+  "board_id": "board-03",
+  "boots": [
+    {
+      "attempts": 1,
+      "disconnects": 0,
+      "ready_ms": 492.947
+    },
+    {
+      "attempts": 1,
+      "disconnects": 0,
+      "ready_ms": 489.537
+    }
+  ],
+  "final_state": {
+    "device_selection": 0,
+    "lease_mask": 0,
+    "page": "home",
+    "parent_page": "home",
+    "runtime_event": "wifi_home",
+    "runtime_owner": "none",
+    "selected_id": "wifi",
+    "selection": 0,
+    "survey_product_source_start_attempted": false,
+    "survey_product_store_bytes_written": 0,
+    "survey_product_store_open_attempted": false,
+    "survey_source_selected_mask": 0,
+    "ui_delta_repaints": 0,
+    "ui_full_repaints": 3,
+    "wifi_product_view": "none"
+  },
+  "firmware_version": "1.0.0-dev.380",
+  "frames": {
+    "pin-optional": {
+      "pixel_sha256": "e9c0d05fd6d4cfe60a0214d6cecdcdc333c2cfb89f58eb23de0cffbe6fd60231",
+      "png_sha256": "4fc54a93e83fa83f9efa172ad16ca70d5e3fac3c1ffb48d1f94f431c20ce47f8",
+      "state": {
+        "device_selection": 3,
+        "lease_mask": 1,
+        "page": "device_lock",
+        "parent_page": "device",
+        "runtime_event": "device_item_opened",
+        "runtime_owner": "device",
+        "selected_id": "device",
+        "selection": 8,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 11,
+        "ui_full_repaints": 3,
+        "wifi_product_view": "none"
+      }
+    },
+    "pin-optional-stable": {
+      "pixel_sha256": "e9c0d05fd6d4cfe60a0214d6cecdcdc333c2cfb89f58eb23de0cffbe6fd60231",
+      "png_sha256": "4fc54a93e83fa83f9efa172ad16ca70d5e3fac3c1ffb48d1f94f431c20ce47f8",
+      "state": {
+        "device_selection": 3,
+        "lease_mask": 1,
+        "page": "device_lock",
+        "parent_page": "device",
+        "runtime_event": "device_item_opened",
+        "runtime_owner": "device",
+        "selected_id": "device",
+        "selection": 8,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 11,
+        "ui_full_repaints": 3,
+        "wifi_product_view": "none"
+      }
+    },
+    "spectrum24-live": {
+      "pixel_sha256": "2a0e0aefa60137b9586fe0bb1400ed170de4087788dfb7424e146b6a435efcf2",
+      "png_sha256": "7af547427b831b991e763adc7b67200d1378d0b2205c7a1ebc1159bf74bc0f1a",
+      "state": {
+        "device_selection": 3,
+        "lease_mask": 9,
+        "page": "survey",
+        "parent_page": "home",
+        "runtime_event": "nrf24_spectrum_running",
+        "runtime_owner": "spectrum24",
+        "selected_id": "spectrum24",
+        "selection": 2,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 21,
+        "ui_full_repaints": 11,
+        "wifi_product_view": "none"
+      }
+    },
+    "subghz-live": {
+      "pixel_sha256": "e6a0650993e696cf199152017af9bf41922ab0211db7fbfe0996e2ea7a0c6395",
+      "png_sha256": "e09156bc827b649dffc94a9edd93e115ee7714bd8544c23faef2482c93d5547a",
+      "state": {
+        "device_selection": 3,
+        "lease_mask": 9,
+        "page": "survey",
+        "parent_page": "home",
+        "runtime_event": "cc1101_spectrum_running",
+        "runtime_owner": "subghz",
+        "selected_id": "subghz",
+        "selection": 3,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 26,
+        "ui_full_repaints": 16,
+        "wifi_product_view": "none"
+      }
+    }
+  },
+  "limits": [
+    "Wi-Fi Nearby Networks reception remains blocked on unenrolled media; not accepted.",
+    "No PIN enrollment/disable/reset, SD enrollment or RF TX in this run.",
+    "Configured PIN/retry/recovery/fault semantics are host-tested, not re-enrolled on this board.",
+    "Production ui.key on physical hardware, not physical keypad/touch acceptance.",
+    "No PSRAM, optical IR, antenna calibration, TX or full-board qualification.",
+    "One earlier reset attempt failed before ROM connection; retained privately, then corrected to default_reset."
+  ],
+  "prior_wifi_failure": {
+    "observed": {
+      "runtime_event": "source_plan_empty",
+      "survey_product_source_start_attempted": false,
+      "survey_source_selected_mask": 0,
+      "wifi_product_view": "menu"
+    },
+    "raw_sha256": "b2d7d58ba9e6ceb46a77d675c8fce54e449e75dd738ed216dcd68d1b50269467",
+    "status": "failed"
+  },
+  "raw_evidence_sha256": "96412dd5e9ef9f52f96b90660dadde4a73977cd5844dc2bc2b503593797a7a74",
+  "runner_sha256": "b93a11b8eadf965b2c2b9743434a0c0d7a8cc804ab0c7516bc9f878fda3d4b32",
+  "samples": [
+    {
+      "command": "metrics",
+      "value": {
+        "app_elf_sha256": "2a41a35a6dc0c29d354667e048b5ee8cdb89c243dc91c2d0ebed302b5ba230e1",
+        "version": "1.0.0-dev.380"
+      }
+    },
+    {
+      "command": "device-lock.state",
+      "value": {
+        "credential_generation": 0,
+        "failed_attempts": 0,
+        "failure": "none",
+        "persistence_fixture_active": false,
+        "protected_access": true,
+        "radio_touched": false,
+        "status": "unconfigured",
+        "worker_active": false
+      }
+    },
+    {
+      "command": "device-lock.admission",
+      "value": {
+        "access": {
+          "backup": "allowed",
+          "cleanup": "allowed",
+          "companion": "allowed",
+          "configure": "allowed",
+          "disable": "setup_required",
+          "export": "allowed",
+          "factory_reset": "allowed",
+          "lock": "allowed",
+          "panic": "allowed",
+          "protected_evidence": "allowed",
+          "protected_ui": "allowed",
+          "safe_stop": "allowed",
+          "secret_read": "allowed",
+          "sensitive_settings": "allowed",
+          "status": "allowed",
+          "unlock": "setup_required",
+          "update_recovery": "allowed"
+        },
+        "protected_content_returned": false,
+        "radio_touched": false,
+        "state": "unconfigured"
+      }
+    },
+    {
+      "command": "ui.state",
+      "value": {
+        "device_selection": 0,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "idle",
+        "runtime_owner": "none",
+        "selected_id": "wifi",
+        "selection": 0,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 0,
+        "ui_full_repaints": 1,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 0,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "idle",
+        "runtime_owner": "none",
+        "selected_id": "ble",
+        "selection": 1,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 1,
+        "ui_full_repaints": 1,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 0,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "idle",
+        "runtime_owner": "none",
+        "selected_id": "spectrum24",
+        "selection": 2,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 2,
+        "ui_full_repaints": 1,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 0,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "idle",
+        "runtime_owner": "none",
+        "selected_id": "subghz",
+        "selection": 3,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 3,
+        "ui_full_repaints": 1,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 0,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "idle",
+        "runtime_owner": "none",
+        "selected_id": "capture",
+        "selection": 4,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 4,
+        "ui_full_repaints": 1,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 0,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "idle",
+        "runtime_owner": "none",
+        "selected_id": "targets",
+        "selection": 5,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 5,
+        "ui_full_repaints": 1,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 0,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "idle",
+        "runtime_owner": "none",
+        "selected_id": "library",
+        "selection": 6,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 6,
+        "ui_full_repaints": 1,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 0,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "idle",
+        "runtime_owner": "none",
+        "selected_id": "lab",
+        "selection": 7,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 7,
+        "ui_full_repaints": 1,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 0,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "idle",
+        "runtime_owner": "none",
+        "selected_id": "device",
+        "selection": 8,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 8,
+        "ui_full_repaints": 1,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key right",
+      "value": {
+        "device_selection": 0,
+        "lease_mask": 1,
+        "page": "device",
+        "parent_page": "home",
+        "runtime_event": "started",
+        "runtime_owner": "device",
+        "selected_id": "device",
+        "selection": 8,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 8,
+        "ui_full_repaints": 2,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 1,
+        "lease_mask": 1,
+        "page": "device",
+        "parent_page": "home",
+        "runtime_event": "started",
+        "runtime_owner": "device",
+        "selected_id": "device",
+        "selection": 8,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 9,
+        "ui_full_repaints": 2,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 2,
+        "lease_mask": 1,
+        "page": "device",
+        "parent_page": "home",
+        "runtime_event": "started",
+        "runtime_owner": "device",
+        "selected_id": "device",
+        "selection": 8,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 10,
+        "ui_full_repaints": 2,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 1,
+        "page": "device",
+        "parent_page": "home",
+        "runtime_event": "started",
+        "runtime_owner": "device",
+        "selected_id": "device",
+        "selection": 8,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 11,
+        "ui_full_repaints": 2,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key right",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 1,
+        "page": "device_lock",
+        "parent_page": "device",
+        "runtime_event": "device_item_opened",
+        "runtime_owner": "device",
+        "selected_id": "device",
+        "selection": 8,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 11,
+        "ui_full_repaints": 3,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key right",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 1,
+        "page": "device_lock",
+        "parent_page": "device",
+        "runtime_event": "device_lock_editor_opened",
+        "runtime_owner": "device",
+        "selected_id": "device",
+        "selection": 8,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 11,
+        "ui_full_repaints": 4,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key left",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 1,
+        "page": "device_lock",
+        "parent_page": "device",
+        "runtime_event": "device_lock_editor_cancelled",
+        "runtime_owner": "device",
+        "selected_id": "device",
+        "selection": 8,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 11,
+        "ui_full_repaints": 5,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "device-lock.state",
+      "value": {
+        "credential_generation": 0,
+        "failed_attempts": 0,
+        "failure": "none",
+        "persistence_fixture_active": false,
+        "protected_access": true,
+        "radio_touched": false,
+        "status": "unconfigured",
+        "worker_active": false
+      }
+    },
+    {
+      "command": "ui.state",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "stopped",
+        "runtime_owner": "none",
+        "selected_id": "device",
+        "selection": 8,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 11,
+        "ui_full_repaints": 7,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.state",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "stopped",
+        "runtime_owner": "none",
+        "selected_id": "device",
+        "selection": 8,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 11,
+        "ui_full_repaints": 7,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key up",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "stopped",
+        "runtime_owner": "none",
+        "selected_id": "lab",
+        "selection": 7,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 12,
+        "ui_full_repaints": 7,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key up",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "stopped",
+        "runtime_owner": "none",
+        "selected_id": "library",
+        "selection": 6,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 13,
+        "ui_full_repaints": 7,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key up",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "stopped",
+        "runtime_owner": "none",
+        "selected_id": "targets",
+        "selection": 5,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 14,
+        "ui_full_repaints": 7,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key up",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "stopped",
+        "runtime_owner": "none",
+        "selected_id": "capture",
+        "selection": 4,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 15,
+        "ui_full_repaints": 7,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key up",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "stopped",
+        "runtime_owner": "none",
+        "selected_id": "subghz",
+        "selection": 3,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 16,
+        "ui_full_repaints": 7,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key up",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "stopped",
+        "runtime_owner": "none",
+        "selected_id": "spectrum24",
+        "selection": 2,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 17,
+        "ui_full_repaints": 7,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key up",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "stopped",
+        "runtime_owner": "none",
+        "selected_id": "ble",
+        "selection": 1,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 18,
+        "ui_full_repaints": 7,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key up",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "stopped",
+        "runtime_owner": "none",
+        "selected_id": "wifi",
+        "selection": 0,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 19,
+        "ui_full_repaints": 7,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key select",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 1,
+        "page": "survey",
+        "parent_page": "home",
+        "runtime_event": "started",
+        "runtime_owner": "wifi",
+        "selected_id": "wifi",
+        "selection": 0,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 19,
+        "ui_full_repaints": 8,
+        "wifi_product_view": "menu"
+      }
+    },
+    {
+      "command": "ui.key right",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 1,
+        "page": "survey",
+        "parent_page": "home",
+        "runtime_event": "source_plan_empty",
+        "runtime_owner": "wifi",
+        "selected_id": "wifi",
+        "selection": 0,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 19,
+        "ui_full_repaints": 8,
+        "wifi_product_view": "menu"
+      }
+    },
+    {
+      "command": "ui.state",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "wifi_home",
+        "runtime_owner": "none",
+        "selected_id": "wifi",
+        "selection": 0,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 19,
+        "ui_full_repaints": 9,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.state",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "wifi_home",
+        "runtime_owner": "none",
+        "selected_id": "wifi",
+        "selection": 0,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 19,
+        "ui_full_repaints": 9,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "wifi_home",
+        "runtime_owner": "none",
+        "selected_id": "ble",
+        "selection": 1,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 20,
+        "ui_full_repaints": 9,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "wifi_home",
+        "runtime_owner": "none",
+        "selected_id": "spectrum24",
+        "selection": 2,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 21,
+        "ui_full_repaints": 9,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key right",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 9,
+        "page": "survey",
+        "parent_page": "home",
+        "runtime_event": "nrf24_modes",
+        "runtime_owner": "spectrum24",
+        "selected_id": "spectrum24",
+        "selection": 2,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 21,
+        "ui_full_repaints": 10,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key right",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 9,
+        "page": "survey",
+        "parent_page": "home",
+        "runtime_event": "nrf24_spectrum_running",
+        "runtime_owner": "spectrum24",
+        "selected_id": "spectrum24",
+        "selection": 2,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 21,
+        "ui_full_repaints": 11,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "hardware.nrf24.spectrum",
+      "value": {
+        "active_slot_mask": 7,
+        "adapter_active": true,
+        "channels": 83,
+        "cleanup_complete": false,
+        "current_lease_mask": 9,
+        "current_owner": "spectrum24",
+        "modules": 3,
+        "profile_declared": true,
+        "rx_only": true,
+        "side_effects": {
+          "cc_command_strobes": 0,
+          "storage_writes": 0,
+          "tx_mode_entries": 0,
+          "tx_payload_commands": 0
+        },
+        "state": "running",
+        "status": "ready",
+        "sweeps": 0,
+        "waterfall_measurements_skipped": 0
+      }
+    },
+    {
+      "command": "hardware.nrf24.spectrum",
+      "value": {
+        "active_slot_mask": 7,
+        "adapter_active": true,
+        "channels": 83,
+        "cleanup_complete": false,
+        "current_lease_mask": 9,
+        "current_owner": "spectrum24",
+        "modules": 3,
+        "profile_declared": true,
+        "rx_only": true,
+        "side_effects": {
+          "cc_command_strobes": 0,
+          "storage_writes": 0,
+          "tx_mode_entries": 0,
+          "tx_payload_commands": 0
+        },
+        "state": "running",
+        "status": "ready",
+        "sweeps": 22,
+        "waterfall_measurements_skipped": 0
+      }
+    },
+    {
+      "command": "ui.state",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "nrf24_home",
+        "runtime_owner": "none",
+        "selected_id": "spectrum24",
+        "selection": 2,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 21,
+        "ui_full_repaints": 13,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "hardware.nrf24.spectrum",
+      "value": {
+        "active_slot_mask": 7,
+        "adapter_active": false,
+        "channels": 83,
+        "cleanup_complete": true,
+        "current_lease_mask": 0,
+        "current_owner": "none",
+        "modules": 3,
+        "profile_declared": true,
+        "rx_only": true,
+        "side_effects": {
+          "cc_command_strobes": 0,
+          "storage_writes": 0,
+          "tx_mode_entries": 0,
+          "tx_payload_commands": 0
+        },
+        "state": "idle",
+        "status": "ready",
+        "sweeps": 25,
+        "waterfall_measurements_skipped": 0
+      }
+    },
+    {
+      "command": "device-lock.state",
+      "value": {
+        "credential_generation": 0,
+        "failed_attempts": 0,
+        "failure": "none",
+        "persistence_fixture_active": false,
+        "protected_access": true,
+        "radio_touched": false,
+        "status": "unconfigured",
+        "worker_active": false
+      }
+    },
+    {
+      "command": "ui.state",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "nrf24_home",
+        "runtime_owner": "none",
+        "selected_id": "spectrum24",
+        "selection": 2,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 21,
+        "ui_full_repaints": 13,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key up",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "nrf24_home",
+        "runtime_owner": "none",
+        "selected_id": "ble",
+        "selection": 1,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 22,
+        "ui_full_repaints": 13,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key up",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "nrf24_home",
+        "runtime_owner": "none",
+        "selected_id": "wifi",
+        "selection": 0,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 23,
+        "ui_full_repaints": 13,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "nrf24_home",
+        "runtime_owner": "none",
+        "selected_id": "ble",
+        "selection": 1,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 24,
+        "ui_full_repaints": 13,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "nrf24_home",
+        "runtime_owner": "none",
+        "selected_id": "spectrum24",
+        "selection": 2,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 25,
+        "ui_full_repaints": 13,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key down",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "nrf24_home",
+        "runtime_owner": "none",
+        "selected_id": "subghz",
+        "selection": 3,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 26,
+        "ui_full_repaints": 13,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key right",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 9,
+        "page": "survey",
+        "parent_page": "home",
+        "runtime_event": "subghz_modes",
+        "runtime_owner": "subghz",
+        "selected_id": "subghz",
+        "selection": 3,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 26,
+        "ui_full_repaints": 14,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key right",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 9,
+        "page": "survey",
+        "parent_page": "home",
+        "runtime_event": "cc1101_spectrum_band_menu",
+        "runtime_owner": "subghz",
+        "selected_id": "subghz",
+        "selection": 3,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 26,
+        "ui_full_repaints": 15,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key right",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 9,
+        "page": "survey",
+        "parent_page": "home",
+        "runtime_event": "cc1101_spectrum_running",
+        "runtime_owner": "subghz",
+        "selected_id": "subghz",
+        "selection": 3,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 26,
+        "ui_full_repaints": 16,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "hardware.cc1101.spectrum",
+      "value": {
+        "adapter_active": true,
+        "bins": 64,
+        "cleanup_complete": false,
+        "current_lease_mask": 9,
+        "current_owner": "subghz",
+        "partnum": 0,
+        "profile_declared": true,
+        "rx_only": true,
+        "side_effects": {
+          "fifo_writes": 0,
+          "pa_table_writes": 0,
+          "rejected_strobes": 0,
+          "storage_writes": 0,
+          "tx_strobes": 0
+        },
+        "state": "running",
+        "status": "ready",
+        "sweeps": 0,
+        "version": 20,
+        "waterfall_measurements_skipped": 0
+      }
+    },
+    {
+      "command": "hardware.cc1101.spectrum",
+      "value": {
+        "adapter_active": true,
+        "bins": 64,
+        "cleanup_complete": false,
+        "current_lease_mask": 9,
+        "current_owner": "subghz",
+        "partnum": 0,
+        "profile_declared": true,
+        "rx_only": true,
+        "side_effects": {
+          "fifo_writes": 0,
+          "pa_table_writes": 0,
+          "rejected_strobes": 0,
+          "storage_writes": 0,
+          "tx_strobes": 0
+        },
+        "state": "running",
+        "status": "ready",
+        "sweeps": 1,
+        "version": 20,
+        "waterfall_measurements_skipped": 0
+      }
+    },
+    {
+      "command": "ui.state",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "subghz_home",
+        "runtime_owner": "none",
+        "selected_id": "subghz",
+        "selection": 3,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 26,
+        "ui_full_repaints": 19,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "hardware.cc1101.spectrum",
+      "value": {
+        "adapter_active": false,
+        "bins": 64,
+        "cleanup_complete": true,
+        "current_lease_mask": 0,
+        "current_owner": "none",
+        "partnum": 0,
+        "profile_declared": true,
+        "rx_only": true,
+        "side_effects": {
+          "fifo_writes": 0,
+          "pa_table_writes": 0,
+          "rejected_strobes": 0,
+          "storage_writes": 0,
+          "tx_strobes": 0
+        },
+        "state": "idle",
+        "status": "ready",
+        "sweeps": 2,
+        "version": 20,
+        "waterfall_measurements_skipped": 0
+      }
+    },
+    {
+      "command": "device-lock.state",
+      "value": {
+        "credential_generation": 0,
+        "failed_attempts": 0,
+        "failure": "none",
+        "persistence_fixture_active": false,
+        "protected_access": true,
+        "radio_touched": false,
+        "status": "unconfigured",
+        "worker_active": false
+      }
+    },
+    {
+      "command": "device-lock.state",
+      "value": {
+        "credential_generation": 0,
+        "failed_attempts": 0,
+        "failure": "none",
+        "persistence_fixture_active": false,
+        "protected_access": true,
+        "radio_touched": false,
+        "status": "unconfigured",
+        "worker_active": false
+      }
+    },
+    {
+      "command": "ui.state",
+      "value": {
+        "device_selection": 3,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "subghz_home",
+        "runtime_owner": "none",
+        "selected_id": "subghz",
+        "selection": 3,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 26,
+        "ui_full_repaints": 19,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "metrics",
+      "value": {
+        "app_elf_sha256": "2a41a35a6dc0c29d354667e048b5ee8cdb89c243dc91c2d0ebed302b5ba230e1",
+        "version": "1.0.0-dev.380"
+      }
+    },
+    {
+      "command": "device-lock.state",
+      "value": {
+        "credential_generation": 0,
+        "failed_attempts": 0,
+        "failure": "none",
+        "persistence_fixture_active": false,
+        "protected_access": true,
+        "radio_touched": false,
+        "status": "unconfigured",
+        "worker_active": false
+      }
+    },
+    {
+      "command": "ui.state",
+      "value": {
+        "device_selection": 0,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "idle",
+        "runtime_owner": "none",
+        "selected_id": "wifi",
+        "selection": 0,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 0,
+        "ui_full_repaints": 1,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "ui.key right",
+      "value": {
+        "device_selection": 0,
+        "lease_mask": 1,
+        "page": "survey",
+        "parent_page": "home",
+        "runtime_event": "started",
+        "runtime_owner": "wifi",
+        "selected_id": "wifi",
+        "selection": 0,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 0,
+        "ui_full_repaints": 2,
+        "wifi_product_view": "menu"
+      }
+    },
+    {
+      "command": "ui.state",
+      "value": {
+        "device_selection": 0,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "wifi_home",
+        "runtime_owner": "none",
+        "selected_id": "wifi",
+        "selection": 0,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 0,
+        "ui_full_repaints": 3,
+        "wifi_product_view": "none"
+      }
+    },
+    {
+      "command": "input.state",
+      "value": {
+        "press_events": 0,
+        "queue_drops": 0,
+        "read_errors": 0
+      }
+    },
+    {
+      "command": "ui.state",
+      "value": {
+        "device_selection": 0,
+        "lease_mask": 0,
+        "page": "home",
+        "parent_page": "home",
+        "runtime_event": "wifi_home",
+        "runtime_owner": "none",
+        "selected_id": "wifi",
+        "selection": 0,
+        "survey_product_source_start_attempted": false,
+        "survey_product_store_bytes_written": 0,
+        "survey_product_store_open_attempted": false,
+        "survey_source_selected_mask": 0,
+        "ui_delta_repaints": 0,
+        "ui_full_repaints": 3,
+        "wifi_product_view": "none"
+      }
+    }
+  ],
+  "schema": "leshy.device_lock.optional_pin.hil.v1",
+  "scope": "optional_pin_and_radio_menu_entry",
+  "source_commit": "343119bbd29dc78615a10b32e888c46141a96fce",
+  "status": "passed",
+  "wifi_blocker": {
+    "runtime_event": "source_plan_empty",
+    "survey_product_source_start_attempted": false,
+    "survey_source_selected_mask": 0,
+    "wifi_product_view": "menu"
+  }
+}

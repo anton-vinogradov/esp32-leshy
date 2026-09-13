@@ -5,6 +5,30 @@
 Status: **accepted physical S5 IR checkpoint; bounded nRF24 and Sub-GHz positive
 paths implemented and awaiting a qualified second RF board**.
 
+## Replacement intake — 13 September 2026
+
+The new board-03 is distinct from the failed board-02. Its
+private local intake (raw identifiers are not published)
+passes plausible receiver identities, RX operations on all three nRF24 modules and
+CC1101, and real passive Wi-Fi/BLE reception. Verify it offline with
+`python3 tools/check_replacement_div_intake.py`. A digest-verified private 16 MiB
+factory backup was made before flashing; exact dev.378 is restored with no active
+owner or lease and transmit outputs inactive.
+
+This is **not fixture TX admission or full-board acceptance**. SD returned a response
+timeout with card presence unknown; Full/Guided passed its receiver subplan but failed
+closed at the unenrolled-media artifact stage. IR polling saw no transitions.
+Physical assembly/antenna confirmation, controls/touch/display/sound, positive optical
+IR and known-signal RF qualification remain open. The ROM reports 8 MiB PSRAM, but
+product PSRAM is disabled and memory integrity was not tested. Old board-02 failures
+remain valid historical evidence and must not be attributed to board-03.
+
+SD follow-up: the owner inserted the original card; exact CID identification and
+read-only filesystem mount now pass, with the existing product root found, zero
+writes/enrollment and complete cleanup. This resolves only the initial SD timeout;
+the other physical gates above remain open. See the
+[checked summary](../../tests/hil/evidence/board-03-sd-readonly-20260913.json).
+
 ## Roles and trust boundary
 
 | Role | Firmware | Authority |

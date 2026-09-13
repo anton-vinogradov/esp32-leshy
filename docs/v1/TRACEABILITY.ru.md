@@ -7,6 +7,13 @@
 
 ## Цели верхнего уровня
 
+Последняя UI-доработка: `E-BUILD-251 / E-AUTO-230 / E-HIL-247 / E-UX-098`
+связывает PR-004/011 и NFR-010 с [итогом Wi-Fi dev.384](../../tests/hil/evidence/wifi-ui-1.0.0-dev.384.json),
+host-тестами навигации/текста/столбцов, 8192 переходами столбцов и шестью
+negative/fixture тестами evidence checker. [Ложноположительный dev.382](../../tests/hil/evidence/wifi-ui-1.0.0-dev.382-review-failure.json)
+сохранён. Это доработка WF-01/03/05/06/09, а не новая закрытая capability,
+приёмка источника скрытого имени, всей Lab или очередной полной matrix.
+
 | Goal | Результат для пользователя | Jobs | Requirements | Этапы | Финальное evidence |
 |---|---|---|---|---|---|
 | G-001 | Одна автономная cross-radio сессия | J-01, J-03 | PR-001…PR-007, NFR-002…NFR-009 | S1–S4 | integration traces, storage fault tests, HIL ≥45 минут/≥8 циклов в часовом бюджете |
@@ -295,6 +302,11 @@ UX-01…UX-07 закрывают visual/interaction gate S2; UX-08 повтор�
 
 | Первое физическое действие после долгого простоя и разделение evidence | После сколь угодно долгого простоя Home первое действие физической клавиши обязано пройти debounce/dispatch и изменить UI без ambiguity, queue loss или hot-path persistence. Evidence клавиатуры и acceptance реального touch panel остаются разными claims | `E-BUILD-247`/`E-AUTO-226`/[`E-DIAG-243`](../../tests/hil/evidence/board-01-long-idle-first-action-1.0.0-dev.378.json)/`E-UX-094`/`RB-M260` связывают exact source `c4293a4adaabb1c46ca3cc66f84805dd2938a8d3`. После minimum 42 551 505 ms и 8 510 301 valid input sample ровно один physical Select press/release/dispatch переводит Home в меню Wi-Fi с zero input errors, ambiguity, drops и hot-path writes; владелец подтверждает исправление симптома. Финальное состояние — Home/armed/none/lease 0. Touch counters равны zero, поэтому direct physical touch acceptance остаётся открыта, cadence — 12/15 |
 
+| Понятный отказ входа Device Lock | CAP-052 / PR-024 / UX-S33: отказ входа Home или защищённых пунктов Device должен объяснять настройку/разблокировку, сохранять выбор при Back и никогда не выдавать доступ или запускать функцию автоматически | `E-BUILD-248`/`E-AUTO-227`/[`E-HIL-244`](../../tests/hil/evidence/board-03-lock-entry-1.0.0-dev.379.json)/`E-UX-095`/`RB-M261`: exact dev.379 на board-03; три перехода Home и два Device туда-обратно, явная отмена редактора, неизменный generation 0/unconfigured, стабильные пиксели/счётчики перерисовки, zero input errors/drops и финальный Home/none/lease 0. Девять испорченных evidence отклоняются offline. HIL использует production ui.key; physical keypad/touch и разблокированные радиофункции не приняты |
+| Необязательный PIN с первого старта | CAP-052 / PR-024 / UX-S33 / ADR-007: доступ только после успешной инициализации ключа; существующие PIN/retry/recovery/fault не обходятся | `E-BUILD-249`/`E-AUTO-228`/[`E-HIL-245`](../../tests/hil/evidence/board-03-optional-pin-1.0.0-dev.380.json)/`E-UX-096`/`RB-M262`: exact dev.380 board-03, семь классов admission, отмена добровольного редактора, две перезагрузки с generation 0, стабильные пиксели, RX трёх nRF24/CC1101, финал Home/none/lease 0; 13 tamper negatives. Wi-Fi RX не принят: незарегистрированная SD оставляет source_plan_empty. Настроенный PIN и ошибки ключа проверены host-тестами; нет настройки PIN, SD writes или RF TX |
+
+| Живой просмотр без SD | ADR-008 / PR-003/004/005 / CAP-009/010/011: Живой Wi-Fi без SD admission: сети/карточка, device frames, все 13 каналов; три одинаковых heap endpoints 142284/61000 B, PIN generation 0 и ноль SD операций/дропов. Холодный BLE принимает 32 устройства; после Wi-Fi безопасный отказ largest block 14324 < 28000 B. Частичная приёмка, не full matrix. | E-BUILD-250 / E-AUTO-229 / [E-HIL-246](../../tests/hil/evidence/board-03-live-radio-1.0.0-dev.381.json) / E-UX-097 / RB-M263; 15 tamper negatives |
+
 ## ADR coverage
 
 | ADR | Requirements / risks | Owner реализации | Verification gates |
@@ -304,6 +316,8 @@ UX-01…UX-07 закрывают visual/interaction gate S2; UX-08 повтор�
 | [ADR-003](adr/ADR-003-storage-schema.ru.md) | PR-003/005…008/012, NFR-007…009; R-006/010/014/016 | storage/session/library | slice S3; fault/endurance S5/S8 |
 | [ADR-004](adr/ADR-004-action-boundary.ru.md) | PR-002/009/012/013, NFR-002/003/006; R-008/009/014/016 | SDK/kernel/services | dispatcher S2; transports/safety S6/S7/S8 |
 | [ADR-005](adr/ADR-005-pre-release-hil.ru.md) | PR-002/010/011/012/014/015, NFR-001…003/005/007/010; R-004/006/011/012/014/016 | platform/verification/firmware | device-smoke S1/S2; signed immutable release gate S8 |
+| [ADR-007](adr/ADR-007-optional-device-lock.ru.md) | PR-024 / CAP-052 | services/security / Device Lock UI | shared host regression; dev.380 scoped physical optional-PIN delta |
+| [ADR-008](adr/ADR-008-live-radio-without-sd.ru.md) | PR-003/004/005 / CAP-009/010/011 | apps/survey / Wi-Fi / BLE | Host admission и commit guards; scoped dev.381 Wi-Fi HIL; warm BLE failed |
 
-Все пять решений — accepted design constraints; ни одно не переводит requirement
+Эти решения — accepted design constraints; ни одно не переводит requirement
 в implemented или verified.

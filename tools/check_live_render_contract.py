@@ -118,7 +118,7 @@ def main() -> int:
                 failures.append(f"{label} has no static/dynamic render boundary")
         for marker in (
             "renderBleDeviceRadar(live, signal, false);",
-            "renderWifiNetworkRadar(live, signal, false);",
+            "renderWifiNetworkDetailData();",
             "renderWifiDeviceDetailLiveData(false);",
         ):
             if marker not in selection_delta:

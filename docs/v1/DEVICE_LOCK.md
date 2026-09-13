@@ -28,7 +28,11 @@ PIN re-enrollment over the same data.
 
 ## User contract
 
-- The owner chooses a 6–12 digit local PIN. Repeated and simple ascending or
+- Under [ADR-007](adr/ADR-007-optional-device-lock.md), PIN is optional from first
+  boot on a genuinely virgin device after successful local key initialization.
+  No-PIN mode provides no PIN-based protection against possession of the device;
+  existing, missing-expected or corrupt credentials can never be skipped.
+- The owner may choose a 6–12 digit local PIN. Repeated and simple ascending or
   descending sequences are rejected.
 - The raw PIN is never persisted, logged, exported or retained by Device Lock.
 - After a successful unlock, the owner can choose **Disable PIN** and confirm it on
@@ -47,7 +51,7 @@ PIN re-enrollment over the same data.
 
 | State | Meaning | Protected access |
 |---|---|---|
-| `unconfigured` | no credential has ever been published | setup required |
+| `unconfigured` | no credential ever published; local key successfully initialized | allowed without PIN; denied before initialization |
 | `disabled` | owner explicitly removed PIN protection; exact local data key retained | allowed without PIN |
 | `locked` | valid credential, attempt allowed | denied |
 | `retry_delay` | persistent failed attempt, timer running | denied |
@@ -57,8 +61,9 @@ PIN re-enrollment over the same data.
 
 Status, Lock, Stop, panic, cleanup, update recovery and confirmed factory reset
 remain available in every state. Protected UI/evidence, secret reads, export,
-backup, companion and sensitive settings require `unlocked` or the explicit
-`disabled` mode.
+backup, companion and sensitive settings permit initialized `unconfigured`,
+`unlocked` or explicit `disabled` mode. Their independent target/transport/
+storage/strong-authentication admission rules still apply.
 
 ## Credential and storage
 

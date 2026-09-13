@@ -7,6 +7,11 @@ completion claim. [Screen map](WIFI_UX_MAP.md) · [Live status](STATUS.md).
 Source review: 13 September 2026. Prioritise information that identifies an owned
 network, explains protection/quality and helps choose the next step.
 
+14 September implementation: dev.384 supplies four themed information pages and
+a pixel-fitted UTF-8/escaped SSID display projection. The receive adapters,
+client-frame → AP merge, provenance/conflicts and hidden-name fixture below remain
+open; the UI change does not claim those measurements.
+
 ## User presentation
 
 Main card: **name → protection → channel → live signal**. Enrich automatically

@@ -211,19 +211,22 @@ void configure(DeviceLock& lock, std::uint64_t nowUs = 100) {
     CHECK(lock.state() == DeviceLockState::Unlocked);
 }
 
-void testPinPolicyAndSetupRequiredDefault() {
+void testPinPolicyAndOptionalDefault() {
     MemoryStore store;
     FakeCrypto crypto;
     DeviceLock lock(store, crypto);
+    CHECK(!lock.audit(0).protectedAccessAllowed);
+    CHECK(lock.access(DeviceLockOperation::ProtectedUi, 0) ==
+          DeviceLockAccess::Faulted);
     CHECK(lock.restore(10));
     CHECK(lock.state() == DeviceLockState::Unconfigured);
     CHECK(lock.audit(10).dataKeyAvailable);
     std::array<std::uint8_t, kDeviceLockDataKeyBytes> bootstrapKey{};
     CHECK(lock.copyDataKey(&bootstrapKey));
     CHECK(lock.access(DeviceLockOperation::ProtectedEvidence, 10) ==
-          DeviceLockAccess::SetupRequired);
+          DeviceLockAccess::Allowed);
     CHECK(lock.access(DeviceLockOperation::Companion, 10) ==
-          DeviceLockAccess::SetupRequired);
+          DeviceLockAccess::Allowed);
     CHECK(lock.access(DeviceLockOperation::Configure, 10) ==
           DeviceLockAccess::Allowed);
     CHECK(lock.access(DeviceLockOperation::SafeStop, 10) ==
@@ -330,7 +333,8 @@ void testWrongPinPersistsBackoffAcrossResetAndEndsRecoveryOnly() {
         if (attempt > 1) {
             CHECK(current.state() == DeviceLockState::RetryDelay);
             const std::uint64_t priorDelay =
-                DeviceLock::retryDelayUs(attempt - 1U);
+                DeviceLock::retryDelayUs(
+                    static_cast<std::uint8_t>(attempt - 1U));
             CHECK(current.service(now + priorDelay));
             now += priorDelay;
         }
@@ -550,7 +554,7 @@ void testDestructiveRecoveryOrderingAndFailures() {
     CHECK(store.clears == 2);
     CHECK(lock.state() == DeviceLockState::Unconfigured);
     CHECK(lock.access(DeviceLockOperation::ProtectedEvidence, 1) ==
-          DeviceLockAccess::SetupRequired);
+          DeviceLockAccess::Allowed);
 }
 
 void testCorruptOrMissingExpectedCredentialFailsClosed() {
@@ -571,6 +575,89 @@ void testCorruptOrMissingExpectedCredentialFailsClosed() {
         CHECK(lock.access(DeviceLockOperation::FactoryReset, 0) ==
               DeviceLockAccess::Allowed);
     }
+}
+
+void testOptionalPinColdKeyContinuityAndFailClosedOrigins() {
+    const DeviceLockOperation protectedOperations[] = {
+        DeviceLockOperation::ProtectedUi, DeviceLockOperation::ProtectedEvidence,
+        DeviceLockOperation::SecretRead, DeviceLockOperation::Export,
+        DeviceLockOperation::Backup, DeviceLockOperation::Companion,
+        DeviceLockOperation::SensitiveSettings};
+    MemoryStore store;
+    FakeCrypto crypto;
+    DeviceLock first(store, crypto);
+    for (auto operation : protectedOperations) {
+        CHECK(first.access(operation, 0) == DeviceLockAccess::Faulted);
+    }
+    CHECK(first.restore(10));
+    CHECK(first.audit(10).protectedAccessAllowed);
+    std::array<std::uint8_t, kDeviceLockDataKeyBytes> original{}, after{};
+    CHECK(first.copyDataKey(&original));
+    CHECK(store.saves == 0 && store.disables == 0 && store.bootstrapSaves == 1);
+    first.lock();
+    first.prepareSystemBoundary();
+    FakeEraser eraser;
+    CHECK(!first.factoryReset(false, eraser));
+    CHECK(eraser.calls == 0 && store.clears == 0);
+    CHECK(first.copyDataKey(&after) && original == after);
+    for (auto operation : protectedOperations) {
+        CHECK(first.access(operation, 20) == DeviceLockAccess::Allowed);
+    }
+    DeviceLock cold(store, crypto);
+    CHECK(cold.restore(30));
+    CHECK(cold.copyDataKey(&after) && original == after);
+    CHECK(store.bootstrapSaves == 1 && store.saves == 0 && store.disables == 0);
+    CHECK(cold.configure("704281", 6, 40));
+    CHECK(cold.copyDataKey(&after) && original == after);
+    cold.lock();
+    for (auto operation : protectedOperations) {
+        CHECK(cold.access(operation, 50) == DeviceLockAccess::Locked);
+    }
+    DeviceLock enrolledCold(store, crypto);
+    CHECK(enrolledCold.restore(60));
+    CHECK(!enrolledCold.audit(60).protectedAccessAllowed);
+    CHECK(!enrolledCold.copyDataKey(&after));
+    CHECK(!enrolledCold.disable(true));
+    CHECK(enrolledCold.unlock("704281", 6, 70));
+    CHECK(enrolledCold.copyDataKey(&after) && original == after);
+
+    // A populated bootstrap key must not turn lost/corrupt enrollment into virgin.
+    for (auto status : {DeviceLockLoadStatus::MissingExpected,
+                        DeviceLockLoadStatus::Corrupt, DeviceLockLoadStatus::Error}) {
+        MemoryStore broken;
+        broken.loadStatus = status;
+        broken.bootstrapStatus = DeviceLockBootstrapStatus::Loaded;
+        broken.bootstrapKey = original;
+        DeviceLock denied(broken, crypto);
+        CHECK(!denied.restore(80));
+        CHECK(!denied.audit(80).protectedAccessAllowed);
+        CHECK(!denied.copyDataKey(&after));
+        for (auto operation : protectedOperations) {
+            CHECK(denied.access(operation, 80) == DeviceLockAccess::Faulted);
+        }
+        CHECK(broken.bootstrapSaves == 0 && broken.saves == 0 && broken.disables == 0);
+    }
+    for (auto status : {DeviceLockBootstrapStatus::Corrupt,
+                        DeviceLockBootstrapStatus::Error, DeviceLockBootstrapStatus::Loaded}) {
+        MemoryStore broken;
+        broken.bootstrapStatus = status;  // Loaded with all-zero key is invalid.
+        DeviceLock denied(broken, crypto);
+        CHECK(!denied.restore(90));
+        CHECK(!denied.audit(90).protectedAccessAllowed);
+        CHECK(denied.access(DeviceLockOperation::ProtectedUi, 90) == DeviceLockAccess::Faulted);
+    }
+    MemoryStore writeFailed;
+    writeFailed.failSave = true;
+    DeviceLock failed(writeFailed, crypto);
+    CHECK(!failed.restore(100));
+    CHECK(!failed.audit(100).protectedAccessAllowed);
+    CHECK(failed.access(DeviceLockOperation::ProtectedUi, 100) == DeviceLockAccess::Faulted);
+    FakeCrypto noRandom;
+    noRandom.fail = true;
+    MemoryStore virgin;
+    DeviceLock noKey(virgin, noRandom);
+    CHECK(!noKey.restore(100));
+    CHECK(!noKey.audit(100).protectedAccessAllowed);
 }
 
 void testCredentialRecordIsVersionedExactAndCorruptionDetecting() {
@@ -603,7 +690,8 @@ void testCredentialRecordIsVersionedExactAndCorruptionDetecting() {
 }  // namespace
 
 int main() {
-    testPinPolicyAndSetupRequiredDefault();
+    testPinPolicyAndOptionalDefault();
+    testOptionalPinColdKeyContinuityAndFailClosedOrigins();
     testOperationNamesAreStableAndComplete();
     testLockRestoreAndCorrectUnlock();
     testWrongPinPersistsBackoffAcrossResetAndEndsRecoveryOnly();

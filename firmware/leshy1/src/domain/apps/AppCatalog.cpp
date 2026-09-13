@@ -35,8 +35,9 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory,
         : (simulatedSurvey && !realSurvey)
               ? kernel::runtime::resourceMask(
                     kernel::runtime::Resource::UiForeground)
-              : kernel::runtime::Resource::UiForeground |
-                    kernel::runtime::Resource::EspRf;
+              : kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground) |
+                    kernel::runtime::resourceMask(kernel::runtime::Resource::EspRf) |
+                    kernel::runtime::resourceMask(kernel::runtime::Resource::RadioSpi);
     items_[size_++] = {"wifi", "WI-FI",
                        persistentSurvey
                            ? "passive / persistent"
@@ -51,7 +52,7 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory,
 
     const bool ble = available(inventory, "radio.ble");
     items_[size_++] = {
-        "ble", "BLUETOOTH", ble ? "passive / persistent"
+        "ble", "BLUETOOTH", ble ? "passive / live"
                                     : "passive source unavailable",
         2, ble, false, surveyResources, AppSection::Nearby,
         AppPresentation::Standard};

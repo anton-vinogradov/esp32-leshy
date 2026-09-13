@@ -56,6 +56,7 @@
 #include "apps/capture/SubGhzRawCsv.h"
 #include "apps/capture/WifiFrameCapture.h"
 #include "apps/device/DeviceLockController.h"
+#include "apps/device/DeviceLockNavigation.h"
 #include "apps/self_test/SelfTestController.h"
 #include "apps/spectrum/Cc1101SignalFinder.h"
 #include "apps/spectrum/Cc1101SpectrumController.h"
@@ -177,6 +178,10 @@
 #include "ui/ConnectivitySetupController.h"
 #include "ui/InterfaceSettingsController.h"
 #include "ui/LiveListRenderCache.h"
+#include "ui/LiveTextRenderCache.h"
+#include "ui/LayeredBarDelta.h"
+#include "ui/WifiNetworkNavigation.h"
+#include "ui/VisibleNetworkName.h"
 #include "ui/RankedListFocus.h"
 #include "ui/AntennaStatusController.h"
 #include "ui/AirspaceGuardPresenter.h"
@@ -333,6 +338,9 @@ using leshy1::apps::ble::BleTrackerKind;
 using leshy1::apps::wifi::WifiNetworkCatalog;
 using leshy1::apps::wifi::WifiNetworkNavigationOrder;
 using leshy1::apps::wifi::WifiNetworkSignalStats;
+using leshy1::ui::WifiNetworkPage;
+using leshy1::ui::WifiNetworkKey;
+using leshy1::ui::WifiNetworkIntent;
 using leshy1::apps::wifi::WifiSecurityAssessment;
 using leshy1::apps::wifi::WifiSecurityNextStep;
 using leshy1::apps::wifi::WifiSecurityPosture;
@@ -2057,6 +2065,7 @@ WifiNetworkNavigationOrder wifiNetworkNavigationOrder;
 leshy1::ui::RankedListFocus wifiNetworkFocus;
 std::size_t wifiNetworkSelection = 0;
 Observation wifiNetworkDetail;
+leshy1::ui::WifiNetworkNavigation wifiNetworkNavigation;
 Observation wifiNetworkRenderedDetail;
 WifiNetworkSignalStats wifiNetworkDetailSignal;
 
@@ -2294,7 +2303,7 @@ struct WifiNetworkRowVisual final {
     std::uint8_t channel = 0U;
     std::array<std::uint8_t, Observation::kIdentityCapacity> identity{};
     std::uint8_t identityLength = 0U;
-    std::array<char, 24> label{};
+    std::array<char, 96> label{};
 
     bool operator==(const WifiNetworkRowVisual& other) const {
         return present == other.present && selected == other.selected &&
@@ -2963,6 +2972,7 @@ static_assert(
 struct ProductSurveyRuntimeState final {
     const char* status = "idle";
     bool selected = false;
+    bool persistent = true;
     bool backendOpen = false;
     bool identityCleanupComplete = true;
     bool filesystemAttempted = false;
@@ -5041,140 +5051,144 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
     const std::uint32_t ownedResources = productSurveyWorkerOwnedResources;
     const std::uint8_t selectedSourceMask =
         productSurveyRuntime.selectedSourceMask;
+    const bool persistent = productSurveyRuntime.persistent;
     portEXIT_CRITICAL(&productSurveyWorkerMux);
     report.selectedSourceMask = selectedSourceMask;
-    const auto required =
-        leshy1::kernel::runtime::resourceMask(Resource::UiForeground) |
-        leshy1::kernel::runtime::resourceMask(Resource::EspRf) |
-        leshy1::kernel::runtime::resourceMask(Resource::Storage) |
-        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
-    if ((ownedResources & required) != required) {
-        report.status = "resources_missing";
-        return report;
-    }
-    if (!loadProductFingerprint(report.expectedFingerprint,
-                                sizeof(report.expectedFingerprint))) {
-        report.status = "enrollment_missing";
-        return report;
-    }
+    leshy1::storage::ProductStorePermit storePermit{};
+    // Volatile live views never identify or mount SD and never mint a write permit.
+    if (persistent) {
+        const auto durableResources =
+            leshy1::kernel::runtime::resourceMask(Resource::UiForeground) |
+            leshy1::kernel::runtime::resourceMask(Resource::EspRf) |
+            leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+            leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+        if ((ownedResources & durableResources) != durableResources) {
+            report.status = "resources_missing";
+            return report;
+        }
+        if (!loadProductFingerprint(report.expectedFingerprint,
+                                    sizeof(report.expectedFingerprint))) {
+            report.status = "enrollment_missing";
+            return report;
+        }
 
-    leshy1::storage::SdTransportRunResult identity;
-    for (std::uint8_t attempt = 1;
-         attempt <= leshy1::storage::kProductStartMaximumIdentityAttempts;
-         ++attempt) {
+        leshy1::storage::SdTransportRunResult identity;
+        for (std::uint8_t attempt = 1;
+             attempt <= leshy1::storage::kProductStartMaximumIdentityAttempts;
+             ++attempt) {
+            if (productSurveyCancelRequested()) {
+                report.status = "cancelled";
+                return report;
+            }
+            heartbeatProductSurveyPreparation();
+            publishProductSurveyPreparationStage("identity");
+            BoardSdSpiTransport identityTransport;
+            const bool identityBegun = identityTransport.begin();
+            identity = {};
+            if (identityBegun) {
+                leshy1::storage::SdTransportRunPolicy policy;
+                policy.allowPhysical = true;
+                policy.explicitlySelected = true;
+                policy.identificationOnly = true;
+                policy.ownedResources = ownedResources;
+                identity = leshy1::storage::runSdIdentificationStateMachine(
+                    leshy1::storage::defaultSdIdentificationPlan(),
+                    identityTransport, policy);
+                identityTransport.end();
+            }
+            heartbeatProductSurveyPreparation();
+            report.identityAttempts = attempt;
+            report.identityTransientRetries =
+                static_cast<std::uint8_t>(attempt - 1U);
+            report.identityStatus = identity.status;
+            report.identityCleanupComplete = identityTransport.cleanupComplete();
+            formatCidFingerprint(identity.identity,
+                                 report.observedFingerprint,
+                                 sizeof(report.observedFingerprint));
+            if (report.identityCleanupComplete &&
+                identity.status == leshy1::storage::SdTransportRunStatus::Valid) {
+                break;
+            }
+            const leshy1::storage::ProductStartIdentityRetryEvidence retryEvidence{
+                true,
+                true,
+                exactCidFingerprint(report.expectedFingerprint),
+                (ownedResources & durableResources) == durableResources,
+                identityTransport.physicalSpiStarted(),
+                identity.status,
+                std::strcmp(report.observedFingerprint,
+                            "00000000000000000000000000000000") == 0,
+                report.identityCleanupComplete,
+                report.filesystemAttempted,
+            };
+            if (!leshy1::storage::shouldRetryProductStartIdentity(
+                    retryEvidence, attempt)) {
+                break;
+            }
+            ulTaskNotifyTake(
+                pdTRUE,
+                pdMS_TO_TICKS(
+                    leshy1::storage::productStartIdentityRetryDelayMs(attempt)));
+            heartbeatProductSurveyPreparation();
+        }
         if (productSurveyCancelRequested()) {
             report.status = "cancelled";
             return report;
         }
-        heartbeatProductSurveyPreparation();
-        publishProductSurveyPreparationStage("identity");
-        BoardSdSpiTransport identityTransport;
-        const bool identityBegun = identityTransport.begin();
-        identity = {};
-        if (identityBegun) {
-            leshy1::storage::SdTransportRunPolicy policy;
-            policy.allowPhysical = true;
-            policy.explicitlySelected = true;
-            policy.identificationOnly = true;
-            policy.ownedResources = ownedResources;
-            identity = leshy1::storage::runSdIdentificationStateMachine(
-                leshy1::storage::defaultSdIdentificationPlan(),
-                identityTransport, policy);
-            identityTransport.end();
+        if (!report.identityCleanupComplete ||
+            identity.status != leshy1::storage::SdTransportRunStatus::Valid) {
+            report.status = "identity_failed";
+            return report;
         }
-        heartbeatProductSurveyPreparation();
-        report.identityAttempts = attempt;
-        report.identityTransientRetries =
-            static_cast<std::uint8_t>(attempt - 1U);
-        report.identityStatus = identity.status;
-        report.identityCleanupComplete = identityTransport.cleanupComplete();
-        formatCidFingerprint(identity.identity,
-                             report.observedFingerprint,
-                             sizeof(report.observedFingerprint));
-        if (report.identityCleanupComplete &&
-            identity.status == leshy1::storage::SdTransportRunStatus::Valid) {
-            break;
+        if (std::strcmp(report.expectedFingerprint,
+                        report.observedFingerprint) != 0) {
+            report.status = "fingerprint_mismatch";
+            return report;
         }
-        const leshy1::storage::ProductStartIdentityRetryEvidence retryEvidence{
-            true,
-            true,
-            exactCidFingerprint(report.expectedFingerprint),
-            (ownedResources & required) == required,
-            identityTransport.physicalSpiStarted(),
-            identity.status,
-            std::strcmp(report.observedFingerprint,
-                        "00000000000000000000000000000000") == 0,
-            report.identityCleanupComplete,
-            report.filesystemAttempted,
-        };
-        if (!leshy1::storage::shouldRetryProductStartIdentity(
-                retryEvidence, attempt)) {
-            break;
+
+        // Cold boot already mounted this exact enrolled card read-only, recovered
+        // the catalog and retained its immutable geometry plus the FAT FSInfo free
+        // hint. Explicit Start re-reads CID physically, then reuses that evidence
+        // for admission. There is deliberately no pre-scan writable mount: Wi-Fi
+        // and BLE run with the SD stack absent, and Stop performs the one exact-CID
+        // writable mount needed for the atomic commit.
+        publishProductSurveyPreparationStage("boot_storage_evidence");
+        report.cardCapacityBytes = productBootRecovery.cardCapacityBytes;
+        report.cachedFreeBytes = productBootRecovery.cachedFreeBytes;
+        const bool capacityMatched =
+            report.cardCapacityBytes != 0 &&
+            report.cardCapacityBytes == identity.identity.capacityBytes &&
+            productBootRecovery.cleanupComplete;
+        const bool rootExists = knownProductSessionRootExists(
+            report.observedFingerprint);
+
+        leshy1::storage::MediaIdentity media;
+        media.present = capacityMatched;
+        media.kind = leshy1::storage::MediaKind::Sd;
+        media.fingerprint = report.observedFingerprint;
+        media.capacityBytes = report.cardCapacityBytes;
+        media.freeBytes = report.cachedFreeBytes;
+        leshy1::storage::ProductStoreRequest storeRequest;
+        storeRequest.operation =
+            leshy1::storage::ProductStoreOperation::CommitSession;
+        storeRequest.explicitlySelected = true;
+        storeRequest.expectedFingerprint = report.expectedFingerprint;
+        storeRequest.rootPath = leshy1::storage::kProductSessionStoreRoot;
+        storeRequest.rootExists = rootExists;
+        storeRequest.driverWriteEnabled = true;
+        storeRequest.requiredBytes = kProductSurveyCommitBytes;
+        storeRequest.reserveBytes = kProductSurveyReserveBytes;
+        storeRequest.ownedResources = ownedResources;
+        storeRequest.power = powerSafetyPolicy.writeDisposition();
+        storePermit =
+            leshy1::storage::authorizeProductStore(media, storeRequest);
+        report.storeStatus = storePermit.status;
+        if (!storePermit.allowed()) {
+            report.status =
+                leshy1::storage::productStoreAccessStatusName(storePermit.status);
+            return report;
         }
-        ulTaskNotifyTake(
-            pdTRUE,
-            pdMS_TO_TICKS(
-                leshy1::storage::productStartIdentityRetryDelayMs(attempt)));
-        heartbeatProductSurveyPreparation();
     }
-    if (productSurveyCancelRequested()) {
-        report.status = "cancelled";
-        return report;
-    }
-    if (!report.identityCleanupComplete ||
-        identity.status != leshy1::storage::SdTransportRunStatus::Valid) {
-        report.status = "identity_failed";
-        return report;
-    }
-    if (std::strcmp(report.expectedFingerprint,
-                    report.observedFingerprint) != 0) {
-        report.status = "fingerprint_mismatch";
-        return report;
-    }
-
-    // Cold boot already mounted this exact enrolled card read-only, recovered
-    // the catalog and retained its immutable geometry plus the FAT FSInfo free
-    // hint. Explicit Start re-reads CID physically, then reuses that evidence
-    // for admission. There is deliberately no pre-scan writable mount: Wi-Fi
-    // and BLE run with the SD stack absent, and Stop performs the one exact-CID
-    // writable mount needed for the atomic commit.
-    publishProductSurveyPreparationStage("boot_storage_evidence");
-    report.cardCapacityBytes = productBootRecovery.cardCapacityBytes;
-    report.cachedFreeBytes = productBootRecovery.cachedFreeBytes;
-    const bool capacityMatched =
-        report.cardCapacityBytes != 0 &&
-        report.cardCapacityBytes == identity.identity.capacityBytes &&
-        productBootRecovery.cleanupComplete;
-    const bool rootExists = knownProductSessionRootExists(
-        report.observedFingerprint);
-
-    leshy1::storage::MediaIdentity media;
-    media.present = capacityMatched;
-    media.kind = leshy1::storage::MediaKind::Sd;
-    media.fingerprint = report.observedFingerprint;
-    media.capacityBytes = report.cardCapacityBytes;
-    media.freeBytes = report.cachedFreeBytes;
-    leshy1::storage::ProductStoreRequest storeRequest;
-    storeRequest.operation =
-        leshy1::storage::ProductStoreOperation::CommitSession;
-    storeRequest.explicitlySelected = true;
-    storeRequest.expectedFingerprint = report.expectedFingerprint;
-    storeRequest.rootPath = leshy1::storage::kProductSessionStoreRoot;
-    storeRequest.rootExists = rootExists;
-    storeRequest.driverWriteEnabled = true;
-    storeRequest.requiredBytes = kProductSurveyCommitBytes;
-    storeRequest.reserveBytes = kProductSurveyReserveBytes;
-    storeRequest.ownedResources = ownedResources;
-    storeRequest.power = powerSafetyPolicy.writeDisposition();
-    const leshy1::storage::ProductStorePermit storePermit =
-        leshy1::storage::authorizeProductStore(media, storeRequest);
-    report.storeStatus = storePermit.status;
-    if (!storePermit.allowed()) {
-        report.status =
-            leshy1::storage::productStoreAccessStatusName(storePermit.status);
-        return report;
-    }
-
     report.sourceFailureInjected =
         consumeProductSurveySourceUnavailableInjection();
     if (report.sourceFailureInjected) {
@@ -5183,6 +5197,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
         report.unavailableSourceMask = selectedSourceMask;
         leshy1::apps::survey::ProductSurveyRequest unavailableRequest;
         unavailableRequest.explicitStart = true;
+        unavailableRequest.persistent = persistent;
         unavailableRequest.sourceAvailable = false;
         unavailableRequest.selectedSourceMask = selectedSourceMask;
         unavailableRequest.availableSourceMask = 0;
@@ -5226,6 +5241,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
         selectedSourceMask & ~report.activeSourceMask);
     leshy1::apps::survey::ProductSurveyRequest surveyRequest;
     surveyRequest.explicitStart = true;
+    surveyRequest.persistent = persistent;
     surveyRequest.sourceAvailable = report.activeSourceMask != 0;
     surveyRequest.selectedSourceMask = selectedSourceMask;
     surveyRequest.availableSourceMask = report.activeSourceMask;
@@ -6180,6 +6196,7 @@ bool startProductSurvey() {
     productSurveyTimeline.reset();
     productSurveyRuntime.status = "preparing";
     productSurveyRuntime.selected = true;
+    productSurveyRuntime.persistent = surveyWorkflow.persistent();
     productSurveyRuntime.selectedSourceMask =
         surveySourceController.selectedMask();
     productSurveyRuntime.timelineStatus = "preparing";
@@ -6258,6 +6275,8 @@ bool serviceProductSurveyCommitBoundary() {
 }
 
 bool reopenProductSurveyBackendForCommit() {
+    // Defense in depth: no UI/worker path may save a live-only session.
+    if (!productSurveyRuntime.persistent) return false;
     const auto required =
         leshy1::kernel::runtime::resourceMask(Resource::UiForeground) |
         leshy1::kernel::runtime::resourceMask(Resource::EspRf) |
@@ -6512,6 +6531,8 @@ SurveyPipelineStatus stopProductSurvey() {
 void releaseProductSurveyAfterTerminal(const char* status, bool returnHome);
 
 bool requestProductSurveyWorkerStop(bool cancel) {
+    // Leaving live browsing always discards RAM; it can never auto-commit.
+    cancel = cancel || !productSurveyRuntime.persistent;
     const std::uint64_t actionStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     const ProductSurveyWorkerControl control = productSurveyControl();
@@ -6560,6 +6581,7 @@ bool requestProductSurveyWorkerPause() {
 }
 
 bool commitPausedProductSurvey() {
+    if (!productSurveyRuntime.persistent) return false;
     if (productSurveyControl() != ProductSurveyWorkerControl::Paused) {
         return false;
     }
@@ -14434,6 +14456,8 @@ enum class NavigationKey : std::uint8_t {
     Left,
     UpDown,
     RightAndSelect,
+    Right,
+    Select,
 };
 
 struct NavigationCell final {
@@ -14524,14 +14548,22 @@ NavigationFooter navigationFooterForCurrentState() {
                     {NavigationKey::RightAndSelect, UiTextId::NavAgain}};
         }
         if (wifiProductView == WifiProductView::NetworkDetail) {
-            return {{NavigationKey::Left, UiTextId::NavList}, {},
-                    {NavigationKey::RightAndSelect, UiTextId::NavCheck}};
+            if (wifiNetworkNavigation.rowCount() != 0U) return {back, choose, enter};
+            if (wifiNetworkNavigation.page() == WifiNetworkPage::Summary) {
+                return {{NavigationKey::Left, UiTextId::NavList},
+                        {NavigationKey::Select, UiTextId::NavRadar},
+                        {NavigationKey::Right, UiTextId::NavActions}};
+            }
+            if (wifiNetworkNavigation.page() == WifiNetworkPage::Radar) {
+                return {back, {}, {NavigationKey::Right, UiTextId::NavActions}};
+            }
+            return {back, {}, {}};
         }
         if (wifiProductView == WifiProductView::PasswordCheckIntro) {
             const WifiSecurityAssessment assessment =
                 assessWifiSecurity(wifiNetworkDetail.wifiNetwork);
             return {back, {}, assessment.passwordCheckAvailable
-                    ? NavigationCell{NavigationKey::RightAndSelect,
+                    ? NavigationCell{NavigationKey::Select,
                                      UiTextId::NavStart}
                     : NavigationCell{}};
         }
@@ -15049,7 +15081,12 @@ constexpr std::int16_t kNavigationArrowWidth = 9;
 constexpr std::int16_t kNavigationUpDownWidth = 23;
 
 std::int16_t navigationKeyWidth(NavigationKey key) {
-    if (key == NavigationKey::Left) return kNavigationArrowWidth;
+    if (key == NavigationKey::Left || key == NavigationKey::Right)
+        return kNavigationArrowWidth;
+    if (key == NavigationKey::Select) {
+        selectUiFont(UiTextRole::Meta);
+        return display.textWidth(tr(UiTextId::NavOk));
+    }
     if (key == NavigationKey::UpDown) return kNavigationUpDownWidth;
     if (key == NavigationKey::RightAndSelect) {
         selectUiFont(UiTextRole::Meta);
@@ -15071,6 +15108,13 @@ void renderNavigationKey(NavigationKey key, std::int16_t x,
         display.fillTriangle(x + 12, centerY - 2, x + 17, centerY + 4,
                              x + 22, centerY - 2,
                              Palette::TextSecondary);
+    } else if (key == NavigationKey::Right) {
+        display.fillTriangle(x, centerY - 5, x, centerY + 5,
+                             x + 8, centerY, Palette::TextSecondary);
+    } else if (key == NavigationKey::Select) {
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, x, textTop);
+        display.print(tr(UiTextId::NavOk));
     } else if (key == NavigationKey::RightAndSelect) {
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
         selectUiFont(UiTextRole::Meta);
@@ -16204,6 +16248,13 @@ void renderDeviceLockPage(bool clearContent) {
     } else if (audit.state ==
                leshy1::services::security::DeviceLockState::Disabled) {
         renderMetric(1, tr(UiTextId::DeviceLockDisabledNote), Tone::Warning);
+    } else if (audit.state ==
+               leshy1::services::security::DeviceLockState::Unconfigured) {
+        renderMetric(1, tr(UiTextId::DeviceLockDisabledNote), Tone::Warning);
+        renderMetric(2, tr(UiTextId::DeviceLockOptionalNote), Tone::Muted);
+    } else if (audit.state ==
+               leshy1::services::security::DeviceLockState::Locked) {
+        renderMetric(1, tr(UiTextId::DeviceLockUnlockRequired), Tone::Warning);
     } else if (audit.state ==
                    leshy1::services::security::DeviceLockState::RecoveryOnly ||
                audit.state ==
@@ -17997,6 +18048,22 @@ void resetWifiNetworkListRenderCache() {
     wifiNetworkListRenderCache.reset();
 }
 
+void fitWifiDisplayName(char* text, std::int16_t pixels) {
+    selectUiFont(UiTextRole::Body);
+    if (display.textWidth(text) <= pixels) return;
+    std::size_t end = std::strlen(text);
+    while (end > 0U) {
+        --end;
+        while (end > 0U &&
+               (static_cast<unsigned char>(text[end]) & 0xC0U) == 0x80U) --end;
+        // Escaped SSID bytes remain unambiguous at the clipping boundary.
+        if (end >= 3U && text[end - 3U] == '\\' && text[end - 2U] == 'x') end -= 3U;
+        text[end] = '~';
+        text[end + 1U] = '\0';
+        if (display.textWidth(text) <= pixels) return;
+    }
+}
+
 WifiNetworkRowVisual composeWifiNetworkRowVisual(
         std::size_t index, std::size_t firstVisible) {
     WifiNetworkRowVisual visual{};
@@ -18011,18 +18078,10 @@ WifiNetworkRowVisual composeWifiNetworkRowVisual(
     visual.channel = observation->channel;
     visual.identity = observation->identity;
     visual.identityLength = observation->identityLength;
-    const std::size_t visibleLength = observation->labelLength < 18U
-        ? observation->labelLength : 18U;
-    if (visibleLength == 0) {
-        std::snprintf(visual.label.data(), visual.label.size(), "%s",
-                      tr(UiTextId::Hidden));
-    } else {
-        std::memcpy(visual.label.data(), observation->label.data(),
-                    visibleLength);
-        if (observation->labelLength > visibleLength) {
-            visual.label[visibleLength - 1U] = '~';
-        }
-    }
+    leshy1::ui::formatVisibleNetworkName(
+        observation->label.data(), observation->labelLength, tr(UiTextId::Hidden),
+        visual.label.data(), visual.label.size());
+    fitWifiDisplayName(visual.label.data(), Layout::ContentWidth - 24);
     return visual;
 }
 
@@ -18123,242 +18182,267 @@ void renderWifiNetworks(bool clearContent) {
     (void)renderWifiNetworksData(clearContent);
 }
 
-bool wifiNetworkDetailStaticFieldsDiffer(const Observation& left,
-                                         const Observation& right) {
-    return left.channel != right.channel ||
-        left.frequencyKhz != right.frequencyKhz ||
-        left.labelLength != right.labelLength ||
-        std::memcmp(left.label.data(), right.label.data(),
-                    left.labelLength) != 0 ||
-        !leshy1::domain::observations::wifiNetworkFactsEqual(
-            left.wifiNetwork, right.wifiNetwork);
-}
-
 UiTextId wifiNetworkTrendText(std::int16_t trendDb) {
     if (trendDb >= 4) return UiTextId::WifiNetworkTrendStronger;
     if (trendDb <= -4) return UiTextId::WifiNetworkTrendWeaker;
     return UiTextId::WifiNetworkTrendStable;
 }
 
+UiTextId wifiSecurityPostureText(WifiSecurityPosture posture);
+Tone wifiSecurityPostureTone(WifiSecurityPosture posture);
+UiTextId wifiSecurityNextStepText(WifiSecurityNextStep step);
+
+leshy1::ui::LiveTextRenderCache<12> wifiNetworkTextCache;
+std::uint32_t wifiNetworkSceneRevision = 0;
+std::uint32_t wifiNetworkRenderedSceneRevision = 0;
+WifiNetworkPage wifiNetworkRenderedPage = WifiNetworkPage::Summary;
+std::uint8_t wifiNetworkRenderedSelection = 255U;
+bool wifiNetworkRadarValid = false;
+std::int16_t wifiNetworkRadarRssi = -100;
+
+bool renderWifiNetworkText(std::uint8_t slot, const char* text,
+                           std::uint16_t color, std::int16_t top,
+                           UiTextRole role = UiTextRole::Meta) {
+    if (!wifiNetworkTextCache.changed(slot, text, color)) return false;
+    bool painted = false;
+    if (role == UiTextRole::Meta) {
+        painted = pushLiveMetaTextRow(text, color, top);
+    } else if (beginLiveTextRow(role, color, Palette::Canvas)) {
+        setLiveTextRowCursor(role, 2, 2);
+        liveTextRowSprite.print(text);
+        pushLiveTextRow(Layout::Edge, top - 2);
+        painted = true;
+    }
+    if (painted) wifiNetworkTextCache.publish(slot, text, color);
+    // Failed compositor is retried, never marked successfully painted.
+    return painted;
+}
+
+constexpr Rect kWifiNetworkRadarBounds = {
+    Layout::Edge, 108, Layout::ContentWidth, 104};
+constexpr Rect kWifiNetworkFindBounds = {
+    Layout::Edge, 216, Layout::ContentWidth, 36};
+constexpr Rect kWifiNetworkActionsBounds = {
+    Layout::Edge, 256, Layout::ContentWidth, 36};
+constexpr Rect kWifiPasswordStartBounds = {
+    Layout::Edge, 246, Layout::ContentWidth, 44};
+
+void renderWifiNetworkButton(Rect bounds, const char* label, bool selected) {
+    const std::uint16_t background = selected ? Palette::SurfaceFocus : Palette::Surface;
+    display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                          Layout::Radius, background);
+    renderFocusCue(bounds, selected);
+    selectUiFont(UiTextRole::Body);
+    const std::int16_t x = bounds.x + std::max<std::int16_t>(
+        12, (bounds.width - display.textWidth(label)) / 2);
+    const std::int16_t y = bounds.y + (bounds.height -
+        kRobotoCondensedBodyAscent - kRobotoCondensedBodyDescent) / 2;
+    display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary, background);
+    setUiCursor(UiTextRole::Body, x, y);
+    display.print(label);
+}
+
 void renderWifiNetworkRadar(const Observation& network,
                             const WifiNetworkSignalStats& signal,
                             bool force = true) {
-    constexpr Rect kRadar = {
-        Layout::Edge, 222, Layout::ContentWidth, 67};
-    constexpr std::int16_t kInset = 10;
-    constexpr std::int16_t kTrackY = 258;
-    constexpr std::int16_t kTrackHeight = 12;
-    const std::int16_t trackWidth = kRadar.width - 2 * kInset;
-    const std::uint8_t level = wifiSignalLevel(network.rssiDbm);
-    const std::uint16_t tone = level >= 3U
-        ? Palette::Positive : (level == 2U ? Palette::Warning
-                                           : Palette::Danger);
-    if (force) {
-        display.fillRect(kRadar.x, kRadar.y, kRadar.width, kRadar.height,
-                         Palette::Canvas);
-        display.fillRoundRect(kRadar.x, kRadar.y, kRadar.width, kRadar.height,
-                              Layout::Radius, Palette::Surface);
-        display.setTextColor(Palette::TextSecondary, Palette::Surface);
-        setUiCursor(UiTextRole::Meta, kRadar.x + kInset, 228);
-        display.print(tr(UiTextId::RadioSignalLabel));
+    if (force || !wifiNetworkRadarValid) {
+        renderRadioSignalCard(network.rssiDbm, kWifiNetworkRadarBounds);
+        wifiNetworkRadarValid = true;
+    } else {
+        renderRadioSignalCardDelta(wifiNetworkRadarRssi, network.rssiDbm,
+                                   kWifiNetworkRadarBounds);
     }
-    display.fillRect(kRadar.x + 108, 226, kRadar.width - 118, 16,
-                     Palette::Surface);
-    char line[32] = {};
-    std::snprintf(line, sizeof(line), tr(UiTextId::RadioSignalDbmFormat),
-                  static_cast<int>(network.rssiDbm));
-    display.setTextColor(tone, Palette::Surface);
-    const std::int16_t valueX = kRadar.x + kRadar.width - kInset -
-                                display.textWidth(line);
-    setUiCursor(UiTextRole::Meta, valueX, 228);
-    display.print(line);
-    display.fillRect(kRadar.x + kInset, 243, trackWidth, 15,
-                     Palette::Surface);
-    setUiCursor(UiTextRole::Body, kRadar.x + kInset, 243);
-    display.print(tr(radioSignalQualityText(network.rssiDbm)));
+    wifiNetworkRadarRssi = network.rssiDbm;
+    if (wifiNetworkNavigation.page() == WifiNetworkPage::Radar) {
+        char line[96] = {};
+        std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkRangeFormat),
+                      static_cast<int>(signal.minimumRssiDbm),
+                      static_cast<int>(signal.maximumRssiDbm));
+        renderWifiNetworkText(8, line, Palette::TextMuted, 230);
+        renderWifiNetworkText(9, tr(wifiNetworkTrendText(signal.rssiTrendDb)),
+                              Palette::TextSecondary, 253);
+        renderWifiNetworkText(10, tr(UiTextId::WifiRadarMeaning),
+                              Palette::TextMuted, 277);
+    }
+}
 
-    display.fillRect(kRadar.x + kInset, kTrackY, trackWidth,
-                     kTrackHeight, Palette::Canvas);
-    display.drawRect(kRadar.x + kInset, kTrackY, trackWidth,
-                     kTrackHeight, Palette::Divider);
-    const std::int16_t clamped = network.rssiDbm < -100
-        ? -100 : (network.rssiDbm > -40 ? -40 : network.rssiDbm);
-    const std::int16_t fillWidth = static_cast<std::int16_t>(
-        (static_cast<std::int32_t>(clamped + 100) * (trackWidth - 2)) / 60);
-    if (fillWidth > 0) {
-        display.fillRect(kRadar.x + kInset + 1, kTrackY + 1,
-                         fillWidth, kTrackHeight - 2, tone);
+UiTextId wifiNetworkPageTitle(WifiNetworkPage page) {
+    switch (page) {
+        case WifiNetworkPage::Actions: return UiTextId::WifiNetworkActions;
+        case WifiNetworkPage::Information: return UiTextId::WifiNetworkAllFacts;
+        case WifiNetworkPage::Identity: return UiTextId::WifiNetworkIdentity;
+        case WifiNetworkPage::Protection: return UiTextId::WifiSecurityCheckTitle;
+        case WifiNetworkPage::Radio: return UiTextId::WifiNetworkRadioTitle;
+        case WifiNetworkPage::Observed: return UiTextId::WifiNetworkObserved;
+        case WifiNetworkPage::Radar: return UiTextId::WifiNetworkFind;
+        default: return UiTextId::WifiNetworkDetailTitle;
     }
-    display.fillRect(kRadar.x + kInset, 273, trackWidth, 14,
-                     Palette::Surface);
-    std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkRangeFormat),
-                  static_cast<int>(signal.minimumRssiDbm),
-                  static_cast<int>(signal.maximumRssiDbm));
-    display.setTextColor(Palette::TextMuted, Palette::Surface);
-    setUiCursor(UiTextRole::Meta, kRadar.x + kInset, 274);
-    display.print(line);
-    const char* trend = tr(wifiNetworkTrendText(signal.rssiTrendDb));
-    const std::int16_t trendX = kRadar.x + kRadar.width - kInset -
-                                display.textWidth(trend);
-    const std::uint16_t trendTone = signal.rssiTrendDb >= 4
-        ? Palette::Positive : (signal.rssiTrendDb <= -4
-            ? Palette::Danger : Palette::TextMuted);
-    display.setTextColor(trendTone, Palette::Surface);
-    setUiCursor(UiTextRole::Meta, trendX, 274);
-    display.print(trend);
+}
+
+void renderWifiNetworkMenu() {
+    const bool actions = wifiNetworkNavigation.page() == WifiNetworkPage::Actions;
+    constexpr UiTextId actionLabels[] = {
+        UiTextId::WifiNetworkAssess, UiTextId::WifiNetworkPassword,
+        UiTextId::WifiNetworkAllFacts};
+    constexpr UiTextId infoLabels[] = {
+        UiTextId::WifiNetworkIdentity, UiTextId::WifiNetworkProtection,
+        UiTextId::WifiNetworkRadioTitle, UiTextId::WifiNetworkObserved};
+    constexpr UiTextId actionNotes[] = {
+        UiTextId::WifiNetworkAssessNote, UiTextId::WifiNetworkPasswordNote,
+        UiTextId::WifiNetworkAllFactsNote};
+    constexpr UiTextId infoNotes[] = {
+        UiTextId::WifiNetworkIdentityNote, UiTextId::WifiNetworkProtectionNote,
+        UiTextId::WifiNetworkRadioNote, UiTextId::WifiNetworkObservedNote};
+    const std::uint8_t selection = wifiNetworkNavigation.selection();
+    for (std::uint8_t row = 0; row < wifiNetworkNavigation.rowCount(); ++row) {
+        if (wifiNetworkRenderedSelection != 255U &&
+            row != selection && row != wifiNetworkRenderedSelection) continue;
+        if (wifiNetworkRenderedSelection == selection) continue;
+        pushLiveListRow(Components::homeRow(row), row == selection,
+                       tr(actions ? actionLabels[row] : infoLabels[row]),
+                       tr(actions ? actionNotes[row] : infoNotes[row]),
+                       LiveListPaletteIndex::TextMuted, false, -100);
+    }
+    wifiNetworkRenderedSelection = selection;
 }
 
 void renderWifiNetworkDetailData() {
     const Observation& network = *liveWifiNetworkDetail();
     const WifiNetworkSignalStats& signal = *liveWifiNetworkSignal();
-    wifiNetworkDetail = network;
-    wifiNetworkDetailSignal = signal;
-    display.fillRect(0, Layout::ContentTop, Layout::ScreenWidth,
-                     Layout::FooterDividerY - Layout::ContentTop,
-                     Palette::Canvas);
-
-    char primary[26] = {};
-    if (network.labelLength == 0U) {
-        std::snprintf(primary, sizeof(primary), "%s", tr(UiTextId::Hidden));
-    } else {
-        const std::size_t visible = network.labelLength < sizeof(primary)
-            ? network.labelLength : sizeof(primary) - 1U;
-        std::memcpy(primary, network.label.data(), visible);
-        primary[visible] = '\0';
-        if (visible < network.labelLength && visible > 1U) {
-            primary[visible - 1U] = '~';
-        }
+    const WifiNetworkPage page = wifiNetworkNavigation.page();
+    if (wifiNetworkNavigation.rowCount() != 0U) {
+        renderWifiNetworkMenu();
+        return;
     }
-    display.setTextColor(Palette::Focus, Palette::Canvas);
-    setUiCursor(UiTextRole::Body, 14, 34);
-    display.print(primary);
+    char primary[96] = {};
+    leshy1::ui::formatVisibleNetworkName(
+        network.label.data(), network.labelLength, tr(UiTextId::Hidden),
+        primary, sizeof(primary));
+    fitWifiDisplayName(primary, Layout::ContentWidth - 4);
+    renderWifiNetworkText(0, primary, Palette::Focus, 34, UiTextRole::Body);
 
     char line[96] = {};
-    std::snprintf(
-        line, sizeof(line), tr(UiTextId::WifiNetworkBssidFormat),
-        static_cast<unsigned>(network.identity[0]),
-        static_cast<unsigned>(network.identity[1]),
-        static_cast<unsigned>(network.identity[2]),
-        static_cast<unsigned>(network.identity[3]),
-        static_cast<unsigned>(network.identity[4]),
-        static_cast<unsigned>(network.identity[5]));
-    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 57);
-    display.print(line);
-
-    char vendor[24] = {};
-    const bool vendorKnown = wifiOuiDatabase.lookup(
-        network.identity.data(), vendor, sizeof(vendor));
-    if (vendorKnown) {
-        std::snprintf(line, sizeof(line),
-                      tr(UiTextId::WifiNetworkVendorFormat), vendor);
-    } else {
-        std::snprintf(line, sizeof(line), "%s",
-                      tr(UiTextId::WifiNetworkVendorUnknown));
-    }
-    display.setTextColor(vendorKnown ? Palette::TextSecondary
-                                     : Palette::TextMuted,
-                         Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 76);
-    display.print(line);
-
-    display.setTextColor(network.labelLength == 0U ? Palette::Warning
-                                                   : Palette::TextMuted,
-                         Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 95);
-    display.print(tr(network.labelLength == 0U
-                         ? UiTextId::WifiNetworkListeningForName
-                         : UiTextId::BlePassiveOnly));
-
     const auto& facts = network.wifiNetwork;
-    const char* authentication = facts.present
-        ? leshy1::drivers::wifi::wifiAuthenticationName(
-              facts.authentication)
-        : "UNKNOWN";
-    std::snprintf(line, sizeof(line),
-                  tr(UiTextId::WifiNetworkSecurityFormat), authentication);
-    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 114);
-    display.print(line);
-
-    std::snprintf(
-        line, sizeof(line), tr(UiTextId::WifiNetworkCipherFormat),
-        leshy1::drivers::wifi::wifiCipherName(facts.pairwiseCipher),
-        leshy1::drivers::wifi::wifiCipherName(facts.groupCipher));
-    setUiCursor(UiTextRole::Meta, 14, 133);
-    display.print(line);
-
-    char width[20] = {};
-    std::snprintf(
-        width, sizeof(width), "%s%s",
-        leshy1::drivers::wifi::wifiChannelWidthName(facts.channelWidth),
-        facts.secondaryChannelDirection == 1U
-            ? "+" : (facts.secondaryChannelDirection == 2U ? "-" : ""));
-    std::snprintf(
-        line, sizeof(line), tr(UiTextId::WifiNetworkRadioFormat),
-        static_cast<unsigned>(network.channel),
-        static_cast<unsigned long>(network.frequencyKhz / 1000U),
-        width);
-    display.setTextColor(Palette::Positive, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 152);
-    display.print(line);
-
-    char phy[28] = {};
-    if (!leshy1::drivers::wifi::formatWifiPhyMask(
-            facts.phyMask, phy, sizeof(phy))) {
-        std::snprintf(phy, sizeof(phy), "UNKNOWN");
+    const bool summary = page == WifiNetworkPage::Summary ||
+                         page == WifiNetworkPage::Radar;
+    if (summary || page == WifiNetworkPage::Protection) {
+        std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkSecurityFormat),
+                      facts.present ? leshy1::drivers::wifi::wifiAuthenticationName(
+                          facts.authentication) : "UNKNOWN");
+        renderWifiNetworkText(1, line, Palette::TextSecondary, 61);
     }
-    const char* ftm = facts.ftmResponder && facts.ftmInitiator
-        ? "R+I" : (facts.ftmResponder ? "R" :
-                     (facts.ftmInitiator ? "I" : "--"));
-    char antenna[4] = "--";
-    if (facts.receiveAntenna <= 1U) {
-        std::snprintf(antenna, sizeof(antenna), "%u",
-                      static_cast<unsigned>(facts.receiveAntenna));
+    if (summary || page == WifiNetworkPage::Radio) {
+        char width[20] = {};
+        std::snprintf(width, sizeof(width), "%s%s",
+            leshy1::drivers::wifi::wifiChannelWidthName(facts.channelWidth),
+            facts.secondaryChannelDirection == 1U ? "+" :
+                (facts.secondaryChannelDirection == 2U ? "-" : ""));
+        std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkRadioFormat),
+                      static_cast<unsigned>(network.channel),
+                      static_cast<unsigned long>(network.frequencyKhz / 1000U),
+                      width);
+        renderWifiNetworkText(2, line, Palette::Positive, 82);
     }
-    std::snprintf(line, sizeof(line),
-                  tr(UiTextId::WifiNetworkPhyFeaturesFormat), phy,
-                  facts.wps ? "+" : "--", ftm, antenna);
-    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 171);
-    display.print(line);
-
-    const bool countryKnown = facts.countryCode[0] >= 'A' &&
-        facts.countryCode[0] <= 'Z' && facts.countryCode[1] >= 'A' &&
-        facts.countryCode[1] <= 'Z' && facts.countryChannelCount != 0U;
-    if (countryKnown) {
-        char country[3] = {facts.countryCode[0], facts.countryCode[1], '\0'};
-        const unsigned lastChannel = static_cast<unsigned>(
-            facts.countryStartChannel + facts.countryChannelCount - 1U);
-        std::snprintf(line, sizeof(line),
-                      tr(UiTextId::WifiNetworkCountryCompactFormat), country,
-                      static_cast<unsigned>(facts.countryStartChannel),
-                      lastChannel,
-                      static_cast<int>(facts.countryMaximumTxPowerDbm));
-        display.setTextColor(Palette::TextMuted, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 190);
-        display.print(line);
+    if (summary) {
+        renderWifiNetworkRadar(network, signal, false);
+    } else if (page == WifiNetworkPage::Identity) {
+        std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkBssidFormat),
+                      network.identity[0], network.identity[1], network.identity[2],
+                      network.identity[3], network.identity[4], network.identity[5]);
+        renderWifiNetworkText(1, line, Palette::TextSecondary, 64);
+        char vendor[WifiOuiDatabase::kNameSize + 1U] = {};
+        const bool known = wifiOuiDatabase.lookup(
+            network.identity.data(), vendor, sizeof(vendor));
+        std::snprintf(line, sizeof(line), known
+            ? tr(UiTextId::WifiNetworkVendorFormat) : "%s",
+            known ? vendor : tr(UiTextId::WifiNetworkVendorUnknown));
+        renderWifiNetworkText(2, line, Palette::TextSecondary, 92);
+        renderWifiNetworkText(3, tr(network.labelLength == 0U
+            ? UiTextId::WifiNameNotHeard : UiTextId::WifiNameApSource),
+            Palette::TextMuted, 120);
+        renderWifiNetworkText(4, tr(UiTextId::WifiNameNoGuess),
+                              Palette::TextMuted, 148);
+    } else if (page == WifiNetworkPage::Protection) {
+        const WifiSecurityAssessment assessment = assessWifiSecurity(facts);
+        renderWifiNetworkText(2, tr(wifiSecurityPostureText(assessment.posture)),
+                              toneColor(wifiSecurityPostureTone(assessment.posture)),
+                              96);
+        renderWifiNetworkText(3, tr(wifiSecurityNextStepText(assessment.nextStep)),
+                              Palette::TextSecondary, 125);
+        std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkCipherFormat),
+            leshy1::drivers::wifi::wifiCipherName(facts.pairwiseCipher),
+            leshy1::drivers::wifi::wifiCipherName(facts.groupCipher));
+        renderWifiNetworkText(4, line, Palette::TextSecondary, 154);
+        renderWifiNetworkText(5, tr(UiTextId::WifiSecurityPmfUnknown),
+                              Palette::TextMuted, 183);
+        renderWifiNetworkText(6, tr(UiTextId::WifiSecurityNotPasswordVerdict),
+                              Palette::TextMuted, 225);
+    } else if (page == WifiNetworkPage::Radio) {
+        char phy[28] = {};
+        if (!leshy1::drivers::wifi::formatWifiPhyMask(facts.phyMask, phy, sizeof(phy)))
+            std::strcpy(phy, "UNKNOWN");
+        std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkPhyFormat), phy);
+        renderWifiNetworkText(3, line, Palette::TextSecondary, 112);
+        const char* ftm = facts.ftmResponder && facts.ftmInitiator
+            ? "R+I" : (facts.ftmResponder ? "R" : (facts.ftmInitiator ? "I" : "--"));
+        char antenna[4] = "--";
+        if (facts.receiveAntenna <= 1U)
+            std::snprintf(antenna, sizeof(antenna), "%u", facts.receiveAntenna);
+        std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkFeaturesFormat),
+                      facts.wps ? "+" : "--", ftm, antenna);
+        renderWifiNetworkText(4, line, Palette::TextSecondary, 142);
+        const bool countryKnown = facts.countryCode[0] >= 'A' &&
+            facts.countryCode[0] <= 'Z' && facts.countryCode[1] >= 'A' &&
+            facts.countryCode[1] <= 'Z' && facts.countryChannelCount != 0U;
+        if (countryKnown) {
+            const char country[] = {facts.countryCode[0], facts.countryCode[1], '\0'};
+            std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkCountryFormat),
+                          country, facts.countryStartChannel,
+                          facts.countryStartChannel + facts.countryChannelCount - 1U,
+                          facts.countryMaximumTxPowerDbm);
+        } else {
+            std::snprintf(line, sizeof(line), "%s", tr(UiTextId::WifiCountryUnknown));
+        }
+        renderWifiNetworkText(5, line, Palette::TextMuted, 172);
+        if (facts.bssColorKnown || facts.vhtCenterChannel1 || facts.vhtCenterChannel2)
+            std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkHeFormat),
+                          facts.bssColor, facts.vhtCenterChannel1, facts.vhtCenterChannel2);
+        else line[0] = '\0';
+        renderWifiNetworkText(6, line, Palette::TextMuted, 202);
+    } else if (page == WifiNetworkPage::Observed) {
+        renderWifiNetworkText(1, tr(UiTextId::BlePassiveOnly), Palette::TextMuted, 65);
+        renderWifiNetworkText(2, tr(UiTextId::WifiObservationMeaning),
+                              Palette::TextSecondary, 95);
+        std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkRangeFormat),
+                      signal.minimumRssiDbm, signal.maximumRssiDbm);
+        renderWifiNetworkText(3, line, Palette::TextSecondary, 126);
+        renderWifiNetworkText(4, tr(UiTextId::WifiObservationNoPacket),
+                              Palette::TextMuted, 160);
+        renderWifiNetworkText(5, tr(UiTextId::WifiObservationNoLocation),
+                              Palette::TextMuted, 188);
     }
-    if (facts.bssColorKnown || facts.vhtCenterChannel1 != 0U ||
-        facts.vhtCenterChannel2 != 0U) {
-        std::snprintf(line, sizeof(line),
-                      tr(UiTextId::WifiNetworkHeCompactFormat),
-                      static_cast<unsigned>(facts.bssColor),
-                      static_cast<unsigned>(facts.vhtCenterChannel1),
-                      static_cast<unsigned>(facts.vhtCenterChannel2));
-        display.setTextColor(Palette::TextMuted, Palette::Canvas);
-        const std::int16_t advancedX = Layout::ScreenWidth - Layout::Edge -
-                                       display.textWidth(line);
-        setUiCursor(UiTextRole::Meta, advancedX, 207);
-        display.print(line);
-    }
-    renderWifiNetworkRadar(network, signal);
+    wifiNetworkDetail = network;
+    wifiNetworkDetailSignal = signal;
     wifiNetworkRenderedDetail = network;
 }
 
 void renderWifiNetworkDetail(bool clearContent) {
-    renderHeader(tr(UiTextId::WifiNetworkDetailTitle), clearContent);
+    const bool sceneChanged = clearContent ||
+        wifiNetworkRenderedPage != wifiNetworkNavigation.page();
+    renderHeader(tr(wifiNetworkPageTitle(wifiNetworkNavigation.page())), sceneChanged);
+    if (sceneChanged) {
+        wifiNetworkTextCache.reset();
+        wifiNetworkRadarValid = false;
+        wifiNetworkRenderedSelection = 255U;
+        if (wifiNetworkNavigation.page() == WifiNetworkPage::Summary) {
+            // Real touch targets; the separate footer remains keyboard hints.
+            renderWifiNetworkButton(kWifiNetworkFindBounds, tr(UiTextId::WifiNetworkFind), true);
+            renderWifiNetworkButton(kWifiNetworkActionsBounds, tr(UiTextId::WifiNetworkActions), false);
+        }
+    }
     renderWifiNetworkDetailData();
+    wifiNetworkRenderedPage = wifiNetworkNavigation.page();
+    wifiNetworkRenderedSceneRevision = wifiNetworkSceneRevision;
 }
 
 UiTextId wifiSecurityPostureText(WifiSecurityPosture posture) {
@@ -18412,27 +18496,29 @@ UiTextId wifiSecurityNextStepText(WifiSecurityNextStep nextStep) {
 }
 
 void renderWifiPasswordCheckIntro(bool clearContent) {
-    renderHeader(tr(UiTextId::WifiSecurityCheckTitle), clearContent);
-    if (clearContent) {
-        display.fillRect(0, Layout::ContentTop, Layout::ScreenWidth,
-                         Layout::FooterDividerY - Layout::ContentTop,
-                         Palette::Canvas);
-    }
+    renderHeader(tr(UiTextId::WifiPasswordCheckTitle), clearContent);
     const WifiSecurityAssessment assessment =
         assessWifiSecurity(wifiNetworkDetail.wifiNetwork);
-    renderMetric(0, tr(wifiSecurityPostureText(assessment.posture)),
-                 wifiSecurityPostureTone(assessment.posture));
-    renderMetric(1, tr(wifiSecurityNextStepText(assessment.nextStep)),
-                 assessment.passwordCheckAvailable ? Tone::Positive
-                                                   : Tone::Warning);
-    renderMetric(2, tr(UiTextId::WifiSecurityPmfUnknown), Tone::Muted);
-    renderMetric(3,
-                 tr(assessment.passwordCheckAvailable
-                        ? UiTextId::WifiSecurityStartMeaning
-                        : UiTextId::WifiSecurityStartUnavailable),
-                 assessment.passwordCheckAvailable ? Tone::Positive
-                                                   : Tone::Muted);
+    char name[96] = {};
+    leshy1::ui::formatVisibleNetworkName(
+        wifiNetworkDetail.label.data(), wifiNetworkDetail.labelLength,
+        tr(UiTextId::Hidden), name, sizeof(name));
+    fitWifiDisplayName(name, Layout::ContentWidth - 4);
+    setUiCursor(UiTextRole::Body, 14, 35);
+    display.setTextColor(Palette::Focus, Palette::Canvas);
+    display.print(name);
+    renderMetric(1, tr(UiTextId::WifiPasswordStepRecord), Tone::Neutral);
+    renderMetric(2, tr(UiTextId::WifiPasswordStepWait), Tone::Neutral);
+    renderMetric(3, tr(UiTextId::WifiPasswordStepComputer), Tone::Neutral);
     renderMetric(4, tr(UiTextId::WifiPasswordCheckPermission), Tone::Warning);
+    setUiCursor(UiTextRole::Meta, 14, 205);
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    display.print(tr(UiTextId::WifiPasswordCheckNoPassword));
+    renderWifiNetworkButton(
+        kWifiPasswordStartBounds,
+        tr(assessment.passwordCheckAvailable
+               ? UiTextId::NavStart : UiTextId::WifiSecurityStartUnavailable),
+        assessment.passwordCheckAvailable);
 }
 
 std::size_t bleDeviceFirstVisible(std::size_t selection) {
@@ -19757,6 +19843,17 @@ void renderWifiChannelAxisLabel(std::uint8_t channel, std::uint16_t tone) {
     const std::int16_t center = kWifiChannelBarX +
         static_cast<std::int16_t>(channel - 1U) * kWifiChannelBarStep +
         kWifiChannelBarWidth / 2;
+    if (beginLiveMetaTextRow(tone, Palette::Canvas)) {
+        liveMetaTextRowSprite.setCursor(
+            (kWifiChannelBarStep - liveMetaTextRowSprite.textWidth(label)) / 2,
+            kRobotoCondensedMetaAscent);
+        liveMetaTextRowSprite.print(label);
+        liveMetaTextRowSprite.pushSprite(center - kWifiChannelBarStep / 2,
+            kWifiChannelAxisY, 0, 0, kWifiChannelBarStep, 17);
+        ++liveTextRowPushes;
+        return;
+    }
+    ++liveTextRowDirectFallbacks;
     display.fillRect(center - kWifiChannelBarStep / 2, kWifiChannelAxisY,
                      kWifiChannelBarStep, 17, Palette::Canvas);
     display.setTextColor(tone, Palette::Canvas);
@@ -19786,9 +19883,6 @@ void renderWifiChannelInfo(const WifiChannelLoadSnapshot& snapshot,
         renderWifiChannelAxisLabel(best, Palette::Focus);
     }
     constexpr std::int16_t rightX = 116;
-    display.fillRect(rightX, kWifiChannelInfoY,
-                     Layout::ScreenWidth - rightX,
-                     kWifiChannelInfoHeight, Palette::Canvas);
     char line[40] = {};
     if (best == 0U) {
         std::snprintf(line, sizeof(line), "%s",
@@ -19798,13 +19892,26 @@ void renderWifiChannelInfo(const WifiChannelLoadSnapshot& snapshot,
                       tr(UiTextId::WifiChannelsBestFormat),
                       static_cast<unsigned>(best));
     }
-    selectUiFont(UiTextRole::Meta);
-    const std::int16_t x = Layout::ScreenWidth - 4 - display.textWidth(line);
-    display.setTextColor(best == 0U ? Palette::TextMuted : Palette::Focus,
-                         Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, x < rightX ? rightX : x,
-                kWifiChannelInfoY + 5);
-    display.print(line);
+    const std::uint16_t tone = best == 0U ? Palette::TextMuted : Palette::Focus;
+    if (beginLiveMetaTextRow(tone, Palette::Canvas)) {
+        const std::int16_t x = std::max<std::int16_t>(0,
+            Layout::ScreenWidth - rightX - 4 - liveMetaTextRowSprite.textWidth(line));
+        liveMetaTextRowSprite.setCursor(x, 2 + kRobotoCondensedMetaAscent);
+        liveMetaTextRowSprite.print(line);
+        liveMetaTextRowSprite.pushSprite(rightX, kWifiChannelInfoY + 3,
+            0, 0, Layout::ScreenWidth - rightX, kLiveMetaTextRowHeight);
+        ++liveTextRowPushes;
+    } else {
+        ++liveTextRowDirectFallbacks;
+        display.fillRect(rightX, kWifiChannelInfoY,
+                         Layout::ScreenWidth - rightX,
+                         kWifiChannelInfoHeight, Palette::Canvas);
+        selectUiFont(UiTextRole::Meta);
+        const std::int16_t x = Layout::ScreenWidth - 4 - display.textWidth(line);
+        display.setTextColor(tone, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, x < rightX ? rightX : x, kWifiChannelInfoY + 5);
+        display.print(line);
+    }
     wifiChannelRenderedBest = best;
     (void)snapshot;
 }
@@ -19829,26 +19936,24 @@ void renderWifiChannelBar(std::uint8_t channel,
         ? 0 : wifiChannelBarHeight(previous);
     const std::int16_t previousAverageHeight = previousAverage == 0xffffU
         ? 0 : wifiChannelBarHeight(previousAverage);
-    const std::int16_t clearHeight = force ? kWifiChannelGraphHeight
-        : std::max(std::max(previousHeight, previousAverageHeight),
-                   std::max(nextHeight, nextAverageHeight));
-    if (clearHeight > 0) {
-        display.fillRect(x, kWifiChannelGraphBottom - clearHeight,
-                         kWifiChannelBarWidth, clearHeight,
-                         kWifiChannelGraphBackground);
-    }
-    if (nextAverageHeight > 0) {
-        display.fillRect(x, kWifiChannelGraphBottom - nextAverageHeight,
-                         kWifiChannelBarWidth, nextAverageHeight,
-                         kWifiChannelAverageTone);
-    }
-    if (nextHeight > 0) {
-        const std::int16_t currentX = x +
-            (kWifiChannelBarWidth - kWifiChannelCurrentBarWidth) / 2;
-        display.fillRect(currentX, kWifiChannelGraphBottom - nextHeight,
-                         kWifiChannelCurrentBarWidth, nextHeight,
-                         wifiChannelBarTone(next));
-    }
+    const auto background = [](std::int16_t y) -> std::uint16_t {
+        for (std::int16_t division = 1; division < 4; ++division) {
+            if (y == kWifiChannelGraphHeight * division / 4)
+                return leshy1::ui::visual::rgb565(22, 36, 32);
+        }
+        return kWifiChannelGraphBackground;
+    };
+    leshy1::ui::paintLayeredBarDelta(
+        {force ? static_cast<std::int16_t>(0) : previousHeight,
+         force ? static_cast<std::int16_t>(0) : previousAverageHeight,
+         wifiChannelBarTone(previous)},
+        {nextHeight, nextAverageHeight, wifiChannelBarTone(next)},
+        kWifiChannelBarWidth, kWifiChannelCurrentBarWidth,
+        kWifiChannelGraphHeight, kWifiChannelAverageTone, background,
+        [&](std::int16_t dx, std::int16_t dy, std::int16_t width,
+            std::int16_t height, std::uint16_t color) {
+            display.fillRect(x + dx, kWifiChannelGraphY + dy, width, height, color);
+        });
     wifiChannelRenderedLoads[at] = next;
     wifiChannelRenderedAverages[at] = nextAverage;
 }
@@ -24385,6 +24490,16 @@ UiDeltaRenderResult renderSelectionDelta() {
         return UiDeltaRenderResult::RequiresFull;
     }
 
+    // Inventory hosts several independent scenes. A scene change must not
+    // fall through into a still-running survey's selection-only renderer:
+    // that can report NoChange and mark an unpainted scene as rendered.
+    if (uiController.page() == 2 &&
+        (renderedUi.wifiProductView != static_cast<std::uint8_t>(wifiProductView) ||
+         renderedUi.bleProductView != static_cast<std::uint8_t>(bleProductView) ||
+         renderedUi.rfSpectrumView != static_cast<std::uint8_t>(rfSpectrumView))) {
+        return UiDeltaRenderResult::RequiresFull;
+    }
+
     if (uiController.isRoot()) {
         const std::uint8_t current = uiController.selection();
         if (renderedUi.rootSelection == current) {
@@ -24820,23 +24935,26 @@ UiDeltaRenderResult renderSelectionDelta() {
         wifiProductView == WifiProductView::NetworkDetail &&
         renderedUi.wifiProductView ==
             static_cast<std::uint8_t>(WifiProductView::NetworkDetail)) {
-        if (renderedUi.wifiNetworkRevision == wifiNetworkCatalog.revision()) {
-            return UiDeltaRenderResult::NoChange;
+        if (wifiNetworkRenderedPage != wifiNetworkNavigation.page() ||
+            wifiNetworkRenderedSceneRevision != wifiNetworkSceneRevision) {
+            return UiDeltaRenderResult::RequiresFull;
         }
-        const Observation& live = *liveWifiNetworkDetail();
-        const WifiNetworkSignalStats& signal = *liveWifiNetworkSignal();
-        if (wifiNetworkDetailStaticFieldsDiffer(
-                wifiNetworkRenderedDetail, live)) {
-            renderWifiNetworkDetailData();
-        } else {
-            renderWifiNetworkRadar(live, signal, false);
-            wifiNetworkDetail = live;
-            wifiNetworkDetailSignal = signal;
-            wifiNetworkRenderedDetail = live;
-        }
-        return UiDeltaRenderResult::Rendered;
+        // Compare rendered values, not the revision of neighbouring networks.
+        const std::uint32_t oldPushes = liveTextRowPushes + liveListAtomicRowPushes;
+        const std::int16_t oldRssi = wifiNetworkRadarRssi;
+        renderWifiNetworkDetailData();
+        return oldPushes != liveTextRowPushes + liveListAtomicRowPushes ||
+               oldRssi != wifiNetworkRadarRssi
+            ? UiDeltaRenderResult::Rendered : UiDeltaRenderResult::NoChange;
     }
 
+    if (uiController.page() == 2 &&
+        wifiProductView == WifiProductView::PasswordCheckIntro &&
+        renderedUi.wifiProductView ==
+            static_cast<std::uint8_t>(WifiProductView::PasswordCheckIntro)) {
+        // A review page is a fixed snapshot; background scans must not repaint it.
+        return UiDeltaRenderResult::NoChange;
+    }
     if (uiController.page() == 2 &&
         wifiProductView == WifiProductView::DeviceDetail &&
         renderedUi.wifiProductView ==
@@ -30228,7 +30346,7 @@ bool startWifiNetworksProduct() {
     surveySourceController.rebuild(inventory, false,
                                    SurveySourceScope::WifiOnly);
     const SurveyWorkflowStatus configured =
-        surveyWorkflow.configure(true, false);
+        surveyWorkflow.configure(false, false);
     if (configured != SurveyWorkflowStatus::Ready) {
         productSurveyRuntime.status = "workflow_config_failed";
         lastRuntimeEvent = productSurveyRuntime.status;
@@ -30330,7 +30448,7 @@ bool startBleDevicesProduct() {
     surveySourceController.rebuild(inventory, false,
                                    SurveySourceScope::BleOnly);
     const SurveyWorkflowStatus configured =
-        surveyWorkflow.configure(true, false);
+        surveyWorkflow.configure(false, false);
     bleProductView = BleProductView::Devices;
     if (configured != SurveyWorkflowStatus::Ready) {
         productSurveyRuntime.status = "workflow_config_failed";
@@ -31114,6 +31232,8 @@ void serviceWifiChannelsProduct() {
 }
 
 bool selectionCanRepaintInPlace(UiAction action) {
+    if (uiController.page() == 2 &&
+        wifiProductView == WifiProductView::NetworkDetail) return true;
     if (uiController.page() == 5 &&
         (action == UiAction::Up || action == UiAction::Down ||
          action == UiAction::Select || action == UiAction::Right)) {
@@ -31970,14 +32090,28 @@ bool applyUiAction(UiAction action, bool render = true) {
             }
         } else if (wifiProductView == WifiProductView::NetworkDetail) {
             handled = true;
-            if (action == UiAction::Back || action == UiAction::Left) {
+            WifiNetworkIntent intent = WifiNetworkIntent::None;
+            if (action == UiAction::Back || action == UiAction::Left)
+                intent = wifiNetworkNavigation.handle(WifiNetworkKey::Left);
+            else if (action == UiAction::Right)
+                intent = wifiNetworkNavigation.handle(WifiNetworkKey::Right);
+            else if (action == UiAction::Select)
+                intent = wifiNetworkNavigation.handle(WifiNetworkKey::Ok);
+            else if (action == UiAction::Up)
+                intent = wifiNetworkNavigation.handle(WifiNetworkKey::Up);
+            else if (action == UiAction::Down)
+                intent = wifiNetworkNavigation.handle(WifiNetworkKey::Down);
+            if (intent == WifiNetworkIntent::Exit) {
                 wifiProductView = WifiProductView::Networks;
                 lastRuntimeEvent = "wifi_networks";
                 changed = true;
-            } else if (action == UiAction::Select ||
-                       action == UiAction::Right) {
+            } else if (intent == WifiNetworkIntent::Password) {
+                wifiNetworkDetail = *liveWifiNetworkDetail();
                 wifiProductView = WifiProductView::PasswordCheckIntro;
                 lastRuntimeEvent = "wifi_password_check_intro";
+                changed = true;
+            } else if (intent == WifiNetworkIntent::Changed) {
+                lastRuntimeEvent = "wifi_network_navigation";
                 changed = true;
             }
         } else if (wifiProductView == WifiProductView::PasswordCheckIntro) {
@@ -31986,8 +32120,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                 wifiProductView = WifiProductView::NetworkDetail;
                 lastRuntimeEvent = "wifi_network_detail";
                 changed = true;
-            } else if (action == UiAction::Select ||
-                       action == UiAction::Right) {
+            } else if (action == UiAction::Select) {
                 const WifiSecurityAssessment assessment =
                     assessWifiSecurity(wifiNetworkDetail.wifiNetwork);
                 if (assessment.passwordCheckAvailable) {
@@ -32076,6 +32209,8 @@ bool applyUiAction(UiAction action, bool render = true) {
                             observation->rssiDbm, 0}
                         : *signal;
                     wifiProductView = WifiProductView::NetworkDetail;
+                    wifiNetworkNavigation.reset();
+                    ++wifiNetworkSceneRevision;
                     lastRuntimeEvent = "wifi_network_detail";
                     changed = true;
                 }
@@ -33316,9 +33451,16 @@ bool applyUiAction(UiAction action, bool render = true) {
                 deviceLockOperationAllowed(
                     leshy1::services::security::
                         DeviceLockOperation::SensitiveSettings);
+            if (!settingsAllowed) {
+                noteDeviceLockAdmissionBlocked();
+                changed = leshy1::apps::device::showDeviceLockAdmission(
+                    uiController, deviceLockController,
+                    deviceLock.audit(static_cast<std::uint64_t>(esp_timer_get_time())),
+                    kDeviceLockPage);
+                return finish(changed);
+            }
             changed = settingsAllowed &&
                 uiController.openChild(pages[deviceSelection]);
-            if (!settingsAllowed) noteDeviceLockAdmissionBlocked();
             if (changed && deviceSelection == 1) {
                 interfaceSettingsController.enter();
             }
@@ -33517,6 +33659,16 @@ bool applyUiAction(UiAction action, bool render = true) {
             deviceLockOperationAllowed(
                 leshy1::services::security::
                     DeviceLockOperation::ProtectedUi);
+        if (!admissionAllowed) {
+            noteDeviceLockAdmissionBlocked();
+            const bool shown = leshy1::apps::device::showDeviceLockAdmission(
+                uiController, deviceLockController,
+                deviceLock.audit(static_cast<std::uint64_t>(esp_timer_get_time())),
+                kDeviceLockPage);
+            // Stop here: the user's entry action only opens the remedy, never
+            // launches the denied app or activates the PIN editor underneath it.
+            return finish(shown);
+        }
         launchStatus = selected == nullptr
                            ? LaunchStatus::InvalidDescriptor
                            : admissionAllowed
@@ -33714,6 +33866,13 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                         TouchTargetLayout::HomeRows, point, first,
                         kWifiProductTaskCount),
                     wifiProductSelection};
+        }
+        if (wifiProductView == WifiProductView::NetworkDetail &&
+            wifiNetworkNavigation.rowCount() != 0U) {
+            return {leshy1::ui::hitTouchTarget(
+                        TouchTargetLayout::HomeRows, point, 0U,
+                        wifiNetworkNavigation.rowCount()),
+                    wifiNetworkNavigation.selection()};
         }
         if (wifiProductView == WifiProductView::AirspaceGuardProfile) {
             return {leshy1::ui::hitTouchTarget(
@@ -34139,6 +34298,32 @@ bool dispatchTouchPoint(TouchPoint point, bool synthetic = false) {
         }
         return changed;
     }
+    if (uiController.page() == 2 &&
+        wifiProductView == WifiProductView::NetworkDetail &&
+        wifiNetworkNavigation.page() == WifiNetworkPage::Summary) {
+        UiAction action = UiAction::Unknown;
+        if (leshy1::ui::visual::containsPoint(
+                kWifiNetworkFindBounds, point.x, point.y)) action = UiAction::Select;
+        if (leshy1::ui::visual::containsPoint(
+                kWifiNetworkActionsBounds, point.x, point.y)) action = UiAction::Right;
+        if (action == UiAction::Unknown) { ++touchMissedPresses; return false; }
+        ++touchHandledPresses;
+        const bool changed = applyUiAction(action, false);
+        lastTouchChanged = changed;
+        if (changed) renderInteractiveScreen(false);
+        return changed;
+    }
+    if (uiController.page() == 2 &&
+        wifiProductView == WifiProductView::PasswordCheckIntro) {
+        if (!leshy1::ui::visual::containsPoint(kWifiPasswordStartBounds, point.x, point.y)) {
+            ++touchMissedPresses; return false;
+        }
+        ++touchHandledPresses;
+        const bool changed = applyUiAction(UiAction::Select, false);
+        lastTouchChanged = changed;
+        if (changed) renderInteractiveScreen(true);
+        return changed;
+    }
     const TouchDispatchTarget dispatch = touchDispatchTarget(point);
     if (!dispatch.target.hit) {
         ++touchMissedPresses;
@@ -34165,7 +34350,9 @@ bool dispatchTouchPoint(TouchPoint point, bool synthetic = false) {
     const bool authenticationIncremental =
         uiController.page() == 2 &&
         wifiProductView == WifiProductView::AuthenticationCapture;
-    if (changed) renderInteractiveScreen(!authenticationIncremental);
+    if (changed) renderInteractiveScreen(!authenticationIncremental &&
+        !(uiController.page() == 2 &&
+          wifiProductView == WifiProductView::NetworkDetail));
     return changed;
 }
 
@@ -42084,6 +42271,7 @@ void emitWifiNetworkDetailState(Stream& reply) {
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.wifi.network_detail.v1\",\"kind\":\"state\","
+        "\"ui_page\":\"%s\",\"ui_selection\":%u,"
         "\"active\":%s,\"passive\":true,\"active_probe_allowed\":false,"
         "\"identity_hash\":%lu,"
         "\"ssid_known\":%s,\"hidden_resolutions\":%lu,"
@@ -42110,6 +42298,8 @@ void emitWifiNetworkDetailState(Stream& reply) {
         "\"live_list_atomic_field_pushes\":%lu,"
         "\"live_list_row_allocation_failures\":%lu,"
         "\"live_list_direct_fallbacks\":%lu}",
+        leshy1::ui::wifiNetworkPageName(wifiNetworkNavigation.page()),
+        static_cast<unsigned>(wifiNetworkNavigation.selection()),
         live ? "true" : "false",
         static_cast<unsigned long>(wifiNetworkNavigationOrder.identityHash(
             wifiNetworkCatalog, wifiNetworkSelection)),
@@ -45087,8 +45277,13 @@ void setup() {
                        TouchCalibrationSource::Legacy0x
                    ? "legacy_0x_calibration_loaded"
                    : "calibration_required")});
-    inventory.add({"radio.wifi", CapabilityState::Declared, "esp32_s3_builtin",
-                   "passive_contract_ready_driver_not_started"});
+    const bool liveSurveyReady =
+        productSurveyWorkerReady && flashMatches && psramMatches;
+    inventory.add({"radio.wifi",
+                   liveSurveyReady ? CapabilityState::Available : CapabilityState::Declared,
+                   "esp32_s3_builtin",
+                   liveSurveyReady ? "passive_live_worker_ready_no_sd"
+                                   : "passive_worker_or_profile_unavailable"});
     inventory.add({
         "capture.wifi_passive",
         flashMatches && psramMatches ? CapabilityState::Available
@@ -45106,12 +45301,12 @@ void setup() {
             : "capture_worker_or_exact_media_unavailable"});
     inventory.add({
         "radio.ble",
-        productSurveyWorkerReady && productBootRecovery.catalogAdmitted
+        liveSurveyReady
             ? CapabilityState::Available : CapabilityState::Declared,
         "esp32_s3_builtin_receive_only_bounded_lifecycle",
-        productSurveyWorkerReady && productBootRecovery.catalogAdmitted
-            ? "passive_ble_worker_ready"
-            : "worker_or_media_unavailable"});
+        liveSurveyReady
+            ? "passive_ble_live_worker_ready_no_sd"
+            : "worker_or_profile_unavailable"});
     inventory.add({"survey.simulated",
                    surveyDemoReady ? CapabilityState::Available : CapabilityState::Fault,
                    "E-SURVEY-001_golden_trace",

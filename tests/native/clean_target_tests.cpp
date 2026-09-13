@@ -2569,6 +2569,23 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(catalog.get(6)->enabled);
     CHECK((catalog.get(4)->resources & resourceMask(Resource::EspRf)) != 0);
 
+    // Built-in RX and live catalogs must not depend on an enrolled SD.
+    HardwareInventory liveInventory;
+    CHECK(liveInventory.add({"radio.wifi", CapabilityState::Available, "worker", "live"}));
+    CHECK(liveInventory.add({"radio.ble", CapabilityState::Available, "worker", "live"}));
+    CHECK(liveInventory.add({"survey.persistent_passive", CapabilityState::Fault, "sd", "unenrolled"}));
+    catalog.rebuild(liveInventory);
+    for (std::size_t index = 0; index < 2; ++index) {
+        CHECK(catalog.get(index)->enabled && !catalog.get(index)->simulated);
+        CHECK((catalog.get(index)->resources & resourceMask(Resource::EspRf)) != 0);
+        CHECK((catalog.get(index)->resources & resourceMask(Resource::Storage)) == 0);
+    }
+    SurveySourceController liveSources;
+    liveSources.rebuild(liveInventory, false, SurveySourceScope::WifiOnly);
+    CHECK(liveSources.canStart() && liveSources.selectedMask() == 1);
+    liveSources.rebuild(liveInventory, false, SurveySourceScope::BleOnly);
+    CHECK(liveSources.canStart() && liveSources.selectedMask() == 2);
+
     HardwareInventory simulatedInventory;
     CHECK(simulatedInventory.add(
         {"board.profile", CapabilityState::Available, "runtime", "match"}));
@@ -5564,6 +5581,51 @@ void testProductStorePolicySeparatesReadOnlyBootFromExplicitWrites() {
                       "commit_evidence") == 0);
 }
 
+void testExplicitLiveSurveyWithoutStorage() {
+    ProductSurveyRequest live;
+    live.persistent = false;
+    live.explicitStart = true;
+    live.sourceAvailable = true;
+    live.ownedResources = resourceMask(Resource::EspRf);
+    CHECK(!live.storePermit.allowed() && !live.storePermit.writable);
+    for (std::uint8_t mask : {1, 2, 3}) {
+        live.selectedSourceMask = mask;
+        live.availableSourceMask = mask;
+        const auto permit = authorizeProductSurvey(live);
+        CHECK(permit.allowed() && permit.passive && !permit.simulated);
+        CHECK(!permit.persistent);
+        CHECK(permit.requiredResources == resourceMask(Resource::EspRf));
+    }
+    auto denied = live;
+    denied.persistent = true;
+    CHECK(authorizeProductSurvey(denied).status == ProductSurveyAdmissionStatus::StoreRejected);
+    CHECK(authorizeProductSurvey(denied).persistent);
+    denied = live;
+    denied.explicitStart = false;
+    CHECK(authorizeProductSurvey(denied).status == ProductSurveyAdmissionStatus::ExplicitStartRequired);
+    denied = live;
+    denied.ownedResources = resourceMask(Resource::Storage);
+    CHECK(authorizeProductSurvey(denied).status == ProductSurveyAdmissionStatus::ResourcesMissing);
+    denied = live;
+    denied.conflictingOwner = true;
+    CHECK(authorizeProductSurvey(denied).status == ProductSurveyAdmissionStatus::ResourceConflict);
+    denied = live;
+    denied.sourceAvailable = false;
+    CHECK(authorizeProductSurvey(denied).status == ProductSurveyAdmissionStatus::SourceUnavailable);
+    denied = live;
+    denied.selectedSourceMask = 0;
+    CHECK(authorizeProductSurvey(denied).status == ProductSurveyAdmissionStatus::SourceUnavailable);
+    denied = live;
+    denied.availableSourceMask = 4;
+    CHECK(authorizeProductSurvey(denied).status == ProductSurveyAdmissionStatus::SourceUnavailable);
+    denied = live;
+    denied.scanPlan.passive = false;
+    CHECK(authorizeProductSurvey(denied).status == ProductSurveyAdmissionStatus::PassivePlanRejected);
+    denied = live;
+    denied.bleScanPlan.passive = false;
+    CHECK(authorizeProductSurvey(denied).status == ProductSurveyAdmissionStatus::PassivePlanRejected);
+}
+
 void testProductSurveyAdmissionNeverFallsBackToSimulatedOrRam() {
     constexpr ResourceMask storeResources =
         resourceMask(Resource::Storage) | resourceMask(Resource::RadioSpi);
@@ -6855,6 +6917,7 @@ int main() {
     testSessionStoreIoRouterSwitchesOnlyTheSelectedBackend();
     testSurveyPipelineQueuesDrainsDropsAndCommitsWithStopPolicy();
     testProductStorePolicySeparatesReadOnlyBootFromExplicitWrites();
+    testExplicitLiveSurveyWithoutStorage();
     testProductSurveyAdmissionNeverFallsBackToSimulatedOrRam();
     testSessionCodecCommitsCanonicalDataAndReopensOffline();
     testSessionCodecRoundTripsBleWithoutInventingWifiFields();

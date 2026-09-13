@@ -28,7 +28,11 @@ release hardening, а не отсутствующей product functionality. Exa
 
 ## Пользовательский контракт
 
-- Owner выбирает локальный PIN из 6–12 цифр. Повторы и простые возрастающие или
+- По [ADR-007](adr/ADR-007-optional-device-lock.ru.md) PIN доброволен с первого
+  запуска действительно нового устройства после проверки инициализации ключа.
+  Без PIN нет PIN-защиты от человека с доступом к устройству; existing,
+  missing-expected или corrupt credentials пропустить нельзя.
+- Owner может выбрать локальный PIN из 6–12 цифр. Повторы и простые возрастающие или
   убывающие последовательности отклоняются.
 - Raw PIN никогда не сохраняется, не логируется, не экспортируется и не остаётся
   внутри Device Lock.
@@ -47,7 +51,7 @@ release hardening, а не отсутствующей product functionality. Exa
 
 | Состояние | Значение | Protected access |
 |---|---|---|
-| `unconfigured` | credential ещё никогда не был опубликован | требуется setup |
+| `unconfigured` | credential никогда не публиковался; локальный ключ успешно инициализирован | разрешён без PIN; до инициализации запрещён |
 | `disabled` | owner явно снял PIN-защиту; exact local data key сохранён | разрешён без PIN |
 | `locked` | credential валиден, попытка разрешена | запрещён |
 | `retry_delay` | persistent failed attempt, timer активен | запрещён |
@@ -57,7 +61,9 @@ release hardening, а не отсутствующей product functionality. Exa
 
 Status, Lock, Stop, panic, cleanup, update recovery и confirmed factory reset
 доступны в любом состоянии. Protected UI/evidence, secret read, export, backup,
-companion и sensitive settings требуют `unlocked` либо явного режима `disabled`.
+companion и sensitive settings допускают initialized `unconfigured`, `unlocked`
+либо явный `disabled`. Независимые правила target/transport/storage/strong-auth
+admission этих операций продолжают действовать.
 
 ## Credential и storage
 

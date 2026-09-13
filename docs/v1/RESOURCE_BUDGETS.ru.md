@@ -2,6 +2,19 @@
 
 *Читать на: [English](RESOURCE_BUDGETS.md) · **Русский***
 
+## Последняя дельта — RB-M264 (14 сентября 2026)
+
+Dev.384: static RAM **237352 B** (+1344 к dev.381), linked flash **3618560 B**,
+app **3619056 B**, OTA free **575248 B** (50960 B сверх порога 512 KiB).
+Firmware tree: `fea94d0114bb6bff348e1ab383f25d6ec937e417`.
+Зависимость от PSRAM и полноэкранный framebuffer не добавлены. Карточка использует
+ограниченный кэш текста/общие row sprites, столбцы — дельты конечного цвета.
+[Evidence точного образа](../../tests/hil/evidence/wifi-ui-1.0.0-dev.384.json):
+финальный heap total/free/min-free 140940/59452/17740 B, ноль операций SD/drops,
+lease 0. Один endpoint — **не** приёмка heap invariance/endurance.
+Дефект старого экрана dev.382 и ширины RU dev.383 исправлены отдельными дельтами.
+Очередная полная HIL matrix всё ещё нужна; Wi-Fi UX дельты её не обнуляют.
+
 Статус документа: **принятый S1 baseline, активный S5 — product build/heap/storage,
 cross-radio release endurance и controlled power-cut измерены; внешние измерения
 shared-bus/power остаются открытыми**.
@@ -2337,3 +2350,47 @@ Retained physical-key observation покрывает minimum 42 551 505 ms и
 8 510 301 valid sample до ровно одного успешного Select, с zero input errors,
 ambiguity, queue drops и hot-path writes. Touch counters равны zero, поэтому
 physical touch acceptance и focused cadence не продвигаются дальше 12/15.
+
+Граница UX отказа входа `RB-M261`: exact `1.0.0-dev.379` на source
+`266fea8eb399a9a82ac4d4b0ab4db3d14ffd822a` использует 236 008 B static RAM,
+3 613 300 B linked flash и 3 613 808/3 679 344 B app/factory images.
+SHA-256 firmware/factory/ELF/map:
+`74137ccd50b15bb503ce57fe875ec10cfffb02501d373ae51716376d0b0c9519`/
+`519d3a692390ee6dc3c48b0d98a220003554036bc30e78bf132bbcadbc201dfa`/
+`5ac2f1d03bbb70cdeaa50d2bd96d862a99c388c48e1ce302ba134f25a25694a1`/
+`abfb24fc073bf7016a0f9789be53eec903a4a5f16fde82a87f1d4dc5106feaba`.
+Относительно dev.378 static RAM не изменилась, linked flash вырос на 548 B,
+app/factory images — на 560 B каждый. Запас app — 580 496 B; запас над OTA
+floor 512 KiB остаётся 56 208 B. Физический admission-only delta на board-03
+проверил пять переходов туда-обратно, неизменность credentials и стабильность
+пикселей/счётчиков перерисовки idle TFT, завершился Home/none/lease 0.
+Разблокированные радиоприложения не запускались; новый RF heap/endurance
+baseline не заявляется. Focused cadence продвинут один раз до 13/15;
+полного прогона и RF TX не было.
+
+Необязательный PIN `RB-M262`: exact `1.0.0-dev.380`, source
+`343119bbd29dc78615a10b32e888c46141a96fce`: static RAM 236008 B,
+linked flash 3613400 B, app/factory 3613904/3679440 B. Относительно
+ dev.379 RAM без изменений, linked flash +100 B, app/factory +96 B.
+App headroom 580400 B; запас над OTA floor 512 KiB — 56112 B.
+SHA-256 app/factory/ELF/map:
+`a0f9483bb31341dd73505b9df09f0f6cfbb8ad312d6bff6c286bca1b76bd2158` /
+`5796c8bd981012be309709543c53935df5ed1694497477813b95bd245ac0d7c6` /
+`2a41a35a6dc0c29d354667e048b5ee8cdb89c243dc91c2d0ebed302b5ba230e1` /
+`657ff877ccadf1a4868de67ebddc0067c3c4771825a9e347853a34755e034803`.
+Board-03 сохраняет generation 0, стабильный Lock без перерисовок,
+RX трёх nRF24/CC1101 и Home/none/lease 0 после двух перезагрузок.
+Wi-Fi меню доступно, но RX не принят из-за незарегистрированной SD;
+отказ сохранён. Нового heap/endurance baseline нет. Cadence 14/15.
+
+Живой просмотр без SD `RB-M263`: exact `1.0.0-dev.381`, source
+`4d395ec43a2f0df345311fbe51a5a03a00a22b50`. Static RAM 236008 B (+0), linked flash
+3613812 B (+412), app/factory 3614320/3679856 B (+416).
+OTA headroom 579984 B; запас сверх 512 KiB floor 55696 B.
+SHA-256 app/factory/ELF/map:
+`cef80a6d80a00dffd4ab4a5f61138b8a052f523e891d8c057ffd11e3a11653bc` /
+`52d1193d4fbf535db07e192b75cd8858b6fface48a0cdc595e70f3e476fde494` /
+`2f39fa772fc9536dad4340c979962bd8fea3147089aeda7202567fd61c58c54c` /
+`de0637de5da998ad41893a84ccbc3954d66244744b97b7e81e346f5e9cc6d4dc`.
+Живой Wi-Fi без SD admission: сети/карточка, device frames, все 13 каналов; три одинаковых heap endpoints 142284/61000 B, PIN generation 0 и ноль SD операций/дропов. Холодный BLE принимает 32 устройства; после Wi-Fi безопасный отказ largest block 14324 < 28000 B. Частичная приёмка, не full matrix.
+Полный host-suite прошёл. Cadence 15/15; broad physical matrix требуется, но не принята. Резерв памяти не снижен, PSRAM не включена.

@@ -2,9 +2,28 @@
 
 Read in: **English** · [Русский](WIFI_UX_MAP.ru.md)
 
-Document: **UX redesign proposal, not the currently installed interface**.
+Document: **target UX, with the implementation checkpoint below**.
 The agreed direction is a task tree, understandable labels and distinct OK/Right
 roles where useful. Publishing mockups does not close implementation or HIL gates.
+
+## Installed checkpoint — 14 September, dev.384
+
+Implemented: Nearby networks → summary → OK signal finder / Right actions →
+protection, password preparation, or four information branches (identity,
+protection, radio, observations). Key/touch routes preserve the selected AP.
+Preparation explains recording a normal connection and checking on a computer;
+Right does not start recording. Footer hints are not touch controls.
+
+Shared retained text/radar/bar deltas and pixel-fitted UTF-8 SSIDs are installed.
+Eight pages and the graph passed a short exact-image hardware delta: 13 channels,
+unchanged static chrome, zero drops/SD operations, final Home/none/lease 0.
+[Machine-checked digest](../../tests/hil/evidence/wifi-ui-1.0.0-dev.384.json).
+This does not prove optical flicker-free operation on every screen.
+
+Still target design: four-entry Wi-Fi root regrouping, contextual Lab shortcut,
+radar pause, expanded hidden-name/source/conflicts and remaining end-to-end wizard
+refinements. Observations currently explains RSSI limits; it is not a new per-AP
+traffic inspector. Reorganising UI does not increment the feature count.
 
 [Open the interactive map and 240 × 320 mockups](https://anton-vinogradov.github.io/esp32-leshy/v1/wifi-screen-flow.html)
 · [Network enrichment, including hidden names](WIFI_NETWORK_FACTS.md)

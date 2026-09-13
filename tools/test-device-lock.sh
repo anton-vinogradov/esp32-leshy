@@ -36,6 +36,7 @@ python3 "$repo_dir/tools/check_device_lock_contract.py"
     -Wconversion -Wsign-conversion -Wshadow \
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/device_lock_controller_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/ui/UiController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/device/DeviceLockController.cpp" \
     "$repo_dir/firmware/leshy1/src/services/security/DeviceLock.cpp" \
     -o "$test_tmp/device_lock_controller_tests"
@@ -53,3 +54,5 @@ python3 \
     "$repo_dir/tools/check_device_lock_recovery_admission_hil_acceptance.py"
 python3 "$repo_dir/tools/check_protected_storage_hil_evidence.py"
 python3 "$repo_dir/tools/check_device_lock_disable_hil_acceptance.py"
+python3 "$repo_dir/tools/check_device_lock_entry_hil.py"
+python3 "$repo_dir/tools/check_optional_device_lock_hil.py"

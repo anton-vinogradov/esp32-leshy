@@ -22,7 +22,9 @@ ProductSurveyPermit rejected(ProductSurveyAdmissionStatus status,
                               const ProductSurveyRequest& request) {
     ProductSurveyPermit permit;
     permit.status = status;
-    permit.requiredResources = kProductSurveyResources;
+    permit.requiredResources = request.persistent ? kProductSurveyResources
+        : kernel::runtime::resourceMask(kernel::runtime::Resource::EspRf);
+    permit.persistent = request.persistent;
     permit.selectedSourceMask = request.selectedSourceMask;
     permit.availableSourceMask = request.availableSourceMask;
     permit.degradedSourceMask = static_cast<std::uint8_t>(
@@ -75,21 +77,23 @@ ProductSurveyPermit authorizeProductSurvey(
         return rejected(ProductSurveyAdmissionStatus::PassivePlanRejected,
                         request);
     }
-    if (!request.storePermit.allowed() || request.storePermit.rootPath == nullptr ||
+    if (request.persistent &&
+        (!request.storePermit.allowed() || request.storePermit.rootPath == nullptr ||
         std::strcmp(request.storePermit.rootPath,
                     storage::kProductSessionStoreRoot) != 0 ||
         request.storePermit.requiredResources != kProductStoreResources ||
-        request.storePermit.byteLimit == 0) {
+        request.storePermit.byteLimit == 0)) {
         return rejected(ProductSurveyAdmissionStatus::StoreRejected, request);
     }
-    if (request.storePermit.operation !=
+    if (request.persistent && (request.storePermit.operation !=
             storage::ProductStoreOperation::CommitSession ||
-        !request.storePermit.writable) {
+        !request.storePermit.writable)) {
         return rejected(ProductSurveyAdmissionStatus::WritableStoreRequired,
                         request);
     }
-    if ((request.ownedResources & kProductSurveyResources) !=
-        kProductSurveyResources) {
+    const auto required = request.persistent ? kProductSurveyResources
+        : kernel::runtime::resourceMask(kernel::runtime::Resource::EspRf);
+    if ((request.ownedResources & required) != required) {
         return rejected(ProductSurveyAdmissionStatus::ResourcesMissing,
                         request);
     }
@@ -99,7 +103,8 @@ ProductSurveyPermit authorizeProductSurvey(
     }
     ProductSurveyPermit permit;
     permit.status = ProductSurveyAdmissionStatus::Permitted;
-    permit.requiredResources = kProductSurveyResources;
+    permit.requiredResources = required;
+    permit.persistent = request.persistent;
     permit.selectedSourceMask = request.selectedSourceMask;
     permit.availableSourceMask = request.availableSourceMask;
     permit.degradedSourceMask = static_cast<std::uint8_t>(

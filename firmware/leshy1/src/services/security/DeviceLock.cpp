@@ -527,9 +527,10 @@ bool DeviceLock::completeBlockingOperation(std::uint64_t startedUs,
 }
 
 void DeviceLock::lock() {
-    // Disabled mode has no volatile unlock session to revoke; its durable
-    // bootstrap key intentionally remains available until PIN enrollment.
-    if (state_ == DeviceLockState::Disabled) return;
+    // No-PIN modes have no authenticated session to revoke. Their durable
+    // bootstrap key remains available until voluntary PIN enrollment (ADR-007).
+    if (state_ == DeviceLockState::Unconfigured ||
+        state_ == DeviceLockState::Disabled) return;
     clearUnlockSession();
     if (credential_.valid()) {
         if (credential_.failedAttempts >= kDeviceLockMaximumFailures) {
@@ -626,9 +627,11 @@ DeviceLockAccess DeviceLock::access(DeviceLockOperation operation,
     }
     switch (state_) {
         case DeviceLockState::Unconfigured:
-            return DeviceLockAccess::SetupRequired;
         case DeviceLockState::Disabled:
-            return DeviceLockAccess::Allowed;
+            // Successful restore/key initialization, not the default enum,
+            // establishes no-PIN access. Missing-expected credentials stay Fault.
+            return dataKeyAvailable_ ? DeviceLockAccess::Allowed
+                                     : DeviceLockAccess::Faulted;
         case DeviceLockState::Locked:
             return DeviceLockAccess::Locked;
         case DeviceLockState::RetryDelay:
@@ -645,12 +648,12 @@ DeviceLockAccess DeviceLock::access(DeviceLockOperation operation,
 
 bool DeviceLock::factoryReset(bool confirmed,
                               DeviceLockProtectedDataEraser& eraser) {
-    clearUnlockSession();
     if (!confirmed) {
         lock();
         lastFailure_ = DeviceLockFailure::ConfirmationRequired;
         return false;
     }
+    clearUnlockSession();
     if (!eraser.eraseProtectedData()) {
         state_ = DeviceLockState::Fault;
         lastFailure_ = DeviceLockFailure::ProtectedEraseFailed;
@@ -683,8 +686,10 @@ DeviceLockAudit DeviceLock::audit(std::uint64_t nowUs) const {
     result.lastFailure = lastFailure_;
     result.failedAttempts = credential_.failedAttempts;
     result.credentialGeneration = credential_.generation;
-    result.protectedAccessAllowed = state_ == DeviceLockState::Unlocked ||
-        state_ == DeviceLockState::Disabled;
+    result.protectedAccessAllowed = dataKeyAvailable_ &&
+        (state_ == DeviceLockState::Unconfigured ||
+         state_ == DeviceLockState::Unlocked ||
+         state_ == DeviceLockState::Disabled);
     result.dataKeyAvailable = dataKeyAvailable_;
     if (state_ == DeviceLockState::RetryDelay && nowUs < retryUntilUs_) {
         result.retryRemainingUs = retryUntilUs_ - nowUs;

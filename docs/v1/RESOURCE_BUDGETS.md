@@ -2,6 +2,19 @@
 
 *Read in: **English** · [Русский](RESOURCE_BUDGETS.ru.md)*
 
+## Latest delta — RB-M264 (14 September 2026)
+
+Dev.384: static RAM **237352 B** (+1344 vs dev.381), linked flash **3618560 B**,
+app **3619056 B**, OTA free **575248 B** (50960 B above the 512 KiB floor).
+Firmware tree: `fea94d0114bb6bff348e1ab383f25d6ec937e417`.
+No PSRAM dependency or full-screen framebuffer was added. Fixed retained text
+and shared row sprites serve the card; channel bars write final-colour deltas.
+[Exact-image UI evidence](../../tests/hil/evidence/wifi-ui-1.0.0-dev.384.json):
+final heap total/free/min-free 140940/59452/17740 B, zero SD operations/drops and
+lease 0. One endpoint is **not** heap-invariance/endurance acceptance.
+Dev.382 stale-scene failure and dev.383 RU width failure led to focused repairs.
+The existing broad HIL matrix is still due; Wi-Fi UX deltas do not reset it.
+
 Document status: **accepted S1 baseline, active S5 — product build/heap/storage,
 cross-radio release endurance and controlled power-cut are measured; externally
 instrumented shared-bus/power measurements remain open**.
@@ -2346,3 +2359,46 @@ The retained physical-key observation covers at least 42,551,505 ms and
 8,510,301 valid samples before exactly one successful Select, with zero input
 errors, ambiguity, queue drops or hot-path writes. Touch counters are zero, so
 this does not advance physical touch acceptance or focused cadence beyond 12/15.
+
+Denied-entry UX bound `RB-M261`: exact `1.0.0-dev.379` at source
+`266fea8eb399a9a82ac4d4b0ab4db3d14ffd822a` uses 236,008 B static RAM,
+3,613,300 B linked flash and 3,613,808/3,679,344 B app/factory images.
+Firmware/factory/ELF/map SHA-256 are
+`74137ccd50b15bb503ce57fe875ec10cfffb02501d373ae51716376d0b0c9519`/
+`519d3a692390ee6dc3c48b0d98a220003554036bc30e78bf132bbcadbc201dfa`/
+`5ac2f1d03bbb70cdeaa50d2bd96d862a99c388c48e1ce302ba134f25a25694a1`/
+`abfb24fc073bf7016a0f9789be53eec903a4a5f16fde82a87f1d4dc5106feaba`.
+Relative to dev.378, static RAM is unchanged, linked flash grows 548 B and
+app/factory images each grow 560 B. App headroom is 580,496 B; the 512 KiB
+OTA-floor margin remains 56,208 B. The physical board-03 admission-only delta
+has five navigation roundtrips, unchanged credentials and stable idle TFT
+pixels/repaint counters, ending Home/none/lease 0. It does not run unlocked
+radio applications or establish a new RF heap/endurance baseline.
+Focused cadence advances once to 13/15; no full matrix or new RF TX.
+
+Optional first-boot PIN bound `RB-M262`: exact `1.0.0-dev.380`, source
+`343119bbd29dc78615a10b32e888c46141a96fce`: static RAM 236008 B,
+linked flash 3613400 B, app/factory 3613904/3679440 B. Relative to
+ dev.379 RAM is unchanged, linked flash +100 B, app/factory +96 B.
+App headroom 580400 B; margin above the 512 KiB OTA floor is 56112 B.
+SHA-256 app/factory/ELF/map:
+`a0f9483bb31341dd73505b9df09f0f6cfbb8ad312d6bff6c286bca1b76bd2158` /
+`5796c8bd981012be309709543c53935df5ed1694497477813b95bd245ac0d7c6` /
+`2a41a35a6dc0c29d354667e048b5ee8cdb89c243dc91c2d0ebed302b5ba230e1` /
+`657ff877ccadf1a4868de67ebddc0067c3c4771825a9e347853a34755e034803`.
+Board-03 retains generation 0, stable idle Lock pixels/repaint counters,
+three nRF24/CC1101 RX and Home/none/lease 0 across two resets. Wi-Fi menu
+entry passes, but reception is not accepted on unenrolled SD; its failure
+is retained. No new RF heap/endurance baseline. Focused cadence is 14/15.
+
+Live browsing without SD `RB-M263`: exact `1.0.0-dev.381`, source
+`4d395ec43a2f0df345311fbe51a5a03a00a22b50`. Static RAM 236008 B (+0), linked flash
+3613812 B (+412), app/factory 3614320/3679856 B (+416).
+OTA headroom 579984 B; margin above 512 KiB floor 55696 B.
+SHA-256 app/factory/ELF/map:
+`cef80a6d80a00dffd4ab4a5f61138b8a052f523e891d8c057ffd11e3a11653bc` /
+`52d1193d4fbf535db07e192b75cd8858b6fface48a0cdc595e70f3e476fde494` /
+`2f39fa772fc9536dad4340c979962bd8fea3147089aeda7202567fd61c58c54c` /
+`de0637de5da998ad41893a84ccbc3954d66244744b97b7e81e346f5e9cc6d4dc`.
+Live Wi-Fi without SD admission: networks/detail, device frames, all 13 channels; three equal heap endpoints 142284/61000 B, PIN generation 0 and zero SD operations/drops. Cold BLE receives 32 devices; warm BLE safely rejects largest block 14324 < 28000 B. Partial acceptance, not full matrix.
+Full host suite passes. Cadence 15/15; broad physical matrix is due, not accepted. Memory reserve unchanged, PSRAM not enabled.

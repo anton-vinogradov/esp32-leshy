@@ -25,6 +25,8 @@ const char* productSurveyAdmissionStatusName(
 
 struct ProductSurveyRequest final {
     bool explicitStart = false;
+    // Live browsing is explicit, never a fallback after a storage failure.
+    bool persistent = true;
     bool sourceAvailable = false;
     std::uint8_t selectedSourceMask = 1;
     std::uint8_t availableSourceMask = 1;
@@ -52,7 +54,8 @@ struct ProductSurveyPermit final {
 };
 
 // Final fail-closed gate before a product Survey may start real hardware. A
-// requested real Session is never silently downgraded to simulated input or RAM.
+// requested persistent Session is never silently downgraded to simulated input
+// or RAM. Explicit live browsing receives no storage authority (ADR-008).
 ProductSurveyPermit authorizeProductSurvey(
     const ProductSurveyRequest& request);
 

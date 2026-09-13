@@ -1,0 +1,13 @@
+{
+  "schema": "leshy.wifi_ui_review_failure.v1",
+  "version": "1.0.0-dev.382",
+  "status": "failed",
+  "retained_run_sha256": "73fae3f612ac17f6c466133167adaacdfd71cae4acd68d88ed93b2c92aec09c5",
+  "original_runner_status": "passed",
+  "finding": "Password preparation changed the state but left the Actions framebuffer visible; render_outcome was no_change.",
+  "cause": "An inventory scene transition fell through into the running survey's selection-only renderer; it then published the new snapshot without painting it.",
+  "fix": "dev.383 rejects delta rendering across inventory scene discriminators before any selection-only handler.",
+  "regression": "The runner requires preparation pixels to differ from the prior Actions frame, then remain identical after Right; independent checker rejects the old state-only false positive.",
+  "privacy": "Raw TFT images, ambient identities and USB metadata remain local; the original run is retained unchanged.",
+  "superseded_by": "wifi-ui-1.0.0-dev.383.json"
+}

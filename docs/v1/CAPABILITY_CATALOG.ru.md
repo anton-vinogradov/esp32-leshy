@@ -42,7 +42,7 @@
 | ID | Возможность 1.0 | Обязательство | Требования | Этап готовности |
 |---|---|---|---|---|
 | CAP-009 | Start/Stop создаёт ограниченную Survey Session с явной конфигурацией и provenance | P0 | PR-003 | S3 |
-| CAP-010 | Пассивный Wi-Fi scan публикует нормализованные Observation | P0 | PR-003 | S3 |
+| CAP-010 | Пассивный Wi-Fi scan публикует нормализованные Observation Живой просмотр сетей/устройств/графиков не требует SD; сохранение требует отдельного разрешения хранилища (ADR-008). | P0 | PR-003 | S3 |
 | CAP-011 | Пассивный BLE scan/sniff публикует нормализованные Observation | P0 | PR-003 | S4 |
 | CAP-012 | Три nRF24 дают пассивную картину активности 2.4 ГГц без скрытого TX | P0, conditional RF shield | PR-003, PR-014 | S4/S5 |
 | CAP-013 | CC1101 даёт пассивный Sub-GHz spectrum/activity и RSSI/frequency evidence | P0, conditional RF shield | PR-003, PR-014 | S4/S5 |
@@ -195,7 +195,7 @@ calibrated range, исторический Target tracking или доказат
 | CAP-049 | Focused Wi-Fi authentication Capture распознаёт EAPOL/PMKID и complete/incomplete handshakes, затем экспортирует immutable PCAP и `hc22000` evidence | P1 | J-03, J-07, PR-015, PR-021 | S7 |
 | CAP-050 | Offline Field Survey объединяет Wi-Fi AP/station и BLE observations с optional GPS track/per-satellite diagnostics, POI/notes, deduplication, сравнением повторного прохода и локальным WiGLE-compatible export | P1, GPS conditional | J-01, J-07, PR-022 | S7 |
 | CAP-051 | BLE Inspector сохраняет compatible raw packets и даёт явный permissioned connected-GATT mode с детерминированным disconnect и provenance | P1 | J-02, J-07, PR-023 | S7 |
-| CAP-052 | [Device Lock](DEVICE_LOCK.ru.md) даёт local PIN setup, bounded retry/recovery и lock overlay, под которым уже запущенный safe Capture может продолжаться при защищённых controls/data | P0 до поставки sensitive data | J-05, J-08, PR-017, PR-024 | S7 |
+| CAP-052 | [Device Lock](DEVICE_LOCK.ru.md) даёт local PIN setup, bounded retry/recovery и lock overlay, под которым уже запущенный safe Capture может продолжаться при защищённых controls/data  PIN доброволен с первого запуска действительно нового устройства; существующую защиту пропустить нельзя.| P0 до поставки sensitive data | J-05, J-08, PR-017, PR-024 | S7 |
 | CAP-053 | [Устройство → Serial Console](SERIAL_CONSOLE.ru.md) даёт bounded UART bridge и общий Actions CLI с явной конфигурацией, permissions, leases и cleanup | P1 | J-05, J-08, PR-012, PR-025 | S7 |
 | CAP-054 | [Automation/HID](AUTOMATION_HID.ru.md) запускает signed permissioned scripts с preview, ceilings, finite runtime и scoped USB/BLE HID; defensive BadUSB inspection по умолчанию пассивен | P1 | J-08, PR-013, PR-026 | S7 |
 | CAP-055 | Owned Lab содержит только именованные и отдельно принятые Wi-Fi/BLE/nRF/IR fixture recipes: targeted handshake-assist, iBeacon/identity emulation, MouseJack injection, проверку устойчивости к RF-помехе на выбранном канале, другие bounded robustness/crash tests и IR-camera tests; interference recipe может использовать любой явный qualified power profile вплоть до полной мощности железа, но требует qualified isolated fixture/interlock и объявляет target/fixture, region, channel/frequency, requested radio setting отдельно от независимо измеренной мощности при её наличии, duration, evidence и physical stop | P0 для любого shipped active output | J-06, J-08, PR-013, PR-027, NFR-011…013 | S7 |

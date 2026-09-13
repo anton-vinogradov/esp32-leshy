@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "apps/device/DeviceLockController.h"
+#include "apps/device/DeviceLockNavigation.h"
 
 namespace {
 
@@ -32,7 +33,10 @@ DeviceLockAudit audit(DeviceLockState state,
     DeviceLockAudit value{};
     value.state = state;
     value.lastFailure = failure;
-    value.protectedAccessAllowed = state == DeviceLockState::Unlocked ||
+    value.dataKeyAvailable = state == DeviceLockState::Unconfigured ||
+        state == DeviceLockState::Unlocked || state == DeviceLockState::Disabled;
+    value.protectedAccessAllowed = state == DeviceLockState::Unconfigured ||
+        state == DeviceLockState::Unlocked ||
         state == DeviceLockState::Disabled;
     return value;
 }
@@ -144,6 +148,57 @@ void testDisableRequiresSeparateSelectionAndConfirmation() {
     CHECK(controller.intent() == DeviceLockIntent::Configure);
 }
 
+void testDeniedEntryShowsRemedyWithoutGrantOrAutomaticActivation() {
+    using leshy1::apps::device::showDeviceLockAdmission;
+    using leshy1::ui::UiAction;
+    using leshy1::ui::UiController;
+    constexpr std::uint8_t lockPage = 12;
+    for (const auto state : {DeviceLockState::Locked,
+             DeviceLockState::RetryDelay, DeviceLockState::RecoveryOnly,
+             DeviceLockState::Fault}) {
+        UiController navigation;
+        DeviceLockController controller;
+        CHECK(navigation.apply(UiAction::Down, 9, true));
+        CHECK(navigation.apply(UiAction::Down, 9, true));
+        CHECK(showDeviceLockAdmission(navigation, controller, audit(state), lockPage));
+        CHECK(navigation.page() == lockPage);
+        CHECK(navigation.selection() == 2);
+        CHECK(controller.view() == DeviceLockView::Status);
+        CHECK(controller.intent() == DeviceLockIntent::None);
+        CHECK(controller.audit().state == state);
+        CHECK(!controller.audit().protectedAccessAllowed);
+        CHECK(!controller.submissionReady());
+        CHECK(navigation.apply(UiAction::Left, 9, true));
+        CHECK(navigation.isRoot());
+        CHECK(navigation.selection() == 2);
+        CHECK(showDeviceLockAdmission(navigation, controller, audit(state), lockPage));
+        CHECK(!showDeviceLockAdmission(navigation, controller, audit(state), lockPage));
+        CHECK(navigation.apply(UiAction::Back, 9, true));
+    }
+    for (const auto state : {DeviceLockState::Unconfigured,
+                            DeviceLockState::Disabled, DeviceLockState::Unlocked}) {
+        UiController navigation;
+        DeviceLockController controller;
+        CHECK(!showDeviceLockAdmission(navigation, controller, audit(state), lockPage));
+        CHECK(navigation.isRoot());
+        CHECK(navigation.revision() == 0);
+    }
+    UiController navigation;
+    DeviceLockController controller;
+    CHECK(navigation.openRootPage(9));
+    CHECK(showDeviceLockAdmission(navigation, controller,
+                                  audit(DeviceLockState::Locked), lockPage));
+    CHECK(navigation.parentPage() == 9);
+    CHECK(navigation.apply(UiAction::Left, 9, true));
+    CHECK(navigation.page() == 9);
+    CHECK(navigation.openChild(5));
+    const auto revision = navigation.revision();
+    CHECK(!showDeviceLockAdmission(navigation, controller,
+                                   audit(DeviceLockState::RetryDelay), lockPage));
+    CHECK(navigation.page() == 5 && navigation.revision() == revision);
+    CHECK(controller.audit().state == DeviceLockState::Locked);
+}
+
 }  // namespace
 
 int main() {
@@ -151,6 +206,7 @@ int main() {
     testWeakAndMismatchedPinNeverProduceSubmission();
     testUnlockCancelRetryAndImmediateLockIntent();
     testDisableRequiresSeparateSelectionAndConfirmation();
+    testDeniedEntryShowsRemedyWithoutGrantOrAutomaticActivation();
     if (failures != 0) return EXIT_FAILURE;
     std::cout << "Device Lock UI controller tests passed\n";
     return EXIT_SUCCESS;
