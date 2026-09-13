@@ -14,4 +14,9 @@ trap 'rm -rf "$test_tmp"' EXIT
     -o "$test_tmp/wifi_network_name_evidence_tests"
 "$test_tmp/wifi_network_name_evidence_tests"
 python3 "$repo_dir/tools/check_wifi_ui_contract.py"
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Wconversion -Werror -pedantic \
+    "$repo_dir/tests/native/wifi_name_fixture_session_tests.cpp" \
+    -o "$test_tmp/wifi_name_fixture_session_tests"
+"$test_tmp/wifi_name_fixture_session_tests"
 python3 "$repo_dir/tools/test_wifi_ui_delta_hil.py"
+python3 "$repo_dir/tools/test_wifi_name_two_board_hil.py"
