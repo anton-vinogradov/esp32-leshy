@@ -8,6 +8,14 @@
 using namespace leshy1::ui;
 
 int main() {
+    unsigned terminalPixels = 0;
+    paintLayeredBarDelta(BarLayers{}, BarLayers{1, 0, 3}, 1, 1, 32767, 2,
+        [](std::int16_t) -> std::uint16_t { return 0; },
+        [&](int x, int y, int width, int height, std::uint16_t color) {
+            assert(x == 0 && y == 32766 && width == 1 && height == 1 && color == 3);
+            ++terminalPixels;
+        });
+    assert(terminalPixels == 1);
     // Every changed pixel is painted exactly once with its final colour;
     // unchanged pixels (including the grid) are never touched.
     constexpr std::int16_t h = 7;
