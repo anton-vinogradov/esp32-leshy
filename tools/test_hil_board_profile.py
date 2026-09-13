@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -15,6 +17,16 @@ import profile_hil_board as profile  # noqa: E402
 
 
 class HilBoardProfileTests(unittest.TestCase):
+    def test_runtime_lookup_still_requires_local_installation(self) -> None:
+        with tempfile.TemporaryDirectory() as name, \
+             mock.patch.object(profile.Path, "home", return_value=Path(name)):
+            with self.assertRaisesRegex(ValueError, "unavailable"):
+                profile.esptool_python()
+            runtime = Path(name) / ".platformio/penv/bin/python"
+            runtime.parent.mkdir(parents=True)
+            runtime.touch()
+            self.assertEqual(runtime, profile.esptool_python())
+
     def test_only_read_only_rom_commands_are_allowlisted(self) -> None:
         self.assertEqual(
             ("chip-id", "read-mac", "flash-id", "get-security-info"),

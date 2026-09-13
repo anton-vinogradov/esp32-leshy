@@ -132,13 +132,17 @@ class IrTwoBoardHilTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "port"):
                 flow.load_profile(path, "/dev/other")
 
-    def test_profile_command_requires_explicit_declarations(self) -> None:
+    @mock.patch.object(flow, "esptool_python", return_value=Path("/test-runtime/python"))
+    def test_profile_command_requires_explicit_declarations(self, runtime) -> None:
         command = flow.profile_command(
             "/dev/fixture", Path("profile.json"), True, True)
+        runtime.assert_called_once_with()
+        self.assertEqual("/test-runtime/python", command[0])
         self.assertIn("--declare-standard-v2-no-extensions", command)
         self.assertIn("--declare-antennas-attached", command)
 
-    def test_default_runner_command_flashes_both_exact_images(self) -> None:
+    @mock.patch.object(flow, "esptool_python", return_value=Path("/test-runtime/python"))
+    def test_default_runner_command_flashes_both_exact_images(self, runtime) -> None:
         command = flow.runner_command(
             candidate_port="/dev/candidate", fixture_port="/dev/fixture",
             profile=Path("profile.json"), fixture_id="0000AABBCCDDEEFF",
@@ -146,13 +150,16 @@ class IrTwoBoardHilTests(unittest.TestCase):
             source_commit="a" * 40,
             product_version="product", fixture_version="fixture",
             reuse_candidate=False, reuse_fixture=False)
+        runtime.assert_called_once_with()
+        self.assertEqual("/test-runtime/python", command[0])
         self.assertIn("candidate=/dev/candidate", command)
         self.assertIn("fixture=/dev/fixture", command)
         self.assertIn("--flash", command)
         self.assertIn("--flash-fixture", command)
         self.assertNotIn("--reuse-exact-flash", command)
 
-    def test_deadline_runner_is_one_command_and_source_bound(self) -> None:
+    @mock.patch.object(flow, "esptool_python", return_value=Path("/test-runtime/python"))
+    def test_deadline_runner_is_one_command_and_source_bound(self, runtime) -> None:
         command = flow.deadline_runner_command(
             candidate_port="/dev/candidate", fixture_port="/dev/fixture",
             profile=Path("profile.json"), fixture_id="0" * 16,
@@ -160,6 +167,8 @@ class IrTwoBoardHilTests(unittest.TestCase):
             source_commit="a" * 40,
             product_version="product", fixture_version="fixture",
             reuse_candidate=False, reuse_fixture=False)
+        runtime.assert_called_once_with()
+        self.assertEqual("/test-runtime/python", command[0])
         self.assertIn("run_1x_infrared_store_deadline_hil.py", command[1])
         self.assertIn("--flash", command)
         self.assertIn("--flash-fixture", command)
