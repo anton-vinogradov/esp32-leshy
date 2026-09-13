@@ -5,6 +5,10 @@ Read this in: **English** · [Русский](README.ru.md)
 ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 [ESP32-DIV](https://github.com/CiferTech/ESP32-DIV) wireless multitool.
 
+[Wi-Fi screen map and navigation design](docs/v1/WIFI_UX_MAP.md) ·
+[Interactive mockups](https://anton-vinogradov.github.io/esp32-leshy/v1/wifi-screen-flow.html) ·
+[Network information and hidden names](docs/v1/WIFI_NETWORK_FACTS.md)
+
 <!-- LESHY-ROADMAP:START -->
 ## Development status and roadmap
 

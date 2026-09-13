@@ -10,6 +10,13 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 ## Now
 
+- **Wi-Fi design review (13 September):** the [published screen map](WIFI_UX_MAP.md)
+  documents the proposed five-key task tree, shared no-blank rendering contract
+  and [automatic network enrichment](WIFI_NETWORK_FACTS.md). Source review found
+  that retention of a supplied hidden name is implemented, but the client-frame
+  name → AP-card path and per-field provenance/conflict handling need follow-up.
+  Earlier WF-03 acceptance is not evidence for that expanded path. This is a
+  docs-only checkpoint: no firmware/HIL acceptance or capability-count change.
 - **Active stage:** `S6 — Targets, comparison, localization, and companion`.
 - **Last completed stage:** `S4 — Cross-radio passive platform`.
 - **Current phase:** `S6.5 — functional-first user slices over shared Actions, safety and schemas`; `FF-5` bounded IR replay is active.

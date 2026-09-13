@@ -63,6 +63,10 @@
 
 - [Целевая архитектура](ARCHITECTURE.ru.md)
 - [UX-01: карта экранов и Actions](UX_SCREEN_MAP.ru.md)
+- [Карта Wi-Fi и интерактивные макеты](WIFI_UX_MAP.ru.md) — проект дерева задач,
+  пяти клавиш и общей отрисовки, не обещание уже установленного интерфейса
+- [Обогащение сведений о Wi-Fi](WIFI_NETWORK_FACTS.ru.md) — скрытые имена,
+  происхождение фактов и честные неизвестные значения
 - [UX-02: матрица состояний](UX_STATE_MATRIX.ru.md)
 - [UX-06: карта input и accessibility](UX_ACCESSIBILITY.ru.md)
 - [Architecture Decision Records](adr/README.ru.md) — обязательные решения по

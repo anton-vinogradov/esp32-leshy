@@ -1,0 +1,253 @@
+<!-- leshy-wifi-source:start -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@500&display=swap">
+<style>
+#leshy-wifi-design { color:var(--foreground); }
+#leshy-wifi-design .wf-layout {display:grid;grid-template-columns:minmax(260px,1fr) 264px;gap:24px;align-items:start;margin-top:12px}
+#leshy-wifi-design .wf-tree ul {list-style:none;padding-left:16px;margin:4px 0 10px;border-left:1px solid var(--border)}
+#leshy-wifi-design .wf-tree li {margin:4px 0}
+#leshy-wifi-design .wf-tree summary {cursor:pointer;padding:8px 0}
+#leshy-wifi-design .wf-tree details {margin:6px 0}
+#leshy-wifi-design .wf-preview {display:flex;flex-direction:column;align-items:center;gap:10px;min-width:0}
+#leshy-wifi-design .wf-caption {max-width:264px;text-align:center}
+#leshy-wifi-design .wf-keyboard {max-width:264px}
+#leshy-wifi-design .ld {--ld-bg:#07100c;--ld-header:#1a3a28;--ld-surface:#0d1611;--ld-selected:#1a4e34;--ld-text:#e7cf8f;--ld-meta:#c6d0c8;--ld-muted:#97a39b;--ld-focus:#f5c542;--ld-positive:#55d98a;--ld-danger:#f05d5e;--ld-warning:#f7a641;--ld-line:#3c4840;position:relative;width:240px;height:320px;flex:none;background:var(--ld-bg);color:var(--ld-text);font:500 16px/18px 'Roboto Condensed','Arial Narrow',sans-serif;border-radius:0;box-shadow:0 0 0 4px #25372c;overflow:hidden;color-scheme:dark}
+#leshy-wifi-design .ld * {box-sizing:border-box}
+#leshy-wifi-design .ld button {font-family:inherit;cursor:pointer;color:var(--ld-text)}
+#leshy-wifi-design .ld .ld-head {height:26px;background:var(--ld-header);display:flex;align-items:center;justify-content:space-between;padding:0 8px;gap:4px;font-size:12px;line-height:14px;white-space:nowrap}
+#leshy-wifi-design .ld .ld-rx {font-size:12px;line-height:14px;color:var(--ld-positive)}
+#leshy-wifi-design .ld .ld-foot {position:absolute;left:0;right:0;bottom:0;height:27px;border-top:1px solid var(--ld-line);padding:0 6px;font-size:12px;line-height:13px;color:var(--ld-meta);background:var(--ld-bg);display:flex;flex-direction:column;justify-content:center}
+#leshy-wifi-design .ld .ld-foot div {display:flex;justify-content:space-between}
+#leshy-wifi-design .ld .ld-body {height:267px;padding:6px 12px}
+#leshy-wifi-design .ld .ld-menu {display:grid;gap:5px}
+#leshy-wifi-design .ld .ld-row {width:216px;height:60px;border:1px solid transparent;border-radius:4px;padding:8px 11px;text-align:left;background:var(--ld-surface);display:flex;flex-direction:column;justify-content:center;gap:3px;font-size:16px;line-height:18px}
+#leshy-wifi-design .ld .ld-row small {font-size:12px;line-height:14px;color:var(--ld-meta);font-weight:500}
+#leshy-wifi-design .ld .ld-row.is-focus {border-color:var(--ld-focus);background:var(--ld-selected)}
+#leshy-wifi-design .ld .ld-row.is-focus>span {color:var(--ld-focus)}
+#leshy-wifi-design .ld .ld-row.ld-lab>span {color:var(--ld-danger)}
+#leshy-wifi-design .ld .ld-title {font-size:16px;line-height:20px;color:var(--ld-focus);margin:0 0 4px;overflow-wrap:anywhere}
+#leshy-wifi-design .ld .ld-meta {font-size:12px;line-height:16px;color:var(--ld-meta)}
+#leshy-wifi-design .ld .ld-muted {color:var(--ld-muted)}
+#leshy-wifi-design .ld .ld-good {color:var(--ld-positive)}
+#leshy-wifi-design .ld .ld-warn {color:var(--ld-warning)}
+#leshy-wifi-design .ld .ld-alert {color:var(--ld-danger)}
+#leshy-wifi-design .ld .ld-block {margin-bottom:10px}
+#leshy-wifi-design .ld .ld-action {width:216px;height:44px;margin-top:5px;padding:5px 11px;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--ld-line);border-radius:4px;background:var(--ld-surface);font-size:16px;line-height:18px;text-align:left;gap:5px}
+#leshy-wifi-design .ld .ld-action:first-of-type {border-color:var(--ld-focus)}
+#leshy-wifi-design .ld .ld-signal {padding:7px 9px;margin:8px 0;background:var(--ld-surface);border-radius:4px}
+#leshy-wifi-design .ld .ld-signal-line {display:flex;justify-content:space-between;align-items:baseline}
+#leshy-wifi-design .ld .ld-track {height:9px;background:#202c24;margin:6px 0}
+#leshy-wifi-design .ld .ld-track span {display:block;width:76%;height:100%;background:var(--ld-positive)}
+#leshy-wifi-design .ld .ld-pill {display:inline;color:var(--ld-warning)}
+#leshy-wifi-design .ld .ld-legend {display:flex;justify-content:space-between;font-size:12px;line-height:14px;margin:3px 0;color:var(--ld-meta)}
+#leshy-wifi-design .ld .ld-legend .avg {color:#babcbc}
+#leshy-wifi-design .ld .ld-legend .now {color:var(--ld-positive)}
+#leshy-wifi-design .ld .ld-axis {display:grid;grid-template-columns:repeat(13,1fr);font-size:12px;line-height:14px;text-align:center;color:var(--ld-meta)}
+#leshy-wifi-design .ld canvas {display:block;image-rendering:pixelated;width:216px;background:#000}
+#leshy-wifi-design .ld .ld-chart-button {background:none;border:0;padding:0;margin:0;font-size:12px;line-height:16px;color:var(--ld-focus);text-align:left}
+#leshy-wifi-design .ld .ld-separator {border:0;border-top:1px solid var(--ld-line);margin:6px 0}
+#leshy-wifi-design .ld .ld-number {font-size:30px;line-height:36px;color:var(--ld-positive);margin:8px 0}
+#leshy-wifi-design .ld .ld-facts {font-size:12px;line-height:20px;color:var(--ld-meta);margin:0}
+#leshy-wifi-design .ld .ld-facts div {display:flex;justify-content:space-between;gap:8px}
+@media(max-width:610px) {#leshy-wifi-design .wf-layout {grid-template-columns:1fr} #leshy-wifi-design .wf-preview {grid-row:1}}
+</style>
+<div id="leshy-wifi-design">
+  <div class="viz-row"><strong>Wi-Fi · предлагаемое дерево экранов</strong><span class="text-small text-muted">Макеты 240 × 320 · условные данные</span></div>
+  <div class="wf-layout">
+    <nav class="wf-tree" aria-label="Диаграмма переходов Wi-Fi">
+      <button type="button" class="btn" data-screen="home">Wi-Fi — 4 входа</button>
+      <ul>
+        <li><details open><summary>Сети рядом → карточка → действия</summary>
+          <ul>
+            <li><button type="button" class="btn btn-ghost" data-screen="networks">Список сетей</button> → <button type="button" class="btn btn-ghost" data-screen="network">Карточка</button></li>
+            <li><button type="button" class="btn btn-ghost" data-screen="radar">Найти по сигналу</button></li>
+            <li><button type="button" class="btn btn-ghost" data-screen="actions">Действия с сетью</button>
+              <ul>
+                <li><button type="button" class="btn btn-ghost" data-screen="security">Оценить защиту</button></li>
+                <li><button type="button" class="btn btn-ghost" data-screen="password">Проверить пароль</button>
+                  <ul>
+                    <li><button type="button" class="btn btn-ghost" data-screen="recording">Запись подключения</button> → <button type="button" class="btn btn-ghost" data-screen="result">Результат</button></li>
+                    <li><button type="button" class="btn btn-ghost" data-screen="export">Передать на ПК</button> → <button type="button" class="btn btn-ghost" data-screen="computer">Отчёт на ПК</button></li>
+                  </ul>
+                </li>
+                <li><button type="button" class="btn btn-ghost" data-screen="facts">Все сведения</button></li>
+                <li><button type="button" class="btn btn-ghost" data-screen="lab">Лаборатория · 4 функции в плане</button></li>
+              </ul>
+            </li>
+          </ul>
+        </details></li>
+        <li><details><summary>Устройства в эфире → факты и сигнал</summary><ul>
+          <li><button type="button" class="btn btn-ghost" data-screen="devices">Замеченные устройства</button> → <button type="button" class="btn btn-ghost" data-screen="device">Карточка</button></li>
+          <li><button type="button" class="btn btn-ghost" data-screen="deviceRadar">Найти по сигналу</button></li>
+          <li><button type="button" class="btn btn-ghost" data-screen="deviceFacts">Все сведения</button></li>
+          <li><button type="button" class="btn btn-ghost" data-screen="empty">Пока никого не слышно</button></li>
+        </ul></details></li>
+        <li><details><summary>Каналы → вид → объяснение</summary><ul>
+          <li><button type="button" class="btn btn-ghost" data-screen="channels">График загрузки</button> / <button type="button" class="btn btn-ghost" data-screen="waterfall">Водопад · доработка UI</button></li>
+          <li><button type="button" class="btn btn-ghost" data-screen="channelWhy">Почему этот канал?</button></li>
+          <li><button type="button" class="btn btn-ghost" data-screen="measurement">Что измеряем</button></li>
+        </ul></details></li>
+        <li><details><summary>Наблюдение и записи → результат</summary><ul>
+          <li><button type="button" class="btn btn-ghost" data-screen="observe">Меню наблюдений</button></li>
+          <li><button type="button" class="btn btn-ghost" data-screen="anomalies">Искать аномалии</button> → <button type="button" class="btn btn-ghost" data-screen="finding">Вывод и основания</button></li>
+          <li><button type="button" class="btn btn-ghost" data-screen="visit">Обзор места</button> → <button type="button" class="btn btn-ghost" data-screen="compare">Сравнить обзоры</button></li>
+          <li><button type="button" class="btn btn-ghost" data-screen="capture">Записать эфир</button> → <button type="button" class="btn btn-ghost" data-screen="usb">Смотреть на ПК по USB</button></li>
+          <li><button type="button" class="btn btn-ghost" data-screen="saved">Сохранённое</button> → <button type="button" class="btn btn-ghost" data-screen="export">Экспорт</button></li>
+          <li><button type="button" class="btn btn-ghost" data-screen="storage">Если нельзя сохранить</button></li>
+        </ul></details></li>
+      </ul>
+      <div class="text-small text-muted">Подключение и собственный адрес Лешего — в «Устройство». Общие записи и Lab открываются с выбранной сетью, без дублирования экранов.</div>
+    </nav>
+    <section class="wf-preview" aria-label="Интерактивный макет экрана">
+      <div class="wf-caption text-small" id="wf-current" aria-live="polite"></div>
+      <div class="ld" id="wf-device" aria-label="Леший: предлагаемые Wi-Fi-экраны"></div>
+      <div class="text-small text-muted">Физические клавиши · макет</div>
+      <div class="viz-row wf-keyboard" aria-label="Клавиши прибора">
+        <button type="button" class="btn" data-key="left" aria-label="Влево: назад или остановить">←</button>
+        <button type="button" class="btn" data-key="up" aria-label="Вверх: предыдущий пункт">↑</button>
+        <button type="button" class="btn" data-key="ok" aria-label="OK: основное действие">OK</button>
+        <button type="button" class="btn" data-key="down" aria-label="Вниз: следующий пункт">↓</button>
+        <button type="button" class="btn" data-key="right" aria-label="Вправо: открыть следующий уровень">→</button>
+      </div>
+      <div class="wf-caption text-small text-muted" id="wf-state-note"></div>
+    </section>
+  </div>
+</div>
+<script>
+(() => {
+const root = document.getElementById('leshy-wifi-design');
+const device = document.getElementById('wf-device');
+const state = { screen:'network', selected:0, paused:false, names:'Понятные названия', sd:true, recordType:'auth' };
+const titles = {home:'WI-FI',networks:'СЕТИ РЯДОМ',network:'WI-FI / СЕТЬ',actions:'СЕТЬ / ДЕЙСТВИЯ',radar:'НАЙТИ СЕТЬ',security:'ОЦЕНКА ЗАЩИТЫ',password:'ПРОВЕРИТЬ ПАРОЛЬ',conditions:'УСЛОВИЯ ЗАПИСИ',recording:'ЗАПИСЬ ПОДКЛЮЧЕНИЯ',recordInfo:'ЗАПИСЬ / УСЛОВИЯ',result:'РЕЗУЛЬТАТ ЗАПИСИ',resultActions:'РЕЗУЛЬТАТ / ДЕЙСТВИЯ',export:'ПЕРЕДАТЬ НА ПК',computer:'ОТЧЁТ НА КОМПЬЮТЕРЕ',facts:'СЕТЬ / СВЕДЕНИЯ',lab:'WI-FI / ЛАБОРАТОРИЯ',labInfo:'АКТИВНЫЕ ПРОВЕРКИ',devices:'УСТРОЙСТВА В ЭФИРЕ',device:'WI-FI / УСТРОЙСТВО',deviceRadar:'НАЙТИ УСТРОЙСТВО',deviceFacts:'УСТРОЙСТВО / ФАКТЫ',empty:'УСТРОЙСТВА В ЭФИРЕ',channels:'WI-FI / КАНАЛЫ',channelView:'КАНАЛЫ / ВИД',waterfall:'WI-FI / ВОДОПАД',channelWhy:'ПОЧЕМУ КАНАЛ 12',measurement:'КАНАЛЫ / ИЗМЕРЕНИЕ',observe:'НАБЛЮДЕНИЕ И ЗАПИСИ',anomalies:'ИСКАТЬ АНОМАЛИИ',watching:'НАБЛЮДЕНИЕ',finding:'РЕЗУЛЬТАТ НАБЛЮДЕНИЯ',evidence:'ОСНОВАНИЯ ВЫВОДА',visit:'ОБЗОР МЕСТА',visiting:'ОБЗОР ИДЁТ',visitResult:'РЕЗУЛЬТАТ ОБЗОРА',compare:'СРАВНЕНИЕ ОБЗОРОВ',capture:'ЗАПИСАТЬ ЭФИР',capturing:'ЗАПИСЬ ЭФИРА',packetResult:'ЗАПИСЬ ЗАВЕРШЕНА',usb:'WI-FI / USB',saved:'СОХРАНЁННОЕ',storage:'СОХРАНЕНИЕ НЕДОСТУПНО',signalInfo:'О СИГНАЛЕ'};
+const parents={home:null,networks:'home',network:'networks',actions:'network',radar:'network',signalInfo:'radar',security:'actions',password:'actions',conditions:'password',recording:'password',recordInfo:'recording',result:'password',resultActions:'result',export:'result',computer:'export',facts:'actions',lab:'actions',labInfo:'lab',devices:'home',device:'devices',deviceRadar:'device',deviceFacts:'device',empty:'devices',channels:'home',waterfall:'channels',channelView:'channels',channelWhy:'channelView',measurement:'channelView',observe:'home',anomalies:'observe',watching:'anomalies',finding:'anomalies',evidence:'finding',visit:'observe',visiting:'visit',visitResult:'visit',compare:'saved',capture:'observe',capturing:'capture',packetResult:'capture',usb:'capture',saved:'observe',storage:'result'};
+Object.assign(titles,{captureSetup:'ЗАПИСЬ / ПОДГОТОВКА',saveConfirm:'СОХРАНИТЬ ЗАПИСЬ?',watchProfile:'ПРОФИЛЬ НАБЛЮДЕНИЯ',watchConditions:'УСЛОВИЯ НАБЛЮДЕНИЯ'});
+Object.assign(parents,{captureSetup:'capture',saveConfirm:'result',watchProfile:'anomalies',watchConditions:'watching'});
+const routes={networks:'Wi-Fi → Сети рядом',network:'Сети рядом → Карточка сети',actions:'Карточка → Действия',radar:'Карточка → Найти по сигналу',security:'Действия → Оценить защиту',password:'Действия → Проверить пароль',recording:'Проверить пароль → Запись',result:'Запись → Результат',computer:'Данные записи → Локальный отчёт ПК',lab:'Карточка → Лаборатория',channels:'Wi-Fi → Каналы',waterfall:'Каналы → Вид → Водопад'};
+const esc = x => String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+const meta=(x,c='')=>`<div class="ld-meta ${c}">${x}</div>`;
+const title=x=>`<div class="ld-title">${x}</div>`;
+const button=(name,to,key='')=>`<button type="button" class="ld-action" data-screen="${to}"><span>${name}</span><span class="ld-meta">${key}</span></button>`;
+const signal=(large=false)=>`<div class="ld-signal"><div class="ld-signal-line"><span class="ld-good">Сильный</span><span class="ld-meta">−54 dBm</span></div><div class="ld-track"><span></span></div>${meta(state.paused?'ПАУЗА · показан сохранённый замер':'Сейчас слышно · сигнал усилился',state.paused?'ld-warn':'ld-muted')}${large?'<canvas width="198" height="66" data-plot="signal" role="img" aria-label="Пример истории уровня сигнала во времени" style="width:198px;height:66px;margin-top:6px"></canvas>':''}</div>`;
+function menu(items){state.selected=Math.min(state.selected,items.length-1);return `<div class="ld-menu">${items.map((r,i)=>`<button type="button" class="ld-row ${i===state.selected?'is-focus':''} ${r[3]?'ld-lab':''}" data-screen="${r[2]}"><span>${esc(r[0])}</span><small>${esc(r[1])}</small></button>`).join('')}</div>`;}
+let items=[], ok='',right='',left='',isList=false;
+function go(screen){if(!titles[screen])return;if(['password','recording','result'].includes(screen))state.recordType='auth';if(['captureSetup','capturing','packetResult'].includes(screen))state.recordType='packets';if(['visiting','visitResult'].includes(screen))state.recordType='visit';if(screen==='finding')state.recordType='finding';state.screen=screen;state.selected=0;state.paused=false;render();}
+function render(){
+const s=state.screen;items=[];ok='';right='';left=parents[s]||'home';isList=false;
+let html='', footLeft='← Назад',footUp='',footOk='',footRight='',note='Проект компоновки. Кнопки макета не управляют прибором.';
+function list(rows){items=rows;isList=true;html=menu(rows);footUp='↑↓ Выбор';footOk='OK / → Открыть';}
+function action(o,r,ol,rl){ok=o;right=r;footOk=ol?`OK ${ol}`:'';footRight=rl?`→ ${rl}`:'';}
+switch(s){
+case 'home':
+ list([['Сети рядом','Найти сеть, оценить её защиту','networks'],['Устройства в эфире','Кого слышит приёмник','devices'],['Каналы','Найти менее занятый','channels'],['Наблюдение и записи','Аномалии, обзор, сохранённое','observe']]);footLeft='← Home';break;
+case 'networks':
+ list([['Дом Wi-Fi','−54 dBm · канал 6 · WPA2','network'],['Скрытая сеть','−61 dBm · канал 1 · WPA2','network'],['Гостевая','−70 dBm · канал 11 · открытая','network'],['Мастерская','−78 dBm · канал 3 · WPA3','network']]);
+ note='Пример списка. Сортировка живая; после первого ввода фокус удерживает объект, а не номер строки.';break;
+case 'network':
+ html=title('Дом Wi-Fi')+meta('Канал 6 · 2437 МГц · 20 МГц')+meta('WPA2 · WPS включён','ld-warn')+signal()+button('Найти по сигналу','radar','OK')+button('Действия с сетью','actions','→');action('radar','actions','Найти','Действия');break;
+case 'actions':list([['Оценить защиту','Что хорошо и что проверить','security'],['Проверить пароль','Запись здесь, проверка на ПК','password'],['Все сведения','Адреса, производитель, радио','facts'],['Лаборатория','Только своя изолированная сеть','lab',true]]);break;
+case 'radar':case 'deviceRadar':
+ html=title(s==='radar'?'Дом Wi-Fi':'Устройство A')+signal(true)+meta('Двигайтесь и следите за уровнем.')+meta('Это сила сигнала, не направление','ld-muted')+meta('и не точное расстояние.','ld-muted');
+ action('pause','signalInfo',state.paused?'Продолжить':'Пауза','Сведения');break;
+case 'signalInfo':
+ html=title('Поиск по уровню')+meta('Сильнее при приближении — подсказка,')+meta('но стены и отражения меняют уровень.')+'<hr class="ld-separator">'+meta('Нельзя определить направление')+meta('или расстояние одним этим замером.')+'<hr class="ld-separator">'+meta('Если устройство давно не слышно,')+meta('показываем возраст последнего замера,')+meta('а не выдаём его за текущий.');break;
+case 'security':
+ html=title('Есть что улучшить')+meta('WPA2: шифрование включено','ld-good')+meta('WPS включён','ld-warn')+'<hr class="ld-separator">'+meta('Не используете WPS? Отключите его')+meta('в настройках роутера.')+meta('Стойкость пароля ещё не проверена.','ld-muted')+button('Проверить пароль','password','OK')+button('Технические сведения','facts','→');action('password','facts','Пароль','Сведения');break;
+case 'facts':
+ html=title('Дом Wi-Fi')+'<div class="ld-facts"><div><span>Производитель</span><span>неизвестен</span></div><div><span>Канал / ширина</span><span>6 / 20 МГц</span></div><div><span>Защита / шифр</span><span>WPA2 / CCMP</span></div><div><span>WPS</span><span>включён</span></div><div><span>PHY</span><span>802.11 b/g/n</span></div></div><hr class="ld-separator">'+meta('BSSID: 02:00:00:00:00:01')+meta('Защита служебных кадров (PMF):')+meta('не измерена','ld-warn')+meta('Пример полей; отсутствующие данные')+meta('не заменяются догадками.','ld-muted');break;
+case 'password':
+ html=title('Слабый пароль?')+meta('Сеть: Дом Wi-Fi · WPA2')+'<hr class="ld-separator">'+meta('1. Запишите подключение своего')+meta('телефона к этой сети.')+'<br>'+meta('2. Передайте запись на компьютер:')+meta('проверка по локальному списку.')+meta('Сам пароль из эфира не читается.','ld-muted')+button('Условия перед записью','conditions','OK');action('conditions','conditions','Подготовка','Условия');break;
+case 'conditions':
+ html=title('Перед записью')+meta('Только ваша сеть / есть разрешение.')+meta('Цель: Дом Wi-Fi · канал 6')+'<hr class="ld-separator">'+meta('Приём без передачи. Запись ограничена')+meta('по времени и объёму.')+meta('Во время записи подключите к сети')+meta('свой телефон обычным способом.')+'<hr class="ld-separator">'+meta('Пока результат только в памяти.','ld-warn')+meta('SD понадобится для сохранения.')+button('Начать запись','recording','OK');action('recording','','Начать','');break;
+case 'recording':
+ html=title('Ожидаем подключение')+meta('Дом Wi-Fi · приём без передачи')+'<hr class="ld-separator">'+title('Переподключите свой телефон')+meta('к выбранной Wi-Fi-сети.')+'<br>'+meta('Осталось 22 с · пример прогресса')+'<div class="ld-track"><span style="width:35%"></span></div>'+meta('Проверяем пригодность данных.','ld-muted')+button('Остановить запись','result','OK');action('result','recordInfo','Стоп','Условия');left='result';footLeft='← Стоп';note='В макете переход к результату условный. В прошивке «пригодно» только после проверки фактической записи.';break;
+case 'recordInfo':
+ html=title('Запись продолжается')+meta('Цель: Дом Wi-Fi · канал 6')+meta('Источник: Wi-Fi приёмник Лешего')+meta('Передача выключена')+'<hr class="ld-separator">'+meta('Время и объём ограничены.')+meta('Результат пока только в RAM.','ld-warn')+'<hr class="ld-separator">'+meta('← или OK остановят запись.')+button('Вернуться к прогрессу','recording','→');left='result';footLeft='← Стоп';action('result','recording','Стоп','Прогресс');break;
+case 'result':
+ html=title('Можно проверить на ПК')+meta('Дом Wi-Fi · подключение записано')+'<hr class="ld-separator">'+meta('Материал пригоден для проверки')+meta('распространённых вариантов пароля.')+'<br>'+meta('Результат пока только в памяти.','ld-warn')+meta('При выключении он пропадёт.')+button('Сохранить и передать',state.sd?'saveConfirm':'storage','OK')+button('Другие действия','resultActions','→');action(state.sd?'saveConfirm':'storage','resultActions','Сохранить','Действия');note='Показан успешный пример. Неполно / нет данных / ошибка — отдельные реальные исходы, не успешная галочка.';break;
+case 'resultActions':list([['Сохранить','На подготовленную SD',state.sd?'saveConfirm':'storage'],['Основания результата','Какие данные получены','evidence'],['Повторить','Снова открыть подготовку','password'],['Передать на компьютер','Формат и следующий шаг','export']]);break;
+case 'saveConfirm':
+ html=title('Сохранить на эту карту?')+meta('Новая запись · прежние не заменяются.')+'<hr class="ld-separator">'+meta('Тип: '+({auth:'подключение Wi-Fi',packets:'эфир Wi-Fi',visit:'обзор места',finding:'отчёт наблюдения'}[state.recordType]))+meta('Сохранение не запускает передачу.')+'<br>'+meta('Отменить можно клавишей ←.')+button('Подтвердить сохранение',state.recordType==='visit'||state.recordType==='finding'?'saved':'export','OK');action(state.recordType==='visit'||state.recordType==='finding'?'saved':'export','','Сохранить','');break;
+case 'export':
+ html=title('Данные для компьютера')+meta('Сначала проверяем сохранённую запись.')+'<hr class="ld-separator">'+(state.recordType==='auth'?title('Проверить пароль')+meta('При пригодных данных: hc22000.','ld-muted')+'<br>':'')+title('Разобрать запись')+meta('Кадры для Wireshark: PCAP.','ld-muted')+button('Следующий шаг на ПК',state.recordType==='auth'?'computer':'usb','OK');action(state.recordType==='auth'?'computer':'usb','saved','Далее','Записи');note='Формат зависит от содержимого. Обычная запись кадров не выдаётся за пригодный материал проверки пароля.';break;
+case 'computer':
+ html=title('Проверка на вашем ПК')+meta('Файл → локальный список → отчёт')+'<hr class="ld-separator">'+title('В списке не найден')+meta('Пример возможного результата.')+meta('Это не доказывает стойкость пароля.','ld-warn')+'<hr class="ld-separator">'+meta('Другой исход: вариант найден —')+meta('смените пароль на длинный и уникальный.')+'<br>'+meta('Пароль и материал не отправляются')+meta('в облачный сервис.');note='Этот шаг выполняется на компьютере, не на Лешем. Визуально показана краткая сводка пути.';break;
+case 'devices':list([['Устройство A','−57 dBm · замечено в Дом Wi-Fi','device'],['Случайный адрес','−66 dBm · ищет сеть','device'],['Неизвестное устройство','−73 dBm · связь с сетью неясна','device'],['Что попадает в список','Только замеченные передатчики','empty']]);break;
+case 'device':
+ html=title('Устройство A')+meta('Замечено в Дом Wi-Fi · канал 6')+meta('Производитель: неизвестен','ld-muted')+signal()+button('Найти по сигналу','deviceRadar','OK')+button('Все наблюдаемые сведения','deviceFacts','→');action('deviceRadar','deviceFacts','Найти','Сведения');break;
+case 'deviceFacts':
+ html=title('Только наблюдаемые факты')+meta('Адрес: 02:00:00:00:00:02')+meta('Случайный / локальный адрес','ld-warn')+'<hr class="ld-separator">'+meta('Сеть: Дом Wi-Fi · канал 6')+meta('Основание: адреса принятых кадров')+meta('Имя / модель: не сообщены')+meta('Производитель: неизвестен')+'<hr class="ld-separator">'+meta('Это не полный список клиентов роутера.')+meta('Устройство может молчать или менять')+meta('адрес. Не угадываем владельца.','ld-muted');break;
+case 'empty':
+ html=title('Пока никого не слышно')+meta('Приём работает.')+'<hr class="ld-separator">'+meta('Оставьте экран открытым и включите')+meta('Wi-Fi на своём устройстве.')+'<br>'+meta('В список попадают только устройства,')+meta('чьи кадры удалось принять.')+'<br>'+meta('Пустой список не означает, что рядом')+meta('нет клиентов Wi-Fi.','ld-muted');break;
+case 'channels':case 'waterfall':
+ html=meta(`Занятое время, %${state.paused?' · ПАУЗА':''}`,state.paused?'ld-warn':'')+(s==='channels'?'<div class="ld-legend"><span class="avg">■ Среднее</span><span class="now">■ Сейчас</span></div>':'<div class="ld-legend"><span>Чёрный 0%</span><span>ярче → 8%+</span></div>')+meta(s==='waterfall'?'1 строка = 1 замер':'Шкала 0–8%, выше — 8%+')+`<canvas width="216" height="164" data-plot="${s}" role="img" aria-label="Условные значения загрузки Wi-Fi каналов от 1 до 13"></canvas><div class="ld-axis">${Array.from({length:13},(_,i)=>`<span>${i+1}</span>`).join('')}</div>`+'<button type="button" class="ld-chart-button" data-screen="channelWhy">Свободнее: 12 · почему?</button>';
+ action('pause','channelView',state.paused?'Продолжить':'Пауза','Вид');note=s==='waterfall'?'Новый Wi-Fi-вид в проекте. 1 пиксель по времени; 13 реальных каналов по горизонтали, без выдуманных частотных отсчётов.':'Числа и выбранный канал — пример. Без новых данных экран не обновляется.';break;
+case 'channelView':list([['График','Среднее и текущая загрузка','channels'],['Водопад','Изменения загрузки во времени','waterfall'],['Почему этот канал','Сравнить измеренные значения','channelWhy'],['Что измеряем','Возможности и ограничения','measurement']]);break;
+case 'channelWhy':
+ html=title('12 — меньше занят')+meta('Среднее за период наблюдения')+'<hr class="ld-separator">'+'<div class="ld-facts"><div><span>Канал 12</span><span>0,1%</span></div><div><span>Канал 13</span><span>0,3%</span></div><div><span>Канал 6</span><span>0,7%</span></div></div>'+'<hr class="ld-separator">'+meta('Измерены все каналы 1–13.')+meta('При равенстве учитываем соседние.')+'<br>'+meta('Это рекомендация по наблюдениям,')+meta('не гарантия скорости интернета.','ld-muted');break;
+case 'measurement':
+ html=title('Занятое время эфира')+meta('Оценка по принятым Wi-Fi-кадрам,')+meta('а не число сетей и не скорость интернета.')+'<hr class="ld-separator">'+meta('Каналы 1–13 слушаются по очереди.')+meta('Одновременно весь диапазон не виден.')+meta('Невидимые помехи этим не измерены.')+'<hr class="ld-separator">'+meta('Сила сигнала и загрузка — разные вещи.')+meta('Другие радиоантенны не складываются')+meta('в дополнительные Wi-Fi-приёмники.','ld-muted');break;
+case 'observe':list([['Искать аномалии','Замечать, объяснять, не блокировать','anomalies'],['Обзор места','Сохранить и сравнить изменения','visit'],['Записать эфир','Для анализа на компьютере','capture'],['Сохранённое','Сводка, сравнение, экспорт','saved']]);break;
+case 'anomalies':
+ html=title('Есть странности в эфире?')+meta('Пассивное наблюдение Wi-Fi.')+meta('Прибор не блокирует происходящее.')+'<hr class="ld-separator">'+meta('Профиль: обычное наблюдение')+meta('Результат: что замечено и почему.')+meta('Ограничения будут в отчёте.')+'<br>'+meta('Активные воздействия не запускаются.','ld-muted')+button('Начать наблюдение','watching','OK');action('watching','watchProfile','Начать','Профиль');break;
+case 'watchProfile':
+ html=title('Чувствительность')+meta('Обычное наблюдение — по умолчанию.')+'<hr class="ld-separator">'+meta('Более чувствительный профиль замечает')+meta('больше событий, но требует осторожнее')+meta('интерпретировать результат.')+'<br>'+meta('Профиль не меняет пассивный режим.')+button('Вернуться к подготовке','anomalies','OK');action('anomalies','','Готово','');break;
+case 'watching':
+ html=title('Наблюдаем эфир')+meta('Wi-Fi · только приём')+'<hr class="ld-separator">'+meta('Осталось 18 с · пример прогресса')+'<div class="ld-track"><span style="width:45%"></span></div>'+meta('Ищем необычные события.')+meta('Вывод появится после проверки данных.')+button('Остановить и посмотреть','finding','OK');action('finding','watchConditions','Стоп','Условия');left='finding';footLeft='← Стоп';break;
+case 'watchConditions':
+ html=title('Наблюдение продолжается')+meta('Wi-Fi · только приём')+meta('Профиль: обычный')+'<hr class="ld-separator">'+meta('Ограничено по времени и объёму.')+meta('Источник и ограничения будут в отчёте.')+button('Вернуться к прогрессу','watching','→');action('finding','watching','Стоп','Прогресс');left='finding';footLeft='← Стоп';break;
+case 'finding':
+ html=title('Замечены разрывы связи')+meta('Требует проверки','ld-warn')+'<hr class="ld-separator">'+meta('Получена серия служебных кадров,')+meta('связанных с разрывом соединений.')+'<br>'+meta('Это ещё не доказательство атаки.')+meta('Проверьте перезапуски своего роутера.')+button('На чём основан вывод','evidence','OK')+button('Сохранить отчёт',state.sd?'saveConfirm':'storage','→');action('evidence',state.sd?'saveConfirm':'storage','Основания','Сохранить');break;
+case 'evidence':
+ html=title('Основания и ограничения')+meta('Наблюдаемые события → исходные кадры')+'<hr class="ld-separator">'+meta('Показать время, канал, тип события')+meta('и точную запись, на которой основан вывод.')+'<br>'+meta('Отдельно: чего не удалось измерить,')+meta('потери данных и другие объяснения.')+'<hr class="ld-separator">'+meta('Технические счётчики находятся здесь,')+meta('а не на основном экране наблюдения.');note='Макет структуры подробного отчёта, без выдуманного доказательства реального события.';break;
+case 'visit':
+ html=title('Обзор места')+meta('Сохранить обстановку и сравнить позже.')+'<hr class="ld-separator">'+meta('Источники: Wi-Fi')+meta('Bluetooth не добавляется незаметно.','ld-muted')+'<br>'+meta('Нужна подготовленная SD для записи.')+meta('Название можно дать после остановки.')+button('Начать обзор',state.sd?'visiting':'storage','OK');action(state.sd?'visiting':'storage','saved','Начать','Записи');break;
+case 'visiting':
+ html=title('Собираем обзор')+meta('Источники: Wi-Fi')+'<hr class="ld-separator">'+meta('Найдено: 12 сетей · 4 устройства')+meta('Это пример, не текущий эфир.')+'<br>'+meta('После остановки сможете сохранить')+meta('и сравнить с прошлым обзором.')+button('Завершить обзор','visitResult','OK');action('visitResult','','Стоп','');left='visitResult';footLeft='← Стоп';break;
+case 'visitResult':
+ html=title('Обзор завершён')+meta('12 сетей · 4 устройства · пример')+'<hr class="ld-separator">'+meta('Офис · сегодня')+meta('Сохраните обзор для сравнения.')+button('Сохранить',state.sd?'saveConfirm':'storage','OK')+button('Сравнить с предыдущим','compare','→');action(state.sd?'saveConfirm':'storage','compare','Сохранить','Сравнить');break;
+case 'compare':
+ html=title('Что изменилось')+meta('Офис: вчера → сегодня')+'<hr class="ld-separator">'+title('2 новые сети')+meta('Гостевая · Мастерская')+'<hr class="ld-separator">'+title('1 сеть не замечена')+meta('Не замечена ≠ выключена.','ld-warn')+'<hr class="ld-separator">'+meta('У выбранного изменения — исходные')+meta('наблюдения из обоих обзоров.');break;
+case 'capture':list([['Записать эфир','Приём → файл для Wireshark','captureSetup'],['Смотреть на ПК по USB','Без смены сети компьютера','usb'],['Что будет записано','Данные эфира и ограничения','evidence'],['Мои записи','Открыть прошлый результат','saved']]);break;
+case 'captureSetup':
+ html=title('Запись Wi-Fi-эфира')+meta('Только своё оборудование / разрешено.')+'<hr class="ld-separator">'+meta('Приём без передачи.')+meta('Время и объём ограничены.')+meta('Результат — кадры для Wireshark.')+'<br>'+meta('Для сохранения нужна подготовленная SD.')+button('Начать запись','capturing','OK');action('capturing','evidence','Начать','Сведения');break;
+case 'capturing':
+ html=title('Запись эфира')+meta('Только приём · заданные границы')+'<hr class="ld-separator">'+meta('Запись ограничена временем и объёмом.')+meta('Кадры ещё в памяти прибора.','ld-warn')+'<br>'+meta('Осталось 20 с · пример прогресса')+'<div class="ld-track"><span style="width:30%"></span></div>'+button('Остановить запись','packetResult','OK');action('packetResult','','Стоп','');left='packetResult';footLeft='← Стоп';break;
+case 'packetResult':
+ html=title('Запись для анализа')+meta('Завершена · пример')+'<hr class="ld-separator">'+meta('Сохраните кадры, чтобы открыть')+meta('их в Wireshark на компьютере.')+'<br>'+meta('Полнота и потери — в подробностях.')+button('Сохранить',state.sd?'saveConfirm':'storage','OK')+button('Подробности записи','evidence','→');action(state.sd?'saveConfirm':'storage','evidence','Сохранить','Подробно');break;
+case 'usb':
+ html=title('Смотреть на компьютере')+meta('1. Подключите Лешего кабелем USB.')+meta('2. Откройте локальный помощник.')+meta('3. Выберите поток Wireshark.')+'<hr class="ld-separator">'+meta('Wi-Fi ноутбука не переключается.','ld-good')+meta('Прибор передаёт принятые кадры')+meta('по кабелю, а не через сеть ноутбука.')+'<hr class="ld-separator">'+meta('Потери потока отмечаются явно,')+meta('они не маскируются под полный захват.');break;
+case 'saved':list([['Обзор · офис сегодня','12 сетей · сравнить изменения','compare'],['Подключение · Дом Wi-Fi','Материал для проверки пароля','export'],['Эфир · сегодня','Открыть в Wireshark','export'],['Отчёт наблюдения','Вывод и его основания','finding']]);break;
+case 'storage':
+ html=title('Сейчас нельзя сохранить')+meta('Карта не подготовлена','ld-warn')+meta('для этого устройства.')+'<hr class="ld-separator">'+meta('Просмотр эфира по-прежнему доступен.')+meta('Имеющийся результат — только в памяти.')+'<br>'+meta('Не извлекайте карту во время записи.')+meta('Подготовка карты — отдельное действие,')+meta('без автоматического форматирования.')+'<hr class="ld-separator">'+meta('← вернуться без изменения карты.');note='Пример конкретной причины. «Нет карты», «заблокировано», «нет места» и «ошибка записи» различаются.';break;
+case 'lab':
+ list([['Помочь записи подключения','WF-18 · в плане · активный тест','labInfo',true],['Устойчивость связи','WF-19 · в плане · активный тест','labInfo',true],['Кто в моей сети','WF-20 · в плане · LAN-обзор','labInfo',true],['Проверки локальной сети','WF-21 · в плане · изолированный стенд','labInfo',true]]);
+ note='Это четыре оставшиеся функции, не работающие кнопки запуска. В реализованном интерфейсе недоступность объясняется до старта.';break;
+case 'labInfo':
+ html=title('Сценарий ещё в плане')+meta('Ничего не запускается.','ld-warn')+'<hr class="ld-separator">'+meta('Будущий путь:')+meta('Собственная цель → проверка условий')+meta('→ границы, мощность и время')+meta('→ отдельное подтверждение OK')+meta('→ активный тест → Стоп → отчёт.')+'<hr class="ld-separator">'+meta('← во время передачи немедленно')+meta('останавливает её, без диалога.','ld-alert');break;
+}
+if(state.names==='Короткие названия'&&s==='home'){items[1][0]='Устройства Wi-Fi';items[3][0]='Наблюдение';html=menu(items);}
+const liveViews=['networks','network','radar','device','devices','deviceRadar','channels','waterfall','recording','recordInfo','watching','watchConditions','visiting','capturing'];
+device.innerHTML=`<div class="ld-head"><span>${titles[s]}</span>${liveViews.includes(s)?'<span class="ld-rx">'+(state.paused?'ПАУЗА':'RX Wi-Fi')+'</span>':''}</div><div class="ld-body">${html}</div><div class="ld-foot"><div><span>${footLeft}</span><span>${footUp}</span></div><div><span>${footOk}</span><span>${footRight}</span></div></div>`;
+root.querySelector('#wf-current').textContent=routes[s]||titles[s];
+root.querySelector('#wf-state-note').textContent=note;
+root.querySelectorAll('.wf-tree button[data-screen]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.screen===s?'true':'false'));
+drawPlots();
+}
+function drawPlots(){device.querySelectorAll('canvas').forEach(c=>{
+ const ctx=c.getContext('2d');ctx.fillStyle='#000';ctx.fillRect(0,0,c.width,c.height);const kind=c.dataset.plot;
+ if(kind==='signal'){
+ ctx.strokeStyle='#55d98a';ctx.lineWidth=1;ctx.beginPath();for(let x=0;x<198;x++){const y=46-x*.14+Math.sin(x*.17)*4;x?ctx.lineTo(x+.5,y+.5):ctx.moveTo(x+.5,y+.5);}ctx.stroke();return;}
+ if(kind==='channels'){
+ const avg=[1.8,.5,1.2,1.3,.8,.7,.4,.6,.3,.4,1.0,.1,.3],cur=[1.6,.3,1.4,1,.7,.9,.3,.8,.4,.5,1.2,.12,.35];
+ ctx.strokeStyle='#233128';ctx.lineWidth=1;for(let y of [41,82,123]){ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(216,y+.5);ctx.stroke();}
+ avg.forEach((v,i)=>{let x=Math.floor(i*216/13)+3,h=Math.round(v/8*164),h2=Math.round(cur[i]/8*164);ctx.fillStyle='#777b7b';ctx.fillRect(x,164-h,10,h);ctx.fillStyle='#55d98a';ctx.fillRect(x+3,164-h2,4,h2);});return;}
+ for(let y=0;y<164;y++){for(let ch=0;ch<13;ch++){let level=((y*17+ch*31)%37<10)?0:((Math.sin(y*.14+ch*2)+1)*.5)*(ch===5?.85:.25);let x=Math.floor(ch*216/13),w=Math.floor((ch+1)*216/13)-x;ctx.fillStyle=level<.13?'#000':level<.3?'#144333':level<.65?'#2e9865':'#ecd25a';ctx.fillRect(x,y,w,1);}}
+ ctx.fillStyle='#334139';for(let ch=1;ch<13;ch++)ctx.fillRect(Math.floor(ch*216/13),0,1,164);
+ });}
+function key(k){if(k==='left'){go(left);return;}if(isList){if(k==='up'||k==='down'){state.selected=Math.max(0,Math.min(items.length-1,state.selected+(k==='up'?-1:1)));render();return;}if(k==='right'||k==='ok'){go(items[state.selected][2]);return;}}
+ const dest=k==='ok'?ok:k==='right'?right:'';if(dest==='pause'){state.paused=!state.paused;render();}else if(dest)go(dest);}
+root.addEventListener('click',ev=>{const b=ev.target.closest('button');if(!b||!root.contains(b))return;if(b.dataset.screen)go(b.dataset.screen);else if(b.dataset.key)key(b.dataset.key);});
+render();
+if(globalThis.Tweak){const tweak=new Tweak({container:device,onChange:render});tweak.addSelect(state,'names',{label:'Названия в Wi-Fi-меню',options:['Понятные названия','Короткие названия']});tweak.addToggle(state,'sd',{label:'SD готова к сохранению (состояние макета)'});}
+})();
+</script>
+<!-- leshy-wifi-source:end -->

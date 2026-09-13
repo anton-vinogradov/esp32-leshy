@@ -5,6 +5,10 @@
 ESP32-Leshy 1.x — переработанная с нуля прошивка для беспроводного мультитула
 [ESP32-DIV](https://github.com/CiferTech/ESP32-DIV).
 
+[Карта экранов и навигации Wi-Fi](docs/v1/WIFI_UX_MAP.ru.md) ·
+[Интерактивные макеты](https://anton-vinogradov.github.io/esp32-leshy/v1/wifi-screen-flow.html) ·
+[Сведения о сети и скрытое имя](docs/v1/WIFI_NETWORK_FACTS.ru.md)
+
 <!-- LESHY-ROADMAP:START -->
 ## Статус разработки и роадмап
 

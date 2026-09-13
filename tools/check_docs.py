@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from readme_roadmap import drift_errors as readme_roadmap_drift_errors
+from export_wifi_map import drift_errors as wifi_map_drift_errors
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,6 +25,11 @@ def main() -> int:
     errors: list[str] = []
 
     errors.extend(readme_roadmap_drift_errors())
+    errors.extend(wifi_map_drift_errors())
+    if ids(V1 / "WIFI_UX_MAP.md", r"\bWF-\d{2}\b") != {
+        f"WF-{number:02d}" for number in range(1, 22)
+    }:
+        errors.append("Wi-Fi screen map must cover the fixed WF-01..WF-21 set")
 
     markdown_files = [ROOT / "README.md", ROOT / "README.ru.md"]
     markdown_files.extend(sorted((ROOT / "docs").rglob("*.md")))
@@ -44,6 +50,8 @@ def main() -> int:
                 errors.append(f"broken local link: {path.relative_to(ROOT)} -> {link}")
 
     paired_ids = [
+        ("Wi-Fi map coverage", V1 / "WIFI_UX_MAP.md", V1 / "WIFI_UX_MAP.ru.md", r"\bWF-\d{2}\b"),
+        ("Wi-Fi enrichment", V1 / "WIFI_NETWORK_FACTS.md", V1 / "WIFI_NETWORK_FACTS.ru.md", r"\bWF-\d{2}\b"),
         ("stage", V1 / "DELIVERY_PLAN.md", V1 / "DELIVERY_PLAN.ru.md", r"^## (S\d+)\b"),
         ("job", V1 / "PRODUCT_REQUIREMENTS.md", V1 / "PRODUCT_REQUIREMENTS.ru.md", r"\bJ-\d{2}\b"),
         (

@@ -1,0 +1,1646 @@
+<!doctype html>
+<html lang="en" data-visualize-standalone>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Леший — карта Wi-Fi</title>
+<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+</head>
+<body>
+<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="Леший — карта Wi-Fi" srcdoc="&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot; data-visualize-standalone&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;meta name=&quot;referrer&quot; content=&quot;no-referrer&quot;&gt;
+&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;&quot;&gt;
+&lt;title&gt;Леший — карта Wi-Fi&lt;/title&gt;
+&lt;style&gt;:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 14px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, &quot;Segoe UI&quot;, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;,
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --icon-size: 16px;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --corner-shape: round;
+  --radius: var(--border-radius-lg, 10px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url(&quot;data:image/svg+xml,%3Csvg xmlns=&#x27;http://www.w3.org/2000/svg&#x27; viewBox=&#x27;0 0 17 17&#x27;%3E%3Cpath d=&#x27;M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z&#x27;/%3E%3C/svg%3E&quot;);
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme=&quot;light&quot;] {
+  color-scheme: light;
+}
+
+:root[data-theme=&quot;dark&quot;] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html &gt; body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: var(--visualize-paint-gutter, 0px);
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--font-weight-medium, 500);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive &gt; .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align=&quot;right&quot;]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align=&quot;center&quot;]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: var(--corner-shape);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget &gt; :not(.card, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+hr {
+  width: 100%;
+  height: 1px;
+  margin-block: 6px;
+  border: 0;
+  background: var(--border);
+}
+
+.nav {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.progress {
+  display: flex;
+  height: 8px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 8px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar:only-child {
+  border-radius: var(--radius-full);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls &gt; .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls &gt; .form-label &gt; :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.nav-link,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn,
+.nav-link {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover,
+.nav-link:not(:disabled):not([aria-disabled=&quot;true&quot;]):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.nav-pills .nav-link {
+  min-width: 0;
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.nav-justified .nav-link {
+  flex: 1 1 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.nav-pills .nav-link.active {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+.btn:disabled,
+.nav-link:disabled,
+.nav-link[aria-disabled=&quot;true&quot;] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type=&quot;file&quot;] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type=&quot;file&quot;]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type=&quot;file&quot;]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type=&quot;color&quot;] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: var(--corner-shape);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;checkbox&quot;]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: &quot;&quot;;
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type=&quot;radio&quot;] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type=&quot;radio&quot;]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: &quot;&quot;;
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed=&quot;true&quot;],
+  [aria-selected=&quot;true&quot;],
+  .is-selected
+) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed=&quot;true&quot;], [aria-selected=&quot;true&quot;], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible,
+.nav-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .btn,
+  .nav-link,
+  .form-control,
+  .form-select {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Keep small-screen WebKit from zooming when a text field receives focus. */
+  .form-control,
+  .form-select {
+    font-size: max(16px, var(--font-size-normal));
+  }
+
+  .form-control[type=&quot;file&quot;]::file-selector-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .form-control-color[type=&quot;color&quot;] {
+    width: 44px;
+    height: 44px;
+  }
+
+  .form-control:is(
+    [type=&quot;date&quot;],
+    [type=&quot;datetime-local&quot;],
+    [type=&quot;month&quot;],
+    [type=&quot;time&quot;],
+    [type=&quot;week&quot;]
+  ) {
+    min-width: 0;
+    max-width: 100%;
+    padding-block: 8px;
+  }
+
+  .form-check {
+    min-height: 44px;
+    padding-inline: 15px;
+  }
+
+  .form-check-input {
+    position: relative;
+  }
+
+  .form-check-input::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    content: &quot;&quot;;
+    transform: translate(-50%, -50%);
+  }
+
+  .form-check-label {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .form-range {
+    height: 44px;
+    touch-action: pan-y;
+  }
+
+  .form-range::-webkit-slider-runnable-track {
+    height: 44px;
+  }
+
+  .form-range::-moz-range-track {
+    height: 44px;
+  }
+
+  .form-range::-webkit-slider-thumb {
+    margin-top: 12px;
+  }
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget &gt; svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: var(--icon-size) !important;
+  height: var(--icon-size) !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html&gt;body{padding:0}&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;!-- leshy-wifi-source:start --&gt;
+&lt;link rel=&quot;stylesheet&quot; href=&quot;https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@500&amp;display=swap&quot;&gt;
+&lt;style&gt;
+#leshy-wifi-design { color:var(--foreground); }
+#leshy-wifi-design .wf-layout {display:grid;grid-template-columns:minmax(260px,1fr) 264px;gap:24px;align-items:start;margin-top:12px}
+#leshy-wifi-design .wf-tree ul {list-style:none;padding-left:16px;margin:4px 0 10px;border-left:1px solid var(--border)}
+#leshy-wifi-design .wf-tree li {margin:4px 0}
+#leshy-wifi-design .wf-tree summary {cursor:pointer;padding:8px 0}
+#leshy-wifi-design .wf-tree details {margin:6px 0}
+#leshy-wifi-design .wf-preview {display:flex;flex-direction:column;align-items:center;gap:10px;min-width:0}
+#leshy-wifi-design .wf-caption {max-width:264px;text-align:center}
+#leshy-wifi-design .wf-keyboard {max-width:264px}
+#leshy-wifi-design .ld {--ld-bg:#07100c;--ld-header:#1a3a28;--ld-surface:#0d1611;--ld-selected:#1a4e34;--ld-text:#e7cf8f;--ld-meta:#c6d0c8;--ld-muted:#97a39b;--ld-focus:#f5c542;--ld-positive:#55d98a;--ld-danger:#f05d5e;--ld-warning:#f7a641;--ld-line:#3c4840;position:relative;width:240px;height:320px;flex:none;background:var(--ld-bg);color:var(--ld-text);font:500 16px/18px &#x27;Roboto Condensed&#x27;,&#x27;Arial Narrow&#x27;,sans-serif;border-radius:0;box-shadow:0 0 0 4px #25372c;overflow:hidden;color-scheme:dark}
+#leshy-wifi-design .ld * {box-sizing:border-box}
+#leshy-wifi-design .ld button {font-family:inherit;cursor:pointer;color:var(--ld-text)}
+#leshy-wifi-design .ld .ld-head {height:26px;background:var(--ld-header);display:flex;align-items:center;justify-content:space-between;padding:0 8px;gap:4px;font-size:12px;line-height:14px;white-space:nowrap}
+#leshy-wifi-design .ld .ld-rx {font-size:12px;line-height:14px;color:var(--ld-positive)}
+#leshy-wifi-design .ld .ld-foot {position:absolute;left:0;right:0;bottom:0;height:27px;border-top:1px solid var(--ld-line);padding:0 6px;font-size:12px;line-height:13px;color:var(--ld-meta);background:var(--ld-bg);display:flex;flex-direction:column;justify-content:center}
+#leshy-wifi-design .ld .ld-foot div {display:flex;justify-content:space-between}
+#leshy-wifi-design .ld .ld-body {height:267px;padding:6px 12px}
+#leshy-wifi-design .ld .ld-menu {display:grid;gap:5px}
+#leshy-wifi-design .ld .ld-row {width:216px;height:60px;border:1px solid transparent;border-radius:4px;padding:8px 11px;text-align:left;background:var(--ld-surface);display:flex;flex-direction:column;justify-content:center;gap:3px;font-size:16px;line-height:18px}
+#leshy-wifi-design .ld .ld-row small {font-size:12px;line-height:14px;color:var(--ld-meta);font-weight:500}
+#leshy-wifi-design .ld .ld-row.is-focus {border-color:var(--ld-focus);background:var(--ld-selected)}
+#leshy-wifi-design .ld .ld-row.is-focus&gt;span {color:var(--ld-focus)}
+#leshy-wifi-design .ld .ld-row.ld-lab&gt;span {color:var(--ld-danger)}
+#leshy-wifi-design .ld .ld-title {font-size:16px;line-height:20px;color:var(--ld-focus);margin:0 0 4px;overflow-wrap:anywhere}
+#leshy-wifi-design .ld .ld-meta {font-size:12px;line-height:16px;color:var(--ld-meta)}
+#leshy-wifi-design .ld .ld-muted {color:var(--ld-muted)}
+#leshy-wifi-design .ld .ld-good {color:var(--ld-positive)}
+#leshy-wifi-design .ld .ld-warn {color:var(--ld-warning)}
+#leshy-wifi-design .ld .ld-alert {color:var(--ld-danger)}
+#leshy-wifi-design .ld .ld-block {margin-bottom:10px}
+#leshy-wifi-design .ld .ld-action {width:216px;height:44px;margin-top:5px;padding:5px 11px;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--ld-line);border-radius:4px;background:var(--ld-surface);font-size:16px;line-height:18px;text-align:left;gap:5px}
+#leshy-wifi-design .ld .ld-action:first-of-type {border-color:var(--ld-focus)}
+#leshy-wifi-design .ld .ld-signal {padding:7px 9px;margin:8px 0;background:var(--ld-surface);border-radius:4px}
+#leshy-wifi-design .ld .ld-signal-line {display:flex;justify-content:space-between;align-items:baseline}
+#leshy-wifi-design .ld .ld-track {height:9px;background:#202c24;margin:6px 0}
+#leshy-wifi-design .ld .ld-track span {display:block;width:76%;height:100%;background:var(--ld-positive)}
+#leshy-wifi-design .ld .ld-pill {display:inline;color:var(--ld-warning)}
+#leshy-wifi-design .ld .ld-legend {display:flex;justify-content:space-between;font-size:12px;line-height:14px;margin:3px 0;color:var(--ld-meta)}
+#leshy-wifi-design .ld .ld-legend .avg {color:#babcbc}
+#leshy-wifi-design .ld .ld-legend .now {color:var(--ld-positive)}
+#leshy-wifi-design .ld .ld-axis {display:grid;grid-template-columns:repeat(13,1fr);font-size:12px;line-height:14px;text-align:center;color:var(--ld-meta)}
+#leshy-wifi-design .ld canvas {display:block;image-rendering:pixelated;width:216px;background:#000}
+#leshy-wifi-design .ld .ld-chart-button {background:none;border:0;padding:0;margin:0;font-size:12px;line-height:16px;color:var(--ld-focus);text-align:left}
+#leshy-wifi-design .ld .ld-separator {border:0;border-top:1px solid var(--ld-line);margin:6px 0}
+#leshy-wifi-design .ld .ld-number {font-size:30px;line-height:36px;color:var(--ld-positive);margin:8px 0}
+#leshy-wifi-design .ld .ld-facts {font-size:12px;line-height:20px;color:var(--ld-meta);margin:0}
+#leshy-wifi-design .ld .ld-facts div {display:flex;justify-content:space-between;gap:8px}
+@media(max-width:610px) {#leshy-wifi-design .wf-layout {grid-template-columns:1fr} #leshy-wifi-design .wf-preview {grid-row:1}}
+&lt;/style&gt;
+&lt;div id=&quot;leshy-wifi-design&quot;&gt;
+  &lt;div class=&quot;viz-row&quot;&gt;&lt;strong&gt;Wi-Fi · предлагаемое дерево экранов&lt;/strong&gt;&lt;span class=&quot;text-small text-muted&quot;&gt;Макеты 240 × 320 · условные данные&lt;/span&gt;&lt;/div&gt;
+  &lt;div class=&quot;wf-layout&quot;&gt;
+    &lt;nav class=&quot;wf-tree&quot; aria-label=&quot;Диаграмма переходов Wi-Fi&quot;&gt;
+      &lt;button type=&quot;button&quot; class=&quot;btn&quot; data-screen=&quot;home&quot;&gt;Wi-Fi — 4 входа&lt;/button&gt;
+      &lt;ul&gt;
+        &lt;li&gt;&lt;details open&gt;&lt;summary&gt;Сети рядом → карточка → действия&lt;/summary&gt;
+          &lt;ul&gt;
+            &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;networks&quot;&gt;Список сетей&lt;/button&gt; → &lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;network&quot;&gt;Карточка&lt;/button&gt;&lt;/li&gt;
+            &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;radar&quot;&gt;Найти по сигналу&lt;/button&gt;&lt;/li&gt;
+            &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;actions&quot;&gt;Действия с сетью&lt;/button&gt;
+              &lt;ul&gt;
+                &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;security&quot;&gt;Оценить защиту&lt;/button&gt;&lt;/li&gt;
+                &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;password&quot;&gt;Проверить пароль&lt;/button&gt;
+                  &lt;ul&gt;
+                    &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;recording&quot;&gt;Запись подключения&lt;/button&gt; → &lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;result&quot;&gt;Результат&lt;/button&gt;&lt;/li&gt;
+                    &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;export&quot;&gt;Передать на ПК&lt;/button&gt; → &lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;computer&quot;&gt;Отчёт на ПК&lt;/button&gt;&lt;/li&gt;
+                  &lt;/ul&gt;
+                &lt;/li&gt;
+                &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;facts&quot;&gt;Все сведения&lt;/button&gt;&lt;/li&gt;
+                &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;lab&quot;&gt;Лаборатория · 4 функции в плане&lt;/button&gt;&lt;/li&gt;
+              &lt;/ul&gt;
+            &lt;/li&gt;
+          &lt;/ul&gt;
+        &lt;/details&gt;&lt;/li&gt;
+        &lt;li&gt;&lt;details&gt;&lt;summary&gt;Устройства в эфире → факты и сигнал&lt;/summary&gt;&lt;ul&gt;
+          &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;devices&quot;&gt;Замеченные устройства&lt;/button&gt; → &lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;device&quot;&gt;Карточка&lt;/button&gt;&lt;/li&gt;
+          &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;deviceRadar&quot;&gt;Найти по сигналу&lt;/button&gt;&lt;/li&gt;
+          &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;deviceFacts&quot;&gt;Все сведения&lt;/button&gt;&lt;/li&gt;
+          &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;empty&quot;&gt;Пока никого не слышно&lt;/button&gt;&lt;/li&gt;
+        &lt;/ul&gt;&lt;/details&gt;&lt;/li&gt;
+        &lt;li&gt;&lt;details&gt;&lt;summary&gt;Каналы → вид → объяснение&lt;/summary&gt;&lt;ul&gt;
+          &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;channels&quot;&gt;График загрузки&lt;/button&gt; / &lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;waterfall&quot;&gt;Водопад · доработка UI&lt;/button&gt;&lt;/li&gt;
+          &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;channelWhy&quot;&gt;Почему этот канал?&lt;/button&gt;&lt;/li&gt;
+          &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;measurement&quot;&gt;Что измеряем&lt;/button&gt;&lt;/li&gt;
+        &lt;/ul&gt;&lt;/details&gt;&lt;/li&gt;
+        &lt;li&gt;&lt;details&gt;&lt;summary&gt;Наблюдение и записи → результат&lt;/summary&gt;&lt;ul&gt;
+          &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;observe&quot;&gt;Меню наблюдений&lt;/button&gt;&lt;/li&gt;
+          &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;anomalies&quot;&gt;Искать аномалии&lt;/button&gt; → &lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;finding&quot;&gt;Вывод и основания&lt;/button&gt;&lt;/li&gt;
+          &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;visit&quot;&gt;Обзор места&lt;/button&gt; → &lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;compare&quot;&gt;Сравнить обзоры&lt;/button&gt;&lt;/li&gt;
+          &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;capture&quot;&gt;Записать эфир&lt;/button&gt; → &lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;usb&quot;&gt;Смотреть на ПК по USB&lt;/button&gt;&lt;/li&gt;
+          &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;saved&quot;&gt;Сохранённое&lt;/button&gt; → &lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;export&quot;&gt;Экспорт&lt;/button&gt;&lt;/li&gt;
+          &lt;li&gt;&lt;button type=&quot;button&quot; class=&quot;btn btn-ghost&quot; data-screen=&quot;storage&quot;&gt;Если нельзя сохранить&lt;/button&gt;&lt;/li&gt;
+        &lt;/ul&gt;&lt;/details&gt;&lt;/li&gt;
+      &lt;/ul&gt;
+      &lt;div class=&quot;text-small text-muted&quot;&gt;Подключение и собственный адрес Лешего — в «Устройство». Общие записи и Lab открываются с выбранной сетью, без дублирования экранов.&lt;/div&gt;
+    &lt;/nav&gt;
+    &lt;section class=&quot;wf-preview&quot; aria-label=&quot;Интерактивный макет экрана&quot;&gt;
+      &lt;div class=&quot;wf-caption text-small&quot; id=&quot;wf-current&quot; aria-live=&quot;polite&quot;&gt;&lt;/div&gt;
+      &lt;div class=&quot;ld&quot; id=&quot;wf-device&quot; aria-label=&quot;Леший: предлагаемые Wi-Fi-экраны&quot;&gt;&lt;/div&gt;
+      &lt;div class=&quot;text-small text-muted&quot;&gt;Физические клавиши · макет&lt;/div&gt;
+      &lt;div class=&quot;viz-row wf-keyboard&quot; aria-label=&quot;Клавиши прибора&quot;&gt;
+        &lt;button type=&quot;button&quot; class=&quot;btn&quot; data-key=&quot;left&quot; aria-label=&quot;Влево: назад или остановить&quot;&gt;←&lt;/button&gt;
+        &lt;button type=&quot;button&quot; class=&quot;btn&quot; data-key=&quot;up&quot; aria-label=&quot;Вверх: предыдущий пункт&quot;&gt;↑&lt;/button&gt;
+        &lt;button type=&quot;button&quot; class=&quot;btn&quot; data-key=&quot;ok&quot; aria-label=&quot;OK: основное действие&quot;&gt;OK&lt;/button&gt;
+        &lt;button type=&quot;button&quot; class=&quot;btn&quot; data-key=&quot;down&quot; aria-label=&quot;Вниз: следующий пункт&quot;&gt;↓&lt;/button&gt;
+        &lt;button type=&quot;button&quot; class=&quot;btn&quot; data-key=&quot;right&quot; aria-label=&quot;Вправо: открыть следующий уровень&quot;&gt;→&lt;/button&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;wf-caption text-small text-muted&quot; id=&quot;wf-state-note&quot;&gt;&lt;/div&gt;
+    &lt;/section&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+&lt;script&gt;
+(() =&gt; {
+const root = document.getElementById(&#x27;leshy-wifi-design&#x27;);
+const device = document.getElementById(&#x27;wf-device&#x27;);
+const state = { screen:&#x27;network&#x27;, selected:0, paused:false, names:&#x27;Понятные названия&#x27;, sd:true, recordType:&#x27;auth&#x27; };
+const titles = {home:&#x27;WI-FI&#x27;,networks:&#x27;СЕТИ РЯДОМ&#x27;,network:&#x27;WI-FI / СЕТЬ&#x27;,actions:&#x27;СЕТЬ / ДЕЙСТВИЯ&#x27;,radar:&#x27;НАЙТИ СЕТЬ&#x27;,security:&#x27;ОЦЕНКА ЗАЩИТЫ&#x27;,password:&#x27;ПРОВЕРИТЬ ПАРОЛЬ&#x27;,conditions:&#x27;УСЛОВИЯ ЗАПИСИ&#x27;,recording:&#x27;ЗАПИСЬ ПОДКЛЮЧЕНИЯ&#x27;,recordInfo:&#x27;ЗАПИСЬ / УСЛОВИЯ&#x27;,result:&#x27;РЕЗУЛЬТАТ ЗАПИСИ&#x27;,resultActions:&#x27;РЕЗУЛЬТАТ / ДЕЙСТВИЯ&#x27;,export:&#x27;ПЕРЕДАТЬ НА ПК&#x27;,computer:&#x27;ОТЧЁТ НА КОМПЬЮТЕРЕ&#x27;,facts:&#x27;СЕТЬ / СВЕДЕНИЯ&#x27;,lab:&#x27;WI-FI / ЛАБОРАТОРИЯ&#x27;,labInfo:&#x27;АКТИВНЫЕ ПРОВЕРКИ&#x27;,devices:&#x27;УСТРОЙСТВА В ЭФИРЕ&#x27;,device:&#x27;WI-FI / УСТРОЙСТВО&#x27;,deviceRadar:&#x27;НАЙТИ УСТРОЙСТВО&#x27;,deviceFacts:&#x27;УСТРОЙСТВО / ФАКТЫ&#x27;,empty:&#x27;УСТРОЙСТВА В ЭФИРЕ&#x27;,channels:&#x27;WI-FI / КАНАЛЫ&#x27;,channelView:&#x27;КАНАЛЫ / ВИД&#x27;,waterfall:&#x27;WI-FI / ВОДОПАД&#x27;,channelWhy:&#x27;ПОЧЕМУ КАНАЛ 12&#x27;,measurement:&#x27;КАНАЛЫ / ИЗМЕРЕНИЕ&#x27;,observe:&#x27;НАБЛЮДЕНИЕ И ЗАПИСИ&#x27;,anomalies:&#x27;ИСКАТЬ АНОМАЛИИ&#x27;,watching:&#x27;НАБЛЮДЕНИЕ&#x27;,finding:&#x27;РЕЗУЛЬТАТ НАБЛЮДЕНИЯ&#x27;,evidence:&#x27;ОСНОВАНИЯ ВЫВОДА&#x27;,visit:&#x27;ОБЗОР МЕСТА&#x27;,visiting:&#x27;ОБЗОР ИДЁТ&#x27;,visitResult:&#x27;РЕЗУЛЬТАТ ОБЗОРА&#x27;,compare:&#x27;СРАВНЕНИЕ ОБЗОРОВ&#x27;,capture:&#x27;ЗАПИСАТЬ ЭФИР&#x27;,capturing:&#x27;ЗАПИСЬ ЭФИРА&#x27;,packetResult:&#x27;ЗАПИСЬ ЗАВЕРШЕНА&#x27;,usb:&#x27;WI-FI / USB&#x27;,saved:&#x27;СОХРАНЁННОЕ&#x27;,storage:&#x27;СОХРАНЕНИЕ НЕДОСТУПНО&#x27;,signalInfo:&#x27;О СИГНАЛЕ&#x27;};
+const parents={home:null,networks:&#x27;home&#x27;,network:&#x27;networks&#x27;,actions:&#x27;network&#x27;,radar:&#x27;network&#x27;,signalInfo:&#x27;radar&#x27;,security:&#x27;actions&#x27;,password:&#x27;actions&#x27;,conditions:&#x27;password&#x27;,recording:&#x27;password&#x27;,recordInfo:&#x27;recording&#x27;,result:&#x27;password&#x27;,resultActions:&#x27;result&#x27;,export:&#x27;result&#x27;,computer:&#x27;export&#x27;,facts:&#x27;actions&#x27;,lab:&#x27;actions&#x27;,labInfo:&#x27;lab&#x27;,devices:&#x27;home&#x27;,device:&#x27;devices&#x27;,deviceRadar:&#x27;device&#x27;,deviceFacts:&#x27;device&#x27;,empty:&#x27;devices&#x27;,channels:&#x27;home&#x27;,waterfall:&#x27;channels&#x27;,channelView:&#x27;channels&#x27;,channelWhy:&#x27;channelView&#x27;,measurement:&#x27;channelView&#x27;,observe:&#x27;home&#x27;,anomalies:&#x27;observe&#x27;,watching:&#x27;anomalies&#x27;,finding:&#x27;anomalies&#x27;,evidence:&#x27;finding&#x27;,visit:&#x27;observe&#x27;,visiting:&#x27;visit&#x27;,visitResult:&#x27;visit&#x27;,compare:&#x27;saved&#x27;,capture:&#x27;observe&#x27;,capturing:&#x27;capture&#x27;,packetResult:&#x27;capture&#x27;,usb:&#x27;capture&#x27;,saved:&#x27;observe&#x27;,storage:&#x27;result&#x27;};
+Object.assign(titles,{captureSetup:&#x27;ЗАПИСЬ / ПОДГОТОВКА&#x27;,saveConfirm:&#x27;СОХРАНИТЬ ЗАПИСЬ?&#x27;,watchProfile:&#x27;ПРОФИЛЬ НАБЛЮДЕНИЯ&#x27;,watchConditions:&#x27;УСЛОВИЯ НАБЛЮДЕНИЯ&#x27;});
+Object.assign(parents,{captureSetup:&#x27;capture&#x27;,saveConfirm:&#x27;result&#x27;,watchProfile:&#x27;anomalies&#x27;,watchConditions:&#x27;watching&#x27;});
+const routes={networks:&#x27;Wi-Fi → Сети рядом&#x27;,network:&#x27;Сети рядом → Карточка сети&#x27;,actions:&#x27;Карточка → Действия&#x27;,radar:&#x27;Карточка → Найти по сигналу&#x27;,security:&#x27;Действия → Оценить защиту&#x27;,password:&#x27;Действия → Проверить пароль&#x27;,recording:&#x27;Проверить пароль → Запись&#x27;,result:&#x27;Запись → Результат&#x27;,computer:&#x27;Данные записи → Локальный отчёт ПК&#x27;,lab:&#x27;Карточка → Лаборатория&#x27;,channels:&#x27;Wi-Fi → Каналы&#x27;,waterfall:&#x27;Каналы → Вид → Водопад&#x27;};
+const esc = x =&gt; String(x).replaceAll(&#x27;&amp;&#x27;,&#x27;&amp;amp;&#x27;).replaceAll(&#x27;&lt;&#x27;,&#x27;&amp;lt;&#x27;).replaceAll(&#x27;&gt;&#x27;,&#x27;&amp;gt;&#x27;).replaceAll(&#x27;&quot;&#x27;,&#x27;&amp;quot;&#x27;);
+const meta=(x,c=&#x27;&#x27;)=&gt;`&lt;div class=&quot;ld-meta ${c}&quot;&gt;${x}&lt;/div&gt;`;
+const title=x=&gt;`&lt;div class=&quot;ld-title&quot;&gt;${x}&lt;/div&gt;`;
+const button=(name,to,key=&#x27;&#x27;)=&gt;`&lt;button type=&quot;button&quot; class=&quot;ld-action&quot; data-screen=&quot;${to}&quot;&gt;&lt;span&gt;${name}&lt;/span&gt;&lt;span class=&quot;ld-meta&quot;&gt;${key}&lt;/span&gt;&lt;/button&gt;`;
+const signal=(large=false)=&gt;`&lt;div class=&quot;ld-signal&quot;&gt;&lt;div class=&quot;ld-signal-line&quot;&gt;&lt;span class=&quot;ld-good&quot;&gt;Сильный&lt;/span&gt;&lt;span class=&quot;ld-meta&quot;&gt;−54 dBm&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;ld-track&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;/div&gt;${meta(state.paused?&#x27;ПАУЗА · показан сохранённый замер&#x27;:&#x27;Сейчас слышно · сигнал усилился&#x27;,state.paused?&#x27;ld-warn&#x27;:&#x27;ld-muted&#x27;)}${large?&#x27;&lt;canvas width=&quot;198&quot; height=&quot;66&quot; data-plot=&quot;signal&quot; role=&quot;img&quot; aria-label=&quot;Пример истории уровня сигнала во времени&quot; style=&quot;width:198px;height:66px;margin-top:6px&quot;&gt;&lt;/canvas&gt;&#x27;:&#x27;&#x27;}&lt;/div&gt;`;
+function menu(items){state.selected=Math.min(state.selected,items.length-1);return `&lt;div class=&quot;ld-menu&quot;&gt;${items.map((r,i)=&gt;`&lt;button type=&quot;button&quot; class=&quot;ld-row ${i===state.selected?&#x27;is-focus&#x27;:&#x27;&#x27;} ${r[3]?&#x27;ld-lab&#x27;:&#x27;&#x27;}&quot; data-screen=&quot;${r[2]}&quot;&gt;&lt;span&gt;${esc(r[0])}&lt;/span&gt;&lt;small&gt;${esc(r[1])}&lt;/small&gt;&lt;/button&gt;`).join(&#x27;&#x27;)}&lt;/div&gt;`;}
+let items=[], ok=&#x27;&#x27;,right=&#x27;&#x27;,left=&#x27;&#x27;,isList=false;
+function go(screen){if(!titles[screen])return;if([&#x27;password&#x27;,&#x27;recording&#x27;,&#x27;result&#x27;].includes(screen))state.recordType=&#x27;auth&#x27;;if([&#x27;captureSetup&#x27;,&#x27;capturing&#x27;,&#x27;packetResult&#x27;].includes(screen))state.recordType=&#x27;packets&#x27;;if([&#x27;visiting&#x27;,&#x27;visitResult&#x27;].includes(screen))state.recordType=&#x27;visit&#x27;;if(screen===&#x27;finding&#x27;)state.recordType=&#x27;finding&#x27;;state.screen=screen;state.selected=0;state.paused=false;render();}
+function render(){
+const s=state.screen;items=[];ok=&#x27;&#x27;;right=&#x27;&#x27;;left=parents[s]||&#x27;home&#x27;;isList=false;
+let html=&#x27;&#x27;, footLeft=&#x27;← Назад&#x27;,footUp=&#x27;&#x27;,footOk=&#x27;&#x27;,footRight=&#x27;&#x27;,note=&#x27;Проект компоновки. Кнопки макета не управляют прибором.&#x27;;
+function list(rows){items=rows;isList=true;html=menu(rows);footUp=&#x27;↑↓ Выбор&#x27;;footOk=&#x27;OK / → Открыть&#x27;;}
+function action(o,r,ol,rl){ok=o;right=r;footOk=ol?`OK ${ol}`:&#x27;&#x27;;footRight=rl?`→ ${rl}`:&#x27;&#x27;;}
+switch(s){
+case &#x27;home&#x27;:
+ list([[&#x27;Сети рядом&#x27;,&#x27;Найти сеть, оценить её защиту&#x27;,&#x27;networks&#x27;],[&#x27;Устройства в эфире&#x27;,&#x27;Кого слышит приёмник&#x27;,&#x27;devices&#x27;],[&#x27;Каналы&#x27;,&#x27;Найти менее занятый&#x27;,&#x27;channels&#x27;],[&#x27;Наблюдение и записи&#x27;,&#x27;Аномалии, обзор, сохранённое&#x27;,&#x27;observe&#x27;]]);footLeft=&#x27;← Home&#x27;;break;
+case &#x27;networks&#x27;:
+ list([[&#x27;Дом Wi-Fi&#x27;,&#x27;−54 dBm · канал 6 · WPA2&#x27;,&#x27;network&#x27;],[&#x27;Скрытая сеть&#x27;,&#x27;−61 dBm · канал 1 · WPA2&#x27;,&#x27;network&#x27;],[&#x27;Гостевая&#x27;,&#x27;−70 dBm · канал 11 · открытая&#x27;,&#x27;network&#x27;],[&#x27;Мастерская&#x27;,&#x27;−78 dBm · канал 3 · WPA3&#x27;,&#x27;network&#x27;]]);
+ note=&#x27;Пример списка. Сортировка живая; после первого ввода фокус удерживает объект, а не номер строки.&#x27;;break;
+case &#x27;network&#x27;:
+ html=title(&#x27;Дом Wi-Fi&#x27;)+meta(&#x27;Канал 6 · 2437 МГц · 20 МГц&#x27;)+meta(&#x27;WPA2 · WPS включён&#x27;,&#x27;ld-warn&#x27;)+signal()+button(&#x27;Найти по сигналу&#x27;,&#x27;radar&#x27;,&#x27;OK&#x27;)+button(&#x27;Действия с сетью&#x27;,&#x27;actions&#x27;,&#x27;→&#x27;);action(&#x27;radar&#x27;,&#x27;actions&#x27;,&#x27;Найти&#x27;,&#x27;Действия&#x27;);break;
+case &#x27;actions&#x27;:list([[&#x27;Оценить защиту&#x27;,&#x27;Что хорошо и что проверить&#x27;,&#x27;security&#x27;],[&#x27;Проверить пароль&#x27;,&#x27;Запись здесь, проверка на ПК&#x27;,&#x27;password&#x27;],[&#x27;Все сведения&#x27;,&#x27;Адреса, производитель, радио&#x27;,&#x27;facts&#x27;],[&#x27;Лаборатория&#x27;,&#x27;Только своя изолированная сеть&#x27;,&#x27;lab&#x27;,true]]);break;
+case &#x27;radar&#x27;:case &#x27;deviceRadar&#x27;:
+ html=title(s===&#x27;radar&#x27;?&#x27;Дом Wi-Fi&#x27;:&#x27;Устройство A&#x27;)+signal(true)+meta(&#x27;Двигайтесь и следите за уровнем.&#x27;)+meta(&#x27;Это сила сигнала, не направление&#x27;,&#x27;ld-muted&#x27;)+meta(&#x27;и не точное расстояние.&#x27;,&#x27;ld-muted&#x27;);
+ action(&#x27;pause&#x27;,&#x27;signalInfo&#x27;,state.paused?&#x27;Продолжить&#x27;:&#x27;Пауза&#x27;,&#x27;Сведения&#x27;);break;
+case &#x27;signalInfo&#x27;:
+ html=title(&#x27;Поиск по уровню&#x27;)+meta(&#x27;Сильнее при приближении — подсказка,&#x27;)+meta(&#x27;но стены и отражения меняют уровень.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Нельзя определить направление&#x27;)+meta(&#x27;или расстояние одним этим замером.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Если устройство давно не слышно,&#x27;)+meta(&#x27;показываем возраст последнего замера,&#x27;)+meta(&#x27;а не выдаём его за текущий.&#x27;);break;
+case &#x27;security&#x27;:
+ html=title(&#x27;Есть что улучшить&#x27;)+meta(&#x27;WPA2: шифрование включено&#x27;,&#x27;ld-good&#x27;)+meta(&#x27;WPS включён&#x27;,&#x27;ld-warn&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Не используете WPS? Отключите его&#x27;)+meta(&#x27;в настройках роутера.&#x27;)+meta(&#x27;Стойкость пароля ещё не проверена.&#x27;,&#x27;ld-muted&#x27;)+button(&#x27;Проверить пароль&#x27;,&#x27;password&#x27;,&#x27;OK&#x27;)+button(&#x27;Технические сведения&#x27;,&#x27;facts&#x27;,&#x27;→&#x27;);action(&#x27;password&#x27;,&#x27;facts&#x27;,&#x27;Пароль&#x27;,&#x27;Сведения&#x27;);break;
+case &#x27;facts&#x27;:
+ html=title(&#x27;Дом Wi-Fi&#x27;)+&#x27;&lt;div class=&quot;ld-facts&quot;&gt;&lt;div&gt;&lt;span&gt;Производитель&lt;/span&gt;&lt;span&gt;неизвестен&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span&gt;Канал / ширина&lt;/span&gt;&lt;span&gt;6 / 20 МГц&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span&gt;Защита / шифр&lt;/span&gt;&lt;span&gt;WPA2 / CCMP&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span&gt;WPS&lt;/span&gt;&lt;span&gt;включён&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span&gt;PHY&lt;/span&gt;&lt;span&gt;802.11 b/g/n&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;BSSID: 02:00:00:00:00:01&#x27;)+meta(&#x27;Защита служебных кадров (PMF):&#x27;)+meta(&#x27;не измерена&#x27;,&#x27;ld-warn&#x27;)+meta(&#x27;Пример полей; отсутствующие данные&#x27;)+meta(&#x27;не заменяются догадками.&#x27;,&#x27;ld-muted&#x27;);break;
+case &#x27;password&#x27;:
+ html=title(&#x27;Слабый пароль?&#x27;)+meta(&#x27;Сеть: Дом Wi-Fi · WPA2&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;1. Запишите подключение своего&#x27;)+meta(&#x27;телефона к этой сети.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;2. Передайте запись на компьютер:&#x27;)+meta(&#x27;проверка по локальному списку.&#x27;)+meta(&#x27;Сам пароль из эфира не читается.&#x27;,&#x27;ld-muted&#x27;)+button(&#x27;Условия перед записью&#x27;,&#x27;conditions&#x27;,&#x27;OK&#x27;);action(&#x27;conditions&#x27;,&#x27;conditions&#x27;,&#x27;Подготовка&#x27;,&#x27;Условия&#x27;);break;
+case &#x27;conditions&#x27;:
+ html=title(&#x27;Перед записью&#x27;)+meta(&#x27;Только ваша сеть / есть разрешение.&#x27;)+meta(&#x27;Цель: Дом Wi-Fi · канал 6&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Приём без передачи. Запись ограничена&#x27;)+meta(&#x27;по времени и объёму.&#x27;)+meta(&#x27;Во время записи подключите к сети&#x27;)+meta(&#x27;свой телефон обычным способом.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Пока результат только в памяти.&#x27;,&#x27;ld-warn&#x27;)+meta(&#x27;SD понадобится для сохранения.&#x27;)+button(&#x27;Начать запись&#x27;,&#x27;recording&#x27;,&#x27;OK&#x27;);action(&#x27;recording&#x27;,&#x27;&#x27;,&#x27;Начать&#x27;,&#x27;&#x27;);break;
+case &#x27;recording&#x27;:
+ html=title(&#x27;Ожидаем подключение&#x27;)+meta(&#x27;Дом Wi-Fi · приём без передачи&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+title(&#x27;Переподключите свой телефон&#x27;)+meta(&#x27;к выбранной Wi-Fi-сети.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Осталось 22 с · пример прогресса&#x27;)+&#x27;&lt;div class=&quot;ld-track&quot;&gt;&lt;span style=&quot;width:35%&quot;&gt;&lt;/span&gt;&lt;/div&gt;&#x27;+meta(&#x27;Проверяем пригодность данных.&#x27;,&#x27;ld-muted&#x27;)+button(&#x27;Остановить запись&#x27;,&#x27;result&#x27;,&#x27;OK&#x27;);action(&#x27;result&#x27;,&#x27;recordInfo&#x27;,&#x27;Стоп&#x27;,&#x27;Условия&#x27;);left=&#x27;result&#x27;;footLeft=&#x27;← Стоп&#x27;;note=&#x27;В макете переход к результату условный. В прошивке «пригодно» только после проверки фактической записи.&#x27;;break;
+case &#x27;recordInfo&#x27;:
+ html=title(&#x27;Запись продолжается&#x27;)+meta(&#x27;Цель: Дом Wi-Fi · канал 6&#x27;)+meta(&#x27;Источник: Wi-Fi приёмник Лешего&#x27;)+meta(&#x27;Передача выключена&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Время и объём ограничены.&#x27;)+meta(&#x27;Результат пока только в RAM.&#x27;,&#x27;ld-warn&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;← или OK остановят запись.&#x27;)+button(&#x27;Вернуться к прогрессу&#x27;,&#x27;recording&#x27;,&#x27;→&#x27;);left=&#x27;result&#x27;;footLeft=&#x27;← Стоп&#x27;;action(&#x27;result&#x27;,&#x27;recording&#x27;,&#x27;Стоп&#x27;,&#x27;Прогресс&#x27;);break;
+case &#x27;result&#x27;:
+ html=title(&#x27;Можно проверить на ПК&#x27;)+meta(&#x27;Дом Wi-Fi · подключение записано&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Материал пригоден для проверки&#x27;)+meta(&#x27;распространённых вариантов пароля.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Результат пока только в памяти.&#x27;,&#x27;ld-warn&#x27;)+meta(&#x27;При выключении он пропадёт.&#x27;)+button(&#x27;Сохранить и передать&#x27;,state.sd?&#x27;saveConfirm&#x27;:&#x27;storage&#x27;,&#x27;OK&#x27;)+button(&#x27;Другие действия&#x27;,&#x27;resultActions&#x27;,&#x27;→&#x27;);action(state.sd?&#x27;saveConfirm&#x27;:&#x27;storage&#x27;,&#x27;resultActions&#x27;,&#x27;Сохранить&#x27;,&#x27;Действия&#x27;);note=&#x27;Показан успешный пример. Неполно / нет данных / ошибка — отдельные реальные исходы, не успешная галочка.&#x27;;break;
+case &#x27;resultActions&#x27;:list([[&#x27;Сохранить&#x27;,&#x27;На подготовленную SD&#x27;,state.sd?&#x27;saveConfirm&#x27;:&#x27;storage&#x27;],[&#x27;Основания результата&#x27;,&#x27;Какие данные получены&#x27;,&#x27;evidence&#x27;],[&#x27;Повторить&#x27;,&#x27;Снова открыть подготовку&#x27;,&#x27;password&#x27;],[&#x27;Передать на компьютер&#x27;,&#x27;Формат и следующий шаг&#x27;,&#x27;export&#x27;]]);break;
+case &#x27;saveConfirm&#x27;:
+ html=title(&#x27;Сохранить на эту карту?&#x27;)+meta(&#x27;Новая запись · прежние не заменяются.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Тип: &#x27;+({auth:&#x27;подключение Wi-Fi&#x27;,packets:&#x27;эфир Wi-Fi&#x27;,visit:&#x27;обзор места&#x27;,finding:&#x27;отчёт наблюдения&#x27;}[state.recordType]))+meta(&#x27;Сохранение не запускает передачу.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Отменить можно клавишей ←.&#x27;)+button(&#x27;Подтвердить сохранение&#x27;,state.recordType===&#x27;visit&#x27;||state.recordType===&#x27;finding&#x27;?&#x27;saved&#x27;:&#x27;export&#x27;,&#x27;OK&#x27;);action(state.recordType===&#x27;visit&#x27;||state.recordType===&#x27;finding&#x27;?&#x27;saved&#x27;:&#x27;export&#x27;,&#x27;&#x27;,&#x27;Сохранить&#x27;,&#x27;&#x27;);break;
+case &#x27;export&#x27;:
+ html=title(&#x27;Данные для компьютера&#x27;)+meta(&#x27;Сначала проверяем сохранённую запись.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+(state.recordType===&#x27;auth&#x27;?title(&#x27;Проверить пароль&#x27;)+meta(&#x27;При пригодных данных: hc22000.&#x27;,&#x27;ld-muted&#x27;)+&#x27;&lt;br&gt;&#x27;:&#x27;&#x27;)+title(&#x27;Разобрать запись&#x27;)+meta(&#x27;Кадры для Wireshark: PCAP.&#x27;,&#x27;ld-muted&#x27;)+button(&#x27;Следующий шаг на ПК&#x27;,state.recordType===&#x27;auth&#x27;?&#x27;computer&#x27;:&#x27;usb&#x27;,&#x27;OK&#x27;);action(state.recordType===&#x27;auth&#x27;?&#x27;computer&#x27;:&#x27;usb&#x27;,&#x27;saved&#x27;,&#x27;Далее&#x27;,&#x27;Записи&#x27;);note=&#x27;Формат зависит от содержимого. Обычная запись кадров не выдаётся за пригодный материал проверки пароля.&#x27;;break;
+case &#x27;computer&#x27;:
+ html=title(&#x27;Проверка на вашем ПК&#x27;)+meta(&#x27;Файл → локальный список → отчёт&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+title(&#x27;В списке не найден&#x27;)+meta(&#x27;Пример возможного результата.&#x27;)+meta(&#x27;Это не доказывает стойкость пароля.&#x27;,&#x27;ld-warn&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Другой исход: вариант найден —&#x27;)+meta(&#x27;смените пароль на длинный и уникальный.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Пароль и материал не отправляются&#x27;)+meta(&#x27;в облачный сервис.&#x27;);note=&#x27;Этот шаг выполняется на компьютере, не на Лешем. Визуально показана краткая сводка пути.&#x27;;break;
+case &#x27;devices&#x27;:list([[&#x27;Устройство A&#x27;,&#x27;−57 dBm · замечено в Дом Wi-Fi&#x27;,&#x27;device&#x27;],[&#x27;Случайный адрес&#x27;,&#x27;−66 dBm · ищет сеть&#x27;,&#x27;device&#x27;],[&#x27;Неизвестное устройство&#x27;,&#x27;−73 dBm · связь с сетью неясна&#x27;,&#x27;device&#x27;],[&#x27;Что попадает в список&#x27;,&#x27;Только замеченные передатчики&#x27;,&#x27;empty&#x27;]]);break;
+case &#x27;device&#x27;:
+ html=title(&#x27;Устройство A&#x27;)+meta(&#x27;Замечено в Дом Wi-Fi · канал 6&#x27;)+meta(&#x27;Производитель: неизвестен&#x27;,&#x27;ld-muted&#x27;)+signal()+button(&#x27;Найти по сигналу&#x27;,&#x27;deviceRadar&#x27;,&#x27;OK&#x27;)+button(&#x27;Все наблюдаемые сведения&#x27;,&#x27;deviceFacts&#x27;,&#x27;→&#x27;);action(&#x27;deviceRadar&#x27;,&#x27;deviceFacts&#x27;,&#x27;Найти&#x27;,&#x27;Сведения&#x27;);break;
+case &#x27;deviceFacts&#x27;:
+ html=title(&#x27;Только наблюдаемые факты&#x27;)+meta(&#x27;Адрес: 02:00:00:00:00:02&#x27;)+meta(&#x27;Случайный / локальный адрес&#x27;,&#x27;ld-warn&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Сеть: Дом Wi-Fi · канал 6&#x27;)+meta(&#x27;Основание: адреса принятых кадров&#x27;)+meta(&#x27;Имя / модель: не сообщены&#x27;)+meta(&#x27;Производитель: неизвестен&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Это не полный список клиентов роутера.&#x27;)+meta(&#x27;Устройство может молчать или менять&#x27;)+meta(&#x27;адрес. Не угадываем владельца.&#x27;,&#x27;ld-muted&#x27;);break;
+case &#x27;empty&#x27;:
+ html=title(&#x27;Пока никого не слышно&#x27;)+meta(&#x27;Приём работает.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Оставьте экран открытым и включите&#x27;)+meta(&#x27;Wi-Fi на своём устройстве.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;В список попадают только устройства,&#x27;)+meta(&#x27;чьи кадры удалось принять.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Пустой список не означает, что рядом&#x27;)+meta(&#x27;нет клиентов Wi-Fi.&#x27;,&#x27;ld-muted&#x27;);break;
+case &#x27;channels&#x27;:case &#x27;waterfall&#x27;:
+ html=meta(`Занятое время, %${state.paused?&#x27; · ПАУЗА&#x27;:&#x27;&#x27;}`,state.paused?&#x27;ld-warn&#x27;:&#x27;&#x27;)+(s===&#x27;channels&#x27;?&#x27;&lt;div class=&quot;ld-legend&quot;&gt;&lt;span class=&quot;avg&quot;&gt;■ Среднее&lt;/span&gt;&lt;span class=&quot;now&quot;&gt;■ Сейчас&lt;/span&gt;&lt;/div&gt;&#x27;:&#x27;&lt;div class=&quot;ld-legend&quot;&gt;&lt;span&gt;Чёрный 0%&lt;/span&gt;&lt;span&gt;ярче → 8%+&lt;/span&gt;&lt;/div&gt;&#x27;)+meta(s===&#x27;waterfall&#x27;?&#x27;1 строка = 1 замер&#x27;:&#x27;Шкала 0–8%, выше — 8%+&#x27;)+`&lt;canvas width=&quot;216&quot; height=&quot;164&quot; data-plot=&quot;${s}&quot; role=&quot;img&quot; aria-label=&quot;Условные значения загрузки Wi-Fi каналов от 1 до 13&quot;&gt;&lt;/canvas&gt;&lt;div class=&quot;ld-axis&quot;&gt;${Array.from({length:13},(_,i)=&gt;`&lt;span&gt;${i+1}&lt;/span&gt;`).join(&#x27;&#x27;)}&lt;/div&gt;`+&#x27;&lt;button type=&quot;button&quot; class=&quot;ld-chart-button&quot; data-screen=&quot;channelWhy&quot;&gt;Свободнее: 12 · почему?&lt;/button&gt;&#x27;;
+ action(&#x27;pause&#x27;,&#x27;channelView&#x27;,state.paused?&#x27;Продолжить&#x27;:&#x27;Пауза&#x27;,&#x27;Вид&#x27;);note=s===&#x27;waterfall&#x27;?&#x27;Новый Wi-Fi-вид в проекте. 1 пиксель по времени; 13 реальных каналов по горизонтали, без выдуманных частотных отсчётов.&#x27;:&#x27;Числа и выбранный канал — пример. Без новых данных экран не обновляется.&#x27;;break;
+case &#x27;channelView&#x27;:list([[&#x27;График&#x27;,&#x27;Среднее и текущая загрузка&#x27;,&#x27;channels&#x27;],[&#x27;Водопад&#x27;,&#x27;Изменения загрузки во времени&#x27;,&#x27;waterfall&#x27;],[&#x27;Почему этот канал&#x27;,&#x27;Сравнить измеренные значения&#x27;,&#x27;channelWhy&#x27;],[&#x27;Что измеряем&#x27;,&#x27;Возможности и ограничения&#x27;,&#x27;measurement&#x27;]]);break;
+case &#x27;channelWhy&#x27;:
+ html=title(&#x27;12 — меньше занят&#x27;)+meta(&#x27;Среднее за период наблюдения&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+&#x27;&lt;div class=&quot;ld-facts&quot;&gt;&lt;div&gt;&lt;span&gt;Канал 12&lt;/span&gt;&lt;span&gt;0,1%&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span&gt;Канал 13&lt;/span&gt;&lt;span&gt;0,3%&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span&gt;Канал 6&lt;/span&gt;&lt;span&gt;0,7%&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&#x27;+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Измерены все каналы 1–13.&#x27;)+meta(&#x27;При равенстве учитываем соседние.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Это рекомендация по наблюдениям,&#x27;)+meta(&#x27;не гарантия скорости интернета.&#x27;,&#x27;ld-muted&#x27;);break;
+case &#x27;measurement&#x27;:
+ html=title(&#x27;Занятое время эфира&#x27;)+meta(&#x27;Оценка по принятым Wi-Fi-кадрам,&#x27;)+meta(&#x27;а не число сетей и не скорость интернета.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Каналы 1–13 слушаются по очереди.&#x27;)+meta(&#x27;Одновременно весь диапазон не виден.&#x27;)+meta(&#x27;Невидимые помехи этим не измерены.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Сила сигнала и загрузка — разные вещи.&#x27;)+meta(&#x27;Другие радиоантенны не складываются&#x27;)+meta(&#x27;в дополнительные Wi-Fi-приёмники.&#x27;,&#x27;ld-muted&#x27;);break;
+case &#x27;observe&#x27;:list([[&#x27;Искать аномалии&#x27;,&#x27;Замечать, объяснять, не блокировать&#x27;,&#x27;anomalies&#x27;],[&#x27;Обзор места&#x27;,&#x27;Сохранить и сравнить изменения&#x27;,&#x27;visit&#x27;],[&#x27;Записать эфир&#x27;,&#x27;Для анализа на компьютере&#x27;,&#x27;capture&#x27;],[&#x27;Сохранённое&#x27;,&#x27;Сводка, сравнение, экспорт&#x27;,&#x27;saved&#x27;]]);break;
+case &#x27;anomalies&#x27;:
+ html=title(&#x27;Есть странности в эфире?&#x27;)+meta(&#x27;Пассивное наблюдение Wi-Fi.&#x27;)+meta(&#x27;Прибор не блокирует происходящее.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Профиль: обычное наблюдение&#x27;)+meta(&#x27;Результат: что замечено и почему.&#x27;)+meta(&#x27;Ограничения будут в отчёте.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Активные воздействия не запускаются.&#x27;,&#x27;ld-muted&#x27;)+button(&#x27;Начать наблюдение&#x27;,&#x27;watching&#x27;,&#x27;OK&#x27;);action(&#x27;watching&#x27;,&#x27;watchProfile&#x27;,&#x27;Начать&#x27;,&#x27;Профиль&#x27;);break;
+case &#x27;watchProfile&#x27;:
+ html=title(&#x27;Чувствительность&#x27;)+meta(&#x27;Обычное наблюдение — по умолчанию.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Более чувствительный профиль замечает&#x27;)+meta(&#x27;больше событий, но требует осторожнее&#x27;)+meta(&#x27;интерпретировать результат.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Профиль не меняет пассивный режим.&#x27;)+button(&#x27;Вернуться к подготовке&#x27;,&#x27;anomalies&#x27;,&#x27;OK&#x27;);action(&#x27;anomalies&#x27;,&#x27;&#x27;,&#x27;Готово&#x27;,&#x27;&#x27;);break;
+case &#x27;watching&#x27;:
+ html=title(&#x27;Наблюдаем эфир&#x27;)+meta(&#x27;Wi-Fi · только приём&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Осталось 18 с · пример прогресса&#x27;)+&#x27;&lt;div class=&quot;ld-track&quot;&gt;&lt;span style=&quot;width:45%&quot;&gt;&lt;/span&gt;&lt;/div&gt;&#x27;+meta(&#x27;Ищем необычные события.&#x27;)+meta(&#x27;Вывод появится после проверки данных.&#x27;)+button(&#x27;Остановить и посмотреть&#x27;,&#x27;finding&#x27;,&#x27;OK&#x27;);action(&#x27;finding&#x27;,&#x27;watchConditions&#x27;,&#x27;Стоп&#x27;,&#x27;Условия&#x27;);left=&#x27;finding&#x27;;footLeft=&#x27;← Стоп&#x27;;break;
+case &#x27;watchConditions&#x27;:
+ html=title(&#x27;Наблюдение продолжается&#x27;)+meta(&#x27;Wi-Fi · только приём&#x27;)+meta(&#x27;Профиль: обычный&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Ограничено по времени и объёму.&#x27;)+meta(&#x27;Источник и ограничения будут в отчёте.&#x27;)+button(&#x27;Вернуться к прогрессу&#x27;,&#x27;watching&#x27;,&#x27;→&#x27;);action(&#x27;finding&#x27;,&#x27;watching&#x27;,&#x27;Стоп&#x27;,&#x27;Прогресс&#x27;);left=&#x27;finding&#x27;;footLeft=&#x27;← Стоп&#x27;;break;
+case &#x27;finding&#x27;:
+ html=title(&#x27;Замечены разрывы связи&#x27;)+meta(&#x27;Требует проверки&#x27;,&#x27;ld-warn&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Получена серия служебных кадров,&#x27;)+meta(&#x27;связанных с разрывом соединений.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Это ещё не доказательство атаки.&#x27;)+meta(&#x27;Проверьте перезапуски своего роутера.&#x27;)+button(&#x27;На чём основан вывод&#x27;,&#x27;evidence&#x27;,&#x27;OK&#x27;)+button(&#x27;Сохранить отчёт&#x27;,state.sd?&#x27;saveConfirm&#x27;:&#x27;storage&#x27;,&#x27;→&#x27;);action(&#x27;evidence&#x27;,state.sd?&#x27;saveConfirm&#x27;:&#x27;storage&#x27;,&#x27;Основания&#x27;,&#x27;Сохранить&#x27;);break;
+case &#x27;evidence&#x27;:
+ html=title(&#x27;Основания и ограничения&#x27;)+meta(&#x27;Наблюдаемые события → исходные кадры&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Показать время, канал, тип события&#x27;)+meta(&#x27;и точную запись, на которой основан вывод.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Отдельно: чего не удалось измерить,&#x27;)+meta(&#x27;потери данных и другие объяснения.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Технические счётчики находятся здесь,&#x27;)+meta(&#x27;а не на основном экране наблюдения.&#x27;);note=&#x27;Макет структуры подробного отчёта, без выдуманного доказательства реального события.&#x27;;break;
+case &#x27;visit&#x27;:
+ html=title(&#x27;Обзор места&#x27;)+meta(&#x27;Сохранить обстановку и сравнить позже.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Источники: Wi-Fi&#x27;)+meta(&#x27;Bluetooth не добавляется незаметно.&#x27;,&#x27;ld-muted&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Нужна подготовленная SD для записи.&#x27;)+meta(&#x27;Название можно дать после остановки.&#x27;)+button(&#x27;Начать обзор&#x27;,state.sd?&#x27;visiting&#x27;:&#x27;storage&#x27;,&#x27;OK&#x27;);action(state.sd?&#x27;visiting&#x27;:&#x27;storage&#x27;,&#x27;saved&#x27;,&#x27;Начать&#x27;,&#x27;Записи&#x27;);break;
+case &#x27;visiting&#x27;:
+ html=title(&#x27;Собираем обзор&#x27;)+meta(&#x27;Источники: Wi-Fi&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Найдено: 12 сетей · 4 устройства&#x27;)+meta(&#x27;Это пример, не текущий эфир.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;После остановки сможете сохранить&#x27;)+meta(&#x27;и сравнить с прошлым обзором.&#x27;)+button(&#x27;Завершить обзор&#x27;,&#x27;visitResult&#x27;,&#x27;OK&#x27;);action(&#x27;visitResult&#x27;,&#x27;&#x27;,&#x27;Стоп&#x27;,&#x27;&#x27;);left=&#x27;visitResult&#x27;;footLeft=&#x27;← Стоп&#x27;;break;
+case &#x27;visitResult&#x27;:
+ html=title(&#x27;Обзор завершён&#x27;)+meta(&#x27;12 сетей · 4 устройства · пример&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Офис · сегодня&#x27;)+meta(&#x27;Сохраните обзор для сравнения.&#x27;)+button(&#x27;Сохранить&#x27;,state.sd?&#x27;saveConfirm&#x27;:&#x27;storage&#x27;,&#x27;OK&#x27;)+button(&#x27;Сравнить с предыдущим&#x27;,&#x27;compare&#x27;,&#x27;→&#x27;);action(state.sd?&#x27;saveConfirm&#x27;:&#x27;storage&#x27;,&#x27;compare&#x27;,&#x27;Сохранить&#x27;,&#x27;Сравнить&#x27;);break;
+case &#x27;compare&#x27;:
+ html=title(&#x27;Что изменилось&#x27;)+meta(&#x27;Офис: вчера → сегодня&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+title(&#x27;2 новые сети&#x27;)+meta(&#x27;Гостевая · Мастерская&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+title(&#x27;1 сеть не замечена&#x27;)+meta(&#x27;Не замечена ≠ выключена.&#x27;,&#x27;ld-warn&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;У выбранного изменения — исходные&#x27;)+meta(&#x27;наблюдения из обоих обзоров.&#x27;);break;
+case &#x27;capture&#x27;:list([[&#x27;Записать эфир&#x27;,&#x27;Приём → файл для Wireshark&#x27;,&#x27;captureSetup&#x27;],[&#x27;Смотреть на ПК по USB&#x27;,&#x27;Без смены сети компьютера&#x27;,&#x27;usb&#x27;],[&#x27;Что будет записано&#x27;,&#x27;Данные эфира и ограничения&#x27;,&#x27;evidence&#x27;],[&#x27;Мои записи&#x27;,&#x27;Открыть прошлый результат&#x27;,&#x27;saved&#x27;]]);break;
+case &#x27;captureSetup&#x27;:
+ html=title(&#x27;Запись Wi-Fi-эфира&#x27;)+meta(&#x27;Только своё оборудование / разрешено.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Приём без передачи.&#x27;)+meta(&#x27;Время и объём ограничены.&#x27;)+meta(&#x27;Результат — кадры для Wireshark.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Для сохранения нужна подготовленная SD.&#x27;)+button(&#x27;Начать запись&#x27;,&#x27;capturing&#x27;,&#x27;OK&#x27;);action(&#x27;capturing&#x27;,&#x27;evidence&#x27;,&#x27;Начать&#x27;,&#x27;Сведения&#x27;);break;
+case &#x27;capturing&#x27;:
+ html=title(&#x27;Запись эфира&#x27;)+meta(&#x27;Только приём · заданные границы&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Запись ограничена временем и объёмом.&#x27;)+meta(&#x27;Кадры ещё в памяти прибора.&#x27;,&#x27;ld-warn&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Осталось 20 с · пример прогресса&#x27;)+&#x27;&lt;div class=&quot;ld-track&quot;&gt;&lt;span style=&quot;width:30%&quot;&gt;&lt;/span&gt;&lt;/div&gt;&#x27;+button(&#x27;Остановить запись&#x27;,&#x27;packetResult&#x27;,&#x27;OK&#x27;);action(&#x27;packetResult&#x27;,&#x27;&#x27;,&#x27;Стоп&#x27;,&#x27;&#x27;);left=&#x27;packetResult&#x27;;footLeft=&#x27;← Стоп&#x27;;break;
+case &#x27;packetResult&#x27;:
+ html=title(&#x27;Запись для анализа&#x27;)+meta(&#x27;Завершена · пример&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Сохраните кадры, чтобы открыть&#x27;)+meta(&#x27;их в Wireshark на компьютере.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Полнота и потери — в подробностях.&#x27;)+button(&#x27;Сохранить&#x27;,state.sd?&#x27;saveConfirm&#x27;:&#x27;storage&#x27;,&#x27;OK&#x27;)+button(&#x27;Подробности записи&#x27;,&#x27;evidence&#x27;,&#x27;→&#x27;);action(state.sd?&#x27;saveConfirm&#x27;:&#x27;storage&#x27;,&#x27;evidence&#x27;,&#x27;Сохранить&#x27;,&#x27;Подробно&#x27;);break;
+case &#x27;usb&#x27;:
+ html=title(&#x27;Смотреть на компьютере&#x27;)+meta(&#x27;1. Подключите Лешего кабелем USB.&#x27;)+meta(&#x27;2. Откройте локальный помощник.&#x27;)+meta(&#x27;3. Выберите поток Wireshark.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Wi-Fi ноутбука не переключается.&#x27;,&#x27;ld-good&#x27;)+meta(&#x27;Прибор передаёт принятые кадры&#x27;)+meta(&#x27;по кабелю, а не через сеть ноутбука.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Потери потока отмечаются явно,&#x27;)+meta(&#x27;они не маскируются под полный захват.&#x27;);break;
+case &#x27;saved&#x27;:list([[&#x27;Обзор · офис сегодня&#x27;,&#x27;12 сетей · сравнить изменения&#x27;,&#x27;compare&#x27;],[&#x27;Подключение · Дом Wi-Fi&#x27;,&#x27;Материал для проверки пароля&#x27;,&#x27;export&#x27;],[&#x27;Эфир · сегодня&#x27;,&#x27;Открыть в Wireshark&#x27;,&#x27;export&#x27;],[&#x27;Отчёт наблюдения&#x27;,&#x27;Вывод и его основания&#x27;,&#x27;finding&#x27;]]);break;
+case &#x27;storage&#x27;:
+ html=title(&#x27;Сейчас нельзя сохранить&#x27;)+meta(&#x27;Карта не подготовлена&#x27;,&#x27;ld-warn&#x27;)+meta(&#x27;для этого устройства.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Просмотр эфира по-прежнему доступен.&#x27;)+meta(&#x27;Имеющийся результат — только в памяти.&#x27;)+&#x27;&lt;br&gt;&#x27;+meta(&#x27;Не извлекайте карту во время записи.&#x27;)+meta(&#x27;Подготовка карты — отдельное действие,&#x27;)+meta(&#x27;без автоматического форматирования.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;← вернуться без изменения карты.&#x27;);note=&#x27;Пример конкретной причины. «Нет карты», «заблокировано», «нет места» и «ошибка записи» различаются.&#x27;;break;
+case &#x27;lab&#x27;:
+ list([[&#x27;Помочь записи подключения&#x27;,&#x27;WF-18 · в плане · активный тест&#x27;,&#x27;labInfo&#x27;,true],[&#x27;Устойчивость связи&#x27;,&#x27;WF-19 · в плане · активный тест&#x27;,&#x27;labInfo&#x27;,true],[&#x27;Кто в моей сети&#x27;,&#x27;WF-20 · в плане · LAN-обзор&#x27;,&#x27;labInfo&#x27;,true],[&#x27;Проверки локальной сети&#x27;,&#x27;WF-21 · в плане · изолированный стенд&#x27;,&#x27;labInfo&#x27;,true]]);
+ note=&#x27;Это четыре оставшиеся функции, не работающие кнопки запуска. В реализованном интерфейсе недоступность объясняется до старта.&#x27;;break;
+case &#x27;labInfo&#x27;:
+ html=title(&#x27;Сценарий ещё в плане&#x27;)+meta(&#x27;Ничего не запускается.&#x27;,&#x27;ld-warn&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;Будущий путь:&#x27;)+meta(&#x27;Собственная цель → проверка условий&#x27;)+meta(&#x27;→ границы, мощность и время&#x27;)+meta(&#x27;→ отдельное подтверждение OK&#x27;)+meta(&#x27;→ активный тест → Стоп → отчёт.&#x27;)+&#x27;&lt;hr class=&quot;ld-separator&quot;&gt;&#x27;+meta(&#x27;← во время передачи немедленно&#x27;)+meta(&#x27;останавливает её, без диалога.&#x27;,&#x27;ld-alert&#x27;);break;
+}
+if(state.names===&#x27;Короткие названия&#x27;&amp;&amp;s===&#x27;home&#x27;){items[1][0]=&#x27;Устройства Wi-Fi&#x27;;items[3][0]=&#x27;Наблюдение&#x27;;html=menu(items);}
+const liveViews=[&#x27;networks&#x27;,&#x27;network&#x27;,&#x27;radar&#x27;,&#x27;device&#x27;,&#x27;devices&#x27;,&#x27;deviceRadar&#x27;,&#x27;channels&#x27;,&#x27;waterfall&#x27;,&#x27;recording&#x27;,&#x27;recordInfo&#x27;,&#x27;watching&#x27;,&#x27;watchConditions&#x27;,&#x27;visiting&#x27;,&#x27;capturing&#x27;];
+device.innerHTML=`&lt;div class=&quot;ld-head&quot;&gt;&lt;span&gt;${titles[s]}&lt;/span&gt;${liveViews.includes(s)?&#x27;&lt;span class=&quot;ld-rx&quot;&gt;&#x27;+(state.paused?&#x27;ПАУЗА&#x27;:&#x27;RX Wi-Fi&#x27;)+&#x27;&lt;/span&gt;&#x27;:&#x27;&#x27;}&lt;/div&gt;&lt;div class=&quot;ld-body&quot;&gt;${html}&lt;/div&gt;&lt;div class=&quot;ld-foot&quot;&gt;&lt;div&gt;&lt;span&gt;${footLeft}&lt;/span&gt;&lt;span&gt;${footUp}&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span&gt;${footOk}&lt;/span&gt;&lt;span&gt;${footRight}&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;`;
+root.querySelector(&#x27;#wf-current&#x27;).textContent=routes[s]||titles[s];
+root.querySelector(&#x27;#wf-state-note&#x27;).textContent=note;
+root.querySelectorAll(&#x27;.wf-tree button[data-screen]&#x27;).forEach(b=&gt;b.setAttribute(&#x27;aria-pressed&#x27;,b.dataset.screen===s?&#x27;true&#x27;:&#x27;false&#x27;));
+drawPlots();
+}
+function drawPlots(){device.querySelectorAll(&#x27;canvas&#x27;).forEach(c=&gt;{
+ const ctx=c.getContext(&#x27;2d&#x27;);ctx.fillStyle=&#x27;#000&#x27;;ctx.fillRect(0,0,c.width,c.height);const kind=c.dataset.plot;
+ if(kind===&#x27;signal&#x27;){
+ ctx.strokeStyle=&#x27;#55d98a&#x27;;ctx.lineWidth=1;ctx.beginPath();for(let x=0;x&lt;198;x++){const y=46-x*.14+Math.sin(x*.17)*4;x?ctx.lineTo(x+.5,y+.5):ctx.moveTo(x+.5,y+.5);}ctx.stroke();return;}
+ if(kind===&#x27;channels&#x27;){
+ const avg=[1.8,.5,1.2,1.3,.8,.7,.4,.6,.3,.4,1.0,.1,.3],cur=[1.6,.3,1.4,1,.7,.9,.3,.8,.4,.5,1.2,.12,.35];
+ ctx.strokeStyle=&#x27;#233128&#x27;;ctx.lineWidth=1;for(let y of [41,82,123]){ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(216,y+.5);ctx.stroke();}
+ avg.forEach((v,i)=&gt;{let x=Math.floor(i*216/13)+3,h=Math.round(v/8*164),h2=Math.round(cur[i]/8*164);ctx.fillStyle=&#x27;#777b7b&#x27;;ctx.fillRect(x,164-h,10,h);ctx.fillStyle=&#x27;#55d98a&#x27;;ctx.fillRect(x+3,164-h2,4,h2);});return;}
+ for(let y=0;y&lt;164;y++){for(let ch=0;ch&lt;13;ch++){let level=((y*17+ch*31)%37&lt;10)?0:((Math.sin(y*.14+ch*2)+1)*.5)*(ch===5?.85:.25);let x=Math.floor(ch*216/13),w=Math.floor((ch+1)*216/13)-x;ctx.fillStyle=level&lt;.13?&#x27;#000&#x27;:level&lt;.3?&#x27;#144333&#x27;:level&lt;.65?&#x27;#2e9865&#x27;:&#x27;#ecd25a&#x27;;ctx.fillRect(x,y,w,1);}}
+ ctx.fillStyle=&#x27;#334139&#x27;;for(let ch=1;ch&lt;13;ch++)ctx.fillRect(Math.floor(ch*216/13),0,1,164);
+ });}
+function key(k){if(k===&#x27;left&#x27;){go(left);return;}if(isList){if(k===&#x27;up&#x27;||k===&#x27;down&#x27;){state.selected=Math.max(0,Math.min(items.length-1,state.selected+(k===&#x27;up&#x27;?-1:1)));render();return;}if(k===&#x27;right&#x27;||k===&#x27;ok&#x27;){go(items[state.selected][2]);return;}}
+ const dest=k===&#x27;ok&#x27;?ok:k===&#x27;right&#x27;?right:&#x27;&#x27;;if(dest===&#x27;pause&#x27;){state.paused=!state.paused;render();}else if(dest)go(dest);}
+root.addEventListener(&#x27;click&#x27;,ev=&gt;{const b=ev.target.closest(&#x27;button&#x27;);if(!b||!root.contains(b))return;if(b.dataset.screen)go(b.dataset.screen);else if(b.dataset.key)key(b.dataset.key);});
+render();
+if(globalThis.Tweak){const tweak=new Tweak({container:device,onChange:render});tweak.addSelect(state,&#x27;names&#x27;,{label:&#x27;Названия в Wi-Fi-меню&#x27;,options:[&#x27;Понятные названия&#x27;,&#x27;Короткие названия&#x27;]});tweak.addToggle(state,&#x27;sd&#x27;,{label:&#x27;SD готова к сохранению (состояние макета)&#x27;});}
+})();
+&lt;/script&gt;
+&lt;!-- leshy-wifi-source:end --&gt;
+
+&lt;script src=&quot;https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  if (window.FloatingUIDOM == null) {
+    return;
+  }
+  const { autoUpdate, computePosition, flip, offset, shift, size } =
+    window.FloatingUIDOM;
+  const tooltipPlacements = new Set([&quot;top&quot;, &quot;right&quot;, &quot;bottom&quot;, &quot;left&quot;]);
+  const tooltipId = `codex-visualization-tooltip-${
+    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
+  }`;
+  const tooltipGap = 5;
+  const hoverDelay = 700;
+  const skipDelay = 300;
+  let activeTrigger = null;
+  let pendingTrigger = null;
+  let tooltip = null;
+  let openTimeout = null;
+  let autoUpdateCleanup = null;
+  let positionRequest = 0;
+  let skipDelayUntil = 0;
+  let lastPointerWasTouch = false;
+  let pinnedByTouch = false;
+
+  const getTrigger = (target) =&gt;
+    target?.nodeType === Node.ELEMENT_NODE
+      ? target.closest(&quot;[data-tooltip]&quot;)
+      : null;
+  const containsTarget = (trigger, target) =&gt;
+    target?.nodeType != null &amp;&amp; trigger.contains(target);
+  const getContent = (trigger) =&gt;
+    trigger.getAttribute(&quot;data-tooltip&quot;)?.trim() ?? &quot;&quot;;
+  const getPlacement = (trigger) =&gt; {
+    const placement = trigger.getAttribute(&quot;data-tooltip-placement&quot;);
+    return tooltipPlacements.has(placement) ? placement : &quot;top&quot;;
+  };
+  const getTooltip = () =&gt; {
+    if (tooltip == null) {
+      tooltip = document.createElement(&quot;div&quot;);
+      tooltip.id = tooltipId;
+      tooltip.className = &quot;tooltip&quot;;
+      tooltip.setAttribute(&quot;role&quot;, &quot;tooltip&quot;);
+    }
+    return tooltip;
+  };
+  const setDescribedBy = (trigger, described) =&gt; {
+    const ids = new Set(
+      (trigger.getAttribute(&quot;aria-describedby&quot;) ?? &quot;&quot;)
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    if (described) {
+      ids.add(tooltipId);
+    } else {
+      ids.delete(tooltipId);
+    }
+    if (ids.size === 0) {
+      trigger.removeAttribute(&quot;aria-describedby&quot;);
+    } else {
+      trigger.setAttribute(&quot;aria-describedby&quot;, [...ids].join(&quot; &quot;));
+    }
+  };
+  const clearOpenTimeout = () =&gt; {
+    if (openTimeout != null) {
+      window.clearTimeout(openTimeout);
+      openTimeout = null;
+    }
+    pendingTrigger = null;
+  };
+  const closeTooltip = (activateSkipDelay = true) =&gt; {
+    clearOpenTimeout();
+    pinnedByTouch = false;
+    positionRequest += 1;
+    autoUpdateCleanup?.();
+    autoUpdateCleanup = null;
+    if (activeTrigger == null) {
+      return;
+    }
+    setDescribedBy(activeTrigger, false);
+    activeTrigger = null;
+    tooltip?.remove();
+    if (activateSkipDelay) {
+      skipDelayUntil = Date.now() + skipDelay;
+    }
+  };
+  const updatePosition = (trigger, floating) =&gt; {
+    const request = ++positionRequest;
+    void computePosition(trigger, floating, {
+      middleware: [
+        offset(tooltipGap),
+        flip({ padding: tooltipGap }),
+        shift({ padding: tooltipGap }),
+        size({
+          padding: tooltipGap,
+          apply({ availableHeight, availableWidth, elements }) {
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-width&quot;,
+              `${Math.max(0, availableWidth)}px`,
+            );
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-height&quot;,
+              `${Math.max(0, availableHeight)}px`,
+            );
+          },
+        }),
+      ],
+      placement: getPlacement(trigger),
+      strategy: &quot;fixed&quot;,
+    })
+      .then(({ x, y }) =&gt; {
+        if (activeTrigger !== trigger || request !== positionRequest) {
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
+        floating.style.visibility = &quot;visible&quot;;
+      })
+      .catch(() =&gt; {
+        if (activeTrigger === trigger &amp;&amp; request === positionRequest) {
+          closeTooltip(false);
+        }
+      });
+  };
+  const openTooltip = (trigger) =&gt; {
+    const content = getContent(trigger);
+    if (!trigger.isConnected || content.length === 0) {
+      return;
+    }
+    clearOpenTimeout();
+    if (activeTrigger === trigger) {
+      return;
+    }
+    closeTooltip();
+    const floating = getTooltip();
+    floating.textContent = content;
+    floating.style.visibility = &quot;hidden&quot;;
+    floating.style.transform = &quot;translate(0, 0)&quot;;
+    document.body.appendChild(floating);
+    activeTrigger = trigger;
+    setDescribedBy(trigger, true);
+    autoUpdateCleanup = autoUpdate(trigger, floating, () =&gt; {
+      updatePosition(trigger, floating);
+    });
+  };
+  const requestOpen = (trigger, immediate = false) =&gt; {
+    if (
+      getContent(trigger).length === 0 ||
+      activeTrigger === trigger ||
+      pendingTrigger === trigger
+    ) {
+      return;
+    }
+    clearOpenTimeout();
+    pendingTrigger = trigger;
+    const delay =
+      immediate || activeTrigger != null || Date.now() &lt; skipDelayUntil
+        ? 0
+        : hoverDelay;
+    if (delay === 0) {
+      openTooltip(trigger);
+      return;
+    }
+    openTimeout = window.setTimeout(() =&gt; {
+      openTimeout = null;
+      pendingTrigger = null;
+      openTooltip(trigger);
+    }, delay);
+  };
+  const handlePointerOpen = (event) =&gt; {
+    if (event.pointerType === &quot;touch&quot;) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    requestOpen(trigger);
+  };
+  const handlePointer = (event) =&gt; {
+    lastPointerWasTouch =
+      event.type === &quot;pointerdown&quot; &amp;&amp; event.pointerType === &quot;touch&quot;;
+  };
+  const handleTouchClick = (event) =&gt; {
+    const isTouch = event.pointerType === &quot;touch&quot; || lastPointerWasTouch;
+    lastPointerWasTouch = false;
+    if (!isTouch || event.detail === 0) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (
+      trigger == null ||
+      !trigger.isConnected ||
+      getContent(trigger).length === 0 ||
+      (pinnedByTouch &amp;&amp; activeTrigger === trigger)
+    ) {
+      if (pinnedByTouch) {
+        closeTooltip();
+      }
+      return;
+    }
+    openTooltip(trigger);
+    pinnedByTouch = activeTrigger === trigger;
+    window.setTimeout(() =&gt; {
+      if (activeTrigger === trigger &amp;&amp; !trigger.isConnected) {
+        closeTooltip(false);
+      }
+    }, 0);
+  };
+  const handleLeave = (event) =&gt; {
+    if (pinnedByTouch) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handleFocusIn = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (trigger?.matches(&quot;:focus-visible&quot;)) {
+      requestOpen(trigger, true);
+    }
+  };
+  const handleKeyDown = (event) =&gt; {
+    if (event.key === &quot;Escape&quot;) {
+      closeTooltip();
+    }
+  };
+  const handleContextMenu = (event) =&gt; {
+    lastPointerWasTouch = false;
+    const trigger = getTrigger(event.target);
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const destroy = () =&gt; {
+    closeTooltip(false);
+    lastPointerWasTouch = false;
+    document.removeEventListener(&quot;pointerover&quot;, handlePointerOpen);
+    document.removeEventListener(&quot;pointerdown&quot;, handlePointer);
+    document.removeEventListener(&quot;pointercancel&quot;, handlePointer);
+    document.removeEventListener(&quot;click&quot;, handleTouchClick);
+    document.removeEventListener(&quot;pointerout&quot;, handleLeave);
+    document.removeEventListener(&quot;focusin&quot;, handleFocusIn);
+    document.removeEventListener(&quot;focusout&quot;, handleLeave);
+    document.removeEventListener(&quot;keydown&quot;, handleKeyDown);
+    document.removeEventListener(&quot;contextmenu&quot;, handleContextMenu);
+    tooltip = null;
+  };
+
+  document.addEventListener(&quot;pointerover&quot;, handlePointerOpen);
+  document.addEventListener(&quot;pointerdown&quot;, handlePointer);
+  document.addEventListener(&quot;pointercancel&quot;, handlePointer);
+  document.addEventListener(&quot;click&quot;, handleTouchClick);
+  document.addEventListener(&quot;pointerout&quot;, handleLeave);
+  document.addEventListener(&quot;focusin&quot;, handleFocusIn);
+  document.addEventListener(&quot;focusout&quot;, handleLeave);
+  document.addEventListener(&quot;keydown&quot;, handleKeyDown);
+  document.addEventListener(&quot;contextmenu&quot;, handleContextMenu);
+  window.addEventListener(&quot;pagehide&quot;, destroy, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-tabs&quot;&gt;
+(() =&gt; {
+  const selector = &#x27;.nav[role=&quot;tablist&quot;] [role=&quot;tab&quot;]&#x27;;
+  const disabled = &#x27;:disabled,[aria-disabled=&quot;true&quot;]&#x27;;
+  const selectTab = (selected) =&gt; {
+    const panelId = selected.getAttribute(&quot;aria-controls&quot;);
+    for (const tab of selected.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;)) {
+      const active = tab === selected;
+      tab.classList.toggle(&quot;active&quot;, active);
+      tab.setAttribute(&quot;aria-selected&quot;, String(active));
+      const id = tab.getAttribute(&quot;aria-controls&quot;);
+      const panel = id &amp;&amp; document.getElementById(id);
+      if (panel != null) {
+        panel.hidden = id !== panelId;
+        if (!panel.hidden &amp;&amp; selected.id) {
+          panel.setAttribute(&quot;aria-labelledby&quot;, selected.id);
+        }
+      }
+    }
+  };
+  const interact = (event) =&gt; {
+    const tab = event.target?.closest?.(selector);
+    if (event.defaultPrevented || tab == null || tab.matches(disabled)) {
+      return;
+    }
+    if (event.type === &quot;click&quot;) {
+      selectTab(tab);
+      return;
+    }
+    const tabs = Array.from(
+      tab.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;),
+    ).filter((candidate) =&gt; !candidate.matches(disabled));
+    const current = tabs.indexOf(tab);
+    let next;
+    if (event.key === &quot;ArrowRight&quot; || event.key === &quot;ArrowDown&quot;) {
+      next = (current + 1) % tabs.length;
+    } else if (event.key === &quot;ArrowLeft&quot; || event.key === &quot;ArrowUp&quot;) {
+      next = (current + tabs.length - 1) % tabs.length;
+    } else if (event.key === &quot;Home&quot;) {
+      next = 0;
+    } else if (event.key === &quot;End&quot;) {
+      next = tabs.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    tabs[next].focus();
+    selectTab(tabs[next]);
+  };
+
+  for (const list of document.querySelectorAll(&#x27;.nav[role=&quot;tablist&quot;]&#x27;)) {
+    const selected =
+      list.querySelector(&#x27;[role=&quot;tab&quot;][aria-selected=&quot;true&quot;]&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;].active&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;]&#x27;);
+    if (selected != null) {
+      selectTab(selected);
+    }
+  }
+  document.addEventListener(&quot;click&quot;, interact);
+  document.addEventListener(&quot;keydown&quot;, interact);
+  window.addEventListener(&quot;pagehide&quot;, () =&gt; {
+    document.removeEventListener(&quot;click&quot;, interact);
+    document.removeEventListener(&quot;keydown&quot;, interact);
+  }, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-lucide&quot; async src=&quot;https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  const initialize = () =&gt; {
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  };
+  if (globalThis.lucide != null) {
+    initialize();
+    return;
+  }
+  document
+    .getElementById(&quot;codex-visualization-lucide&quot;)
+    ?.addEventListener(&quot;load&quot;, initialize, { once: true });
+})();
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+"></iframe>
+</body>
+</html>

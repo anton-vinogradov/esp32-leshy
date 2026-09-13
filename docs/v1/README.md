@@ -61,6 +61,10 @@ accepted decisions change.
 
 - [Target architecture](ARCHITECTURE.md)
 - [UX-01: screen and Action map](UX_SCREEN_MAP.md)
+- [Wi-Fi screen map and interactive mockups](WIFI_UX_MAP.md) — proposed task tree,
+  five-key contract and shared rendering; not an installed-interface claim
+- [Wi-Fi network enrichment](WIFI_NETWORK_FACTS.md) — hidden names, provenance,
+  observable facts and explicit unknowns
 - [UX-02: state matrix](UX_STATE_MATRIX.md)
 - [UX-06: input and accessibility map](UX_ACCESSIBILITY.md)
 - [Architecture Decision Records](adr/README.md) — binding toolchain, resource,

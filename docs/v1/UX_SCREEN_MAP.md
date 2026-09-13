@@ -13,6 +13,11 @@ their product screens are wired.
 
 ## Task-first tree contract
 
+Wi-Fi redesign supplement: [user screen map and interactive mockups](WIFI_UX_MAP.md),
+including the five-key contract and [network enrichment](WIFI_NETWORK_FACTS.md).
+This supplement is a design to implement/review, not a retroactive claim that
+the accepted firmware already renders these new screens.
+
 The fixed 1.0 denominator is **62 capabilities (`Y = 62`)**. It does not mean 62
 menu entries. Menu row count and capability count are deliberately independent:
 one understandable user task composes several CAPs behind a contextual transition.
