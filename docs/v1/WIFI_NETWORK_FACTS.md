@@ -23,6 +23,13 @@ It adds no radio owner, global RAM allocation, SD write or accepted feature.
 
 ## User presentation
 
+Two-DIV validation follows [the product-firmware rule](GOVERNANCE.md#product-firmware-on-both-divs):
+the source is a normal, user-accessible bounded test-network role, not a separate
+test binary. That source role is not implemented yet. Hidden → visible → hidden
+beacons check AP-name discovery/retention only; they do not prove learning a name
+from a client's association while the AP remains hidden. Both cases need their
+own observations. Neither requires the laptop's Wi-Fi.
+
 Main card: **name → protection → channel → live signal**. Enrich automatically
 within the current receive session; do not require a different scanner for every
 property. **All information** has four themed branches:

@@ -86,6 +86,23 @@ be `active`. Requirements use `draft`, `accepted`, `implemented`, `verified`,
 
 ## Definition of Done
 
+### Product firmware on both DIVs
+
+User clarification, 14 September 2026: new two-DIV Wi-Fi acceptance uses ordinary
+Leshy product builds on **both** boards, with exact image identities. Do not create
+or flash a separate fixture personality to supply a missing product function.
+An owned test-network/source role belongs in the normal Self-check / Owned Lab
+menu, with the same admission, resource ownership, deadline, watchdog and physical
+Stop as any user session. If it is missing, implement and verify that product path
+first; it is not an excuse for a test-only radio entry point.
+
+Host automation operates those same actions, collects observations and checks
+cleanup; it does not silently replace a board's firmware or bypass product guards.
+Host simulations and pure unit fixtures remain useful, but cannot stand in for
+product HIL. Existing historical fixture evidence keeps its original limited scope.
+
+### Completion criteria
+
 Work is complete only when:
 
 - a requirement and measurable acceptance criterion exist;

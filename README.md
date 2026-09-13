@@ -23,7 +23,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 - **Current phase:** `S6.5 — functional-first user slices`; active focus: Wi-Fi UX and owned-fixture checks. IR and other radios are parked, not declared complete.
 - **Delivery mode:** `functional-first`: user-visible vertical slices precede additional invisible infrastructure; affected delta HIL runs per slice and the broad matrix runs at block/stage, RC, cross-cutting or cadence boundaries.
 - **Verified checkpoint:** Dev.385 Wi-Fi menu delta: 10 route states, 5 TFT captures, key/touch entry, bounded selection, retained parent focus, final Home/none/lease 0 and zero drops/SD operations. Dev.384 remains the exact-image baseline for eight card pages and the 13-channel graph.
-- **Next gate:** Progress **24/62**, Wi-Fi **17/21 done, 4/21 remaining**. Next: hidden-name reception/provenance on a second owned DIV, remaining task-tree/wizard integration and admitted Wi-Fi Lab fixtures. Laptop Wi-Fi must not be used as a fixture. Warm BLE and the due broad physical matrix remain separate open gates.
+- **Next gate:** Progress **24/62**, Wi-Fi **17/21 done, 4/21 remaining**. Both owned DIVs are connected and idle on ordinary Leshy (original dev.378, board-03 dev.385). Implement the bounded user-accessible test-network role in normal firmware first, then verify hidden-name reception/provenance through product paths on both boards; no separate fixture binary. The discarded fixture was built but never flashed or run. Task-tree/wizard integration and admitted Wi-Fi Lab remain open. Laptop Wi-Fi is not a fixture. Warm BLE and the due broad physical matrix remain separate open gates.
 
 ### Functional-first delivery queue
 
