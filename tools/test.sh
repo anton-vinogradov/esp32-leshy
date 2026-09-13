@@ -86,6 +86,17 @@ run_opaque_evidence_check() {
     fi
 }
 
+run_archived_evidence_check() {
+    if [[ "$retained_evidence_mode" == "full" ]]; then
+        python3 "$repo_dir/$1"
+    else
+        echo "INFO: archived full-binary acceptance deferred locally: $1"
+        python3 "$repo_dir/tools/check_tracked_hil_evidence.py" \
+            --bundle "$repo_dir/tests/hil/evidence/$2" \
+            --summary "$repo_dir/tests/hil/evidence/$2.json" --recursive
+    fi
+}
+
 "${CXX:-c++}" \
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
@@ -668,6 +679,7 @@ python3 "$repo_dir/tools/check_worker_deadline_supervision.py"
 python3 "$repo_dir/tools/check_worker_deadline_acceptance.py" "${retained_scope_args[@]}"
 python3 "$repo_dir/tools/check_worker_deadline_ble_acceptance.py" "${retained_scope_args[@]}"
 python3 "$repo_dir/tools/test_worker_deadline_evidence_scope.py"
+python3 "$repo_dir/tools/test_tracked_evidence_scope.py"
 python3 "$repo_dir/tools/check_visual_system_acceptance.py"
 python3 "$repo_dir/tools/check_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_targets_product_contract.py"
@@ -811,7 +823,7 @@ python3 "$repo_dir/tools/check_wifi_networks_contract.py"
 python3 "$repo_dir/tools/check_wifi_network_hil_selector_contract.py"
 python3 "$repo_dir/tools/check_wifi_networks_acceptance.py"
 python3 "$repo_dir/tools/check_wifi_network_live_radar_acceptance.py"
-python3 "$repo_dir/tools/check_stable_network_nav_acceptance.py"
+run_archived_evidence_check tools/check_stable_network_nav_acceptance.py board-01-stable-network-nav-0.114
 python3 "$repo_dir/tools/check_wifi_devices_contract.py"
 python3 "$repo_dir/tools/check_wifi_devices_acceptance.py"
 python3 "$repo_dir/tools/check_wifi_device_intelligence_acceptance.py"
@@ -824,10 +836,10 @@ python3 "$repo_dir/tools/check_wifi_channel_neutral_bars_acceptance.py"
 python3 "$repo_dir/tools/check_wifi_capture_product_contract.py"
 python3 "$repo_dir/tools/check_wifi_capture_product_acceptance.py"
 python3 "$repo_dir/tools/check_ble_nearby_contract.py"
-python3 "$repo_dir/tools/check_ble_nearby_acceptance.py"
+run_archived_evidence_check tools/check_ble_nearby_acceptance.py board-01-ble-nearby-0.111
 python3 "$repo_dir/tools/check_ble_device_intelligence_acceptance.py"
-python3 "$repo_dir/tools/check_signal_order_acceptance.py"
-python3 "$repo_dir/tools/check_dense_details_acceptance.py"
+run_archived_evidence_check tools/check_signal_order_acceptance.py board-01-signal-order-0.112
+run_archived_evidence_check tools/check_dense_details_acceptance.py board-01-dense-details-0.113
 python3 "$repo_dir/tools/check_product_content_acceptance.py"
 python3 "$repo_dir/tools/check_ui_language_acceptance.py"
 python3 "$repo_dir/tools/check_ui_typography_acceptance.py"
@@ -892,8 +904,8 @@ python3 "$repo_dir/tools/check_early_boot_watchdog_contract.py"
 python3 "$repo_dir/tools/check_runtime_watchdog_journal_contract.py"
 python3 "$repo_dir/tools/check_runtime_watchdog_journal_acceptance.py"
 run_opaque_evidence_check tools/check_safety_watchdog_acceptance.py
-python3 "$repo_dir/tools/check_worker_preparation_deadline_acceptance.py"
-python3 "$repo_dir/tools/check_capture_store_deadline_acceptance.py"
+run_archived_evidence_check tools/check_worker_preparation_deadline_acceptance.py board-01-worker-preparation-deadline-0.135
+run_archived_evidence_check tools/check_capture_store_deadline_acceptance.py board-01-capture-store-deadline-0.136
 python3 "$repo_dir/tools/check_infrared_store_deadline_acceptance.py"
 python3 "$repo_dir/tools/check_s5_runtime_completeness_contract.py"
 run_opaque_evidence_check tools/check_s5_runtime_completeness_acceptance.py
@@ -902,7 +914,7 @@ python3 "$repo_dir/tools/check_release_hil_acceptance.py"
 if [[ "$retained_evidence_mode" == "tracked" ]]; then
     python3 "$repo_dir/tools/check_tracked_hil_evidence.py"
     python3 "$repo_dir/tools/hil_evidence.py" verify \
-        --index "$repo_dir/tests/hil/evidence/declarative-hil-index.json"
+        --index "$repo_dir/tests/hil/evidence/declarative-hil-index.json" --tracked-only
     python3 "$repo_dir/tools/check_product_home_acceptance.py" --tracked-only
     python3 "$repo_dir/tools/check_home_identity_acceptance.py" --tracked-only
     python3 "$repo_dir/tools/check_inline_key_hints_acceptance.py" --tracked-only

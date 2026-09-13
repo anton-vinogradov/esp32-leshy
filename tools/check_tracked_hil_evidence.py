@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -44,6 +45,10 @@ def main() -> int:
         "--bundle", type=Path, default=DEFAULT_BUNDLE,
         help="retained bundle containing artifacts.sha256",
     )
+    parser.add_argument("--summary", type=Path,
+                        help="bind the top artifact index to its reviewed summary")
+    parser.add_argument("--recursive", action="store_true",
+                        help="also verify all indexed child bundles")
     args = parser.parse_args()
     requested_bundle = args.bundle
     if not requested_bundle.is_absolute():
@@ -62,11 +67,29 @@ def main() -> int:
     declared_opaque = 0
     locally_rehashed_opaque = 0
 
-    for index in [requested_bundle / "artifacts.sha256"]:
+    if args.summary is not None:
+        summary_path = args.summary.resolve()
+        try:
+            summary_relative = str(summary_path.relative_to(ROOT))
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            expected = summary["evidence"]["artifact_index_sha256"]
+            if summary_relative not in tracked or expected != digest(
+                    requested_bundle / "artifacts.sha256"):
+                failures.append("reviewed summary/index binding mismatch")
+        except (OSError, ValueError, KeyError, TypeError):
+            failures.append("invalid reviewed summary/index binding")
+    manifests = [requested_bundle / "artifacts.sha256"]
+    if args.recursive:
+        manifests += sorted(path for path in requested_bundle.rglob("artifacts.sha256")
+                            if path.parent != requested_bundle)
+    for index in manifests:
         index_rel = str(index.relative_to(ROOT))
         if index_rel not in tracked:
             continue
         indexes += 1
+        if not index.is_file():
+            failures.append(f"{index_rel}: tracked artifact index missing")
+            continue
         bundle = index.parent.resolve()
         indexed_here: set[str] = set()
         for line_number, line in enumerate(
@@ -83,6 +106,8 @@ def main() -> int:
                 failures.append(f"{index_rel}: artifact escapes bundle: {relative}")
                 continue
             root_relative = str(target.relative_to(ROOT))
+            if root_relative in indexed_here:
+                failures.append(f"{index_rel}: duplicate artifact: {relative}")
             indexed_here.add(root_relative)
             if root_relative in tracked:
                 indexed_tracked += 1
@@ -118,6 +143,11 @@ def main() -> int:
             path for path in tracked_below
             if not any(path.startswith(prefix) for prefix in nested_roots)
         }
+        # Parent indexes bind each child index; the child owns its payload.
+        owned_tracked.update(
+            prefix + "artifacts.sha256" for prefix in nested_roots
+            if not any(prefix != parent and prefix.startswith(parent)
+                       for parent in nested_roots))
         missing_from_index = sorted(owned_tracked - indexed_here)
         for path in missing_from_index:
             failures.append(f"{index_rel}: tracked artifact absent from index: {path}")
@@ -128,7 +158,7 @@ def main() -> int:
         print("\n".join(f"FAIL: {failure}" for failure in failures))
         return 1
     print(
-        "tracked HIL evidence passed: "
+        "tracked artifact integrity passed (not a new HIL/full-binary pass): "
         f"{indexes} index, {indexed_tracked} tracked artifacts rehashed, "
         f"{declared_opaque} opaque build artifacts declared, "
         f"{locally_rehashed_opaque} locally present opaque artifacts rehashed"

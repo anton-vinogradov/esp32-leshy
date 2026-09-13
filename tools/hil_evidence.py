@@ -304,7 +304,7 @@ def retain(args: argparse.Namespace) -> int:
     return 0
 
 
-def verify_manifest(bundle: Path) -> set[str]:
+def verify_manifest(bundle: Path, tracked_only: bool = False) -> set[str]:
     manifest = bundle / "artifacts.sha256"
     require(manifest.is_file(), "artifact index missing")
     indexed: set[str] = set()
@@ -315,7 +315,9 @@ def verify_manifest(bundle: Path) -> set[str]:
         expected, relative = parts
         indexed.add(relative)
         path = bundle / relative
-        if not path.is_file() and relative in OPTIONAL_OPAQUE_BUILD_ARTIFACTS:
+        optional_build = relative in OPTIONAL_OPAQUE_BUILD_ARTIFACTS or (
+            tracked_only and relative == "fixture.bin")
+        if not path.is_file() and optional_build:
             absent_opaque.add(relative)
             continue
         require(path.is_file(), f"retained artifact missing: {relative}")
@@ -343,7 +345,18 @@ def verify_optional_build_artifact(path: Path, expected_hash: object,
         require(digest(path) == expected_hash, f"{label} hash mismatch")
 
 
-def verify_summary(summary_path: Path) -> dict[str, Any]:
+def verify_fixture_identity(path: Path, expected_hash: object,
+                            tracked_only: bool = False) -> None:
+    require(isinstance(expected_hash, str) and len(expected_hash) == 64 and
+            all(char in "0123456789abcdef" for char in expected_hash),
+            "fixture app identity invalid")
+    if not path.is_file() and tracked_only:
+        return
+    require(path.is_file() and app_elf_sha256(path) == expected_hash,
+            "fixture app identity mismatch")
+
+
+def verify_summary(summary_path: Path, tracked_only: bool = False) -> dict[str, Any]:
     summary = load(summary_path)
     require(summary.get("schema") == SUMMARY_SCHEMA, "summary schema mismatch")
     require(str(summary.get("status", "")).startswith("pass"),
@@ -359,7 +372,7 @@ def verify_summary(summary_path: Path) -> dict[str, Any]:
     require(provenance == candidate, "summary/provenance mismatch")
     require(provenance.get("schema") == PROVENANCE_SCHEMA,
             "provenance schema mismatch")
-    indexed = verify_manifest(bundle)
+    indexed = verify_manifest(bundle, tracked_only)
     require(evidence.get("files") == len(indexed) + 1,
             "retained file count mismatch")
     require(evidence.get("artifact_index_sha256") ==
@@ -385,10 +398,9 @@ def verify_summary(summary_path: Path) -> dict[str, Any]:
         verify_optional_build_artifact(
             fixture_image, fixture_provenance.get("firmware_sha256"),
             fixture_provenance.get("firmware_bytes"), "fixture")
-        require(fixture_image.is_file() and
-                app_elf_sha256(fixture_image) ==
-                fixture_provenance.get("app_elf_sha256"),
-                "fixture app identity mismatch")
+        verify_fixture_identity(fixture_image,
+                                fixture_provenance.get("app_elf_sha256"),
+                                tracked_only)
         require(fixture_profile_path.is_file() and
                 digest(fixture_profile_path) ==
                 fixture_provenance.get("profile_sha256"),
@@ -527,9 +539,10 @@ def verify(args: argparse.Namespace) -> int:
         path = (ROOT / relative).resolve()
         require(path.is_file() and path.is_relative_to(ROOT),
                 f"summary path is invalid: {relative}")
-        checked.append(verify_summary(path))
+        checked.append(verify_summary(path, args.tracked_only))
     print(json.dumps({
         "status": "pass", "summaries": len(checked),
+        "verification_scope": "tracked" if args.tracked_only else "retained",
         "scenarios": [value["scenario_id"] for value in checked],
     }, sort_keys=True))
     return 0
@@ -562,6 +575,9 @@ def parser() -> argparse.ArgumentParser:
     pack.set_defaults(function=retain)
     check = commands.add_parser("verify")
     check.add_argument("--index", required=True, type=Path)
+    check.add_argument("--tracked-only", action="store_true",
+                       help="allow absent archived fixture bytes; verify all "
+                            "present artifacts and retained fixture proof")
     check.set_defaults(function=verify)
     return root
 
