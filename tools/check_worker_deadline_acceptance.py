@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import struct
@@ -66,12 +67,13 @@ def png_size(path: Path) -> tuple[int, int] | None:
     return struct.unpack(">II", data[16:24])
 
 
-def verify_manifest(failures: list[str]) -> None:
+def verify_manifest(failures: list[str], tracked_only: bool = False) -> None:
     manifest = BUNDLE / "artifacts.sha256"
     require(failures, manifest.is_file(), "artifact index missing")
     if not manifest.is_file():
         return
     indexed: set[str] = set()
+    declared_only: set[str] = set()
     for line in manifest.read_text(encoding="utf-8").splitlines():
         parts = line.split("  ", 1)
         if len(parts) != 2:
@@ -80,6 +82,9 @@ def verify_manifest(failures: list[str]) -> None:
         expected, relative = parts
         indexed.add(relative)
         path = BUNDLE / relative
+        if tracked_only and relative in ("firmware.bin", "firmware.elf", "firmware.map") and not path.is_file():
+            declared_only.add(relative)
+            continue
         require(failures, path.is_file(), f"retained artifact missing: {relative}")
         if path.is_file():
             require(failures, digest(path) == expected,
@@ -88,7 +93,7 @@ def verify_manifest(failures: list[str]) -> None:
         str(path.relative_to(BUNDLE)) for path in BUNDLE.rglob("*")
         if path.is_file() and path != manifest
     }
-    require(failures, indexed == actual, "artifact index coverage mismatch")
+    require(failures, indexed - declared_only == actual, "artifact index coverage mismatch")
 
 
 def safe_state(record: dict[str, Any], state: str, reason: str,
@@ -109,6 +114,10 @@ def safe_state(record: dict[str, Any], state: str, reason: str,
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--tracked-only', action='store_true',
+                        help='verify public artifacts/claims; missing historical build bytes stay unverified')
+    args = parser.parse_args()
     failures: list[str] = []
     require(failures, SUMMARY.is_file() and BUNDLE.is_dir(),
             "0.133 worker-deadline evidence missing")
@@ -188,12 +197,16 @@ def main() -> int:
         "worker_heartbeat_supervision": True,
     }, "coverage/limitations mismatch")
 
-    verify_manifest(failures)
+    verify_manifest(failures, args.tracked_only)
+    firmware = BUNDLE / "firmware.bin"
+    if firmware.is_file():
+        require(failures, digest(firmware) == FIRMWARE and app_elf_sha256(firmware) == APP,
+                "exact retained firmware mismatch")
+    else:
+        require(failures, args.tracked_only, "exact retained firmware missing")
     require(failures,
             digest(BUNDLE / "artifacts.sha256") == INDEX and
             digest(BUNDLE / "run.json") == RUN and
-            digest(BUNDLE / "firmware.bin") == FIRMWARE and
-            app_elf_sha256(BUNDLE / "firmware.bin") == APP and
             digest(BUNDLE / "runner.py") == RUNNER,
             "retained candidate/runner mismatch")
     runner_blob = git_blob(SOURCE, "tools/run_1x_worker_deadline_hil.py")
@@ -335,6 +348,8 @@ def main() -> int:
         return 1
     print(json.dumps({
         "schema": summary["schema"], "status": summary["status"],
+        "verification_scope": "tracked" if args.tracked_only else "full",
+        "firmware_bytes_verified": firmware.is_file(),
         "source": SOURCE, "cid": CID, "worker": "product_survey",
         "path": "wifi_nearby_networks", "deadline_ms": 6000,
         "observed_age_ms": 6001, "trip_count": 1,

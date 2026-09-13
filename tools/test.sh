@@ -75,6 +75,11 @@ case "$retained_evidence_mode" in
         ;;
 esac
 
+retained_scope_args=()
+if [[ "$retained_evidence_mode" == "tracked" ]]; then
+    retained_scope_args=(--tracked-only)
+fi
+
 run_opaque_evidence_check() {
     if [[ "$retained_evidence_mode" == "full" ]]; then
         python3 "$repo_dir/$1"
@@ -660,8 +665,9 @@ python3 "$repo_dir/tools/check_product_start_resilience_acceptance.py"
 python3 "$repo_dir/tools/check_product_boot_resilience_acceptance.py"
 python3 "$repo_dir/tools/check_product_hardware_watchdog_acceptance.py"
 python3 "$repo_dir/tools/check_worker_deadline_supervision.py"
-python3 "$repo_dir/tools/check_worker_deadline_acceptance.py"
-python3 "$repo_dir/tools/check_worker_deadline_ble_acceptance.py"
+python3 "$repo_dir/tools/check_worker_deadline_acceptance.py" "${retained_scope_args[@]}"
+python3 "$repo_dir/tools/check_worker_deadline_ble_acceptance.py" "${retained_scope_args[@]}"
+python3 "$repo_dir/tools/test_worker_deadline_evidence_scope.py"
 python3 "$repo_dir/tools/check_visual_system_acceptance.py"
 python3 "$repo_dir/tools/check_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_targets_product_contract.py"
