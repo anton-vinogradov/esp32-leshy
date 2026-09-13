@@ -657,6 +657,24 @@ class AirspaceAcceptanceTests(unittest.TestCase):
         self.assertIn("result_second.ble_scan_rejected", failures)
         self.assertIn("result_second.ble_scan_status", failures)
 
+    def test_tracked_mode_only_allows_absent_build_bytes(self) -> None:
+        self.write_bundle()
+        args = self.args()
+        (self.bundle / "firmware.bin").unlink()
+        self.assertTrue(CHECKER.check(args))
+        args.tracked_only = True
+        self.assertEqual([], CHECKER.check(args))
+        (self.bundle / "run.json").unlink()
+        self.assertTrue(CHECKER.check(args))
+
+    def test_tracked_mode_still_rejects_present_corrupt_firmware(self) -> None:
+        self.write_bundle()
+        args = self.args()
+        args.tracked_only = True
+        (self.bundle / "firmware.bin").write_bytes(b"tampered")
+        self.assertIn("positive.firmware.bin: hash mismatch",
+                      "\n".join(CHECKER.check(args)))
+
     def test_manifest_tamper_fails_closed(self) -> None:
         self.write_bundle()
         (self.bundle / "firmware.bin").write_bytes(b"tampered")

@@ -732,7 +732,7 @@ python3 "$repo_dir/tools/check_airspace_guard_hil_acceptance.py" \
     --expectations "$airspace_guard_expectations" \
     --positive "$airspace_guard_positive" \
     --negative-dev239 "$airspace_guard_negative_dev239" \
-    --negative-dev241 "$airspace_guard_negative_dev241"
+    --negative-dev241 "$airspace_guard_negative_dev241" "${retained_scope_args[@]}"
 python3 "$repo_dir/tools/check_airspace_guard_profiles_hil_acceptance.py"
 python3 "$repo_dir/tools/check_field_survey_journey_hil_acceptance.py"
 python3 "$repo_dir/tools/check_live_companion_wifi_hil_acceptance.py"

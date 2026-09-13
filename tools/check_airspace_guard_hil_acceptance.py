@@ -202,12 +202,14 @@ def verify_expectations(value: dict[str, Any], failures: list[str]) -> None:
                 f"expectations.{field}: invalid")
 
 
-def verify_manifest(bundle: Path, failures: list[str]) -> dict[str, str]:
+def verify_manifest(bundle: Path, failures: list[str],
+                    tracked_only: bool = False) -> dict[str, str]:
     manifest = bundle / "artifacts.sha256"
     if not manifest.is_file():
         failures.append("positive.artifacts.sha256: missing")
         return {}
     entries: dict[str, str] = {}
+    omitted_build_bytes: set[str] = set()
     try:
         lines = manifest.read_text(encoding="utf-8").splitlines()
     except OSError as error:
@@ -228,7 +230,10 @@ def verify_manifest(bundle: Path, failures: list[str]) -> dict[str, str]:
             continue
         artifact = bundle / relative
         if not artifact.is_file():
-            failures.append(f"positive.artifacts.sha256:{number}: missing {name}")
+            if tracked_only and name == "firmware.bin":
+                omitted_build_bytes.add(name)
+            else:
+                failures.append(f"positive.artifacts.sha256:{number}: missing {name}")
         else:
             try:
                 actual = digest(artifact)
@@ -247,8 +252,8 @@ def verify_manifest(bundle: Path, failures: list[str]) -> dict[str, str]:
     except OSError as error:
         failures.append(f"positive.bundle inventory: {error}")
         actual_files = set()
-    if set(entries) != actual_files:
-        missing = sorted(set(entries) - actual_files)
+    if set(entries) - omitted_build_bytes != actual_files:
+        missing = sorted(set(entries) - omitted_build_bytes - actual_files)
         unindexed = sorted(actual_files - set(entries))
         failures.append(
             "positive.artifacts.sha256: inventory mismatch "
@@ -1215,6 +1220,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--expected-source-commit")
     parser.add_argument("--expected-firmware-sha256")
     parser.add_argument("--expected-app-elf-sha256")
+    parser.add_argument("--tracked-only", action="store_true",
+                        help="allow absent archived firmware.bin, never missing "
+                             "public proof or mismatched present bytes")
     return parser.parse_args(argv)
 
 
@@ -1249,7 +1257,8 @@ def check(args: argparse.Namespace) -> list[str]:
                     "expectations.runner_source_sha256: source-commit runner "
                     "binding mismatch")
     bundle, run_path = resolve_positive(args.positive, failures)
-    entries = verify_manifest(bundle, failures) if bundle.is_dir() else {}
+    entries = (verify_manifest(bundle, failures, args.tracked_only)
+               if bundle.is_dir() else {})
     run = load_json(run_path, failures, "positive.run")
     if expectations:
         if run_path.is_file():
@@ -1288,6 +1297,9 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps({
         "schema": "leshy.airspace_guard_hil.acceptance.v1",
         "status": "pass",
+        "verification_scope": "tracked" if args.tracked_only else "full",
+        "firmware_bytes_verified": (
+            resolve_positive(args.positive, [])[0] / "firmware.bin").is_file(),
         "expectations": str(args.expectations),
         "positive": str(args.positive),
         "negative_dev239": str(args.negative_dev239),
