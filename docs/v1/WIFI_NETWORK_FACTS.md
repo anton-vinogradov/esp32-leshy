@@ -12,6 +12,15 @@ a pixel-fitted UTF-8/escaped SSID display projection. The receive adapters,
 client-frame → AP merge, provenance/conflicts and hidden-name fixture below remain
 open; the UI change does not claim those measurements.
 
+Host foundation (14 September): [bounded name decoder/tracker](../../firmware/leshy1/src/apps/wifi/WifiNetworkNameEvidence.h)
+now accepts complete AP beacon/probe-response and client association/reassociation
+frames, preserves 32-byte names, binds BSSID/channel and keeps conflicting names
+without changing AP RSSI. Confirmation and name age are separate. Native and
+ASan/UBSan tests cover malformed/truncated/duplicate elements and wrong addresses.
+This is **not wired to the live receiver yet**: the selected-channel window,
+schedule restoration, card merge and two-device positive/negative HIL remain open.
+It adds no radio owner, global RAM allocation, SD write or accepted feature.
+
 ## User presentation
 
 Main card: **name → protection → channel → live signal**. Enrich automatically

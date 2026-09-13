@@ -8,5 +8,10 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/tests/native/wifi_network_ui_tests.cpp" \
     -o "$test_tmp/wifi_network_ui_tests"
 "$test_tmp/wifi_network_ui_tests"
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Wconversion -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/wifi_network_name_evidence_tests.cpp" \
+    -o "$test_tmp/wifi_network_name_evidence_tests"
+"$test_tmp/wifi_network_name_evidence_tests"
 python3 "$repo_dir/tools/check_wifi_ui_contract.py"
 python3 "$repo_dir/tools/test_wifi_ui_delta_hil.py"
