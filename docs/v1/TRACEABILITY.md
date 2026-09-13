@@ -7,6 +7,12 @@ lives in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md).
 
 ## Top-level goals
 
+Menu refinement: `E-BUILD-252 / E-AUTO-231 / E-HIL-248 / E-UX-099 / RB-M265`
+binds PR-004/011 and NFR-010 to the [dev.385 menu-only digest](../../tests/hil/evidence/wifi-menu-1.0.0-dev.385.json).
+Four root entries, two observation tasks, preserved legacy task IDs/back focus,
+10 route states, 5 TFT frames, 12 UI-checker fixtures/negatives; no RX/TX/SD start.
+WF-01…WF-21 remain **17/21**, total **24/62**; the full matrix remains due.
+
 Latest UI refinement: `E-BUILD-251 / E-AUTO-230 / E-HIL-247 / E-UX-098`
 bind PR-004/011 and NFR-010 to the [dev.384 Wi-Fi digest](../../tests/hil/evidence/wifi-ui-1.0.0-dev.384.json),
 the host-tested navigation/text/bar components, 8192 bar transitions and six

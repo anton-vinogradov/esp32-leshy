@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import subprocess
 
-from check_device_lock_entry_hil import LOCK_FIELDS, UI_FIELDS, project, require
+from check_device_lock_entry_hil import LOCK_FIELDS, PUBLIC_SOURCE_BASE, UI_FIELDS, project, require
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT = ROOT / 'tests/hil/evidence/board-03-optional-pin-1.0.0-dev.380.json'
@@ -148,7 +148,13 @@ def check(data):
     final = data['final_state']
     require(final['page'] == 'home' and final['runtime_owner'] == 'none' and final['lease_mask'] == 0
             and final['survey_product_store_bytes_written'] == 0, 'final lease/store')
-    source = subprocess.check_output(['git', 'show', SOURCE + ':firmware/leshy1/src/services/security/DeviceLock.cpp'], cwd=ROOT, text=True)
+    # The identical source blob is reachable from the public snapshot; the
+    # original source commit also carries private intake and stays local.
+    source = subprocess.check_output(['git', 'show', PUBLIC_SOURCE_BASE + ':firmware/leshy1/src/services/security/DeviceLock.cpp'], cwd=ROOT)
+    require(hashlib.sha256(source).hexdigest() ==
+            '11e6f1b2d8ad3f4c69d95a5036ec3d458730cec943e7bf669d985f3f02b8abe6',
+            'historical DeviceLock source hash')
+    source = source.decode('utf-8')
     require('dataKeyAvailable_ ? DeviceLockAccess::Allowed' in source, 'initialized key required')
 
 

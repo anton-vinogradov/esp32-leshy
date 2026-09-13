@@ -104,6 +104,29 @@ def valid_result_state() -> dict[str, Any]:
 
 
 class AirspaceGuardHilRunnerTests(unittest.TestCase):
+    def test_profile_route_supports_flat_and_grouped_menu(self) -> None:
+        profile = dict(capture_state="idle", profile_version=1, passive_only=True,
+                       rx_only=True, application_connect_calls=0, application_raw_tx_calls=0)
+        for grouped in (False, True):
+            with self.subTest(grouped=grouped):
+                route = [dict(page="survey", wifi_product_view="menu",
+                              wifi_product_selection=i, runtime_owner="wifi", lease_mask=15,
+                              wifi_product_menu_section="root" if grouped else "legacy")
+                         for i in range(5)]
+                keys = ["right", "down", "down", "down", "down", "right"]
+                if grouped:
+                    route.insert(4, dict(route[3], wifi_product_menu_section="observe"))
+                    keys.insert(4, "right")
+                route.append(dict(wifi_product_view="airspace_guard_profile",
+                                  wifi_product_selection=0, runtime_owner="wifi", lease_mask=15))
+                trace = []
+                with patch.object(RUNNER, "home_wifi"), \
+                        patch.object(RUNNER, "action", side_effect=route) as act, \
+                        patch.object(RUNNER, "guard_state", return_value=profile):
+                    self.assertEqual(profile, RUNNER.open_guard_profile(object(), trace))
+                self.assertEqual(keys, [call.args[1] for call in act.call_args_list])
+                self.assertEqual(route, trace)
+
     def test_candidate_verification_is_false_before_fixture_or_flash(self) -> None:
         self.assertFalse(RUNNER.candidate_verification_succeeded(
             fresh_flash_requested=True, reuse_exact_requested=False,

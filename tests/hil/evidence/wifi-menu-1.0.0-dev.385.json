@@ -1,0 +1,83 @@
+{
+  "app_elf_sha256": "ed424d575112e00618e19986b82c5e0ebd1b73bbea822f2ca252b6f873df2cab",
+  "app_sha256": "4f2f984ce4c1b6ed48fe96c024f9d9252265f1d8b11dfce91b167ad7184169c7",
+  "channel_pixels": null,
+  "channels": null,
+  "failures": [],
+  "final": {
+    "lease_mask": 0,
+    "page": "home",
+    "runtime_owner": "none",
+    "survey_dropped": 0,
+    "survey_product_filesystem_mount_attempts": 0,
+    "survey_product_store_bytes_written": 0,
+    "survey_scan_dropped": 0,
+    "survey_timeline_overflow": 0
+  },
+  "frames_count": 5,
+  "heap_final": {
+    "heap_free": 66948,
+    "heap_min_free": 66840,
+    "heap_total": 140940
+  },
+  "limits": "Not physical finger/optical flicker acceptance, hidden-name fixture, full matrix or endurance.",
+  "menu_states": {
+    "entry": {
+      "wifi_product_menu_section": "root",
+      "wifi_product_selection": 0,
+      "wifi_product_view": "menu"
+    },
+    "guard": {
+      "wifi_product_menu_section": "observe",
+      "wifi_product_selection": 0,
+      "wifi_product_view": "airspace_guard_profile"
+    },
+    "guard_back": {
+      "wifi_product_menu_section": "observe",
+      "wifi_product_selection": 4,
+      "wifi_product_view": "menu"
+    },
+    "observe_entry": {
+      "wifi_product_menu_section": "observe",
+      "wifi_product_selection": 3,
+      "wifi_product_view": "menu"
+    },
+    "observe_first": {
+      "wifi_product_menu_section": "observe",
+      "wifi_product_selection": 3,
+      "wifi_product_view": "menu"
+    },
+    "reentry": {
+      "wifi_product_menu_section": "root",
+      "wifi_product_selection": 0,
+      "wifi_product_view": "menu"
+    },
+    "root_back": {
+      "wifi_product_menu_section": "root",
+      "wifi_product_selection": 3,
+      "wifi_product_view": "menu"
+    },
+    "root_last": {
+      "wifi_product_menu_section": "root",
+      "wifi_product_selection": 3,
+      "wifi_product_view": "menu"
+    },
+    "visit": {
+      "wifi_product_menu_section": "observe",
+      "wifi_product_selection": 3,
+      "wifi_product_view": "visit"
+    },
+    "visit_back": {
+      "wifi_product_menu_section": "observe",
+      "wifi_product_selection": 3,
+      "wifi_product_view": "menu"
+    }
+  },
+  "pages": [],
+  "run_sha256": "8c0ba9efce5058c71eef11658438c5115a1ed219b29a05c9b6242e3528e862e4",
+  "schema": "leshy.wifi_ui_delta.acceptance.v1",
+  "scope": "board-03 RX-only keys and synthetic touch through product dispatch; no password recording",
+  "slice": "menu",
+  "status": "passed",
+  "version": "1.0.0-dev.385"
+}

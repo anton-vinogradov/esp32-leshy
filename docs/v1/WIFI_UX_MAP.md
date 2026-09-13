@@ -6,7 +6,7 @@ Document: **target UX, with the implementation checkpoint below**.
 The agreed direction is a task tree, understandable labels and distinct OK/Right
 roles where useful. Publishing mockups does not close implementation or HIL gates.
 
-## Installed checkpoint — 14 September, dev.384
+## Installed checkpoint — 14 September, dev.385
 
 Implemented: Nearby networks → summary → OK signal finder / Right actions →
 protection, password preparation, or four information branches (identity,
@@ -20,8 +20,14 @@ unchanged static chrome, zero drops/SD operations, final Home/none/lease 0.
 [Machine-checked digest](../../tests/hil/evidence/wifi-ui-1.0.0-dev.384.json).
 This does not prove optical flicker-free operation on every screen.
 
-Still target design: four-entry Wi-Fi root regrouping, contextual Lab shortcut,
-radar pause, expanded hidden-name/source/conflicts and remaining end-to-end wizard
+Dev.385 adds four root entries; **Observe and record** contains Site survey and
+Find anomalies. Opening the group starts no receiver or recording. Ten route
+states and five TFT captures passed the [menu-only delta](../../tests/hil/evidence/wifi-menu-1.0.0-dev.385.json),
+including touch, bounds, parent focus and Home cleanup. The deep-card/graph
+acceptance above is the dev.384 baseline, not a repeated full gate.
+
+Still target design: contextual Lab shortcut, radar pause,
+expanded hidden-name/source/conflicts and remaining end-to-end wizard
 refinements. Observations currently explains RSSI limits; it is not a new per-AP
 traffic inspector. Reorganising UI does not increment the feature count.
 

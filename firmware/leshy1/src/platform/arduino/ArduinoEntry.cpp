@@ -181,6 +181,7 @@
 #include "ui/LiveTextRenderCache.h"
 #include "ui/LayeredBarDelta.h"
 #include "ui/WifiNetworkNavigation.h"
+#include "ui/WifiMenuLayout.h"
 #include "ui/VisibleNetworkName.h"
 #include "ui/RankedListFocus.h"
 #include "ui/AntennaStatusController.h"
@@ -1816,6 +1817,7 @@ const char* wifiProductViewName(WifiProductView view) {
 }
 WifiProductView wifiProductView = WifiProductView::None;
 std::uint8_t wifiProductSelection = 0;
+bool wifiObservationMenu = false;
 enum class WifiAuthenticationProductState : std::uint8_t {
     Idle,
     WaitingForSurveyStop,
@@ -20194,6 +20196,7 @@ void renderSurveySourceRow(std::uint8_t index) {
 constexpr std::uint8_t kWifiProductTaskCount = 5;
 
 UiTextId wifiProductLabel(std::uint8_t index) {
+    if (!wifiObservationMenu && index == 3U) return UiTextId::WifiMenuObserve;
     constexpr UiTextId labels[kWifiProductTaskCount] = {
         UiTextId::WifiMenuNetworks,
         UiTextId::WifiMenuDevices,
@@ -20205,6 +20208,7 @@ UiTextId wifiProductLabel(std::uint8_t index) {
 }
 
 UiTextId wifiProductNote(std::uint8_t index) {
+    if (!wifiObservationMenu && index == 3U) return UiTextId::WifiMenuObserveNote;
     constexpr UiTextId notes[kWifiProductTaskCount] = {
         UiTextId::WifiMenuNetworksNote,
         UiTextId::WifiMenuDevicesNote,
@@ -20218,15 +20222,16 @@ UiTextId wifiProductNote(std::uint8_t index) {
 bool wifiProductTaskReady(std::uint8_t index) {
     // Functions are admitted one at a time. The menu stays truthful while the
     // remaining radio workflows are being implemented and measured.
-    return index < kWifiProductTaskCount;
+    return leshy1::ui::wifiMenuWindow(wifiObservationMenu).contains(index);
 }
 
 std::uint8_t wifiProductFirstVisible(std::uint8_t selection) {
-    return homeFirstVisible(selection);
+    (void)selection;
+    return leshy1::ui::wifiMenuWindow(wifiObservationMenu).first;
 }
 
 void renderWifiProductRow(std::uint8_t index, std::uint8_t firstVisible) {
-    if (index >= kWifiProductTaskCount || index < firstVisible ||
+    if (!wifiProductTaskReady(index) || index < firstVisible ||
         index >= firstVisible + kVisibleHomeRows) return;
     const bool ready = wifiProductTaskReady(index);
     renderMenuRow(Components::homeRow(index - firstVisible),
@@ -20237,10 +20242,11 @@ void renderWifiProductRow(std::uint8_t index, std::uint8_t firstVisible) {
 }
 
 void renderWifiProductMenu(bool clearContent) {
-    renderHeader(tr(UiTextId::WifiMenuTitle), clearContent);
+    renderHeader(tr(wifiObservationMenu ? UiTextId::WifiMenuObserve
+                                        : UiTextId::WifiMenuTitle), clearContent);
     const std::uint8_t first = wifiProductFirstVisible(wifiProductSelection);
     const std::uint8_t end = static_cast<std::uint8_t>(
-        std::min<std::size_t>(kWifiProductTaskCount,
+        std::min<std::size_t>(leshy1::ui::wifiMenuWindow(wifiObservationMenu).end,
                               first + kVisibleHomeRows));
     for (std::uint8_t index = first; index < end; ++index) {
         renderWifiProductRow(index, first);
@@ -24301,6 +24307,7 @@ struct UiRenderSnapshot final {
     std::uint8_t selfTestSelection = 0;
     std::uint8_t wifiProductView = 0;
     std::uint8_t wifiProductSelection = 0;
+    bool wifiObservationMenu = false;
     std::uint8_t airspaceGuardView = 0;
     std::size_t airspaceGuardFindingSelection = 0;
     std::size_t airspaceGuardEvidenceSelection = 0;
@@ -24399,6 +24406,7 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         selfTestController.selection(),
         static_cast<std::uint8_t>(wifiProductView),
         wifiProductSelection,
+        wifiObservationMenu,
         static_cast<std::uint8_t>(airspaceGuardController.view()),
         airspaceGuardController.findingSelection(),
         airspaceGuardController.evidenceSelection(),
@@ -24495,6 +24503,7 @@ UiDeltaRenderResult renderSelectionDelta() {
     // that can report NoChange and mark an unpainted scene as rendered.
     if (uiController.page() == 2 &&
         (renderedUi.wifiProductView != static_cast<std::uint8_t>(wifiProductView) ||
+         renderedUi.wifiObservationMenu != wifiObservationMenu ||
          renderedUi.bleProductView != static_cast<std::uint8_t>(bleProductView) ||
          renderedUi.rfSpectrumView != static_cast<std::uint8_t>(rfSpectrumView))) {
         return UiDeltaRenderResult::RequiresFull;
@@ -28080,6 +28089,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_product_stop_action_us\":%llu,"
                       "\"wifi_product_view\":\"%s\","
                       "\"wifi_product_selection\":%u,"
+                      "\"wifi_product_menu_section\":\"%s\","
                       "\"ble_product_view\":\"%s\","
                       "\"ble_device_selection\":%u,"
                       "\"ble_device_focus_user_owned\":%s,"
@@ -28372,6 +28382,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           productSurveyRuntime.stopActionUs),
                       wifiProductViewName(wifiProductView),
                       static_cast<unsigned>(wifiProductSelection),
+                      wifiObservationMenu ? "observe" : "root",
                       bleProductViewName(bleProductView),
                       static_cast<unsigned>(bleDeviceSelection),
                       bleDeviceFocus.userOwned() ? "true" : "false",
@@ -30783,6 +30794,7 @@ bool startWifiChannelsProduct() {
 }
 
 bool openWifiVisitProduct() {
+    wifiObservationMenu = true;
     if (surveyWorkflow.state() != SurveyWorkflowState::Setup) {
         surveyPipeline.resetToSetup();
     }
@@ -30817,6 +30829,7 @@ bool openWifiVisitProduct() {
 }
 
 bool openAirspaceGuardProfileProduct() {
+    wifiObservationMenu = true;
     wifiFrameCapture.reset();
     airspaceGuardController.reset();
     airspaceGuardCaptureState = AirspaceGuardCaptureState::Idle;
@@ -31670,12 +31683,14 @@ bool applyUiAction(UiAction action, bool render = true) {
                 }
             }
         } else if (wifiProductView == WifiProductView::Menu) {
-            if (action == UiAction::Up && wifiProductSelection > 0) {
+            const auto menu = leshy1::ui::wifiMenuWindow(wifiObservationMenu);
+            handled = true;  // Consume keys at both bounds; never fall into Survey.
+            if (action == UiAction::Up && wifiProductSelection > menu.first) {
                 handled = true;
                 --wifiProductSelection;
                 changed = true;
             } else if (action == UiAction::Down &&
-                       wifiProductSelection + 1U < kWifiProductTaskCount) {
+                       wifiProductSelection + 1U < menu.end) {
                 handled = true;
                 ++wifiProductSelection;
                 changed = true;
@@ -31683,7 +31698,11 @@ bool applyUiAction(UiAction action, bool render = true) {
                         action == UiAction::Right) &&
                        wifiProductTaskReady(wifiProductSelection)) {
                 handled = true;
-                if (wifiProductSelection == 0) {
+                if (!wifiObservationMenu && wifiProductSelection == 3U) {
+                    wifiObservationMenu = true;
+                    lastRuntimeEvent = "wifi_observe_menu";
+                    changed = true;
+                } else if (wifiProductSelection == 0) {
                     changed = startWifiNetworksProduct();
                 } else if (wifiProductSelection == 1) {
                     changed = startWifiDevicesProduct();
@@ -31700,6 +31719,13 @@ bool applyUiAction(UiAction action, bool render = true) {
                 lastRuntimeEvent = "wifi_task_not_ready";
             } else if (action == UiAction::Back || action == UiAction::Left) {
                 handled = true;
+                if (wifiObservationMenu) {
+                    wifiObservationMenu = false;
+                    wifiProductSelection = 3U;
+                    lastRuntimeEvent = "wifi_menu";
+                    uiController.recordHandledAction(action);
+                    return finish(true);
+                }
                 wifiProductView = WifiProductView::None;
                 changed = uiController.apply(
                     action, static_cast<std::uint8_t>(appCatalog.size()),
@@ -33768,6 +33794,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                 wifiProductView = wifiApp ? WifiProductView::Menu
                                           : WifiProductView::None;
                 wifiProductSelection = 0;
+                wifiObservationMenu = false;
                 if (!wifiApp) {
                     bleProductView = BleProductView::None;
                     startBleDevicesProduct();
@@ -33864,7 +33891,7 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                 wifiProductFirstVisible(wifiProductSelection);
             return {leshy1::ui::hitTouchTarget(
                         TouchTargetLayout::HomeRows, point, first,
-                        kWifiProductTaskCount),
+                        leshy1::ui::wifiMenuWindow(wifiObservationMenu).end),
                     wifiProductSelection};
         }
         if (wifiProductView == WifiProductView::NetworkDetail &&

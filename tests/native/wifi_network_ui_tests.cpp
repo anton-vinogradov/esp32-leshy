@@ -4,10 +4,17 @@
 #include "ui/WifiNetworkNavigation.h"
 #include "ui/VisibleNetworkName.h"
 #include "ui/LayeredBarDelta.h"
+#include "ui/WifiMenuLayout.h"
 
 using namespace leshy1::ui;
 
 int main() {
+    const auto rootMenu = wifiMenuWindow(false), observationMenu = wifiMenuWindow(true);
+    assert(rootMenu.count() == 4 && observationMenu.count() == 2);
+    for (std::uint8_t id = 0; id < 10; ++id) {
+        assert(rootMenu.contains(id) == (id < 4));
+        assert(observationMenu.contains(id) == (id == 3 || id == 4));
+    }
     unsigned terminalPixels = 0;
     paintLayeredBarDelta(BarLayers{}, BarLayers{1, 0, 3}, 1, 1, 32767, 2,
         [](std::int16_t) -> std::uint16_t { return 0; },

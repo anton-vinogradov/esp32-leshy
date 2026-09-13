@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from check_wifi_ui_delta_hil import PAGES, check
+from check_wifi_ui_delta_hil import MENU_STATES, PAGES, check
 
 
 class WifiUiEvidenceTest(unittest.TestCase):
@@ -63,6 +63,54 @@ class WifiUiEvidenceTest(unittest.TestCase):
         run["channel_pixels"]["static_changed_pixels"] = 1
         self.assertIn("eight navigation pages", check(run, self.frames))
         self.assertIn("channel chrome immutable", check(run, self.frames))
+
+
+    def menu_run(self):
+        run = copy.deepcopy(self.run)
+        run.update(slice="menu", pages={}, screens={}, menu_states={})
+        for name, values in MENU_STATES.items():
+            run["menu_states"][name] = dict(zip(
+                ("wifi_product_view", "wifi_product_menu_section", "wifi_product_selection"), values))
+        for value, name in enumerate(("root-observe-selected", "observe-menu", "visit-setup",
+                                      "guard-profile", "root-menu")):
+            raw = bytes([value]) * (240 * 320 * 2)
+            png = b"fixture-only" + bytes([value])
+            for ext, data in (("rgb565", raw), ("png", png)):
+                (self.frames / f"{name}.{ext}").write_bytes(data)
+            run["screens"][name] = {"rgb565_sha256": hashlib.sha256(raw).hexdigest(),
+                                     "png_sha256": hashlib.sha256(png).hexdigest()}
+        return run
+
+    def test_menu_slice(self):
+        self.assertEqual(check(self.menu_run(), self.frames), [])
+
+    def test_menu_routes_required(self):
+        run = self.menu_run()
+        for name in MENU_STATES:
+            changed = copy.deepcopy(run)
+            del changed["menu_states"][name]
+            self.assertIn(f"menu route {name}", check(changed, self.frames))
+
+    def test_menu_no_fifth_root_row(self):
+        run = self.menu_run()
+        run["menu_states"]["root_last"]["wifi_product_selection"] = 4
+        self.assertIn("menu route root_last", check(run, self.frames))
+
+    def test_menu_pixels_not_just_state(self):
+        run = self.menu_run()
+        run["screens"]["observe-menu"] = run["screens"]["root-observe-selected"]
+        self.assertIn("menu scene repainted", check(run, self.frames))
+
+    def test_missing_screen_manifest(self):
+        for run in (self.run, self.menu_run()):
+            run = copy.deepcopy(run)
+            run["screens"] = {}
+            self.assertIn("required screen hashes", check(run, self.frames))
+
+    def test_unknown_slice(self):
+        run = copy.deepcopy(self.run)
+        run["slice"] = "skip"
+        self.assertIn("known UI slice", check(run, self.frames))
 
 
 if __name__ == "__main__":

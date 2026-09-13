@@ -7,16 +7,20 @@ This delta does not claim unlocked radio operation or physical keypad/touch HIL.
 """
 import argparse
 import copy
+from functools import lru_cache
 import hashlib
 import json
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT = ROOT / 'tests/hil/evidence/board-03-lock-entry-1.0.0-dev.379.json'
 VERSION = '1.0.0-dev.379'
 SOURCE = '266fea8eb399a9a82ac4d4b0ab4db3d14ffd822a'
+PUBLIC_SOURCE_BASE = '6e03054628e43b9786eaec116557bbcc380b3ded'
+SOURCE_SHA256 = 'ebf5e9f48c785bbde95d83c67ad1318394d26390f1cb20b3ee02b9b75c92cf5d'
 APP = '74137ccd50b15bb503ce57fe875ec10cfffb02501d373ae51716376d0b0c9519'
 ELF = '5ac2f1d03bbb70cdeaa50d2bd96d862a99c388c48e1ce302ba134f25a25694a1'
 UI_FIELDS = ('page', 'parent_page', 'selected_id', 'selection', 'device_selection',
@@ -35,6 +39,29 @@ def require(condition, message):
 
 def project(value, fields):
     return {key: value[key] for key in fields}
+
+
+@lru_cache(maxsize=1)
+def historical_source():
+    # The original commit also contains private intake data and is not published.
+    # Reconstruct its exact source bytes from a public base plus a source-only
+    # reverse delta. Never substitute current HEAD or skip the historical check.
+    source_path = 'firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp'
+    delta = ROOT / 'tests/hil/evidence/source/device-lock-entry-dev379.patch'
+    try:
+        original = subprocess.check_output(
+            ['git', 'show', PUBLIC_SOURCE_BASE + ':' + source_path], cwd=ROOT)
+        with tempfile.TemporaryDirectory(prefix='leshy-retained-source-') as directory:
+            base, restored = Path(directory) / 'base.cpp', Path(directory) / 'restored.cpp'
+            base.write_bytes(original)
+            subprocess.run(['patch', '--batch', '--silent', '--fuzz=0', '--output',
+                            str(restored), str(base), str(delta)], check=True,
+                           capture_output=True)
+            source = restored.read_bytes()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ValueError('historical source reconstruction failed') from error
+    require(hashlib.sha256(source).hexdigest() == SOURCE_SHA256, 'historical source hash')
+    return source.decode('utf-8')
 
 
 def retain(raw_path):
@@ -146,7 +173,7 @@ def check(data):
     final = data['final_state']
     require(final['page'] == 'home' and final['runtime_owner'] == 'none' and final['lease_mask'] == 0, 'final lease')
     # Historical source remains a checkable independent artifact, not current HEAD.
-    source = subprocess.check_output(['git', 'show', SOURCE + ':firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp'], cwd=ROOT, text=True)
+    source = historical_source()
     require(source.count('leshy1::apps::device::showDeviceLockAdmission(') == 2, 'both entry paths must route remedy')
 
 

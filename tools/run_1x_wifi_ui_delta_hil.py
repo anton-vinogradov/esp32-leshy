@@ -26,6 +26,7 @@ def main():
     p.add_argument("--firmware", required=True, type=Path)
     p.add_argument("--expected-version", required=True)
     p.add_argument("--language", choices=("ru", "en"))
+    p.add_argument("--slice", choices=("card", "menu"), default="card")
     p.add_argument("--output", required=True, type=Path)
     args = p.parse_args()
     assert serial_metadata(args.port)["serial_number"].upper() == args.expected_mac.upper()
@@ -37,7 +38,8 @@ def main():
     report = {"schema": "leshy.wifi_ui_delta.v1", "status": "in_progress",
               "firmware_sha256": hashlib.sha256(args.firmware.read_bytes()).hexdigest(),
               "app_elf_sha256": app_elf_sha256(args.firmware),
-              "expected_version": args.expected_version, "steps": [], "failures": []}
+              "expected_version": args.expected_version, "slice": args.slice,
+              "steps": [], "failures": []}
 
     def checkpoint(step):
         report["step"] = step
@@ -69,6 +71,7 @@ def main():
             result = action(device, value)
             report["steps"].append({k: result.get(k) for k in (
                 "page", "wifi_product_view", "wifi_product_selection",
+                "wifi_product_menu_section",
                 "runtime_event", "runtime_owner", "lease_mask",
                 "render_mode", "render_outcome")})
             return result
@@ -90,6 +93,48 @@ def main():
                 "png_sha256", "rgb565_sha256")}
             return record
 
+        def menu_state(name, section, selection, view="menu"):
+            s = state()
+            require(s.get("wifi_product_view") == view and
+                    s.get("wifi_product_menu_section") == section and
+                    s.get("wifi_product_selection") == selection, f"menu route: {name}")
+            report.setdefault("menu_states", {})[name] = {
+                k: s[k] for k in ("wifi_product_view", "wifi_product_menu_section",
+                                 "wifi_product_selection")}
+
+        def menu_delta():
+            menu_state("entry", "root", 0)
+            for _ in range(5): key("down")
+            menu_state("root_last", "root", 3)
+            before = screen("root-observe-selected")
+            touch = query(device, b"ui.touch 120 270", "leshy.touch.frontend.v1", "state")
+            require(touch.get("last_changed"), "observation menu touch missed")
+            menu_state("observe_entry", "observe", 3)
+            opened = screen("observe-menu")
+            require(before["rgb565_sha256"] != opened["rgb565_sha256"],
+                    "observation scene was not painted")
+            key("up")
+            menu_state("observe_first", "observe", 3)
+            key("right")
+            menu_state("visit", "observe", 3, "visit")
+            screen("visit-setup")
+            key("back")
+            menu_state("visit_back", "observe", 3)
+            key("down")
+            key("right")
+            menu_state("guard", "observe", 0, "airspace_guard_profile")
+            screen("guard-profile")
+            key("back")
+            key("down")
+            menu_state("guard_back", "observe", 4)
+            key("back")
+            menu_state("root_back", "root", 3)
+            key("back")
+            require(state().get("page") == "home", "menu exit Home")
+            key("right")
+            menu_state("reentry", "root", 0)
+            screen("root-menu")
+
         try:
             checkpoint("synchronize")
             synchronize_console(device, 15)
@@ -108,94 +153,97 @@ def main():
                 s = key("up")
             s = key("right")
             require(s.get("wifi_product_view") == "menu", "Wi-Fi menu entry failed")
-            s = key("select")
-            deadline = time.monotonic() + 30
-            while time.monotonic() < deadline:
-                s = state()
-                if int(s.get("wifi_networks_unique", 0)) > 0: break
-                time.sleep(0.2)
-            require(int(s.get("wifi_networks_unique", 0)) > 0, "no access points received")
-            key("select")
-            detail("summary")
-            screen("summary")
-            key("select")
-            detail("radar")
-            screen("radar")
-            key("back")
-            detail("summary")
-            checkpoint("touch:radar")
-            touch = query(device, b"ui.touch 120 235", "leshy.touch.frontend.v1", "state")
-            require(touch.get("last_changed"), "radar touch target missed")
-            detail("radar")
-            key("back")
-            checkpoint("touch:actions")
-            touch = query(device, b"ui.touch 120 274", "leshy.touch.frontend.v1", "state")
-            require(touch.get("last_changed"), "actions touch target missed")
-            detail("actions")
-            key("back")
-            key("right")
-            detail("actions")
-            screen("actions")
-            key("select")
-            detail("protection")
-            screen("protection")
-            key("back")
-            key("down")
-            before_intro = screen("before-password-steps")
-            s = key("right")
-            require(s.get("wifi_product_view") == "password_check_intro", "preflight missing")
-            require(s.get("render_outcome") != "no_change", "unpainted preflight scene")
-            intro = screen("password-steps")
-            require(intro["rgb565_sha256"] != before_intro["rgb565_sha256"],
-                    "preflight frame unchanged from actions")
-            s = key("right")
-            require(s.get("wifi_product_view") == "password_check_intro", "Right started capture")
-            repeated_intro = screen("password-steps-stable")
-            require(intro["rgb565_sha256"] == repeated_intro["rgb565_sha256"],
-                    "static preflight unnecessarily changed")
-            key("back")
-            detail("actions")
-            key("down")
-            key("right")
-            detail("information")
-            screen("information")
-            for page in ("identity", "protection", "radio", "observed"):
-                key("right")
-                detail(page)
-                screen(page)
+            if args.slice == "menu":
+                menu_delta()
+            else:
+                s = key("select")
+                deadline = time.monotonic() + 30
+                while time.monotonic() < deadline:
+                    s = state()
+                    if int(s.get("wifi_networks_unique", 0)) > 0: break
+                    time.sleep(0.2)
+                require(int(s.get("wifi_networks_unique", 0)) > 0, "no access points received")
+                key("select")
+                detail("summary")
+                screen("summary")
+                key("select")
+                detail("radar")
+                screen("radar")
                 key("back")
-                detail("information")
+                detail("summary")
+                checkpoint("touch:radar")
+                touch = query(device, b"ui.touch 120 235", "leshy.touch.frontend.v1", "state")
+                require(touch.get("last_changed"), "radar touch target missed")
+                detail("radar")
+                key("back")
+                checkpoint("touch:actions")
+                touch = query(device, b"ui.touch 120 274", "leshy.touch.frontend.v1", "state")
+                require(touch.get("last_changed"), "actions touch target missed")
+                detail("actions")
+                key("back")
+                key("right")
+                detail("actions")
+                screen("actions")
+                key("select")
+                detail("protection")
+                screen("protection")
+                key("back")
                 key("down")
-            key("back")
-            key("back")
-            detail("summary")
-            before = detail("summary")
-            time.sleep(3)
-            after = detail("summary")
-            require(after["signal_samples"] >= before["signal_samples"], "signal continuity")
-            key("back")
-            key("back")
-            require(state().get("wifi_product_view") == "menu", "network cleanup to menu")
-            key("down")
-            key("down")
-            key("right")
-            deadline = time.monotonic() + 20
-            while time.monotonic() < deadline:
-                s = state()
-                if s.get("wifi_channel_measured_mask") == 8191: break
-                time.sleep(0.2)
-            require(s.get("wifi_product_view") == "channels" and
-                    s.get("wifi_channel_monitor_active"), "channel monitor inactive")
-            require(s.get("wifi_channel_measured_mask") == 8191, "13-channel coverage missing")
-            screen("channels-first")
-            time.sleep(3)
-            screen("channels-second")
-            report["channel_pixels"] = changed_pixels(frames, "channels-first", "channels-second")
-            require(report["channel_pixels"]["static_changed_pixels"] == 0,
-                    "channel static chrome changed")
-            report["channels"] = {k: s[k] for k in (
-                "wifi_channel_measured_mask", "wifi_channel_completed_sweeps",
-                "wifi_channel_monitor_active")}
+                before_intro = screen("before-password-steps")
+                s = key("right")
+                require(s.get("wifi_product_view") == "password_check_intro", "preflight missing")
+                require(s.get("render_outcome") != "no_change", "unpainted preflight scene")
+                intro = screen("password-steps")
+                require(intro["rgb565_sha256"] != before_intro["rgb565_sha256"],
+                        "preflight frame unchanged from actions")
+                s = key("right")
+                require(s.get("wifi_product_view") == "password_check_intro", "Right started capture")
+                repeated_intro = screen("password-steps-stable")
+                require(intro["rgb565_sha256"] == repeated_intro["rgb565_sha256"],
+                        "static preflight unnecessarily changed")
+                key("back")
+                detail("actions")
+                key("down")
+                key("right")
+                detail("information")
+                screen("information")
+                for page in ("identity", "protection", "radio", "observed"):
+                    key("right")
+                    detail(page)
+                    screen(page)
+                    key("back")
+                    detail("information")
+                    key("down")
+                key("back")
+                key("back")
+                detail("summary")
+                before = detail("summary")
+                time.sleep(3)
+                after = detail("summary")
+                require(after["signal_samples"] >= before["signal_samples"], "signal continuity")
+                key("back")
+                key("back")
+                require(state().get("wifi_product_view") == "menu", "network cleanup to menu")
+                key("down")
+                key("down")
+                key("right")
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    s = state()
+                    if s.get("wifi_channel_measured_mask") == 8191: break
+                    time.sleep(0.2)
+                require(s.get("wifi_product_view") == "channels" and
+                        s.get("wifi_channel_monitor_active"), "channel monitor inactive")
+                require(s.get("wifi_channel_measured_mask") == 8191, "13-channel coverage missing")
+                screen("channels-first")
+                time.sleep(3)
+                screen("channels-second")
+                report["channel_pixels"] = changed_pixels(frames, "channels-first", "channels-second")
+                require(report["channel_pixels"]["static_changed_pixels"] == 0,
+                        "channel static chrome changed")
+                report["channels"] = {k: s[k] for k in (
+                    "wifi_channel_measured_mask", "wifi_channel_completed_sweeps",
+                    "wifi_channel_monitor_active")}
             report["status"] = "passed"
         except (Exception, KeyboardInterrupt) as error:
             report["status"] = "failed"

@@ -295,7 +295,10 @@ def open_guard_profile(device: PassiveSerial,
         selection = int(state.get("wifi_product_selection", -1))
         if selection == 4:
             break
-        state = action(device, "down" if selection < 4 else "up")
+        if selection == 3 and state.get("wifi_product_menu_section") == "root":
+            state = action(device, "right")  # Open the observation container.
+        else:
+            state = action(device, "down" if selection < 4 else "up")
         trace.append(state)
     if int(state.get("wifi_product_selection", -1)) != 4:
         raise RuntimeError(f"cannot focus Airspace Guard: {state!r}")

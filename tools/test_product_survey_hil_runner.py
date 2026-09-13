@@ -649,19 +649,20 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
                 "survey_product_source_active": False,
             },
         ]
-        calls: list[str] = []
-
-        def fake_action(_: Any, name: str) -> dict[str, Any]:
-            calls.append(name)
-            return states[len(calls) - 1]
-
-        trace: list[dict[str, Any]] = []
-        with patch.object(RUNNER, "normalize_home", return_value=home), \
-                patch.object(RUNNER, "action", side_effect=fake_action):
-            setup = RUNNER.open_product_survey_visit(object(), trace)
-        self.assertEqual(["right", "down", "down", "down", "right"], calls)
-        self.assertEqual([], RUNNER.setup_failures(setup, "wifi"))
-        self.assertEqual(states, trace)
+        for grouped in (False, True):
+            with self.subTest(grouped=grouped):
+                route = list(states)
+                expected = ["right", "down", "down", "down", "right"]
+                if grouped:
+                    route.insert(4, dict(states[3], wifi_product_menu_section="observe"))
+                    expected.append("right")
+                trace: list[dict[str, Any]] = []
+                with patch.object(RUNNER, "normalize_home", return_value=home), \
+                        patch.object(RUNNER, "action", side_effect=route) as act:
+                    setup = RUNNER.open_product_survey_visit(object(), trace)
+                self.assertEqual(expected, [call.args[1] for call in act.call_args_list])
+                self.assertEqual([], RUNNER.setup_failures(setup, "wifi"))
+                self.assertEqual(route, trace)
 
     def test_current_product_route_rejects_non_wifi_home(self) -> None:
         with patch.object(

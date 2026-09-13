@@ -2,7 +2,16 @@
 
 *Read in: **English** · [Русский](RESOURCE_BUDGETS.ru.md)*
 
-## Latest delta — RB-M264 (14 September 2026)
+## Latest delta — RB-M265 (14 September 2026)
+
+Dev.385 menu grouping: static RAM **237352 B** (unchanged), linked flash **3618768 B**,
+app **3619264 B** (+208 B), OTA free **575040 B** (50752 B above the floor).
+[Exact-image menu delta](../../tests/hil/evidence/wifi-menu-1.0.0-dev.385.json):
+10 route states / 5 TFT captures; final heap total/free/min 140940/66948/66840 B,
+Home/none/lease 0, zero drops/SD operations. This did not start a radio, so its
+heap is not a comparison with a live scan or an endurance claim.
+
+## Previous card/graph baseline — RB-M264
 
 Dev.384: static RAM **237352 B** (+1344 vs dev.381), linked flash **3618560 B**,
 app **3619056 B**, OTA free **575248 B** (50960 B above the 512 KiB floor).

@@ -548,6 +548,12 @@ def open_product_survey_visit(
     state = action(device, "right")
     if trace is not None:
         trace.append(state)
+    if (state.get("wifi_product_view") == "menu" and
+            state.get("wifi_product_menu_section") == "observe"):
+        # Current task tree; older retained images expose the flat menu.
+        state = action(device, "right")
+        if trace is not None:
+            trace.append(state)
     return state
 
 
