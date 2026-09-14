@@ -7,6 +7,14 @@ lives in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md).
 
 ## Top-level goals
 
+Ordinary test-network source: `E-BUILD-253 / E-AUTO-232 / E-HIL-249 / RB-M266`
+bind PR-004/009/011 and NFR-002/010 to product Self-check and bounded RF ownership.
+Dev.386 full host checks passed; dev.387 build/clean-target delta and boot/journal
+contracts passed. `E-HIL-249` is a **blocked result**, not acceptance:
+[startup watchdog and USB blocker](../../tests/hil/evidence/wifi-product-network-dev386-boot-blocker.json).
+No AP was started; the second board remains on dev.385. Root cause and physical
+follow-up remain open. Wi-Fi **17/21**, total **24/62**, cadence unchanged.
+
 Menu refinement: `E-BUILD-252 / E-AUTO-231 / E-HIL-248 / E-UX-099 / RB-M265`
 binds PR-004/011 and NFR-010 to the [dev.385 menu-only digest](../../tests/hil/evidence/wifi-menu-1.0.0-dev.385.json).
 Four root entries, two observation tasks, preserved legacy task IDs/back focus,

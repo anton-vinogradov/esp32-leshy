@@ -2,7 +2,19 @@
 
 *Read in: **English** · [Русский](RESOURCE_BUDGETS.ru.md)*
 
-## Latest delta — RB-M265 (14 September 2026)
+## Latest source/build — RB-M266 (14 September 2026)
+
+Ordinary Wi-Fi test-network role: dev.386 static RAM **237864 B** (+512),
+app **3624096 B**, OTA free **570208 B**. Full host checks passed; source-board
+startup failed before AP testing. Dev.387 startup logging/retry-budget follow-up:
+static RAM **237864 B**, linked flash **3624272 B**, app **3624768 B**,
+OTA free **569536 B** (45248 B above floor). Clean-target delta and build passed.
+The follow-up could not connect to the original's bootloader and was not written.
+[Blocked deployment digest](../../tests/hil/evidence/wifi-product-network-dev386-boot-blocker.json).
+Safe-Mode heap is not comparable with a working AP; no runtime heap-invariance,
+two-DIV acceptance, feature credit or cadence reset is claimed.
+
+## Previous menu delta — RB-M265 (14 September 2026)
 
 Dev.385 menu grouping: static RAM **237352 B** (unchanged), linked flash **3618768 B**,
 app **3619264 B** (+208 B), OTA free **575040 B** (50752 B above the floor).

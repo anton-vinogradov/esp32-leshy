@@ -26,7 +26,10 @@ It adds no radio owner, global RAM allocation, SD write or accepted feature.
 Two-DIV validation follows [the product-firmware rule](GOVERNANCE.md#product-firmware-on-both-divs):
 the source is a normal, user-accessible bounded test-network role, not a separate
 test binary. Dev.386 adds that source role in ordinary firmware; physical
-acceptance is pending. Hidden → visible → hidden
+acceptance is blocked by original-board startup/USB failure before AP start.
+Dev.387 adds boot-stage evidence/retry-budget diagnostics but has not been flashed;
+see the [retained blocker](../../tests/hil/evidence/wifi-product-network-dev386-boot-blocker.json).
+Hidden → visible → hidden
 beacons check AP-name discovery/retention only; they do not prove learning a name
 from a client's association while the AP remains hidden. Both cases need their
 own observations. Neither requires the laptop's Wi-Fi.

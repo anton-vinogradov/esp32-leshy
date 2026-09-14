@@ -7,6 +7,14 @@
 
 ## Цели верхнего уровня
 
+Штатный источник тестовой сети: `E-BUILD-253 / E-AUTO-232 / E-HIL-249 / RB-M266`
+связывает PR-004/009/011 и NFR-002/010 с Self-check и ограниченным владением RF.
+Dev.386 прошла полный host-suite; dev.387 — сборку, clean-target delta и boot/journal
+контракты. `E-HIL-249` — **blocker, не приёмка**:
+[startup watchdog и USB](../../tests/hil/evidence/wifi-product-network-dev386-boot-blocker.json).
+AP не запускалась, второй DIV остался на dev.385; причина и физическая проверка
+открыты. Wi-Fi **17/21**, всего **24/62**, cadence не меняется.
+
 Доработка меню: `E-BUILD-252 / E-AUTO-231 / E-HIL-248 / E-UX-099 / RB-M265`
 связывает PR-004/011 и NFR-010 с [дельтой только меню dev.385](../../tests/hil/evidence/wifi-menu-1.0.0-dev.385.json).
 Четыре входа корня, две задачи наблюдения, сохранённые task ID/возврат к строке,

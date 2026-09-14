@@ -1,0 +1,43 @@
+{
+  "schema": "leshy.wifi_product_boot.blocker.v1",
+  "status": "blocked",
+  "two_board_acceptance": false,
+  "test_network_started": false,
+  "installed_source_version": "1.0.0-dev.386",
+  "app_elf_sha256": "53f65c3524be7533e3f90f9546180db5ee6cf43f4d915415656dbe8131b4510d",
+  "image_sha256": "a58fbc897054b8f4e53c0f95ed56a5dd288dfb94e1a500b7d0e77b106a610da2",
+  "retained_stop": {
+    "reason": "runtime_watchdog",
+    "reset_reason_code": 6,
+    "watchdog_trip_stage": "unknown",
+    "watchdog_triggered_cpu_mask": 2,
+    "watchdog_incident_sequence": 4,
+    "watchdog_journal_nvs_verified": true,
+    "watchdog_journal_sd_write_attempted": false,
+    "runtime_owner": "none",
+    "lease_mask": 0,
+    "buzzer_inactive": true,
+    "nrf_ce_inactive": true
+  },
+  "observed_sd_retry_attempts": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "followup_app_elf_sha256": "c25bab5f357428dc1d9fb5fed27471138f71ebce424dc8aaf804facaf610928e",
+  "followup_image_sha256": "fd1f9de98687ba51088c45ab2151c1499de459f308351a6d76d930b33f70a2db",
+  "followup_written": false,
+  "receiver_unchanged_version": "1.0.0-dev.385",
+  "cause": "unconfirmed: startup Task-WDT; later SD retries and unresponsive USB",
+  "limits": "Follow-up adds startup-stage logging and a completed-recovery feed; neither its boot nor the AP role is physically accepted. No new feature/cadence credit.",
+  "private_log_sha256": {
+    "wifi-product-test-network-386/deploy.log": "5a114809b541fc9943371b1c54435e6e1c168838d55e250425cb8e5f8750daac",
+    "wifi-product-test-network-386/source-postdeploy-safety.log": "a8930bf0748137fdfd8a0bd3df28fd0c954c4c73efef9e7ef4846f64df7064af",
+    "wifi-product-test-network-386/source-clear-boot.log": "e72426b8b70a0a6f4b03883502b8f0ccd6559e139d80e0babc2d11b6f777a68b",
+    "wifi-product-test-network-386/source-clear-boot-continuation.log": "7009c6610f2783bb5d68f3b36bf121f2b1a799f1ae1c1747f5891100fdd8c892",
+    "wifi-product-test-network-386/source-final-read.log": "5e4b70896238de0c76690f5947558bd99356e52f020f278006ac625c9c18e4e0",
+    "wifi-product-test-network-387/source-deploy.log": "b2eb22f27e11fda6639b8cbe248f88ba870c641759fa80d4112cc89f9d5cafc7",
+    "wifi-product-test-network-387/source-usb-recovery.log": "d8223a63be4cfa1f9ff74a79b7857ea5bfffb2959ae0e7a02ac5933d48a6f66a"
+  }
+}
