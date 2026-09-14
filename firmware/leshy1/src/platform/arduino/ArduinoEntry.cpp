@@ -2760,6 +2760,15 @@ enum class RuntimeWatchdogStage : std::uint32_t {
     Input = 11,
     Yield = 12,
     CrashJournalSd = 13,
+    BootSettings = 14,
+    BootDisplay = 15,
+    BootInput = 16,
+    BootCatalog = 17,
+    BootRetry = 18,
+    BootStorage = 19,
+    BootWorkers = 20,
+    BootUi = 21,
+    BootReady = 22,
 };
 
 const char* runtimeWatchdogStageName(RuntimeWatchdogStage stage) {
@@ -2779,6 +2788,15 @@ const char* runtimeWatchdogStageName(RuntimeWatchdogStage stage) {
         case RuntimeWatchdogStage::Input: return "input";
         case RuntimeWatchdogStage::Yield: return "yield";
         case RuntimeWatchdogStage::CrashJournalSd: return "crash_journal_sd";
+        case RuntimeWatchdogStage::BootSettings: return "boot_settings";
+        case RuntimeWatchdogStage::BootDisplay: return "boot_display";
+        case RuntimeWatchdogStage::BootInput: return "boot_input";
+        case RuntimeWatchdogStage::BootCatalog: return "boot_catalog";
+        case RuntimeWatchdogStage::BootRetry: return "boot_retry";
+        case RuntimeWatchdogStage::BootStorage: return "boot_storage";
+        case RuntimeWatchdogStage::BootWorkers: return "boot_workers";
+        case RuntimeWatchdogStage::BootUi: return "boot_ui";
+        case RuntimeWatchdogStage::BootReady: return "boot_ready";
         case RuntimeWatchdogStage::Unknown:
         default: return "unknown";
     }
@@ -11589,7 +11607,7 @@ bool runtimeWatchdogTraceSelfValid(const RuntimeWatchdogTraceRecord& record) {
         record.pageInverse == ~record.page &&
         record.wifiViewInverse == ~record.wifiView &&
         record.stage <= static_cast<std::uint32_t>(
-            RuntimeWatchdogStage::CrashJournalSd) &&
+            RuntimeWatchdogStage::BootReady) &&
         record.wifiView <= static_cast<std::uint32_t>(
             WifiProductView::AirspaceGuard) &&
         record.journalCommitted <= 1U &&
@@ -11607,7 +11625,7 @@ bool durableRuntimeWatchdogJournalValid(
     return leshy1::kernel::safety::validateRuntimeWatchdogJournalRecord(
                record,
                static_cast<std::uint32_t>(
-                   RuntimeWatchdogStage::CrashJournalSd),
+                   RuntimeWatchdogStage::BootReady),
                static_cast<std::uint32_t>(WifiProductView::AirspaceGuard)) &&
         record.safetyReason ==
             static_cast<std::uint32_t>(SafetyReason::RuntimeWatchdog) &&
@@ -12165,6 +12183,10 @@ void recoverProductCatalogAtBoot() {
         productBootRecovery.status = "recovery_watchdog_cleanup_failed";
         productBootRecovery.cleanupComplete = false;
     }
+    // Recovery completed and its independent deadline was disarmed. Do not
+    // charge the following bounded retry backoff to its nearly spent interval.
+    // The permanent runtime subscription remains armed during backoff/restart.
+    feedRuntimeSafetyWatchdog();
     const std::uint8_t completedAttempts = static_cast<std::uint8_t>(
         productBootRetryRestarts + 1U);
     productBootRecovery.attempts = completedAttempts;
@@ -12192,6 +12214,7 @@ void recoverProductCatalogAtBoot() {
     };
     if (leshy1::storage::shouldRetryProductBootRecovery(
             retryEvidence, completedAttempts)) {
+        updateRuntimeWatchdogContext(RuntimeWatchdogStage::BootRetry);
         ++productBootRetryRestarts;
         char line[320] = {};
         std::snprintf(
@@ -45354,6 +45377,7 @@ void setup() {
     // Restore only: dev.277 links and exercises the production crypto/store
     // boundary without silently enrolling or weakening an existing device.
     // UI setup and protected-operation admission are the next CAP-052 slice.
+    updateRuntimeWatchdogContext(RuntimeWatchdogStage::BootSettings);
     deviceLockRestoreSucceeded = deviceLock.restore(
         static_cast<std::uint64_t>(esp_timer_get_time()));
     const bool automationTrustRestoreSucceeded = automationTrustStore.restore();
@@ -45369,6 +45393,7 @@ void setup() {
     ledcAttach(BoardProfile::kBacklightPin, 5000, 8);
     ledcWrite(BoardProfile::kBacklightPin,
               interfaceSettingsController.brightnessDuty());
+    updateRuntimeWatchdogContext(RuntimeWatchdogStage::BootDisplay);
     display.init();
     display.setRotation(2);
     // Reserve the two compact 1-bpp compositors before Wi-Fi/BLE/storage
@@ -45384,6 +45409,7 @@ void setup() {
     bootMetrics.displayReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
     feedRuntimeSafetyWatchdog();
 
+    updateRuntimeWatchdogContext(RuntimeWatchdogStage::BootInput);
     Wire.begin(BoardProfile::kI2cSdaPin, BoardProfile::kI2cSclPin, kI2cHz);
     bootMetrics.inputDetected =
         probeInputAtBoot(&lastInputRaw, &bootMetrics.inputProbeAttempts);
@@ -45407,14 +45433,17 @@ void setup() {
     bootMetrics.inputReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
     feedRuntimeSafetyWatchdog();
     if (!safetySupervisor.latched()) {
+        updateRuntimeWatchdogContext(RuntimeWatchdogStage::BootCatalog);
         surveyDemoReady = prepareSurveyDemo();
         libraryDemoReady = prepareLibraryDemo();
         recoverProductCatalogAtBoot();
         mirrorRuntimeWatchdogJournalToSdAtBoot();
+        updateRuntimeWatchdogContext(RuntimeWatchdogStage::BootStorage);
         storageDiscovery = boardStorageAdapter.discoverReadOnly();
         storageDiscoveryReady =
             leshy1::storage::validateMediaDiscovery(storageDiscovery) ==
             leshy1::storage::MediaDiscoveryValidation::Valid;
+        updateRuntimeWatchdogContext(RuntimeWatchdogStage::BootWorkers);
         productSurveyWorkerReady = initializeProductSurveyWorker();
         captureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
         subGhzCaptureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
@@ -45610,12 +45639,14 @@ void setup() {
                        ? "nrf1_nrf2_cc1101_read_only_probe_available"
                        : "rf_shield_not_declared"});
 
+    updateRuntimeWatchdogContext(RuntimeWatchdogStage::BootUi);
     appCatalog.rebuild(inventory, targetsMergeFixtureContinuityValid());
     feedRuntimeSafetyWatchdog();
     renderInteractiveScreen(true);
     bootMetrics.interactiveReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
     feedRuntimeSafetyWatchdog();
 
+    updateRuntimeWatchdogContext(RuntimeWatchdogStage::BootReady);
     emitMetrics();
     emitInventory();
     broadcast("{\"schema\":\"leshy.boot.v1\",\"kind\":\"help\",\"commands\":["
@@ -45661,6 +45692,7 @@ void setup() {
               "\"survey.field-visit\","
               "\"survey.field-visit.test-incomplete once\","
               "\"wifi.network.detail\","
+              "\"wifi.test-network.state\","
               "\"wifi.network.hil-select-label-fnv1a64 <16-hex-hash>\","
               "\"ble.device.hil-select-label-fnv1a64 <16-hex-hash>\","
               "\"ble.inspector.gatt.hil-fault wrong-peer|timeout|resource-conflict|failed-cleanup|state|clear\","

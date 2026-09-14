@@ -29,6 +29,20 @@ def main() -> int:
             "setup must establish one permanent runtime subscription")
     require(setup.count("feedRuntimeSafetyWatchdog();") >= 5,
             "bounded boot stages require explicit progress feeds")
+    for stage in ("BootSettings", "BootDisplay", "BootInput", "BootCatalog",
+                  "BootStorage", "BootWorkers", "BootUi", "BootReady"):
+        require("updateRuntimeWatchdogContext(RuntimeWatchdogStage::" +
+                stage + ");" in setup,
+                f"startup crash must retain its stage: {stage}")
+    recovery_fn = text[text.index("void recoverProductCatalogAtBoot() {"):
+                       text.index("void emitProductBootRecovery(")]
+    cleanup = recovery_fn.index("disarmProductBootRecoveryWatchdog()")
+    completed_feed = recovery_fn.index("feedRuntimeSafetyWatchdog();", cleanup)
+    backoff = recovery_fn.index("delay(leshy1::storage::productBootRetryDelayMs(")
+    require(cleanup < completed_feed < backoff,
+            "completed SD recovery must feed before bounded retry backoff")
+    require("updateRuntimeWatchdogContext(RuntimeWatchdogStage::BootRetry);"
+            in recovery_fn[:backoff], "retry must have a retained stage")
     for token in (
         "RTC_NOINIT_ATTR std::uint32_t earlyBootWatchdogTestRtcState",
         "ESP_SYSTEM_INIT_FN(leshy_early_boot_guard, SECONDARY, BIT(0), 1000)",
