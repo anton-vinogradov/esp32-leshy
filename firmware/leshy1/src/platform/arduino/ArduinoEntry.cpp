@@ -58,6 +58,8 @@
 #include "apps/device/DeviceLockController.h"
 #include "apps/device/DeviceLockNavigation.h"
 #include "apps/self_test/SelfTestController.h"
+#include "apps/self_test/WifiTestNetwork.h"
+#include "platform/arduino/BoardWifiTestNetwork.h"
 #include "apps/spectrum/Cc1101SignalFinder.h"
 #include "apps/spectrum/Cc1101SpectrumController.h"
 #include "apps/spectrum/Nrf24SignalFinder.h"
@@ -1280,6 +1282,13 @@ ConnectivitySetupController connectivitySetupController;
 AntennaStatusController antennaStatusController;
 BoardAntennaStatusLeds boardAntennaStatusLeds;
 SelfTestController selfTestController;
+leshy1::apps::self_test::WifiTestNetwork wifiTestNetwork;
+leshy1::platform::arduino::BoardWifiTestNetwork boardWifiTestNetwork;
+std::uint8_t wifiTestSelection = 1;
+bool wifiTestHidden = false;
+leshy1::ui::LiveTextRenderCache<5, 80> wifiTestTextCache;
+bool wifiTestHeaderActive = false;
+std::uint32_t wifiTestRenderedSecond = UINT32_MAX;
 constexpr std::uint8_t kDevicePage = 9;
 constexpr std::uint8_t kAboutPage = 10;
 constexpr std::uint8_t kPowerPage = 11;
@@ -14868,6 +14877,11 @@ NavigationFooter navigationFooterForCurrentState() {
     }
 
     if (uiController.page() == 6) {
+        if (selfTestController.view() == SelfTestView::WifiNetwork) {
+            return {{NavigationKey::Left, wifiTestNetwork.running()
+                         ? UiTextId::NavStop : UiTextId::NavBack},
+                    choose, enter};
+        }
         if (selfTestController.view() == SelfTestView::ModeMenu) {
             return {back, choose, enter};
         }
@@ -15252,7 +15266,7 @@ void renderHeaderStatus() {
         return;
     }
     const char* receiver = headerReceiverStatus();
-    constexpr const char* transmitter = "TX --";
+    const char* transmitter = boardWifiTestNetwork.active() ? "TX WIFI" : "TX --";
     const bool receiving = receiver[3] != '-';
 
     selectUiFont(UiTextRole::Meta);
@@ -17563,10 +17577,149 @@ void renderCapturePage(bool clearContent) {
     }
 }
 
+void stopWifiTestNetwork(leshy1::apps::self_test::WifiTestNetwork::StopReason reason) {
+    const bool stopped = boardWifiTestNetwork.stop();
+    wifiTestNetwork.stop(reason);
+    lastRuntimeEvent = stopped ? "wifi_test_stopped" : "wifi_test_cleanup_failed";
+    if (!stopped) {
+        // Do not release ownership or continue a possibly transmitting session.
+        latchSafetyStopInTask(SafetyReason::OutputInvariant);
+        ESP.restart();
+        return;
+    }
+    resourceBroker.release(AppRuntime::kForegroundOwner,
+        leshy1::kernel::runtime::resourceMask(Resource::EspRf));
+}
+
+bool startWifiTestNetwork() {
+    using Test = leshy1::apps::self_test::WifiTestNetwork;
+    const bool admitted = uiController.page() == 6 &&
+        selfTestController.view() == SelfTestView::WifiNetwork &&
+        runtimeSafetyWatchdogReady && safetySupervisor.armed() && digitalRead(0) != LOW &&
+        deviceLockOperationAllowed(
+            leshy1::services::security::DeviceLockOperation::ProtectedUi) &&
+        resourceBroker.ownerOf(Resource::EspRf) == leshy1::kernel::runtime::kNoOwner &&
+        boardWifiTestNetwork.cleanupComplete() &&
+        productSurveyControl() == ProductSurveyWorkerControl::Idle &&
+        !productSurveyRuntime.sourceActive && !arduinoCompanionWebService.active();
+    if (!admitted || !beginLiveMetaTextRow(Palette::TextMuted, Palette::Canvas)) {
+        wifiTestNetwork.stop(Test::StopReason::Failed);
+        lastRuntimeEvent = "wifi_test_admission_failed";
+        return false;
+    }
+    const auto resources = leshy1::kernel::runtime::resourceMask(Resource::EspRf);
+    if (!resourceBroker.acquire(AppRuntime::kForegroundOwner, resources)) {
+        wifiTestNetwork.stop(Test::StopReason::Failed);
+        lastRuntimeEvent = "wifi_test_resource_busy";
+        return false;
+    }
+    if (!wifiTestNetwork.begin(millis(), true, admitted) ||
+        !boardWifiTestNetwork.begin(wifiTestHidden)) {
+        stopWifiTestNetwork(Test::StopReason::Failed);
+        lastRuntimeEvent = "wifi_test_start_failed";
+        return false;
+    }
+    lastRuntimeEvent = "wifi_test_started";
+    return true;
+}
+
+bool serviceWifiTestNetwork() {
+    using Test = leshy1::apps::self_test::WifiTestNetwork;
+    const bool wasRunning = wifiTestNetwork.running();
+    if (wasRunning) {
+        if (safetySupervisor.latched() || !runtimeSafetyWatchdogReady ||
+            !deviceLockOperationAllowed(
+                leshy1::services::security::DeviceLockOperation::ProtectedUi)) {
+            stopWifiTestNetwork(Test::StopReason::Safety);
+        } else if (uiController.page() != 6 ||
+                   selfTestController.view() != SelfTestView::WifiNetwork ||
+                   digitalRead(0) == LOW) {
+            stopWifiTestNetwork(Test::StopReason::User);
+        } else if (wifiTestNetwork.due(millis())) {
+            stopWifiTestNetwork(Test::StopReason::Deadline);
+        }
+    }
+    const auto seconds = wifiTestNetwork.remainingSeconds(millis());
+    return (uiController.page() == 6 &&
+            selfTestController.view() == SelfTestView::WifiNetwork &&
+            wifiTestRenderedSecond != seconds) ||
+           wasRunning != wifiTestNetwork.running();
+}
+
+void emitWifiTestNetworkState(Stream& reply) {
+    const auto& mac = boardWifiTestNetwork.bssid();
+    reply.printf(
+        "{\"schema\":\"leshy.wifi.test_network.v1\",\"kind\":\"state\","
+        "\"active\":%s,\"radio_started\":%s,\"hidden\":%s,"
+        "\"ssid\":\"%s\",\"bssid\":\"%02x%02x%02x%02x%02x%02x\","
+        "\"channel\":6,\"remaining_s\":%lu,\"limit_ms\":60000,"
+        "\"stop_reason\":%u,\"power_quarter_dbm\":%d,\"error\":%d,"
+        "\"cleanup_complete\":%s,\"lease_mask\":%lu}\n",
+        wifiTestNetwork.running() ? "true" : "false",
+        boardWifiTestNetwork.active() ? "true" : "false",
+        wifiTestHidden ? "true" : "false", boardWifiTestNetwork.ssid(),
+        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+        static_cast<unsigned long>(wifiTestNetwork.remainingSeconds(millis())),
+        static_cast<unsigned>(wifiTestNetwork.reason()),
+        static_cast<int>(boardWifiTestNetwork.powerQuarterDbm()),
+        boardWifiTestNetwork.lastError(),
+        boardWifiTestNetwork.cleanupComplete() ? "true" : "false",
+        static_cast<unsigned long>(appRuntime.activeResources()));
+}
+
+void renderWifiTestNetwork(bool force) {
+    if (force || wifiTestHeaderActive != wifiTestNetwork.running()) {
+        renderHeader(tr(UiTextId::WifiTestHeader), force);
+        wifiTestHeaderActive = wifiTestNetwork.running();
+    }
+    if (force) {
+        wifiTestTextCache.reset();
+        display.setTextColor(Palette::TextMuted, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 14, 54);
+        display.print(tr(UiTextId::WifiTestFind));
+        setUiCursor(UiTextRole::Meta, 14, 268);
+        display.print(tr(UiTextId::WifiTestNoInternet));
+    }
+    for (std::uint8_t row = 0; row < 2; ++row) {
+        const char* label = tr(row == 0
+            ? (wifiTestHidden ? UiTextId::WifiTestNameHidden : UiTextId::WifiTestNameVisible)
+            : (wifiTestNetwork.running() ? UiTextId::WifiTestStop : UiTextId::WifiTestStart));
+        const char* note = tr(row == 0 ? UiTextId::WifiTestVisibilityNote :
+            wifiTestNetwork.running() ? UiTextId::WifiTestStopNote : UiTextId::WifiTestStartNote);
+        const std::uint16_t style = static_cast<std::uint16_t>(
+            (row == wifiTestSelection ? 1U : 0U) | (wifiTestNetwork.running() ? 2U : 0U));
+        if (wifiTestTextCache.changed(row, label, style) &&
+            pushLiveListRow(Components::homeRow(static_cast<std::uint8_t>(row + 1U)),
+                row == wifiTestSelection, label, note,
+                LiveListPaletteIndex::TextSecondary, false, 0)) {
+            wifiTestTextCache.publish(row, label, style);
+        }
+    }
+    const char* ssid = boardWifiTestNetwork.ssid()[0]
+        ? boardWifiTestNetwork.ssid() : "LESHY-TEST-....";
+    if (wifiTestTextCache.changed(2, ssid, Palette::TextSecondary) &&
+        pushLiveMetaTextRow(ssid, Palette::TextSecondary, 32))
+        wifiTestTextCache.publish(2, ssid, Palette::TextSecondary);
+    char status[80]{};
+    if (wifiTestNetwork.running())
+        std::snprintf(status, sizeof(status), tr(UiTextId::WifiTestRemaining),
+            static_cast<unsigned>(wifiTestNetwork.remainingSeconds(millis())));
+    else std::snprintf(status, sizeof(status), "%s", tr(
+        wifiTestNetwork.reason() == leshy1::apps::self_test::WifiTestNetwork::StopReason::Deadline
+            ? UiTextId::WifiTestExpired :
+        wifiTestNetwork.reason() == leshy1::apps::self_test::WifiTestNetwork::StopReason::Failed
+            ? UiTextId::WifiTestFailed : UiTextId::WifiTestIdle));
+    const auto tone = wifiTestNetwork.running() ? Palette::Warning : Palette::TextMuted;
+    if (wifiTestTextCache.changed(3, status, tone) &&
+        pushLiveMetaTextRow(status, tone, 240))
+        wifiTestTextCache.publish(3, status, tone);
+    wifiTestRenderedSecond = wifiTestNetwork.remainingSeconds(millis());
+}
+
 void renderSelfTestModeRow(std::uint8_t index) {
-    const UiTextId labels[2] = {UiTextId::Quick, UiTextId::FullGuided};
-    const UiTextId notes[2] = {UiTextId::QuickNote, UiTextId::FullNote};
-    if (index >= 2) return;
+    const UiTextId labels[3] = {UiTextId::Quick, UiTextId::FullGuided, UiTextId::WifiTestTitle};
+    const UiTextId notes[3] = {UiTextId::QuickNote, UiTextId::FullNote, UiTextId::WifiTestNote};
+    if (index >= SelfTestController::kModeCount) return;
     const bool selected = selfTestController.selection() == index;
     renderMenuRow(Components::choiceRow(index), tr(labels[index]),
                   tr(notes[index]), selected, true,
@@ -17574,14 +17727,18 @@ void renderSelfTestModeRow(std::uint8_t index) {
 }
 
 void renderSelfTestPage(bool clearContent) {
+    if (selfTestController.view() == SelfTestView::WifiNetwork) {
+        renderWifiTestNetwork(clearContent);
+        return;
+    }
     char line[96] = {};
     if (selfTestController.view() == SelfTestView::ModeMenu) {
         renderHeader(tr(UiTextId::SelfTestTitle), clearContent);
-        for (std::uint8_t index = 0; index < 2; ++index) {
+        for (std::uint8_t index = 0; index < SelfTestController::kModeCount; ++index) {
             renderSelfTestModeRow(index);
         }
         display.setTextColor(Palette::TextMuted, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 207);
+        setUiCursor(UiTextRole::Meta, 14, 230);
         display.print(tr(UiTextId::SelfTestNoBoot));
         return;
     }
@@ -25404,6 +25561,12 @@ UiDeltaRenderResult renderSelectionDelta() {
         return UiDeltaRenderResult::NoChange;
     }
 
+    if (uiController.page() == 6 &&
+        selfTestController.view() == SelfTestView::WifiNetwork &&
+        renderedUi.selfTestView == static_cast<std::uint8_t>(SelfTestView::WifiNetwork)) {
+        renderWifiTestNetwork(false);
+        return UiDeltaRenderResult::Rendered;
+    }
     if (uiController.page() == 6 &&
         selfTestController.view() == SelfTestView::ModeMenu &&
         renderedUi.selfTestView ==
@@ -33612,6 +33775,33 @@ bool applyUiAction(UiAction action, bool render = true) {
         }
     }
     if (!wasRoot && uiController.page() == 6) {
+        if (selfTestController.view() == SelfTestView::WifiNetwork) {
+            bool changed = false;
+            if (action == UiAction::Up && wifiTestSelection > 0) {
+                --wifiTestSelection; changed = true;
+            } else if (action == UiAction::Down && wifiTestSelection < 1) {
+                ++wifiTestSelection; changed = true;
+            } else if (action == UiAction::Select || action == UiAction::Right) {
+                if (wifiTestSelection == 0) {
+                    if (wifiTestNetwork.due(millis())) {
+                        stopWifiTestNetwork(leshy1::apps::self_test::WifiTestNetwork::StopReason::Deadline);
+                    } else if (wifiTestNetwork.running() &&
+                               !boardWifiTestNetwork.setHidden(!wifiTestHidden)) {
+                        stopWifiTestNetwork(leshy1::apps::self_test::WifiTestNetwork::StopReason::Failed);
+                    } else wifiTestHidden = !wifiTestHidden;
+                } else if (wifiTestNetwork.running()) {
+                    stopWifiTestNetwork(leshy1::apps::self_test::WifiTestNetwork::StopReason::User);
+                } else startWifiTestNetwork();
+                changed = true;
+            } else if (action == UiAction::Left || action == UiAction::Back) {
+                if (wifiTestNetwork.running())
+                    stopWifiTestNetwork(leshy1::apps::self_test::WifiTestNetwork::StopReason::User);
+                else selfTestController.back();
+                changed = true;
+            }
+            uiController.recordHandledAction(action);
+            return finish(changed);
+        }
         bool handled = false;
         bool changed = false;
         if (selfTestController.view() == SelfTestView::ModeMenu &&
@@ -34236,9 +34426,19 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
             : TouchDispatchTarget{};
     }
     if (uiController.page() == 6 &&
+        selfTestController.view() == SelfTestView::WifiNetwork) {
+        for (std::uint8_t row = 0; row < 2; ++row) {
+            if (leshy1::ui::visual::containsPoint(
+                    Components::homeRow(static_cast<std::uint8_t>(row + 1U)),
+                    point.x, point.y))
+                return {{true, row}, wifiTestSelection};
+        }
+        return {};
+    }
+    if (uiController.page() == 6 &&
         selfTestController.view() == SelfTestView::ModeMenu) {
         return {leshy1::ui::hitTouchTarget(
-                    TouchTargetLayout::TwoChoices, point),
+                    TouchTargetLayout::ThreeChoices, point),
                 selfTestController.selection()};
     }
     return {};
@@ -34624,7 +34824,7 @@ bool screenshotLiveWorkActive() {
         gattState == BleGattInspectorState::Discovering ||
         gattState == BleGattInspectorState::Ready ||
         gattState == BleGattInspectorState::CleanupPending ||
-        arduinoCompanionWebService.active();
+        arduinoCompanionWebService.active() || boardWifiTestNetwork.active();
 }
 
 struct ScreenshotSdIdentityResult final {
@@ -44636,6 +44836,8 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         }
     } else if (std::strcmp(command, "wifi.device.detail") == 0) {
         emitWifiDeviceDetailState(reply);
+    } else if (std::strcmp(command, "wifi.test-network.state") == 0) {
+        emitWifiTestNetworkState(reply);
     } else if (std::strcmp(command, "wifi.network.detail") == 0) {
         emitWifiNetworkDetailState(reply);
     } else if (std::strcmp(
@@ -45578,6 +45780,10 @@ void loop() {
         serviceInfraredCapture();
         serviceInfraredReplay();
         serviceSpectrumWaterfallCadence();
+    }
+    if (serviceWifiTestNetwork() && uiController.page() == 6 &&
+        selfTestController.view() == SelfTestView::WifiNetwork) {
+        renderInteractiveScreen(false);
     }
     if (serviceWebCompanion() && uiController.page() == 7) {
         renderInteractiveScreen(false);

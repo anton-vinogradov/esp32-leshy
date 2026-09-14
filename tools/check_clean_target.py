@@ -31,6 +31,7 @@ def main() -> int:
         "BoardWifiPassiveInitConfig.h"
     )
     passive_wifi_capture_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveCapture.cpp"
+    test_network_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiTestNetwork.cpp"
     companion_web_adapter = (
         TARGET / "src" / "platform" / "arduino" /
         "ArduinoCompanionWebService.cpp"
@@ -104,6 +105,7 @@ def main() -> int:
             physical_sd_filesystem,
             passive_wifi_adapter,
             passive_wifi_capture_adapter,
+            test_network_adapter,
             companion_web_adapter,
             wifi_own_identity_adapter,
             wifi_own_identity_header,
@@ -1709,6 +1711,8 @@ def main() -> int:
         if re.search(pattern, privacy_sources, re.IGNORECASE):
             errors.append(f"directory evidence may retain a name field: {pattern}")
 
+    from check_wifi_test_network_contract import check_repository as check_test_network
+    errors.extend(check_test_network())
     for pattern in (r"#include\s*[<\"]WiFi\.h[>\"]", r"\besp_wifi_", r"\bWiFi\."):
         if re.search(pattern, implicit_sources):
             errors.append(f"measurement target starts an unapproved Wi-Fi path: {pattern}")

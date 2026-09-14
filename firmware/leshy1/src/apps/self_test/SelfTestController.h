@@ -11,6 +11,7 @@ namespace leshy1::apps::self_test {
 enum class SelfTestMode : std::uint8_t {
     Quick,
     FullGuided,
+    WifiNetwork,
 };
 
 enum class SelfTestView : std::uint8_t {
@@ -19,6 +20,7 @@ enum class SelfTestView : std::uint8_t {
     VisualCheck,
     ActiveChecks,
     Result,
+    WifiNetwork,
 };
 
 enum class SelfTestResultStatus : std::uint8_t {
@@ -124,7 +126,7 @@ struct SelfTestReport final {
 // blocked until every applicable capability has registered a check.
 class SelfTestController final {
 public:
-    static constexpr std::uint8_t kModeCount = 2;
+    static constexpr std::uint8_t kModeCount = 3;
     static constexpr std::uint8_t kVisualStateCount = 5;
 
     bool previousMode();

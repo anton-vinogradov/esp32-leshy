@@ -25,10 +25,30 @@ It adds no radio owner, global RAM allocation, SD write or accepted feature.
 
 Two-DIV validation follows [the product-firmware rule](GOVERNANCE.md#product-firmware-on-both-divs):
 the source is a normal, user-accessible bounded test-network role, not a separate
-test binary. That source role is not implemented yet. Hidden → visible → hidden
+test binary. Dev.386 adds that source role in ordinary firmware; physical
+acceptance is pending. Hidden → visible → hidden
 beacons check AP-name discovery/retention only; they do not prove learning a name
 from a client's association while the AP remains hidden. Both cases need their
 own observations. Neither requires the laptop's Wi-Fi.
+
+Product path: **Device → Self-check → Check Wi-Fi**. Entry keeps radio off.
+The owner may choose visible/hidden name and explicitly create a 60-second
+WPA2 test network on channel 6, named `LESHY-TEST-xxxx` from Leshy's own AP identity.
+A second DIV uses **Wi-Fi → Nearby networks**. Visibility may change during
+the same session without changing the BSSID or renewing the deadline.
+Left, the Stop row, BOOT, deadline, device lock or Safety Stop end transmission;
+leaving the page also stops it. Failed cleanup latches safety and resets rather
+than releasing a possibly live radio. Opening this tool does not create a
+self-test Pass report. It needs no SD.
+
+This first source mode checks discovery only: no DHCP, web server, internet,
+client connection, raw injection, deauthentication or laptop networking.
+The driver applies/readbacks a 2 dBm configured power limit after Wi-Fi start;
+the SDK startup interval still uses its PHY default, so this is not a claim of
+measured power or a 2 dBm ceiling from the first transmitted frame.
+Timer text uses the shared retained compositor; unchanged text and controls are
+not repainted. The host runner only drives real product key/touch paths and reads
+state/TFT pixels; deployment is separate.
 
 Main card: **name → protection → channel → live signal**. Enrich automatically
 within the current receive session; do not require a different scanner for every

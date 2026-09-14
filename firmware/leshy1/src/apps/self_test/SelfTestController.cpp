@@ -6,6 +6,7 @@ const char* selfTestModeName(SelfTestMode mode) {
     switch (mode) {
         case SelfTestMode::Quick: return "quick";
         case SelfTestMode::FullGuided: return "full_guided";
+        case SelfTestMode::WifiNetwork: return "wifi_network";
     }
     return "unknown";
 }
@@ -17,6 +18,7 @@ const char* selfTestViewName(SelfTestView view) {
         case SelfTestView::VisualCheck: return "visual_check";
         case SelfTestView::ActiveChecks: return "active_checks";
         case SelfTestView::Result: return "result";
+        case SelfTestView::WifiNetwork: return "wifi_network";
     }
     return "unknown";
 }
@@ -58,7 +60,8 @@ bool SelfTestController::nextMode() {
 }
 
 SelfTestMode SelfTestController::selectedMode() const {
-    return selection_ == 0 ? SelfTestMode::Quick : SelfTestMode::FullGuided;
+    return selection_ == 0 ? SelfTestMode::Quick :
+        selection_ == 1 ? SelfTestMode::FullGuided : SelfTestMode::WifiNetwork;
 }
 
 void SelfTestController::beginReport(SelfTestMode mode,
@@ -245,7 +248,15 @@ void SelfTestController::finishResult() {
 
 bool SelfTestController::activate(const SelfTestFacts& facts,
                                   std::uint64_t startedUs) {
-    if (view_ == SelfTestView::Result) return false;
+    if (view_ == SelfTestView::Result || view_ == SelfTestView::WifiNetwork) return false;
+    if (view_ == SelfTestView::ModeMenu &&
+        selectedMode() == SelfTestMode::WifiNetwork) {
+        report_ = {};
+        report_.mode = SelfTestMode::WifiNetwork;
+        runAwaitingFinish_ = false;
+        view_ = SelfTestView::WifiNetwork;
+        return true;  // Menu entry is not radio start and not a test pass.
+    }
     if (view_ == SelfTestView::ModeMenu &&
         selectedMode() == SelfTestMode::FullGuided) {
         view_ = SelfTestView::Preflight;
