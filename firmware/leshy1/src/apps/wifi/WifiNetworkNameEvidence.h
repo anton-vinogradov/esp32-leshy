@@ -92,7 +92,7 @@ inline WifiNameDecode decodeWifiNetworkName(
     return Result::Visible;
 }
 
-// Fixed selected-target state for a bounded listen window. The future live
+// Fixed selected-target state for a bounded listen window. The live
 // adapter owns the deadline, receiver and schedule restore; this model does no
 // I/O, scan, TX, allocation or catalog/RSSI mutation. First conflict is retained
 // rather than silently replacing the displayed name. Reset starts a new window.
@@ -108,6 +108,10 @@ class WifiNetworkNameTracker final {
     }
     const WifiNetworkNameEvidence& primary() const { return primary_; }
     const WifiNetworkNameEvidence& conflict() const { return conflict_; }
+    const WifiNetworkNameEvidence& firstClient() const { return firstClient_; }
+    bool clientMatchesPrimary() const {
+        return firstClient_.length != 0U && sameName(primary_, firstClient_);
+    }
     bool apConfirmed() const { return confirmed_; }
     bool additionalConflict() const { return additionalConflict_; }
     std::uint64_t primaryLastSeenUs() const { return primaryLastSeenUs_; }
@@ -123,6 +127,11 @@ class WifiNetworkNameTracker final {
         for (std::uint8_t i = 0; i < evidence.length; ++i) nonzero |= evidence.name[i];
         if (nonzero == 0U) return false;
         lastEvidenceUs_ = evidence.observedUs;
+        // A directed probe response may reveal the name before association.
+        // Preserve that first source; independently retain the client frame.
+        const bool firstClient = firstClient_.length == 0U &&
+            evidence.source == WifiNameSource::ClientConnection;
+        if (firstClient) firstClient_ = evidence;
         if (primary_.length == 0U) {
             primary_ = evidence;
             primaryLastSeenUs_ = evidence.observedUs;
@@ -137,20 +146,20 @@ class WifiNetworkNameTracker final {
                 apConfirmationUs_ = evidence.observedUs;
                 return true;
             }
-            return false;
+            return firstClient;
         }
         if (conflict_.length == 0U) { conflict_ = evidence; return true; }
         if (!sameName(conflict_, evidence) && !additionalConflict_) {
             additionalConflict_ = true;
             return true;
         }
-        return false;
+        return firstClient;
     }
   private:
     static bool sameName(const WifiNetworkNameEvidence& a, const WifiNetworkNameEvidence& b) {
         return a.length == b.length && std::memcmp(a.name.data(), b.name.data(), a.length) == 0;
     }
-    WifiNetworkNameEvidence primary_{}, conflict_{};
+    WifiNetworkNameEvidence primary_{}, conflict_{}, firstClient_{};
     std::array<std::uint8_t, 6> target_{};
     std::uint64_t lastEvidenceUs_ = 0;
     std::uint64_t primaryLastSeenUs_ = 0;
@@ -160,5 +169,5 @@ class WifiNetworkNameTracker final {
     bool additionalConflict_ = false;
 };
 
-static_assert(sizeof(WifiNetworkNameTracker) <= 160U, "selected name evidence must stay bounded");
+static_assert(sizeof(WifiNetworkNameTracker) <= 224U, "selected name evidence must stay bounded");
 }  // namespace leshy1::apps::wifi

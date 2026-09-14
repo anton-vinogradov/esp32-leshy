@@ -29,6 +29,14 @@ def check(run, folder):
         need(s.get('identity_hash') == identity and s.get('ui_page') == 'listen_name' and
              s.get('active') is True and s.get('passive') is True and
              s.get('active_probe_allowed') is False and s.get('channel') == 6, label + ' target/passive/page')
+    # Optional on older retained candidates; strict on the new independent
+    # client marker. AP-only evidence must never invent a client association.
+    if any('name_window_client_seen' in states.get(label, {}) or
+           'name_window_client_matches' in states.get(label, {}) for label in NAME_STATES):
+        for label in NAME_STATES:
+            s = states.get(label, {})
+            need(s.get('name_window_client_seen') is False and s.get('name_window_client_matches') is False,
+                 label + ' AP-only client provenance')
     ready = states.get('name_ready', {})
     need(ready.get('name_listen_state') == 'idle' and ready.get('name_receiver_owned') is False and
          ready.get('ssid_known') is False and ready.get('name_window_duration_ms') == 0 and
@@ -80,6 +88,9 @@ def summary(run, raw, failures):
     fields = ('name_listen_state', 'name_window_source', 'name_window_found',
               'name_window_duration_ms', 'name_scan_restored', 'name_receiver_owned', 'signal_samples')
     result['name_listener'] = {label: {k: run['states'][label].get(k) for k in fields} for label in NAME_STATES}
+    if 'name_window_client_seen' in run['states']['name_ready']:
+        result['client_provenance'] = {label: {k: run['states'][label].get(k) for k in
+            ('name_window_client_seen', 'name_window_client_matches')} for label in NAME_STATES}
     result['name_countdown_pixels'] = run['name_countdown_pixels']
     result['name_history_retention'] = run.get('name_history_retention', {})
     result['history_before_cleanup'] = {role: {key: run['cleanup'][role].get('initial_state', {}).get(key)

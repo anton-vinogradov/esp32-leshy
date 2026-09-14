@@ -118,6 +118,29 @@ int main() {
     assert(!tracker.reset({}, 6));
     assert(!tracker.accept(name) && tracker.primary().length == 0U);
     assert(!tracker.reset(ap, 14));
+    // A real phone may cause an AP probe response before its association.
+    // That must not be relabelled as client-first name discovery.
+    tracker.reset(ap, 6);
+    name = {}; name.bssid = ap; name.channel = 6; name.length = 1;
+    name.name[0] = 'N'; name.observedUs = 100; name.source = WifiNameSource::AccessPoint;
+    assert(tracker.accept(name));
+    assert(tracker.firstClient().length == 0 && !tracker.clientMatchesPrimary());
+    wrong = name; wrong.source = WifiNameSource::ClientConnection;
+    wrong.channel = 1; assert(!tracker.accept(wrong));
+    wrong.channel = 6; wrong.bssid[5] ^= 2; assert(!tracker.accept(wrong));
+    wrong.bssid = ap; wrong.observedUs = 99; assert(!tracker.accept(wrong));
+    assert(tracker.firstClient().length == 0);
+    name.source = WifiNameSource::ClientConnection; name.observedUs = 101;
+    assert(tracker.accept(name) && tracker.clientMatchesPrimary());
+    assert(tracker.firstClient().observedUs == 101);
+    assert(tracker.primary().source == WifiNameSource::AccessPoint);
+    assert(!tracker.accept(name));
+    tracker.reset(ap, 6);
+    assert(tracker.firstClient().length == 0 && !tracker.clientMatchesPrimary());
+    name.source = WifiNameSource::AccessPoint; tracker.accept(name);
+    name.source = WifiNameSource::ClientConnection; name.name[0] = 'X'; name.observedUs = 102;
+    assert(tracker.accept(name) && !tracker.clientMatchesPrimary());
+    assert(tracker.firstClient().name[0] == 'X' && tracker.conflict().name[0] == 'X');
     WifiNetworkCatalog catalog;
     leshy1::domain::observations::Observation observation{};
     observation.radio = leshy1::domain::observations::RadioKind::Wifi;

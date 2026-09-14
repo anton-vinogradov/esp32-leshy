@@ -14,6 +14,8 @@ public:
     bool cleanupComplete() const { return cleanupComplete_; }
     int lastError() const { return error_; }
     const char* ssid() const { return ssid_.data(); }
+    // Ephemeral credential for the local TFT only; never diagnostics or storage.
+    const char* displayPassword() const { return started_ ? password_.data() : ""; }
     const std::array<std::uint8_t, 6>& bssid() const { return bssid_; }
     std::int8_t powerQuarterDbm() const { return power_; }
 private:

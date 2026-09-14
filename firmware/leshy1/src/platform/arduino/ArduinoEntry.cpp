@@ -17763,6 +17763,22 @@ void renderWifiTestNetwork(bool force) {
     if (wifiTestTextCache.changed(2, ssid, Palette::TextSecondary) &&
         pushLiveMetaTextRow(ssid, Palette::TextSecondary, 32))
         wifiTestTextCache.publish(2, ssid, Palette::TextSecondary);
+    // Cache only visibility, not the secret. Each new session crosses idle;
+    // failed paints retry. The credential disappears on Stop or expiry.
+    const char* credentialState = wifiTestNetwork.running() ? "active" : "idle";
+    static_assert(76 - 2 + kLiveMetaTextRowHeight <= Components::homeRow(1).y,
+        "temporary credential must not overwrite the first button frame");
+    if (wifiTestTextCache.changed(4, credentialState, Palette::TextSecondary)) {
+        char credential[80]{};
+        if (wifiTestNetwork.running())
+            std::snprintf(credential, sizeof(credential), tr(UiTextId::WifiTestPassword),
+                boardWifiTestNetwork.displayPassword());
+        else std::snprintf(credential, sizeof(credential), "%s", tr(UiTextId::WifiTestPasswordIdle));
+        if (pushLiveMetaTextRow(credential, Palette::TextSecondary, 76))
+            wifiTestTextCache.publish(4, credentialState, Palette::TextSecondary);
+        volatile char* secret = credential;
+        for (std::size_t i = 0; i < sizeof(credential); ++i) secret[i] = 0;
+    }
     char status[80]{};
     if (wifiTestNetwork.running())
         std::snprintf(status, sizeof(status), tr(UiTextId::WifiTestRemaining),
@@ -18638,7 +18654,9 @@ void renderWifiNetworkDetailData() {
         renderWifiNetworkText(6, tr(wifiNetworkNameSourceText(name)), Palette::TextMuted, 184);
         renderWifiNetworkText(7, name && name->conflict ? tr(UiTextId::WifiNameConflict) :
             (name && name->source == leshy1::apps::wifi::WifiNameSource::ClientConnection &&
-                !name->apConfirmed ? tr(UiTextId::WifiNameUnconfirmed) : ""), Palette::Warning, 207);
+                !name->apConfirmed ? tr(UiTextId::WifiNameUnconfirmed) :
+                (wifiNameResult.clientMatchesPrimary() ? tr(UiTextId::WifiNameClientFrame) : "")),
+            Palette::Warning, 207);
         renderWifiNameActionButton(wifiNameBusy() ? UiTextId::NavStop : UiTextId::NavStart);
     } else if (page == WifiNetworkPage::Protection) {
         const WifiSecurityAssessment assessment = assessWifiSecurity(facts);
@@ -42778,6 +42796,7 @@ void emitWifiNetworkDetailState(Stream& reply) {
         "\"name_listen_state\":\"%s\",\"name_listen_status\":\"%s\","
         "\"name_remaining_seconds\":%u,\"name_scan_restored\":%s,\"name_receiver_owned\":%s,"
         "\"name_window_source\":%u,\"name_window_found\":%s,\"name_window_conflict\":%s,"
+        "\"name_window_client_seen\":%s,\"name_window_client_matches\":%s,"
         "\"name_window_duration_ms\":%lu,"
         "\"vendor_known\":%s,\"vendor\":\"%s\","
         "\"facts_known\":%s,\"authentication\":\"%s\","
@@ -42816,6 +42835,8 @@ void emitWifiNetworkDetailState(Stream& reply) {
         static_cast<unsigned>(wifiNameResult.primary().source),
         wifiNameResult.primary().length != 0U ? "true" : "false",
         wifiNameResult.conflict().length != 0U ? "true" : "false",
+        wifiNameResult.firstClient().length != 0U ? "true" : "false",
+        wifiNameResult.clientMatchesPrimary() ? "true" : "false",
         static_cast<unsigned long>(wifiNameEndedUs >= wifiNameStartedUs && wifiNameStartedUs != 0U
             ? (wifiNameEndedUs - wifiNameStartedUs) / 1000ULL : 0U),
         vendorKnown ? "true" : "false", vendor,

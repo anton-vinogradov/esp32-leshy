@@ -104,6 +104,17 @@ def check(run, folder):
              pixels["dynamic_pixels"] > 0, "countdown final-pixel delta")
     except (OSError, RuntimeError):
         need(False, "complete countdown pixels")
+    if run.get('credential_display_requested'):
+        try:
+            def region(name):
+                raw = (folder / 'frames' / (name + '.rgb565')).read_bytes()
+                return raw[74 * 240 * 2:93 * 240 * 2]
+            idle, active, ended = (region(name) for name in ('source-ready', 'source-running', 'source-deadline'))
+            need(len(idle) == len(active) == len(ended) == 19 * 240 * 2 and
+                 idle != active and idle == ended, 'ephemeral credential TFT region')
+            need(run.get('credential_pixels') == {'shown_region_changed': True, 'inactive_region_restored': True},
+                 'credential pixel report')
+        except OSError: need(False, 'credential TFT unavailable')
     return failures
 
 
@@ -119,6 +130,7 @@ def summary(run, raw, failures):
                 for k in ("hidden", "hidden_no_name", "resolved", "retained")},
             "deadline_observed_s": run.get("deadline_observed_s"),
             "countdown_pixels": run.get("countdown_pixels"),
+            "credential_pixels": run.get("credential_pixels"),
             "final": {role: {k: run["cleanup"][role]["final_state"].get(k) for k in FINAL}
                       for role in ("source", "receiver")},
             "heap": {role: {k: run[role + "_final_boot"].get(k) for k in

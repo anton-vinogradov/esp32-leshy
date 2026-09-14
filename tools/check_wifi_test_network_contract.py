@@ -47,12 +47,24 @@ def check(adapter, entry):
         failures.append("shared retained paint missing")
     if "display.fillRect" in render: failures.append("full clear in live paint")
     if ".begin(" in query or ".stop(" in query: failures.append("state query mutates radio")
+    if "displayPassword" in query or "password" in query.lower():
+        failures.append("state query leaks AP credential")
+    if entry.count("boardWifiTestNetwork.displayPassword()") != 1:
+        failures.append("AP credential must have only the local TFT consumer")
+    for marker in ("boardWifiTestNetwork.displayPassword()",
+                   "wifiTestTextCache.changed(4, credentialState",
+                   "wifiTestTextCache.publish(4, credentialState",
+                   "UiTextId::WifiTestPasswordIdle", "secret[i] = 0"):
+        if marker not in render: failures.append("missing ephemeral TFT credential bound: " + marker)
     return failures
 
 def check_repository():
     base = ROOT / "firmware/leshy1/src/platform/arduino"
-    return check((base / "BoardWifiTestNetwork.cpp").read_text(),
-                 (base / "ArduinoEntry.cpp").read_text())
+    failures = check((base / "BoardWifiTestNetwork.cpp").read_text(),
+                     (base / "ArduinoEntry.cpp").read_text())
+    if 'return started_ ? password_.data() : "";' not in (base / "BoardWifiTestNetwork.h").read_text():
+        failures.append("credential visible while AP inactive")
+    return failures
 
 if __name__ == "__main__":
     failures = check_repository()

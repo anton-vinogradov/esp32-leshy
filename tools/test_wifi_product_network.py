@@ -44,5 +44,14 @@ class ProductNetworkTests(unittest.TestCase):
     def test_timed_capture_never_retries_into_another_scene(self):
         source = Path(runner.__file__).read_text()
         self.assertIn("capture(device, frames, name, maximum_attempts=1)", source)
+    def test_credential_not_logged_or_cached(self):
+        for entry in (
+            self.entry.replace("wifiTestTextCache.publish(4, credentialState",
+                               "wifiTestTextCache.publish(4, credential"),
+            self.entry.replace("secret[i] = 0", "secret[i] = 1"),
+            self.entry.replace("void emitWifiTestNetworkState(Stream& reply) {",
+                "void emitWifiTestNetworkState(Stream& reply) { reply.println(boardWifiTestNetwork.displayPassword());"),
+        ):
+            with self.subTest(): self.assertTrue(check(self.adapter, entry))
 
 if __name__ == "__main__": unittest.main()

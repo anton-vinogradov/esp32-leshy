@@ -39,6 +39,14 @@ class NameEvidenceTests(EvidenceTests):
         r['name_countdown_pixels']=name_countdown_diff(raw,later)
 
     def test_positive(self): self.assertEqual(check(self.run,self.folder), [])
+    def test_ap_only_cannot_claim_client(self):
+        for label in NAME_STATES:
+            self.run['states'][label].update(name_window_client_seen=False,name_window_client_matches=False)
+        self.assertEqual(check(self.run,self.folder), [])
+        for key, value in (('name_window_client_seen',True),('name_window_client_matches',True),
+                           ('name_window_client_seen',None)):
+            r=copy.deepcopy(self.run);r['states']['name_ap_frame'][key]=value
+            self.assertTrue(check(r,self.folder))
     def test_name_tamper(self):
         for label,key,value in (
             ('name_ready','name_receiver_owned',True),

@@ -57,6 +57,8 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--name-listen", action="store_true",
                         help="Also verify ordinary 20-second selected-name listening (not client association)")
+    parser.add_argument("--credential-display", action="store_true",
+                        help="Verify the local-only temporary password region (dev.391+)")
     args = parser.parse_args()
     require(args.source_port != args.receiver_port, "ports must differ")
     require(args.source_mac.replace(":", "").lower() !=
@@ -79,6 +81,7 @@ def main():
               "app_elf_sha256": app_elf_sha256(image), "failures": [],
               "board_identities": board_identities,
               "name_listener_requested": args.name_listen,
+              "credential_display_requested": args.credential_display,
               "states": {}, "screens": {}, "cleanup": {}}
 
     def checkpoint(step):
@@ -356,6 +359,18 @@ def main():
                     "physical deadline outside timing bounds")
             report["states"]["deadline"] = ended
             screen(source, "source-deadline")
+            if args.credential_display:
+                # The old/expired credential itself never enters JSON/logs.
+                def credential_pixels(label):
+                    raw = (frames / (label + ".rgb565")).read_bytes()
+                    require(len(raw) == 153600, "incomplete credential TFT frame")
+                    return raw[74 * 240 * 2:93 * 240 * 2]
+                idle = credential_pixels("source-ready")
+                active = credential_pixels("source-running")
+                ended = credential_pixels("source-deadline")
+                require(idle != active and idle == ended,
+                        "local credential not shown/removed across deadline")
+                report["credential_pixels"] = {"shown_region_changed": True, "inactive_region_restored": True}
             report["status"] = "pass"
         except (Exception, KeyboardInterrupt) as error:
             report["status"] = "failed"

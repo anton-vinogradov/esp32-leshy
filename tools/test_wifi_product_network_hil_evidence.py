@@ -60,6 +60,20 @@ class EvidenceTests(unittest.TestCase):
         r['countdown_pixels'] = countdown_diff(raw,later)
 
     def test_positive(self): self.assertEqual(check(self.run,self.folder), [])
+    def test_ephemeral_credential_pixels(self):
+        r = self.run
+        r['credential_display_requested'] = True
+        r['credential_pixels'] = dict(shown_region_changed=True, inactive_region_restored=True)
+        self.assertIn('ephemeral credential TFT region', check(r, self.folder))
+        for label in ('source-running','source-running-later'):
+            path=self.folder/'frames'/f'{label}.rgb565'
+            frame=bytearray(path.read_bytes()); frame[(76*240+15)*2]=1
+            path.write_bytes(frame);r['screens'][label]['rgb565_sha256']=digest(frame)
+        self.assertEqual(check(r,self.folder), [])
+        path=self.folder/'frames/source-deadline.rgb565'
+        frame=bytearray(path.read_bytes());frame[(76*240+15)*2]=1
+        path.write_bytes(frame);r['screens']['source-deadline']['rgb565_sha256']=digest(frame)
+        self.assertIn('ephemeral credential TFT region',check(r,self.folder))
     def test_same_board(self):
         self.run['board_identities']['receiver'] = 'a'*64
         self.assertIn('two distinct physical identities',check(self.run,self.folder))
