@@ -106,11 +106,40 @@ def main():
 
     checkpoint("preflight")
     with ExitStack() as stack:
+        class TracedSerial(PassiveSerial):
+            """Private, bounded, flushed command/JSON trace; no binary GRAM."""
+            def trace(self, direction, data):
+                if not data: return
+                record = json.dumps({"monotonic_s": time.monotonic(),
+                    "direction": direction, "hex": data.hex()}) + "\n"
+                self.trace_stats["bytes_observed"] += len(data)
+                if direction == "rx" and not data.endswith(b"\n"):
+                    self.trace_stats["partial_lines"] += 1
+                if self.trace_stats["file_bytes"] + len(record) <= 4 * 1024 * 1024:
+                    self.trace_file.write(record)
+                    self.trace_file.flush()
+                    self.trace_stats["file_bytes"] += len(record)
+                else: self.trace_stats["truncated"] = True
+
+            def readline(self, *args, **kwargs):
+                data = super().readline(*args, **kwargs)
+                self.trace("rx", data)
+                return data
+
+            def write(self, data):
+                self.trace("tx", data)
+                return super().write(data)
+
         devices = {}
         try:
             for role in ("source", "receiver"):
-                device = stack.enter_context(PassiveSerial(
+                trace_file = stack.enter_context((args.output / (role + "-console.jsonl")).open("x"))
+                device = stack.enter_context(TracedSerial(
                     getattr(args, role + "_port"), 115200, timeout=.1))
+                device.trace_file = trace_file
+                device.trace_stats = {"file_bytes": 0, "bytes_observed": 0,
+                                      "partial_lines": 0, "truncated": False}
+                report.setdefault("console_traces", {})[role] = device.trace_stats
                 devices[role] = device
                 synchronize_console(device, 10)
                 boot, _ = stabilized_boot_metrics(device)
@@ -250,6 +279,8 @@ def main():
                     raise TimeoutError(label)
                 ready = detail()
                 require(ready["name_listen_state"] == "idle" and not ready["name_receiver_owned"], "page started receiver")
+                require(ready["name_window_duration_ms"] == 0 and not ready["name_window_found"] and
+                        not ready["name_scan_restored"], "new page retained old window result")
                 require(not ready["ssid_known"], "fresh hidden target unexpectedly named")
                 report["states"]["name_ready"] = ready
                 screen(receiver, "name-ready")

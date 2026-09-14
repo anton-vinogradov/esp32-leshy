@@ -14622,7 +14622,7 @@ NavigationFooter navigationFooterForCurrentState() {
                 return {back, {}, {NavigationKey::Right, UiTextId::NavListen}};
             if (wifiNetworkNavigation.page() == WifiNetworkPage::ListenName)
                 return {back, {}, {NavigationKey::Select,
-                    wifiNameBusy() ? UiTextId::NavStop : UiTextId::NavStart}};
+                    UiTextId::NavStartStop}};
             if (wifiNetworkNavigation.page() == WifiNetworkPage::Summary) {
                 return {{NavigationKey::Left, UiTextId::NavList},
                         {NavigationKey::Select, UiTextId::NavRadar},
@@ -18639,7 +18639,7 @@ void renderWifiNetworkDetailData() {
         renderWifiNetworkText(7, name && name->conflict ? tr(UiTextId::WifiNameConflict) :
             (name && name->source == leshy1::apps::wifi::WifiNameSource::ClientConnection &&
                 !name->apConfirmed ? tr(UiTextId::WifiNameUnconfirmed) : ""), Palette::Warning, 207);
-        renderWifiNameActionButton(wifiNameBusy() ? UiTextId::WifiTestStop : UiTextId::WifiTestStart);
+        renderWifiNameActionButton(wifiNameBusy() ? UiTextId::NavStop : UiTextId::NavStart);
     } else if (page == WifiNetworkPage::Protection) {
         const WifiSecurityAssessment assessment = assessWifiSecurity(facts);
         renderWifiNetworkText(2, tr(wifiSecurityPostureText(assessment.posture)),
@@ -30728,6 +30728,8 @@ bool startWifiNetworksProduct() {
     wifiNameListenState = WifiNameListenState::Idle;
     wifiNameStatus = "idle";
     wifiNameScanRestored = false;
+    wifiNameResult = {};
+    wifiNameStartedUs = wifiNameEndedUs = 0;
     if (surveyWorkflow.state() != SurveyWorkflowState::Setup) {
         surveyPipeline.resetToSetup();
     }
@@ -32550,6 +32552,9 @@ bool applyUiAction(UiAction action, bool render = true) {
                 if (wifiNetworkNavigation.page() == WifiNetworkPage::ListenName && !wifiNameBusy()) {
                     wifiNameListenState = WifiNameListenState::Idle;
                     wifiNameStatus = "idle";
+                    wifiNameResult = {};
+                    wifiNameStartedUs = wifiNameEndedUs = 0;
+                    wifiNameScanRestored = false;
                 }
                 lastRuntimeEvent = "wifi_network_navigation";
                 changed = true;

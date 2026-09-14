@@ -44,13 +44,28 @@ class PassiveSerial(serial.Serial):
 
 def read_json(device: serial.Serial, schema: str, kind: str, timeout: float = 5.0) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
+    # Pyserial readline() may return a fragment when its short transport
+    # timeout expires. Keep it until LF, including split UTF-8 code points.
+    # Never read ahead: a frame_begin record can be followed by binary GRAM.
+    pending = bytearray()
+    received = fragments = invalid = 0
     while time.monotonic() < deadline:
-        line = device.readline()
-        if not line:
+        chunk = device.readline()
+        if not chunk:
             continue
+        received += len(chunk)
+        pending.extend(chunk)
+        if len(pending) > 262144:
+            raise RuntimeError("console JSON line exceeds 256 KiB")
+        if not pending.endswith(b"\n"):
+            fragments += 1
+            continue
+        line = bytes(pending)
+        pending.clear()
         try:
             value = json.loads(line)
         except (UnicodeDecodeError, json.JSONDecodeError):
+            invalid += 1
             continue
         if isinstance(value, dict) and value.get("schema") == schema:
             if value.get("kind") == "error":
@@ -59,7 +74,9 @@ def read_json(device: serial.Serial, schema: str, kind: str, timeout: float = 5.
                 raise RuntimeError(f"device rejected command: {value}")
             if value.get("kind") == kind:
                 return value
-    raise TimeoutError(f"timed out waiting for {schema}/{kind}")
+    raise TimeoutError(f"timed out waiting for {schema}/{kind}: "
+                       f"bytes={received}, fragments={fragments}, "
+                       f"invalid_lines={invalid}, pending_bytes={len(pending)}")
 
 
 def synchronize_console(device: serial.Serial, timeout: float = 5.0) -> None:
