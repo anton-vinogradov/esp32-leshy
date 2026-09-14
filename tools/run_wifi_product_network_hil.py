@@ -132,10 +132,10 @@ def main():
             checkpoint("source_start_touch")
             query(source, b"ui.touch 120 180", "leshy.touch.frontend.v1", "state")
             started = ap(source)
+            report["states"]["started"] = started
             require(started["active"] and started["hidden"] and started["radio_started"] and
                     started["power_quarter_dbm"] == 8 and started["lease_mask"] == 3,
                     "touch did not start bounded product AP")
-            report["states"]["started"] = started
             screen(source, "source-running")
             time.sleep(1.2)
             screen(source, "source-running-later")
@@ -208,6 +208,22 @@ def main():
         except (Exception, KeyboardInterrupt) as error:
             report["status"] = "failed"
             report["failures"].append(f"{type(error).__name__}: {error}")
+            # Preserve the reason before ordinary Back/Stop cleanup changes it.
+            # Reads only; no retry, restart, radio start or deadline renewal.
+            report["failure_snapshot"] = {}
+            checkpoint("failure_snapshot")
+            for role, device in devices.items():
+                snapshot = report["failure_snapshot"][role] = {}
+                for name, command, schema in (
+                    ("ui", b"ui.state", "leshy.ui.v1"),
+                    ("safety", b"safety.state", "leshy.safety.v1"),
+                    ("test_network", b"wifi.test-network.state", "leshy.wifi.test_network.v1"),
+                ):
+                    try:
+                        snapshot[name] = query(device, command, schema, "state")
+                    except Exception as diagnostic_error:
+                        snapshot[name] = {"unavailable": str(diagnostic_error)}
+                checkpoint("failure_snapshot:" + role)
         finally:
             for role, device in devices.items():
                 checkpoint("cleanup:" + role)
