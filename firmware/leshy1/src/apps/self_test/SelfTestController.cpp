@@ -253,6 +253,7 @@ bool SelfTestController::activate(const SelfTestFacts& facts,
         selectedMode() == SelfTestMode::WifiNetwork) {
         report_ = {};
         report_.mode = SelfTestMode::WifiNetwork;
+        report_.readOnly = false;  // This tool can explicitly transmit; no Pass is implied.
         runAwaitingFinish_ = false;
         view_ = SelfTestView::WifiNetwork;
         return true;  // Menu entry is not radio start and not a test pass.

@@ -27,6 +27,7 @@ int main() {
     assert(menu.activate({}, 1));
     assert(menu.view() == SelfTestView::WifiNetwork);
     assert(!menu.hasReport() && !menu.runAwaitingFinish());
+    assert(!menu.report().readOnly);
     assert(!menu.activate({}, 2));
     assert(menu.back() && menu.view() == SelfTestView::ModeMenu);
     assert(menu.selection() == 2);

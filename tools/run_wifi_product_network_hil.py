@@ -21,6 +21,7 @@ def require(value, message):
 def exact_port(port, expected):
     observed = serial_metadata(port)["serial_number"].replace(":", "").lower()
     require(observed == expected.replace(":", "").lower(), "wrong physical board")
+    return observed
 
 def bssid_hash(value):
     result = 2166136261
@@ -50,8 +51,10 @@ def main():
     require(args.source_port != args.receiver_port, "ports must differ")
     require(args.source_mac.replace(":", "").lower() !=
             args.receiver_mac.replace(":", "").lower(), "physical boards must differ")
-    exact_port(args.source_port, args.source_mac)
-    exact_port(args.receiver_port, args.receiver_mac)
+    board_identities = {
+        role: hashlib.sha256(exact_port(getattr(args, role + "_port"),
+            getattr(args, role + "_mac")).encode()).hexdigest()
+        for role in ("source", "receiver")}
     require(not args.output.exists(), "output must be new")
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -64,6 +67,7 @@ def main():
                   ["git", "rev-parse", "HEAD"], text=True).strip(),
               "image_sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
               "app_elf_sha256": app_elf_sha256(image), "failures": [],
+              "board_identities": board_identities,
               "states": {}, "screens": {}, "cleanup": {}}
 
     def checkpoint(step):
@@ -114,7 +118,11 @@ def main():
             action(source, "down")
             action(source, "down")
             action(source, "right")
-            require(ui(source)["self_test_view"] == "wifi_network", "ordinary Wi-Fi test missing")
+            source_view = ui(source)
+            require(source_view["self_test_view"] == "wifi_network" and
+                    source_view["self_test_read_only"] is False and
+                    source_view["self_test_status"] == "not_run",
+                    "ordinary transmitting tool must not claim read-only or Pass")
             state = ap(source)
             require(not state["active"] and not state["radio_started"] and
                     state["cleanup_complete"], "menu must not start AP")
@@ -193,8 +201,12 @@ def main():
             report["states"]["user_stop"] = stopped
             checkpoint("deadline")
             action(source, "down")
+            deadline_start = time.monotonic()
             action(source, "right")
-            require(ap(source)["active"], "second explicit start failed")
+            second = ap(source)
+            report["states"]["deadline_start"] = second
+            require(second["active"] and 58 <= second["remaining_s"] <= 60,
+                    "second explicit start failed")
             deadline = time.monotonic() + 64
             while time.monotonic() < deadline:
                 ended = ap(source)
@@ -202,6 +214,9 @@ def main():
                 time.sleep(.4)
             require(not ended["radio_started"] and ended["cleanup_complete"] and
                     ended["stop_reason"] == 2 and ended["lease_mask"] == 1, "deadline stop failed")
+            report["deadline_observed_s"] = round(time.monotonic() - deadline_start, 3)
+            require(59 <= report["deadline_observed_s"] <= 63,
+                    "physical deadline outside timing bounds")
             report["states"]["deadline"] = ended
             screen(source, "source-deadline")
             report["status"] = "pass"
