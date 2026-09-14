@@ -2,7 +2,18 @@
 
 *Read in: **English** · [Русский](RESOURCE_BUDGETS.ru.md)*
 
-## Latest product delta — RB-M268 (14 September 2026)
+## Current build; hardware blocked — RB-M269 (14 September 2026)
+
+Ordinary dev.391, source `18b4798`: static RAM **238840 B** (+104 vs dev.390),
+linked flash **3633604 B**, app **3634112 B**, OTA free **560192 B**
+(35904 B above the floor). First client evidence adds fixed tracker state; the
+temporary password reuses the metadata sprite/cache without caching the secret.
+Full tracked host suite, focused regressions and ASan/UBSan passed.
+[Deployment blocker](../../tests/hil/evidence/wifi-product-network-dev391-console-blocker.json):
+one original-DIV app write verified, runtime/heap unknown after USB silence,
+including one reset. Second DIV untouched; no new HIL or heap acceptance.
+
+## Previous product delta — RB-M268 (14 September 2026)
 
 Ordinary dev.390, firmware `80b653c`: static RAM **238736 B** (+872 vs dev.388),
 linked flash **3632704 B**, app **3633200 B**, OTA free **561104 B**

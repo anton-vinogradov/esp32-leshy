@@ -2,7 +2,18 @@
 
 *Читать на: [English](RESOURCE_BUDGETS.md) · **Русский***
 
-## Текущая product-дельта — RB-M268 (14 сентября 2026)
+## Текущая сборка; HIL заблокирован — RB-M269 (14 сентября 2026)
+
+Обычная dev.391, source `18b4798`: static RAM **238840 B** (+104 к dev.390),
+linked flash **3633604 B**, app **3634112 B**, OTA free **560192 B**
+(35904 B сверх floor). Первый клиентский кадр хранится в ограниченном tracker;
+пароль использует прежние metadata sprite/cache, сам секрет в кэш не попадает.
+Прошли полный tracked host-suite, focused regressions и ASan/UBSan.
+[Блокер деплоя](../../tests/hil/evidence/wifi-product-network-dev391-console-blocker.json):
+одна запись app оригинала проверена, runtime/heap неизвестны после молчания USB,
+включая один reset. Второй DIV не изменён; новой HIL/heap-приёмки нет.
+
+## Предыдущая product-дельта — RB-M268 (14 сентября 2026)
 
 Обычная dev.390, firmware `80b653c`: static RAM **238736 B** (+872 к dev.388),
 linked flash **3632704 B**, app **3633200 B**, OTA free **561104 B**

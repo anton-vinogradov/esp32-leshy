@@ -7,6 +7,14 @@ lives in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md).
 
 ## Top-level goals
 
+Phone-test preparation: `E-BUILD-256 / E-AUTO-235 / E-HIL-252 (blocked) / E-UX-102 / RB-M269`
+bind PR-004/009/011 and NFR-002/010 to ordinary dev.391 (`18b4798`).
+Local-only temporary password, retained rendering and AP-first/client-frame
+provenance pass host/build checks. Full tracked host suite also closes the stale
+catalog-token CI failure. [Deployment evidence](../../tests/hil/evidence/wifi-product-network-dev391-console-blocker.json)
+records one verified app write, silent original-DIV console after one reset,
+and an unchanged idle receiver. No new physical, feature or cadence credit.
+
 Name-listener refinement: `E-BUILD-255 / E-AUTO-234 / E-HIL-251 / E-UX-101 / RB-M268`
 bind PR-004/009/011 and NFR-002/010 to [ordinary dev.390](../../tests/hil/evidence/wifi-name-listen-1.0.0-dev.390.json).
 Host decoder/catalog/safety/render contracts, ASan/UBSan, 28 evidence-checker and

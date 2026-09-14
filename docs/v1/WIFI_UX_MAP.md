@@ -8,6 +8,13 @@ roles where useful. Publishing mockups does not close implementation or HIL gate
 
 ## Installed checkpoint — 14 September, dev.390
 
+Dev.391 is **built, not hardware-accepted**: the test-network screen shows its
+random WPA2 password only during the 60-second session; Stop/deadline removes it.
+The listener separately marks a client connection frame even if an AP response
+reveals the name first. Both use retained text regions.
+[Deployment is blocked](../../tests/hil/evidence/wifi-product-network-dev391-console-blocker.json)
+by a silent original-DIV USB console; the receiver still runs dev.390.
+
 Implemented: Nearby networks → summary → OK signal finder / Right actions →
 protection, password preparation, or four information branches (identity,
 protection, radio, observations). Key/touch routes preserve the selected AP.
@@ -67,6 +74,8 @@ same navigation contract in English.
 flowchart TD
     DEV["Device"] --> SELF["Self-check"] --> TEST["Check Wi-Fi"]
     TEST --> START["Create own test network — 60 s / Stop"]
+    START --> CREDENTIAL["dev.391 built: local WPA2 password; no internet"]
+    CREDENTIAL -. "Owned phone; physical gate open" .-> PHONE["Normal connection; listener checks observed frame"]
     START -. "Second DIV receives" .-> N
     W["Wi-Fi"] --> N["Nearby networks"]
     W --> D["Devices on air"]

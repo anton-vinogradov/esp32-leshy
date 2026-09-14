@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Host regressions for ordinary-product two-board verification."""
 import unittest
+import json
+import struct
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 from check_wifi_test_network_contract import ROOT, check
@@ -53,5 +56,33 @@ class ProductNetworkTests(unittest.TestCase):
                 "void emitWifiTestNetworkState(Stream& reply) { reply.println(boardWifiTestNetwork.displayPassword());"),
         ):
             with self.subTest(): self.assertTrue(check(self.adapter, entry))
+    def test_console_blocker_requires_actual_failure_shape(self):
+        from retain_wifi_product_boot_blocker import retain_console_timeout
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            image = bytearray(288); image[0] = 0xe9
+            struct.pack_into('<I', image, 32, 0xabcd5432)
+            image[176:208] = bytes([1])*32
+            (folder/'firmware.bin').write_bytes(image)
+            deploy = folder/'deploy.log'
+            deploy.write_text('Wrote 288 bytes\nHash of data verified.\n'
+                'TimeoutError: timed out synchronizing the firmware console\n')
+            for filename in ('source-one-reset.log','source-post-deploy-probe.log'):
+                (folder/filename).write_bytes(b'')
+            def record(filename, value):
+                (folder/filename).write_text(json.dumps(value, separators=(',',':'))+'\n')
+            record('receiver-post-deploy-probe.log', dict(schema='leshy.ui.v1',
+                page='home', lease_mask=0, safety_latched=False))
+            record('source-boot.log', dict(schema='leshy.storage.product_boot_retry.v1',
+                cleanup_complete=True, blocked_write_attempts=0, completed_attempts=1))
+            result = retain_console_timeout(folder, deploy)
+            self.assertFalse(result['application_runtime_verified'])
+            self.assertFalse(result['two_board_acceptance'])
+            self.assertEqual(result['observed_sd_retry_attempts'], [1])
+            (folder/'source-one-reset.log').write_bytes(b'new evidence')
+            with self.assertRaises(ValueError): retain_console_timeout(folder, deploy)
+            (folder/'source-one-reset.log').write_bytes(b'')
+            deploy.write_text('write never completed')
+            with self.assertRaises(ValueError): retain_console_timeout(folder, deploy)
 
 if __name__ == "__main__": unittest.main()

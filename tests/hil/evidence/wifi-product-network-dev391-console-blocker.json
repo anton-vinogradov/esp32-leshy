@@ -1,0 +1,31 @@
+{
+  "schema": "leshy.wifi_product_boot.console_timeout.v1",
+  "status": "blocked",
+  "two_board_acceptance": false,
+  "application_runtime_verified": false,
+  "app_elf_sha256": "7b6d5a0bc2f44e863296fb35ac0dc9773f3e95519fa39a11d05acf8345739162",
+  "image_sha256": "31e0bb976ce3142d0e2bc96e7d0f2031ae33c4e3d9f1ad8227c8cc695b193aef",
+  "image_bytes": 3634112,
+  "verified_flash_writes": 1,
+  "test_network_started": false,
+  "observed_sd_retry_attempts": [
+    1
+  ],
+  "source_post_flash_state": "unknown; USB silent",
+  "receiver_state": {
+    "page": "home",
+    "lease_mask": 0,
+    "safety_latched": false
+  },
+  "receiver_flashed": false,
+  "controlled_reset_attempts": 1,
+  "cause": "Unconfirmed. Last serial output is a clean missing-media retry followed by ROM boot; silence does not distinguish a stalled application from a USB transport failure.",
+  "private_log_sha256": {
+    "deploy-name391.log": "940bd02de5dc5a2928a0b60f7e5f1fa7850393601adca391ecbb2c32e3f79dfd",
+    "source-boot.log": "f83a334526bb793b4a1ee2f688b46a9d9b3010edb5d2027e9b6ac9bb28cf6689",
+    "source-post-deploy-probe.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "receiver-post-deploy-probe.log": "0027ff7a37072c854d5b03e61acb6231b7c09e1c13766e49016c07fbfad64a7a",
+    "source-one-reset.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "limits": "No new feature/cadence credit, no test AP or client positive. Do not infer a watchdog trip, SD defect, or safe final source state from a silent console."
+}

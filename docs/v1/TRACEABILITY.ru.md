@@ -7,6 +7,14 @@
 
 ## Цели верхнего уровня
 
+Подготовка теста с телефоном: `E-BUILD-256 / E-AUTO-235 / E-HIL-252 (blocked) / E-UX-102 / RB-M269`
+связывает PR-004/009/011 и NFR-002/010 с обычной dev.391 (`18b4798`).
+Временный пароль только на TFT, retained rendering и отдельный клиентский кадр
+при AP-first прошли host/build. Полный tracked host-suite также закрывает
+устаревший catalog-token guard CI. [Evidence деплоя](../../tests/hil/evidence/wifi-product-network-dev391-console-blocker.json)
+сохраняет одну проверенную запись app, молчание USB оригинала после одного reset
+и неизменённый приёмник на Home. Нового physical/feature/cadence credit нет.
+
 Доработка имени: `E-BUILD-255 / E-AUTO-234 / E-HIL-251 / E-UX-101 / RB-M268`
 связывает PR-004/009/011 и NFR-002/010 с [обычной dev.390](../../tests/hil/evidence/wifi-name-listen-1.0.0-dev.390.json).
 Прошли host-контракты decoder/catalog/safety/render, ASan/UBSan, 28 тестов evidence

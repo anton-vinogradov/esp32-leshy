@@ -27,6 +27,13 @@ positive remains a separate gate; host coverage alone does not close it.
 
 ## User presentation
 
+Dev.391 preparation (built; deployment blocked): the ordinary test-network screen
+shows a new random WPA2 password while active, never in USB state or on SD.
+The listener retains the first client frame independently: a directed AP probe
+response can arrive first, so AP-first is not relabelled as client-first.
+The display says a connection **frame was heard**, not that authentication,
+DHCP or internet succeeded. Phone hardware qualification remains open.
+
 Dev.390 [physical delta](../../tests/hil/evidence/wifi-name-listen-1.0.0-dev.390.json):
 20.001 s with no name, live AP-frame name, touch Stop, fresh scan restoration and
 13 TFT captures; countdown 26 changed dynamic / zero static pixels. Both boards
@@ -59,8 +66,9 @@ leaving the page also stops it. Failed cleanup latches safety and resets rather
 than releasing a possibly live radio. Opening this tool does not create a
 self-test Pass report. It needs no SD.
 
-This first source mode checks discovery only: no DHCP, web server, internet,
-client connection, raw injection, deauthentication or laptop networking.
+The accepted source baseline checks discovery only. Dev.391 prepares an owned
+phone connection-frame check, with no DHCP, web server, internet, raw injection,
+deauthentication or laptop networking.
 The driver applies/readbacks a 2 dBm configured power limit after Wi-Fi start;
 the SDK startup interval still uses its PHY default, so this is not a claim of
 measured power or a 2 dBm ceiling from the first transmitted frame.
