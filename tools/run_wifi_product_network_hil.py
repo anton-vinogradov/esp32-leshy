@@ -92,7 +92,9 @@ def main():
         return query(device, b"wifi.test-network.state", "leshy.wifi.test_network.v1", "state")
     def screen(device, name):
         checkpoint("capture:" + name)
-        report["screens"][name] = capture(device, frames, name)
+        # A 30-second transport retry can cross the 20-second receive deadline
+        # and compare different scenes. Preserve the transport failure instead.
+        report["screens"][name] = capture(device, frames, name, maximum_attempts=1)
     def root_item(device, identifier):
         require(ui(device)["page"] == "home", "Home required")
         for _ in range(20):

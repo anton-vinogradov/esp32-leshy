@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Host regressions for ordinary-product two-board verification."""
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 from check_wifi_test_network_contract import ROOT, check
 import run_wifi_product_network_hil as runner
@@ -40,5 +41,8 @@ class ProductNetworkTests(unittest.TestCase):
         with self.assertRaises(RuntimeError): runner.countdown_diff(b"", b"")
     def test_bssid_hash(self):
         self.assertEqual(runner.bssid_hash("000000000000"), 2138539933)
+    def test_timed_capture_never_retries_into_another_scene(self):
+        source = Path(runner.__file__).read_text()
+        self.assertIn("capture(device, frames, name, maximum_attempts=1)", source)
 
 if __name__ == "__main__": unittest.main()
