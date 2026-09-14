@@ -101,7 +101,14 @@ int main() {
     for (unsigned row = 0; row < 4; ++row) {
         nav.handle(Key::Right);
         assert(nav.rowCount() == 0);
-        assert(nav.handle(Key::Ok) == Intent::None);
+        if (row == 0U) {
+            assert(nav.handle(Key::Right) == Intent::Changed);
+            assert(nav.page() == Page::ListenName);
+            assert(nav.handle(Key::Right) == Intent::None); // Only OK starts.
+            assert(nav.handle(Key::Ok) == Intent::ListenName);
+            nav.handle(Key::Left);
+            assert(nav.page() == Page::Identity);
+        } else assert(nav.handle(Key::Ok) == Intent::None);
         nav.handle(Key::Left);
         assert(nav.page() == Page::Information);
         // Protection must return to its own info row, not the first row.

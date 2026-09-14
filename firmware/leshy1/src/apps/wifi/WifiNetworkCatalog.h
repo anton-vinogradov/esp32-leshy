@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "domain/observations/Observation.h"
+#include "apps/wifi/WifiNetworkNameEvidence.h"
 
 namespace leshy1::apps::wifi {
 
@@ -13,6 +14,13 @@ struct WifiNetworkSignalStats final {
     std::int16_t minimumRssiDbm = 0;
     std::int16_t maximumRssiDbm = 0;
     std::int16_t rssiTrendDb = 0;
+};
+
+struct WifiNetworkNameFacts final {
+    std::uint64_t observedUs = 0;
+    WifiNameSource source = WifiNameSource::None;
+    bool apConfirmed = false;
+    bool conflict = false;
 };
 
 // A bounded, allocation-free live view of nearby access points. Survey
@@ -33,6 +41,12 @@ public:
     std::uint32_t revision() const { return revision_; }
     std::uint32_t hiddenResolutions() const { return hiddenResolutions_; }
     bool strongestFirst() const;
+    // Name-only enrichment never changes AP RSSI, sample count or radio age.
+    bool learnName(const WifiNetworkNameEvidence& evidence);
+    bool learnNames(const WifiNetworkNameTracker& tracker);
+    const WifiNetworkNameFacts* nameAt(std::size_t index) const {
+        return index < size_ ? &names_[index] : nullptr;
+    }
     const domain::observations::Observation* at(std::size_t index) const;
     const WifiNetworkSignalStats* signalAt(std::size_t index) const;
     std::size_t indexOfIdentity(
@@ -49,6 +63,7 @@ private:
 
     std::array<domain::observations::Observation, kCapacity> entries_{};
     std::array<WifiNetworkSignalStats, kCapacity> signals_{};
+    std::array<WifiNetworkNameFacts, kCapacity> names_{};
     std::size_t size_ = 0;
     std::uint32_t revision_ = 0;
     std::uint32_t hiddenResolutions_ = 0;

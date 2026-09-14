@@ -10,6 +10,7 @@
 #include "apps/capture/WifiFrameCapture.h"
 #include "apps/wifi/WifiChannelLoad.h"
 #include "apps/wifi/WifiDeviceCatalog.h"
+#include "apps/wifi/WifiNetworkNameEvidence.h"
 #include "platform/arduino/BoardWifiPassiveInitConfig.h"
 #include "platform/arduino/WifiPassiveCaptureTeardownPolicy.h"
 #include "services/auth/WifiAuthenticationCapture.h"
@@ -124,6 +125,9 @@ public:
         const apps::capture::WifiFrameCapturePlan& plan,
         const std::array<std::uint8_t, 6>& targetAccessPoint,
         std::uint64_t startedUs);
+    bool beginNameMonitor(const std::array<std::uint8_t, 6>& accessPoint,
+                          std::uint8_t channel, std::uint64_t startedUs);
+    apps::wifi::WifiNetworkNameTracker nameSnapshot() const;
     bool service(std::uint64_t nowUs);
     bool stop(std::uint64_t endedUs);
     void reset();
@@ -165,7 +169,8 @@ private:
                       std::uint64_t startedUs, bool airspaceGuardMonitor,
                       bool authenticationCapture = false,
                       const std::array<std::uint8_t, 6>*
-                          authenticationTarget = nullptr);
+                          authenticationTarget = nullptr,
+                      bool nameMonitor = false);
     static void receive(void* buffer, wifi_promiscuous_pkt_type_t type);
     void accept(void* buffer, wifi_promiscuous_pkt_type_t type,
                 std::uint32_t generation);
@@ -208,6 +213,8 @@ private:
     bool channelMonitor_ = false;
     bool airspaceGuardMonitor_ = false;
     bool authenticationCapture_ = false;
+    bool nameMonitor_ = false;
+    apps::wifi::WifiNetworkNameTracker nameTracker_{};
     bool initialized_ = false;
     bool started_ = false;
     bool promiscuous_ = false;

@@ -155,7 +155,7 @@ WifiPassiveTeardownState BoardWifiPassiveCapture::teardownState(
         ? 0U : callbacksInFlight_;
     portEXIT_CRITICAL(&callbackMux_);
     state.logicalModeHeld = deviceMonitor_ || channelMonitor_ ||
-        airspaceGuardMonitor_ || authenticationCapture_ ||
+        airspaceGuardMonitor_ || authenticationCapture_ || nameMonitor_ ||
         state.callbackOwnerHeld;
     state.promiscuous = promiscuous_;
     state.started = started_;
@@ -213,6 +213,7 @@ void BoardWifiPassiveCapture::releaseFailedBegin() {
     channelMonitor_ = false;
     airspaceGuardMonitor_ = false;
     authenticationCapture_ = false;
+    nameMonitor_ = false;
     releaseCallbackOwner();
     releaseWifiPassiveCallbackOwner(&teardown);
 }
@@ -248,11 +249,31 @@ bool BoardWifiPassiveCapture::beginAuthenticationCapture(
     return beginCapture(plan, startedUs, false, true, &targetAccessPoint);
 }
 
+bool BoardWifiPassiveCapture::beginNameMonitor(
+    const std::array<std::uint8_t, 6>& accessPoint, std::uint8_t channel,
+    std::uint64_t startedUs) {
+    if (initialized_ || started_ || promiscuous_ || !cleanupComplete_ ||
+        !nameTracker_.reset(accessPoint, channel)) return false;
+    apps::capture::WifiFrameCapturePlan plan{};
+    plan.channel = channel;
+    plan.durationMs = 20000U;
+    // Reuse the proven receive/teardown lifecycle, but retain only decoded
+    // names, never a second frame queue or unrelated client payloads.
+    return beginCapture(plan, startedUs, false, false, nullptr, true);
+}
+
+apps::wifi::WifiNetworkNameTracker BoardWifiPassiveCapture::nameSnapshot() const {
+    portENTER_CRITICAL(&mux_);
+    const auto snapshot = nameTracker_;
+    portEXIT_CRITICAL(&mux_);
+    return snapshot;
+}
+
 bool BoardWifiPassiveCapture::beginCapture(
     const apps::capture::WifiFrameCapturePlan& plan,
     std::uint64_t startedUs, bool airspaceGuardMonitor,
     bool authenticationCapture,
-    const std::array<std::uint8_t, 6>* authenticationTarget) {
+    const std::array<std::uint8_t, 6>* authenticationTarget, bool nameMonitor) {
     if (initialized_ || started_ || promiscuous_) {
         return false;
     }
@@ -279,6 +300,7 @@ bool BoardWifiPassiveCapture::beginCapture(
     channelMonitor_ = false;
     airspaceGuardMonitor_ = airspaceGuardMonitor;
     authenticationCapture_ = authenticationCapture;
+    nameMonitor_ = nameMonitor;
     if (authenticationCapture) authenticationTarget_ = *authenticationTarget;
     airspaceGuardStats_ = {};
     authenticationStats_ = {};
@@ -353,7 +375,7 @@ bool BoardWifiPassiveCapture::beginCapture(
     wifi_promiscuous_filter_t filter{};
     filter.filter_mask = authenticationCapture_
         ? WIFI_PROMIS_FILTER_MASK_DATA
-        : (airspaceGuardMonitor_
+        : (airspaceGuardMonitor_ || nameMonitor_
                ? WIFI_PROMIS_FILTER_MASK_MGMT
                : WIFI_PROMIS_FILTER_MASK_MGMT |
                      WIFI_PROMIS_FILTER_MASK_CTRL |
@@ -662,7 +684,7 @@ bool BoardWifiPassiveCapture::stop(std::uint64_t endedUs) {
     if (!initialized_ && !started_ && !promiscuous_ &&
         !eventLoopOwned_ && !ownsCallbackLifecycle &&
         !deviceMonitor_ && !channelMonitor_ &&
-        !airspaceGuardMonitor_ && !authenticationCapture_) {
+        !airspaceGuardMonitor_ && !authenticationCapture_ && !nameMonitor_) {
         return cleanupComplete_ && terminalCapture;
     }
     closeCallbackAdmission();
@@ -773,6 +795,7 @@ bool BoardWifiPassiveCapture::stop(std::uint64_t endedUs) {
     channelMonitor_ = false;
     airspaceGuardMonitor_ = false;
     authenticationCapture_ = false;
+    nameMonitor_ = false;
     // Exact physical teardown is global to the one Wi-Fi adapter. Mark every
     // view clean so a failed begin whose mode flag was already folded down can
     // also be recovered by a later stop() retry.
@@ -804,6 +827,7 @@ void BoardWifiPassiveCapture::reset() {
     airspaceGuardStats_ = {};
     authenticationStats_ = {};
     authenticationTarget_ = {};
+    nameTracker_ = {};
     airspaceGuardIdentityRetention_.reset();
     channelLoad_.reset();
     portEXIT_CRITICAL(&mux_);
@@ -812,6 +836,7 @@ void BoardWifiPassiveCapture::reset() {
     channelMonitor_ = false;
     airspaceGuardMonitor_ = false;
     authenticationCapture_ = false;
+    nameMonitor_ = false;
     currentChannel_ = 0;
     nextChannelUs_ = 0;
     channelLandedUs_ = 0;
@@ -966,6 +991,30 @@ void BoardWifiPassiveCapture::accept(void* buffer,
         return;
     }
     const bool receiveValid = packet->rx_ctrl.rx_state == 0U;
+    if (nameMonitor_) {
+        if (!receiveValid || type != WIFI_PKT_MGMT) return;
+        domain::captures::WifiFrameView frame{};
+        frame.monotonicUs = static_cast<std::uint64_t>(esp_timer_get_time());
+        frame.capturedLength = packet->rx_ctrl.sig_len;
+        frame.originalLength = packet->rx_ctrl.sig_len;
+        frame.channel = packet->rx_ctrl.channel;
+        frame.kind = WifiFrameKind::Management;
+        frame.fcsIncluded = true;
+        frame.payload = packet->payload;
+        apps::wifi::WifiNetworkNameEvidence name{};
+        if (apps::wifi::decodeWifiNetworkName(frame, &name) ==
+            apps::wifi::WifiNameDecode::Visible) {
+            portENTER_CRITICAL(&mux_);
+            // Frames arriving at/after the deadline cannot extend the window.
+            const auto& stats = capture_.stats();
+            if (stats.state == WifiFrameCaptureState::Running &&
+                frame.monotonicUs >= stats.startedUs &&
+                frame.monotonicUs - stats.startedUs < 20000000ULL)
+                nameTracker_.accept(name);
+            portEXIT_CRITICAL(&mux_);
+        }
+        return;
+    }
     if (authenticationCapture_) {
         std::uint64_t receivedUs =
             static_cast<std::uint64_t>(esp_timer_get_time());

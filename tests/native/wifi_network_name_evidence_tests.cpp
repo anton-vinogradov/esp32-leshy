@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <vector>
 #include "apps/wifi/WifiNetworkNameEvidence.h"
+#include "apps/wifi/WifiNetworkCatalog.h"
 
 using namespace leshy1::apps::wifi;
 using leshy1::domain::captures::WifiFrameView;
@@ -117,5 +118,62 @@ int main() {
     assert(!tracker.reset({}, 6));
     assert(!tracker.accept(name) && tracker.primary().length == 0U);
     assert(!tracker.reset(ap, 14));
+    WifiNetworkCatalog catalog;
+    leshy1::domain::observations::Observation observation{};
+    observation.radio = leshy1::domain::observations::RadioKind::Wifi;
+    observation.identityLength = 6;
+    std::memcpy(observation.identity.data(), ap.data(), 6U);
+    observation.channel = 6;
+    observation.monotonicUs = 90;
+    observation.rssiDbm = -75;
+    assert(catalog.upsert(observation));
+    bytes = packet(0, {'N'});
+    assert(decodeWifiNetworkName(view(bytes), &name) == WifiNameDecode::Visible);
+    assert(catalog.learnName(name));
+    assert(catalog.at(0)->label[0] == 'N' && catalog.hiddenResolutions() == 1);
+    assert(catalog.at(0)->rssiDbm == -75 && catalog.at(0)->monotonicUs == 90);
+    assert(catalog.signalAt(0)->samples == 1);
+    assert(catalog.nameAt(0)->source == WifiNameSource::ClientConnection);
+    assert(!catalog.nameAt(0)->apConfirmed);
+    assert(!catalog.learnName(name));
+    observation.monotonicUs = 110;
+    observation.rssiDbm = -70;
+    catalog.upsert(observation); // A later hidden scan does not erase the name.
+    assert(catalog.at(0)->label[0] == 'N' && catalog.signalAt(0)->samples == 2);
+    observation.label[0] = 'N'; observation.labelLength = 1;
+    observation.monotonicUs = 120;
+    assert(catalog.upsert(observation));
+    assert(catalog.nameAt(0)->apConfirmed);
+    assert(catalog.nameAt(0)->source == WifiNameSource::ClientConnection);
+    name.name[0] = 'X'; name.observedUs = 121;
+    assert(catalog.learnName(name));
+    assert(catalog.nameAt(0)->conflict && catalog.at(0)->label[0] == 'N');
+    assert(catalog.nameAt(0)->observedUs == 120); // A conflict is not a refresh.
+    assert(catalog.at(0)->monotonicUs == 120 && catalog.signalAt(0)->samples == 3);
+    name.bssid[5] ^= 2U;
+    assert(!catalog.learnName(name));
+    observation.identity[5] ^= 2U; observation.rssiDbm = -30;
+    observation.label[0] = 'Z'; observation.monotonicUs = 130;
+    catalog.upsert(observation); // Provenance follows identity through sorting.
+    assert(catalog.at(1)->label[0] == 'N' && catalog.nameAt(1)->conflict);
+    assert(catalog.nameAt(0)->source == WifiNameSource::AccessPoint);
+    catalog.reset();
+    assert(catalog.size() == 0 && catalog.nameAt(0) == nullptr);
+    observation.identity[5] ^= 2U;
+    observation.monotonicUs = 10; observation.labelLength = 0;
+    catalog.upsert(observation);
+    tracker.reset(ap, 6);
+    name = {}; name.bssid = ap; name.channel = 6; name.length = 1;
+    name.name[0] = 'N'; name.observedUs = 100; name.source = WifiNameSource::ClientConnection;
+    tracker.accept(name);
+    name.name[0] = 'X'; name.observedUs = 101; tracker.accept(name);
+    name.name[0] = 'N'; name.observedUs = 102; name.source = WifiNameSource::AccessPoint;
+    tracker.accept(name);
+    name.observedUs = 103; tracker.accept(name);
+    assert(catalog.learnNames(tracker));
+    assert(catalog.nameAt(0)->source == WifiNameSource::ClientConnection);
+    assert(catalog.nameAt(0)->apConfirmed && catalog.nameAt(0)->conflict);
+    assert(catalog.nameAt(0)->observedUs == 103 && catalog.at(0)->monotonicUs == 10);
+    assert(!catalog.learnNames(tracker));
     std::puts("Wi-Fi name evidence: four frame types, exact bytes, address binding, conflicts, bounded state passed");
 }

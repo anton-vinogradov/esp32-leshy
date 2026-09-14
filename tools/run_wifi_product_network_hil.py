@@ -37,6 +37,14 @@ def countdown_diff(before, after):
             counts["dynamic_pixels" if 238 <= pixel // 240 < 258 else "static_pixels"] += 1
     return counts
 
+def name_countdown_diff(before, after):
+    require(len(before) == len(after) == 240 * 320 * 2, "incomplete TFT frame")
+    counts = {"dynamic_pixels": 0, "static_pixels": 0}
+    for pixel in range(240 * 320):
+        if before[2*pixel:2*pixel+2] != after[2*pixel:2*pixel+2]:
+            counts["dynamic_pixels" if 158 <= pixel // 240 < 182 else "static_pixels"] += 1
+    return counts
+
 def main():
     from capture_1x_ui import PassiveSerial, synchronize_console
     from run_1x_product_home_hil import stabilized_boot_metrics
@@ -47,6 +55,8 @@ def main():
         parser.add_argument("--" + role + "-mac", required=True)
     parser.add_argument("--firmware", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--name-listen", action="store_true",
+                        help="Also verify ordinary 20-second selected-name listening (not client association)")
     args = parser.parse_args()
     require(args.source_port != args.receiver_port, "ports must differ")
     require(args.source_mac.replace(":", "").lower() !=
@@ -68,6 +78,7 @@ def main():
               "image_sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
               "app_elf_sha256": app_elf_sha256(image), "failures": [],
               "board_identities": board_identities,
+              "name_listener_requested": args.name_listen,
               "states": {}, "screens": {}, "cleanup": {}}
 
     def checkpoint(step):
@@ -194,6 +205,77 @@ def main():
             action(source, "right")
             require(ap(source)["hidden"], "hide action failed")
             observe("retained", True, known["signal_samples"] + 2)
+            if args.name_listen:
+                checkpoint("name_listener")
+                # A fresh, explicitly started AP window for the receiver delta.
+                action(source, "left")
+                action(source, "down")
+                action(source, "right")
+                require(ap(source)["active"] and ap(source)["hidden"], "fresh hidden AP missing")
+                for key in ("right", "down", "down", "right", "right", "right"):
+                    action(receiver, key)
+                def detail():
+                    s = query(receiver, b"wifi.network.detail", "leshy.wifi.network_detail.v1", "state")
+                    require(s["identity_hash"] == identity and s["ui_page"] == "listen_name",
+                            "name listener lost target/page")
+                    return s
+                def wait_name(label, predicate, timeout=10):
+                    checkpoint(label)
+                    end = time.monotonic() + timeout
+                    while time.monotonic() < end:
+                        s = detail()
+                        if predicate(s):
+                            report["states"][label] = s
+                            return s
+                        require(s["name_listen_state"] != "failed", "name listener failed: " + s["name_listen_status"])
+                        time.sleep(.1)
+                    raise TimeoutError(label)
+                ready = detail()
+                require(ready["name_listen_state"] == "idle" and not ready["name_receiver_owned"], "page started receiver")
+                report["states"]["name_ready"] = ready
+                screen(receiver, "name-ready")
+                action(receiver, "right")
+                require(detail()["name_listen_state"] == "idle", "Right must not start listening")
+                action(receiver, "select")
+                running = wait_name("name_running", lambda s: s["name_listen_state"] == "running")
+                screen(receiver, "name-running")
+                time.sleep(1.2)
+                screen(receiver, "name-running-later")
+                report["name_countdown_pixels"] = name_countdown_diff(
+                    (frames / "name-running.rgb565").read_bytes(),
+                    (frames / "name-running-later.rgb565").read_bytes())
+                require(report["name_countdown_pixels"]["static_pixels"] == 0 and
+                        report["name_countdown_pixels"]["dynamic_pixels"] > 0, "name timer repaints static screen")
+                negative_name = wait_name("name_deadline", lambda s: s["name_listen_state"] == "result", 23)
+                require(not negative_name["name_window_found"] and negative_name["name_scan_restored"] and
+                        not negative_name["name_receiver_owned"] and
+                        20000 <= negative_name["name_window_duration_ms"] <= 21000,
+                        "hidden name timeout/restore failed")
+                resumed = wait_name("name_scan_resumed", lambda s: s["signal_samples"] > running["signal_samples"])
+                screen(receiver, "name-timeout")
+                # Listener is active before AP visibility changes: SDK scans
+                # cannot account for the new window's name evidence.
+                action(receiver, "select")
+                positive_start = wait_name("name_positive_start", lambda s: s["name_listen_state"] == "running")
+                action(source, "up")
+                action(source, "right")
+                require(not ap(source)["hidden"] and ap(source)["active"], "visible AP missing")
+                positive = wait_name("name_ap_frame", lambda s: s["name_window_found"])
+                require(positive["name_window_source"] == 1 and positive["name_ap_confirmed"] and
+                        positive["signal_samples"] == positive_start["signal_samples"],
+                        "name-only AP evidence changed RSSI observations")
+                action(source, "right")
+                require(ap(source)["hidden"], "hide after name evidence failed")
+                screen(receiver, "name-found")
+                query(receiver, b"ui.touch 120 265", "leshy.touch.frontend.v1", "state")
+                stopped_name = wait_name("name_touch_stop", lambda s: s["name_listen_state"] == "result")
+                require(stopped_name["name_scan_restored"] and not stopped_name["name_receiver_owned"] and
+                        0 < stopped_name["name_window_duration_ms"] < 20000 and stopped_name["name_window_found"],
+                        "touch stop/retention/restore failed")
+                wait_name("name_after_stop_scan", lambda s: s["signal_samples"] > positive["signal_samples"])
+                for _ in range(5): action(receiver, "left")
+                require(ui(receiver)["wifi_product_view"] == "networks", "name Back path did not return to list")
+                report["name_listener_scope"] = "passive_ap_frames_timeout_touch_stop_restore_no_client_association"
             action(source, "left")
             stopped = ap(source)
             require(not stopped["radio_started"] and stopped["cleanup_complete"] and

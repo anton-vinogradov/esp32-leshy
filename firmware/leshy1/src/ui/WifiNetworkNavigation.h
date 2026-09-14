@@ -6,6 +6,7 @@ namespace leshy1::ui {
 
 enum class WifiNetworkPage : std::uint8_t {
     Summary, Radar, Actions, Information, Identity, Protection, Radio, Observed,
+    ListenName,
 };
 enum class WifiNetworkKey : std::uint8_t { Up, Down, Left, Right, Ok };
 inline const char* wifiNetworkPageName(WifiNetworkPage page) {
@@ -18,10 +19,11 @@ inline const char* wifiNetworkPageName(WifiNetworkPage page) {
         case WifiNetworkPage::Protection: return "protection";
         case WifiNetworkPage::Radio: return "radio";
         case WifiNetworkPage::Observed: return "observed";
+        case WifiNetworkPage::ListenName: return "listen_name";
     }
     return "unknown";
 }
-enum class WifiNetworkIntent : std::uint8_t { None, Changed, Exit, Password };
+enum class WifiNetworkIntent : std::uint8_t { None, Changed, Exit, Password, ListenName };
 
 // Pure navigation: traversing a page cannot start a capture or transmit.
 class WifiNetworkNavigation final {
@@ -43,6 +45,7 @@ class WifiNetworkNavigation final {
                 case Page::Actions:
                 case Page::Radar: page_ = Page::Summary; break;
                 case Page::Information: page_ = Page::Actions; selection_ = 2; break;
+                case Page::ListenName: page_ = Page::Identity; break;
                 case Page::Protection:
                     page_ = protectionParent_;
                     selection_ = page_ == Page::Information ? 1U : 0U; break;
@@ -66,6 +69,10 @@ class WifiNetworkNavigation final {
             page_ = Page::Actions; selection_ = 0; return Intent::Changed;
         }
         if (key != Key::Ok && key != Key::Right) return Intent::None;
+        if (page_ == Page::Identity) {
+            page_ = Page::ListenName; return Intent::Changed;
+        }
+        if (page_ == Page::ListenName && key == Key::Ok) return Intent::ListenName;
         if (page_ == Page::Actions) {
             if (selection_ == 1U) return Intent::Password;
             protectionParent_ = Page::Actions;

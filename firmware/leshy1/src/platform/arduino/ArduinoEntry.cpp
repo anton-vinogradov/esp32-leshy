@@ -2080,6 +2080,30 @@ leshy1::ui::WifiNetworkNavigation wifiNetworkNavigation;
 Observation wifiNetworkRenderedDetail;
 WifiNetworkSignalStats wifiNetworkDetailSignal;
 
+enum class WifiNameListenState : std::uint8_t { Idle, Waiting, Running, Result, Failed };
+WifiNameListenState wifiNameListenState = WifiNameListenState::Idle;
+leshy1::apps::wifi::WifiNetworkNameTracker wifiNameResult;
+std::array<std::uint8_t, 6> wifiNameTarget{};
+std::uint8_t wifiNameChannel = 0;
+std::uint64_t wifiNameStartedUs = 0, wifiNameEndedUs = 0, nextWifiNameUiUs = 0;
+bool wifiNameCancelPending = false, wifiNameOwnsReceiver = false;
+bool wifiNameScanRestored = false;
+const char* wifiNameStatus = "idle";
+const char* wifiNameListenStateName() {
+    switch (wifiNameListenState) {
+        case WifiNameListenState::Idle: return "idle";
+        case WifiNameListenState::Waiting: return "waiting";
+        case WifiNameListenState::Running: return "running";
+        case WifiNameListenState::Result: return "result";
+        case WifiNameListenState::Failed: return "failed";
+    }
+    return "unknown";
+}
+bool wifiNameBusy() {
+    return wifiNameListenState == WifiNameListenState::Waiting ||
+        wifiNameListenState == WifiNameListenState::Running || wifiNameOwnsReceiver;
+}
+
 std::size_t wifiNetworkVisibleSize() {
     return wifiNetworkNavigationOrder.size(wifiNetworkCatalog);
 }
@@ -2544,6 +2568,10 @@ static_assert(
     "authentication capture must fit the one bounded packet buffer");
 
 bool beginWifiAuthenticationCaptureAfterSurvey();
+void finishWifiNameSurveyHandoff(bool quiescent);
+bool requestWifiNameListen();
+bool stopWifiNameListen(bool resume);
+void serviceWifiNameListen();
 bool bleSelectedDeviceConnectable();
 bool beginBleGattAfterSurvey();
 void serviceBleGattProduct();
@@ -8162,6 +8190,7 @@ void serviceProductSurveyWorker() {
                 wifiProductView == WifiProductView::AuthenticationCapture &&
                 wifiAuthenticationProductState ==
                     WifiAuthenticationProductState::WaitingForSurveyStop;
+            const bool namePending = wifiNameListenState == WifiNameListenState::Waiting;
             const bool bleGattPending =
                 bleProductView == BleProductView::InspectorGatt &&
                 bleGattWaitingForSurveyStop;
@@ -8196,7 +8225,7 @@ void serviceProductSurveyWorker() {
                     lastRuntimeEvent = productSurveyRuntime.status;
                 }
                 render = true;
-            } else if (!authenticationPending) {
+            } else if (!authenticationPending && !namePending) {
                 // Preserve the ordinary product-survey cancellation path.
                 releaseProductSurveyAfterTerminal(
                     timelineCancelled ? "cancelled"
@@ -8230,7 +8259,9 @@ void serviceProductSurveyWorker() {
                     surveyPipeline.resetToSetup();
                     productSurveyTimeline.reset();
                 }
-                if (wifiAuthenticationReturnAfterSurveyStop) {
+                if (namePending) {
+                    finishWifiNameSurveyHandoff(surveyQuiescent);
+                } else if (wifiAuthenticationReturnAfterSurveyStop) {
                     wifiAuthenticationReturnAfterSurveyStop = false;
                     if (surveyQuiescent) {
                         std::memset(&wifiAuthenticationReport, 0,
@@ -8281,6 +8312,10 @@ void serviceProductSurveyWorker() {
             }
             const bool keepVisible = event.report.admissionStatus ==
                 leshy1::apps::survey::ProductSurveyAdmissionStatus::SourceUnavailable;
+            if (wifiNameListenState == WifiNameListenState::Waiting) {
+                wifiNameListenState = WifiNameListenState::Failed;
+                wifiNameStatus = "survey_failed";
+            }
             releaseProductSurveyAfterTerminal(event.report.status, !keepVisible);
             // releaseProductSurveyAfterTerminal() renders exactly once after
             // applying the terminal status and route decision. Do not queue a
@@ -14583,6 +14618,11 @@ NavigationFooter navigationFooterForCurrentState() {
         }
         if (wifiProductView == WifiProductView::NetworkDetail) {
             if (wifiNetworkNavigation.rowCount() != 0U) return {back, choose, enter};
+            if (wifiNetworkNavigation.page() == WifiNetworkPage::Identity)
+                return {back, {}, {NavigationKey::Right, UiTextId::NavListen}};
+            if (wifiNetworkNavigation.page() == WifiNetworkPage::ListenName)
+                return {back, {}, {NavigationKey::Select,
+                    wifiNameBusy() ? UiTextId::NavStop : UiTextId::NavStart}};
             if (wifiNetworkNavigation.page() == WifiNetworkPage::Summary) {
                 return {{NavigationKey::Left, UiTextId::NavList},
                         {NavigationKey::Select, UiTextId::NavRadar},
@@ -18453,6 +18493,7 @@ UiTextId wifiNetworkPageTitle(WifiNetworkPage page) {
         case WifiNetworkPage::Actions: return UiTextId::WifiNetworkActions;
         case WifiNetworkPage::Information: return UiTextId::WifiNetworkAllFacts;
         case WifiNetworkPage::Identity: return UiTextId::WifiNetworkIdentity;
+        case WifiNetworkPage::ListenName: return UiTextId::WifiNameListenTitle;
         case WifiNetworkPage::Protection: return UiTextId::WifiSecurityCheckTitle;
         case WifiNetworkPage::Radio: return UiTextId::WifiNetworkRadioTitle;
         case WifiNetworkPage::Observed: return UiTextId::WifiNetworkObserved;
@@ -18486,6 +18527,29 @@ void renderWifiNetworkMenu() {
                        LiveListPaletteIndex::TextMuted, false, -100);
     }
     wifiNetworkRenderedSelection = selection;
+}
+
+UiTextId wifiNetworkNameSourceText(const leshy1::apps::wifi::WifiNetworkNameFacts* name) {
+    using Source = leshy1::apps::wifi::WifiNameSource;
+    if (name == nullptr || name->source == Source::None) return UiTextId::WifiNameNotHeard;
+    if (name->source == Source::ClientConnection)
+        return name->apConfirmed ? UiTextId::WifiNameClientConfirmed : UiTextId::WifiNameClientSource;
+    return UiTextId::WifiNameApSource;
+}
+
+unsigned wifiNameRemainingSeconds(std::uint64_t nowUs) {
+    if (wifiNameListenState != WifiNameListenState::Running || nowUs < wifiNameStartedUs)
+        return 0U;
+    const auto elapsed = nowUs - wifiNameStartedUs;
+    return elapsed >= 20000000ULL ? 0U :
+        static_cast<unsigned>((20000000ULL - elapsed + 999999ULL) / 1000000ULL);
+}
+
+void renderWifiNameActionButton(UiTextId label) {
+    const char* text = tr(label);
+    if (!wifiNetworkTextCache.changed(11U, text, Palette::Focus)) return;
+    renderWifiNetworkButton(kWifiPasswordStartBounds, text, true);
+    wifiNetworkTextCache.publish(11U, text, Palette::Focus);
 }
 
 void renderWifiNetworkDetailData() {
@@ -18539,11 +18603,43 @@ void renderWifiNetworkDetailData() {
             ? tr(UiTextId::WifiNetworkVendorFormat) : "%s",
             known ? vendor : tr(UiTextId::WifiNetworkVendorUnknown));
         renderWifiNetworkText(2, line, Palette::TextSecondary, 92);
-        renderWifiNetworkText(3, tr(network.labelLength == 0U
-            ? UiTextId::WifiNameNotHeard : UiTextId::WifiNameApSource),
+        const auto* name = wifiNetworkCatalog.nameAt(wifiNetworkCatalog.indexOfIdentity(network));
+        renderWifiNetworkText(3, tr(wifiNetworkNameSourceText(name)),
             Palette::TextMuted, 120);
-        renderWifiNetworkText(4, tr(UiTextId::WifiNameNoGuess),
+        renderWifiNetworkText(4, tr(name && name->conflict ? UiTextId::WifiNameConflict :
+            (name && name->source == leshy1::apps::wifi::WifiNameSource::ClientConnection &&
+                !name->apConfirmed ? UiTextId::WifiNameUnconfirmed : UiTextId::WifiNameNoGuess)),
                               Palette::TextMuted, 148);
+        const auto nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+        if (name && name->observedUs && nowUs >= name->observedUs)
+            std::snprintf(line, sizeof(line), tr(UiTextId::WifiNameAge),
+                static_cast<unsigned long>((nowUs - name->observedUs) / 1000000ULL));
+        else line[0] = '\0';
+        renderWifiNetworkText(5, line, Palette::TextMuted, 177);
+        renderWifiNameActionButton(UiTextId::WifiNameListenTitle);
+    } else if (page == WifiNetworkPage::ListenName) {
+        std::snprintf(line, sizeof(line), tr(UiTextId::WifiNameListenChannel),
+            static_cast<unsigned>(wifiNameBusy() ? wifiNameChannel : network.channel));
+        renderWifiNetworkText(1, line, Palette::TextSecondary, 64);
+        renderWifiNetworkText(2, tr(UiTextId::WifiNameListenPause), Palette::TextMuted, 86);
+        renderWifiNetworkText(3, tr(UiTextId::WifiNameListenClient), Palette::TextSecondary, 108);
+        renderWifiNetworkText(4, tr(UiTextId::WifiNameListenPassive), Palette::TextMuted, 130);
+        UiTextId stateText = UiTextId::WifiNameListenReady;
+        if (wifiNameListenState == WifiNameListenState::Waiting) stateText = UiTextId::WifiNameListenWaiting;
+        if (wifiNameListenState == WifiNameListenState::Failed) stateText = UiTextId::WifiNameListenFailed;
+        if (wifiNameListenState == WifiNameListenState::Result)
+            stateText = wifiNameResult.primary().length ? UiTextId::WifiNameListenFound : UiTextId::WifiNameListenEmpty;
+        if (wifiNameListenState == WifiNameListenState::Running)
+            std::snprintf(line, sizeof(line), tr(UiTextId::WifiNameListenRemaining),
+                wifiNameRemainingSeconds(static_cast<std::uint64_t>(esp_timer_get_time())));
+        else std::snprintf(line, sizeof(line), "%s", tr(stateText));
+        renderWifiNetworkText(5, line, Palette::Focus, 160);
+        const auto* name = wifiNetworkCatalog.nameAt(wifiNetworkCatalog.indexOfIdentity(network));
+        renderWifiNetworkText(6, tr(wifiNetworkNameSourceText(name)), Palette::TextMuted, 184);
+        renderWifiNetworkText(7, name && name->conflict ? tr(UiTextId::WifiNameConflict) :
+            (name && name->source == leshy1::apps::wifi::WifiNameSource::ClientConnection &&
+                !name->apConfirmed ? tr(UiTextId::WifiNameUnconfirmed) : ""), Palette::Warning, 207);
+        renderWifiNameActionButton(wifiNameBusy() ? UiTextId::WifiTestStop : UiTextId::WifiTestStart);
     } else if (page == WifiNetworkPage::Protection) {
         const WifiSecurityAssessment assessment = assessWifiSecurity(facts);
         renderWifiNetworkText(2, tr(wifiSecurityPostureText(assessment.posture)),
@@ -27612,6 +27708,124 @@ bool requestWifiAuthenticationCaptureFromDetail() {
     return true;
 }
 
+bool wifiNameRouteAllowed() {
+    return uiController.page() == 2 && wifiProductView == WifiProductView::NetworkDetail &&
+        wifiNetworkNavigation.page() == WifiNetworkPage::ListenName &&
+        !safetySupervisor.latched() && runtimeSafetyWatchdogReady && safetySupervisor.armed() &&
+        digitalRead(0) != LOW && std::strcmp(appRuntime.activeApp(), "wifi") == 0 &&
+        resourceBroker.ownerOf(Resource::EspRf) == AppRuntime::kForegroundOwner &&
+        deviceLockOperationAllowed(leshy1::services::security::DeviceLockOperation::ProtectedUi);
+}
+
+bool resumeWifiNameSurvey() {
+    // The selected BSSID, catalog, order and focus survive the temporary dwell.
+    // Never release the foreground lease between two owners of the same radio.
+    if (!wifiNameRouteAllowed() || !wifiFrameCapture.cleanupComplete() ||
+        productSurveyControl() != ProductSurveyWorkerControl::Idle ||
+        productSurveyRuntime.sourceActive || productSurveyScanActive() ||
+        !productSurveyRuntime.cleanupComplete || workerDeadlineSnapshot().armed) return false;
+    surveyPipeline.resetToSetup();
+    if (surveyWorkflow.configure(false, false) != SurveyWorkflowStatus::Ready) return false;
+    return startProductSurvey();
+}
+
+bool stopWifiNameListen(bool resume) {
+    if (wifiNameListenState == WifiNameListenState::Waiting) {
+        // Consume the ordinary worker's terminal cleanup before doing anything
+        // else. A second press cannot skip this barrier or start a receiver.
+        wifiNameCancelPending = true;
+        requestProductSurveyWorkerStop(true);
+        return true;
+    }
+    if (!wifiNameOwnsReceiver) return !wifiNameBusy();
+    const auto nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    const bool wasFailed = wifiFrameCapture.stats().state == WifiFrameCaptureState::Failed;
+    const bool cleanup = wifiFrameCapture.stop(nowUs) && wifiFrameCapture.cleanupComplete();
+    wifiNameEndedUs = wifiFrameCapture.stats().endedUs;
+    wifiNameResult = wifiFrameCapture.nameSnapshot();
+    wifiNetworkCatalog.learnNames(wifiNameResult);
+    wifiNameOwnsReceiver = !cleanup;
+    wifiNameScanRestored = cleanup && resume && !wasFailed && resumeWifiNameSurvey();
+    wifiNameListenState = wifiNameScanRestored ? WifiNameListenState::Result : WifiNameListenState::Failed;
+    wifiNameStatus = !cleanup ? "receiver_cleanup_failed" : wasFailed ? "receiver_failed" :
+        !resume ? "interrupted" : !wifiNameScanRestored ? "scan_restore_failed" : "scan_resumed";
+    lastRuntimeEvent = wifiNameStatus;
+    return cleanup;
+}
+
+void finishWifiNameSurveyHandoff(bool quiescent) {
+    if (wifiNameListenState != WifiNameListenState::Waiting) return;
+    if (!quiescent) {
+        wifiNameListenState = WifiNameListenState::Failed;
+        wifiNameStatus = "survey_cleanup_failed";
+    } else if (wifiNameCancelPending || !wifiNameRouteAllowed()) {
+        wifiNameScanRestored = wifiNameRouteAllowed() && resumeWifiNameSurvey();
+        wifiNameListenState = wifiNameScanRestored ? WifiNameListenState::Result : WifiNameListenState::Failed;
+        wifiNameStatus = wifiNameScanRestored ? "cancelled_before_listen" : "interrupted";
+    } else {
+        wifiFrameCapture.reset();
+        wifiNameStartedUs = static_cast<std::uint64_t>(esp_timer_get_time());
+        if (wifiNameStartedUs == 0U) wifiNameStartedUs = 1U;
+        const bool started = wifiFrameCapture.beginNameMonitor(wifiNameTarget, wifiNameChannel, wifiNameStartedUs);
+        wifiNameOwnsReceiver = started || !wifiFrameCapture.cleanupComplete();
+        wifiNameListenState = started ? WifiNameListenState::Running : WifiNameListenState::Failed;
+        wifiNameStatus = started ? "listening" : "receiver_start_failed";
+        nextWifiNameUiUs = 0;
+        // Even a clean failed begin remains a failure, never an empty success.
+        if (!started && !wifiNameOwnsReceiver) wifiNameScanRestored = resumeWifiNameSurvey();
+    }
+    lastRuntimeEvent = wifiNameStatus;
+}
+
+bool requestWifiNameListen() {
+    if (wifiNameBusy()) return stopWifiNameListen(true);
+    if (!wifiNameRouteAllowed()) return false;
+    const auto& network = *liveWifiNetworkDetail();
+    if (network.identityLength != 6U || network.channel < 1U || network.channel > 13U) return false;
+    const auto control = productSurveyControl();
+    if (control != ProductSurveyWorkerControl::Starting &&
+        control != ProductSurveyWorkerControl::Running &&
+        control != ProductSurveyWorkerControl::Idle) return false;
+    std::copy_n(network.identity.begin(), 6U, wifiNameTarget.begin());
+    wifiNameChannel = static_cast<std::uint8_t>(network.channel);
+    wifiNameResult.reset(wifiNameTarget, wifiNameChannel);
+    wifiNameStartedUs = 0;
+    wifiNameEndedUs = 0;
+    wifiNameCancelPending = false;
+    wifiNameScanRestored = false;
+    wifiNameListenState = WifiNameListenState::Waiting;
+    wifiNameStatus = "waiting_for_survey";
+    if (control == ProductSurveyWorkerControl::Idle) {
+        finishWifiNameSurveyHandoff(!productSurveyScanActive() && !productSurveyRuntime.sourceActive &&
+            productSurveyRuntime.scannerCleanupComplete && productSurveyRuntime.cleanupComplete &&
+            !productSurveyRuntime.backendOpen && !workerDeadlineSnapshot().armed &&
+            wifiFrameCapture.cleanupComplete());
+    } else requestProductSurveyWorkerStop(true);
+    lastRuntimeEvent = wifiNameStatus;
+    return true;
+}
+
+void serviceWifiNameListen() {
+    if (!wifiNameBusy()) return;
+    if (!wifiNameRouteAllowed()) {
+        stopWifiNameListen(false);
+        if (wifiNameListenState == WifiNameListenState::Waiting) serviceProductSurveyWorker();
+        return;
+    }
+    if (wifiNameListenState != WifiNameListenState::Running) return;
+    const auto nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    wifiFrameCapture.service(nowUs);
+    if (wifiFrameCapture.stats().state != WifiFrameCaptureState::Running) {
+        stopWifiNameListen(true);
+        renderInteractiveScreen(false);
+    } else if (nowUs >= nextWifiNameUiUs) {
+        nextWifiNameUiUs = nowUs + 250000ULL;
+        wifiNameResult = wifiFrameCapture.nameSnapshot();
+        wifiNetworkCatalog.learnNames(wifiNameResult);
+        renderInteractiveScreen(false);
+    }
+}
+
 bool beginWifiAuthenticationCaptureAfterSurvey() {
     if (wifiAuthenticationProductState !=
             WifiAuthenticationProductState::WaitingForSurveyStop ||
@@ -27921,6 +28135,8 @@ bool stopWifiFrameCapture() {
 }
 
 void serviceWifiFrameCapture() {
+    // The name listener owns its teardown and retains the foreground scan lease.
+    if (wifiNameBusy()) return;
     if (wifiAuthenticationProductState ==
         WifiAuthenticationProductState::Running) {
         return;
@@ -30508,6 +30724,10 @@ void emitSurveyBrowser(Stream& reply) {
 }
 
 bool startWifiNetworksProduct() {
+    if (wifiNameBusy()) return false;
+    wifiNameListenState = WifiNameListenState::Idle;
+    wifiNameStatus = "idle";
+    wifiNameScanRestored = false;
     if (surveyWorkflow.state() != SurveyWorkflowState::Setup) {
         surveyPipeline.resetToSetup();
     }
@@ -32303,7 +32523,9 @@ bool applyUiAction(UiAction action, bool render = true) {
         } else if (wifiProductView == WifiProductView::NetworkDetail) {
             handled = true;
             WifiNetworkIntent intent = WifiNetworkIntent::None;
-            if (action == UiAction::Back || action == UiAction::Left)
+            if ((action == UiAction::Back || action == UiAction::Left) && wifiNameBusy()) {
+                changed = stopWifiNameListen(true);
+            } else if (action == UiAction::Back || action == UiAction::Left)
                 intent = wifiNetworkNavigation.handle(WifiNetworkKey::Left);
             else if (action == UiAction::Right)
                 intent = wifiNetworkNavigation.handle(WifiNetworkKey::Right);
@@ -32313,7 +32535,9 @@ bool applyUiAction(UiAction action, bool render = true) {
                 intent = wifiNetworkNavigation.handle(WifiNetworkKey::Up);
             else if (action == UiAction::Down)
                 intent = wifiNetworkNavigation.handle(WifiNetworkKey::Down);
-            if (intent == WifiNetworkIntent::Exit) {
+            if (intent == WifiNetworkIntent::ListenName) {
+                changed = requestWifiNameListen();
+            } else if (intent == WifiNetworkIntent::Exit) {
                 wifiProductView = WifiProductView::Networks;
                 lastRuntimeEvent = "wifi_networks";
                 changed = true;
@@ -32323,6 +32547,10 @@ bool applyUiAction(UiAction action, bool render = true) {
                 lastRuntimeEvent = "wifi_password_check_intro";
                 changed = true;
             } else if (intent == WifiNetworkIntent::Changed) {
+                if (wifiNetworkNavigation.page() == WifiNetworkPage::ListenName && !wifiNameBusy()) {
+                    wifiNameListenState = WifiNameListenState::Idle;
+                    wifiNameStatus = "idle";
+                }
                 lastRuntimeEvent = "wifi_network_navigation";
                 changed = true;
             }
@@ -34559,6 +34787,20 @@ bool dispatchTouchPoint(TouchPoint point, bool synthetic = false) {
         if (action == UiAction::Unknown) { ++touchMissedPresses; return false; }
         ++touchHandledPresses;
         const bool changed = applyUiAction(action, false);
+        lastTouchChanged = changed;
+        if (changed) renderInteractiveScreen(false);
+        return changed;
+    }
+    if (uiController.page() == 2 &&
+        wifiProductView == WifiProductView::NetworkDetail &&
+        (wifiNetworkNavigation.page() == WifiNetworkPage::Identity ||
+         wifiNetworkNavigation.page() == WifiNetworkPage::ListenName)) {
+        if (!leshy1::ui::visual::containsPoint(kWifiPasswordStartBounds, point.x, point.y)) {
+            ++touchMissedPresses; return false;
+        }
+        ++touchHandledPresses;
+        const bool changed = applyUiAction(wifiNetworkNavigation.page() == WifiNetworkPage::Identity
+            ? UiAction::Right : UiAction::Select, false);
         lastTouchChanged = changed;
         if (changed) renderInteractiveScreen(false);
         return changed;
@@ -42499,6 +42741,8 @@ void emitWifiNetworkDetailState(Stream& reply) {
     const WifiNetworkSignalStats& signal = *liveWifiNetworkSignal();
     const auto& facts = network.wifiNetwork;
     char vendor[WifiOuiDatabase::kNameSize + 1U] = {};
+    const auto* name = wifiNetworkCatalog.nameAt(catalogIndex);
+    const auto nameSource = name == nullptr ? leshy1::apps::wifi::WifiNameSource::None : name->source;
     const bool vendorKnown = network.identityLength == 6U &&
         wifiOuiDatabase.lookup(network.identity.data(), vendor,
                                sizeof(vendor));
@@ -42525,6 +42769,11 @@ void emitWifiNetworkDetailState(Stream& reply) {
         "\"active\":%s,\"passive\":true,\"active_probe_allowed\":false,"
         "\"identity_hash\":%lu,"
         "\"ssid_known\":%s,\"hidden_resolutions\":%lu,"
+        "\"name_source\":%u,\"name_ap_confirmed\":%s,\"name_conflict\":%s,"
+        "\"name_listen_state\":\"%s\",\"name_listen_status\":\"%s\","
+        "\"name_remaining_seconds\":%u,\"name_scan_restored\":%s,\"name_receiver_owned\":%s,"
+        "\"name_window_source\":%u,\"name_window_found\":%s,\"name_window_conflict\":%s,"
+        "\"name_window_duration_ms\":%lu,"
         "\"vendor_known\":%s,\"vendor\":\"%s\","
         "\"facts_known\":%s,\"authentication\":\"%s\","
         "\"pairwise_cipher\":\"%s\",\"group_cipher\":\"%s\","
@@ -42555,6 +42804,15 @@ void emitWifiNetworkDetailState(Stream& reply) {
             wifiNetworkCatalog, wifiNetworkSelection)),
         network.labelLength != 0U ? "true" : "false",
         static_cast<unsigned long>(wifiNetworkCatalog.hiddenResolutions()),
+        static_cast<unsigned>(nameSource), name && name->apConfirmed ? "true" : "false",
+        name && name->conflict ? "true" : "false", wifiNameListenStateName(), wifiNameStatus,
+        wifiNameRemainingSeconds(static_cast<std::uint64_t>(esp_timer_get_time())),
+        wifiNameScanRestored ? "true" : "false", wifiNameOwnsReceiver ? "true" : "false",
+        static_cast<unsigned>(wifiNameResult.primary().source),
+        wifiNameResult.primary().length != 0U ? "true" : "false",
+        wifiNameResult.conflict().length != 0U ? "true" : "false",
+        static_cast<unsigned long>(wifiNameEndedUs >= wifiNameStartedUs && wifiNameStartedUs != 0U
+            ? (wifiNameEndedUs - wifiNameStartedUs) / 1000ULL : 0U),
         vendorKnown ? "true" : "false", vendor,
         facts.present ? "true" : "false",
         leshy1::drivers::wifi::wifiAuthenticationName(facts.authentication),
@@ -45773,6 +46031,7 @@ void loop() {
     serviceDeviceLock();
     serviceSerialConsoleAction();
     serviceWifiAuthenticationSyntheticHilExpiry();
+    serviceWifiNameListen(); // Also quiesces on PIN/safety/route loss, before other capture services.
     if (safetySupervisor.latched()) {
         quiesceSpectrumOnSafetyStop();
         quiesceAirspaceGuardOnSafetyStop();
