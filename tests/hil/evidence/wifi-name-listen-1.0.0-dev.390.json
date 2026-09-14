@@ -1,0 +1,230 @@
+{
+  "schema": "leshy.wifi_name_listen.acceptance.v1",
+  "status": "passed",
+  "failures": [],
+  "app_elf_sha256": "2fe1bb52de3e74717b491aad5c1d7aa79ce209363a9ea7d0b76ed707f3979a3f",
+  "image_sha256": "0dcee2984aca7e83c021158add4cd966844cd0cfac50488b6c32405e2c5e6da4",
+  "version": "1.0.0-dev.390",
+  "source_commit": "3fe3ccada63c80ed2b6b4e74a9cee5446216ebc2",
+  "run_sha256": "1770292e31fb3599717794e0d46ab440d24c438a8afb61e5229c2c91438612b2",
+  "boards": 2,
+  "ordinary_product_ui_only": true,
+  "name_states": {
+    "hidden": {
+      "ssid_known": false,
+      "signal_samples": 1,
+      "hidden_resolutions": 0
+    },
+    "hidden_no_name": {
+      "ssid_known": false,
+      "signal_samples": 3,
+      "hidden_resolutions": 0
+    },
+    "resolved": {
+      "ssid_known": true,
+      "signal_samples": 4,
+      "hidden_resolutions": 1
+    },
+    "retained": {
+      "ssid_known": true,
+      "signal_samples": 6,
+      "hidden_resolutions": 1
+    }
+  },
+  "deadline_observed_s": 60.314,
+  "countdown_pixels": {
+    "dynamic_pixels": 14,
+    "static_pixels": 0
+  },
+  "final": {
+    "source": {
+      "page": "home",
+      "runtime_owner": "none",
+      "lease_mask": 0,
+      "safety_latched": false,
+      "safety_state": "armed",
+      "survey_scan_dropped": 0,
+      "survey_dropped": 0,
+      "survey_timeline_overflow": 0,
+      "survey_product_store_bytes_written": 0,
+      "survey_product_filesystem_mount_attempts": 0
+    },
+    "receiver": {
+      "page": "home",
+      "runtime_owner": "none",
+      "lease_mask": 0,
+      "safety_latched": false,
+      "safety_state": "armed",
+      "survey_scan_dropped": 0,
+      "survey_dropped": 0,
+      "survey_timeline_overflow": 0,
+      "survey_product_store_bytes_written": 0,
+      "survey_product_filesystem_mount_attempts": 0
+    }
+  },
+  "heap": {
+    "source": {
+      "heap_total": 139556,
+      "heap_free": 63704,
+      "heap_min_free": 20756
+    },
+    "receiver": {
+      "heap_total": 139556,
+      "heap_free": 58064,
+      "heap_min_free": 14940
+    }
+  },
+  "screens": {
+    "hidden": {
+      "png_sha256": "946a5c6412e010030597dc5c6f62eba82d30f3e93e49a6daedf594080a909eed",
+      "rgb565_sha256": "a03b0ace7f8f164558575340b386bc74b9126cef143b0cc40b2f8c4be80dd875"
+    },
+    "hidden_no_name": {
+      "png_sha256": "924a6f96d3a577ba5dfc09700ac954404dcaceff800dd3f621cad3fbc22073d4",
+      "rgb565_sha256": "6195fcda4d05ac9fb2f92bb99ac89d3aa64c66ce81a7173e40e820b8d7f9a2b7"
+    },
+    "resolved": {
+      "png_sha256": "85ffdd46b0b5224574ccce55fbd0b25248005550507d84f8e413c83e3a3b0f06",
+      "rgb565_sha256": "1d732debcb8d9702b726d12338d940b08c1dec50f31f34abc42b839f4695a560"
+    },
+    "retained": {
+      "png_sha256": "75be800aa6aed390493639a7cddb7cb3410ed8203fdcbc6a5e02fb219a5d4200",
+      "rgb565_sha256": "80a29c8b001166ec1cca7574977f5b37ce428e135c90d8a1b2a2f54f77b0fb66"
+    },
+    "source-deadline": {
+      "png_sha256": "80cdf4f872b5d4eaed34d973daf3fec44a151cf95529910eb6cc0f40b6519135",
+      "rgb565_sha256": "1fba234dd4f14a052eefeeba27b29e11fc6eb5190d818ff4bfe09071ba7f7154"
+    },
+    "source-ready": {
+      "png_sha256": "2c81bf4c4d70886ba7d8b3bc0b69d343b4b6ecf4cc08105580de8bb138f4ef15",
+      "rgb565_sha256": "1c7a8969816cecbc46fccc6990a94b70c43938bc2c1210d37605e57f02b5ca43"
+    },
+    "source-running": {
+      "png_sha256": "cfa39e29d1efb5cd8bd64579ddb3baf7be47ea5a3601f2ecda303c411fc806e9",
+      "rgb565_sha256": "93d0dcb65550ea00024676e51470b6a51172c9a75124c7e3ac5a18f4d12ff1be"
+    },
+    "source-running-later": {
+      "png_sha256": "8693d4b4ca6468d6c09ed83e2381ac71fca2080bcac2719da1e358ada6c14266",
+      "rgb565_sha256": "eca7ebf14473e12c4a124b7d11d749b2a0a4d7ffaeb8cd2d9f71e87e8d1993b5"
+    },
+    "name-ready": {
+      "png_sha256": "db669704274b62978dbafb21cd3e81aa2aeb216c4a2f691b493dfda31d4c1b1e",
+      "rgb565_sha256": "e20bf83498c1378429659c810ad9426383afa2515b67d99fe7aa490d59bb9fd8"
+    },
+    "name-running": {
+      "png_sha256": "9379544dd56bb248e43f46ab811c7cc12070f0a321f163cf5dd9f3a4ffb77de5",
+      "rgb565_sha256": "63368843a016554396c52438bc03939d45cb3e43f2a05a2c9c18d5dde39ecc18"
+    },
+    "name-running-later": {
+      "png_sha256": "5c3b880540eb183fe35304b900fb9ed6d31554c2dee379b508ac5d5b19f4f265",
+      "rgb565_sha256": "6eb5ee7dc73ffab652c3d1efcf79d46557b899e7bcce52291813c97052e51dae"
+    },
+    "name-timeout": {
+      "png_sha256": "8f4362f8d419291adc9d420d79e3f14d354fdb1ea36e8ea5ac76d8cdc8a7993a",
+      "rgb565_sha256": "1d42fc2b38f84c181da4166b3bd33260c1a89452dcc9d96ebd4cc49010a76e1e"
+    },
+    "name-found": {
+      "png_sha256": "0e1735c07a30bb5155c1f7211e814d4e9446ea3c01eee1dfb2de6fccc4018309",
+      "rgb565_sha256": "064629f9c8f7862efecf09834908adff84b3adde92d319df4d8766575b4b8c39"
+    }
+  },
+  "limits": "Live AP-frame name listener, hidden timeout, manual stop and scan restore verified. Client association/reassociation and conflict handling have host coverage only; no real client positive yet. Live catalogs are separate from the bounded 64-record survey history; its capacity drops are reported, not interpreted as zero-loss capture. Final zero counters are cleanup state only. No optical flicker, BOOT/lock fault injection, heap invariance, endurance or broad-matrix acceptance.",
+  "name_listener": {
+    "name_ready": {
+      "name_listen_state": "idle",
+      "name_window_source": 0,
+      "name_window_found": false,
+      "name_window_duration_ms": 0,
+      "name_scan_restored": false,
+      "name_receiver_owned": false,
+      "signal_samples": 2
+    },
+    "name_running": {
+      "name_listen_state": "running",
+      "name_window_source": 0,
+      "name_window_found": false,
+      "name_window_duration_ms": 0,
+      "name_scan_restored": false,
+      "name_receiver_owned": true,
+      "signal_samples": 3
+    },
+    "name_deadline": {
+      "name_listen_state": "result",
+      "name_window_source": 0,
+      "name_window_found": false,
+      "name_window_duration_ms": 20001,
+      "name_scan_restored": true,
+      "name_receiver_owned": false,
+      "signal_samples": 3
+    },
+    "name_scan_resumed": {
+      "name_listen_state": "result",
+      "name_window_source": 0,
+      "name_window_found": false,
+      "name_window_duration_ms": 20001,
+      "name_scan_restored": true,
+      "name_receiver_owned": false,
+      "signal_samples": 4
+    },
+    "name_positive_start": {
+      "name_listen_state": "running",
+      "name_window_source": 0,
+      "name_window_found": false,
+      "name_window_duration_ms": 0,
+      "name_scan_restored": false,
+      "name_receiver_owned": true,
+      "signal_samples": 4
+    },
+    "name_ap_frame": {
+      "name_listen_state": "running",
+      "name_window_source": 1,
+      "name_window_found": true,
+      "name_window_duration_ms": 0,
+      "name_scan_restored": false,
+      "name_receiver_owned": true,
+      "signal_samples": 4
+    },
+    "name_touch_stop": {
+      "name_listen_state": "result",
+      "name_window_source": 1,
+      "name_window_found": true,
+      "name_window_duration_ms": 1056,
+      "name_scan_restored": true,
+      "name_receiver_owned": false,
+      "signal_samples": 4
+    },
+    "name_after_stop_scan": {
+      "name_listen_state": "result",
+      "name_window_source": 1,
+      "name_window_found": true,
+      "name_window_duration_ms": 1056,
+      "name_scan_restored": true,
+      "name_receiver_owned": false,
+      "signal_samples": 5
+    }
+  },
+  "name_countdown_pixels": {
+    "dynamic_pixels": 26,
+    "static_pixels": 0
+  },
+  "name_history_retention": {
+    "survey_received": 36,
+    "survey_forwarded": 36,
+    "survey_dropped": 0,
+    "survey_scan_dropped": 0
+  },
+  "history_before_cleanup": {
+    "source": {
+      "survey_received": 0,
+      "survey_forwarded": 0,
+      "survey_dropped": 0,
+      "survey_scan_dropped": 0
+    },
+    "receiver": {
+      "survey_received": 747,
+      "survey_forwarded": 64,
+      "survey_dropped": 683,
+      "survey_scan_dropped": 0
+    }
+  }
+}

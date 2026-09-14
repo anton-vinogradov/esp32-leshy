@@ -1,0 +1,117 @@
+{
+  "schema": "leshy.wifi_name_listen.failures.v1",
+  "status": "failed_runs_retained",
+  "acceptance_claimed": false,
+  "records": [
+    {
+      "run_sha256": "1307494851ee28ca7392b1b4dd810fbc79b421642ce13d87601a1dfcb7f6dead",
+      "source_commit": "96902900dc06e39fff207e5468523c6027ccf4e5",
+      "image_sha256": "673a1403a6fefc4343fee175f09bcf32c8e117b2050525b58101e8e1f0b4327e",
+      "app_elf_sha256": "cafe3731aa55371f20222326ad3402cc47cc4df16338df5ab3d5ddbc8e30364b",
+      "status": "failed",
+      "failures": [
+        "TimeoutError: name_scan_resumed"
+      ],
+      "final": {
+        "source": {
+          "page": "home",
+          "runtime_owner": "none",
+          "lease_mask": 0,
+          "safety_latched": false
+        },
+        "receiver": {
+          "page": "home",
+          "runtime_owner": "none",
+          "lease_mask": 0,
+          "safety_latched": false
+        }
+      },
+      "console_traces": {},
+      "name_countdown_pixels": {
+        "dynamic_pixels": 26,
+        "static_pixels": 0
+      },
+      "name_screen_transport_errors": {}
+    },
+    {
+      "run_sha256": "dac5b3988f08598edfd468d9ef2518c0406b97ac79ae5bb024eceecc8161202a",
+      "source_commit": "b17aea92eef6049e02739a261ff84f4f07e468a6",
+      "image_sha256": "673a1403a6fefc4343fee175f09bcf32c8e117b2050525b58101e8e1f0b4327e",
+      "app_elf_sha256": "cafe3731aa55371f20222326ad3402cc47cc4df16338df5ab3d5ddbc8e30364b",
+      "status": "failed",
+      "failures": [
+        "TimeoutError: timed out waiting for leshy.wifi.network_detail.v1/state"
+      ],
+      "final": {
+        "source": {
+          "page": "home",
+          "runtime_owner": "none",
+          "lease_mask": 0,
+          "safety_latched": false
+        },
+        "receiver": {
+          "page": "home",
+          "runtime_owner": "none",
+          "lease_mask": 0,
+          "safety_latched": false
+        }
+      },
+      "console_traces": {},
+      "name_countdown_pixels": {
+        "dynamic_pixels": 26,
+        "static_pixels": 0
+      },
+      "name_screen_transport_errors": {}
+    },
+    {
+      "run_sha256": "aeb857abc381376830520f31257e2102bc055c330d529aafb44417813dd180b7",
+      "source_commit": "80b653cc5bde2552b6d59a530988e3d89bf29d03",
+      "image_sha256": "0dcee2984aca7e83c021158add4cd966844cd0cfac50488b6c32405e2c5e6da4",
+      "app_elf_sha256": "2fe1bb52de3e74717b491aad5c1d7aa79ce209363a9ea7d0b76ed707f3979a3f",
+      "status": "failed",
+      "failures": [
+        "RuntimeError: name timer repaints static screen"
+      ],
+      "final": {
+        "source": {
+          "page": "home",
+          "runtime_owner": "none",
+          "lease_mask": 0,
+          "safety_latched": false
+        },
+        "receiver": {
+          "page": "home",
+          "runtime_owner": "none",
+          "lease_mask": 0,
+          "safety_latched": false
+        }
+      },
+      "console_traces": {
+        "source": {
+          "sha256": "f9031fc54f9c74c79c4714e1ad92f6b9feafac759bc34c9a7e55072d37533ed5",
+          "file_bytes": 1033769,
+          "bytes_observed": 511469,
+          "partial_lines": 0,
+          "truncated": false
+        },
+        "receiver": {
+          "sha256": "874259e145fa9db684abb6a8fed212f4dd0cb31411b9cce8c8486381479e126d",
+          "file_bytes": 2787891,
+          "bytes_observed": 1377623,
+          "partial_lines": 0,
+          "truncated": false
+        }
+      },
+      "name_countdown_pixels": {
+        "dynamic_pixels": 780,
+        "static_pixels": 120
+      },
+      "name_screen_transport_errors": {
+        "name-running-later": [
+          "name-running-later: frame ended at 152339 of 153600"
+        ]
+      }
+    }
+  ],
+  "limits": "Digests bind private raw failures and verified Home cleanup. No raw identifiers or screenshots published; no inferred root cause."
+}

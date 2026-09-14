@@ -20,7 +20,8 @@ class NameEvidenceTests(EvidenceTests):
             name_ap_confirmed=True,name_window_duration_ms=20001,signal_samples=10,
             name_remaining_seconds=18)
         for label in NAME_STATES: r['states'][label] = base.copy()
-        r['states']['name_ready']['name_listen_state'] = 'idle'
+        r['states']['name_ready'].update(name_listen_state='idle', name_window_duration_ms=0,
+                                        name_scan_restored=False)
         for label in ('name_running','name_positive_start','name_ap_frame'):
             r['states'][label].update(name_listen_state='running',name_receiver_owned=True)
         for label in ('name_ap_frame','name_touch_stop'):
@@ -41,6 +42,9 @@ class NameEvidenceTests(EvidenceTests):
     def test_name_tamper(self):
         for label,key,value in (
             ('name_ready','name_receiver_owned',True),
+            ('name_ready','name_window_duration_ms',20000),
+            ('name_ready','name_window_found',True),
+            ('name_ready','name_scan_restored',True),
             ('name_running','name_remaining_seconds',21),
             ('name_deadline','name_window_duration_ms',1000),
             ('name_deadline','name_window_found',True),

@@ -31,7 +31,9 @@ def check(run, folder):
              s.get('active_probe_allowed') is False and s.get('channel') == 6, label + ' target/passive/page')
     ready = states.get('name_ready', {})
     need(ready.get('name_listen_state') == 'idle' and ready.get('name_receiver_owned') is False and
-         ready.get('ssid_known') is False, 'no start on entry / hidden target')
+         ready.get('ssid_known') is False and ready.get('name_window_duration_ms') == 0 and
+         ready.get('name_window_found') is False and ready.get('name_scan_restored') is False,
+         'no start on entry / hidden target / no stale result')
     for label in ('name_running', 'name_positive_start', 'name_ap_frame'):
         s = states.get(label, {})
         need(s.get('name_listen_state') == 'running' and s.get('name_receiver_owned') is True and
@@ -80,6 +82,9 @@ def summary(run, raw, failures):
     result['name_listener'] = {label: {k: run['states'][label].get(k) for k in fields} for label in NAME_STATES}
     result['name_countdown_pixels'] = run['name_countdown_pixels']
     result['name_history_retention'] = run.get('name_history_retention', {})
+    result['history_before_cleanup'] = {role: {key: run['cleanup'][role].get('initial_state', {}).get(key)
+        for key in ('survey_received', 'survey_forwarded', 'survey_dropped', 'survey_scan_dropped')}
+        for role in ('source', 'receiver')}
     result['screens'].update({label: {k: run['screens'][label][k] for k in ('png_sha256','rgb565_sha256')} for label in NAME_SCREENS})
     result['limits'] = ('Live AP-frame name listener, hidden timeout, manual stop and scan restore verified. '
         'Client association/reassociation and conflict handling have host coverage only; no real client positive yet. '

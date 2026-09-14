@@ -2,7 +2,25 @@
 
 *Read in: **English** · [Русский](RESOURCE_BUDGETS.ru.md)*
 
-## Latest product delta — RB-M267 (14 September 2026)
+## Latest product delta — RB-M268 (14 September 2026)
+
+Ordinary dev.390, firmware `80b653c`: static RAM **238736 B** (+872 vs dev.388),
+linked flash **3632704 B**, app **3633200 B**, OTA free **561104 B**
+(36816 B above the 512 KiB floor). No PSRAM or full-screen buffer dependency.
+[Checked name-listener delta](../../tests/hil/evidence/wifi-name-listen-1.0.0-dev.390.json):
+13 TFT frames; countdown 26 dynamic / zero static pixels; passive no-name window
+20.001 s, touch Stop at 1.056 s, same-network scan restoration. Final source heap
+total/free/min **139556/63704/20756 B**, receiver **139556/58064/14940 B**.
+Both Home/none/lease 0; no SD operations or scan-queue drops. Before cleanup the
+separate bounded history retained **64/747** observations, dropping **683** for
+capacity; the live catalog is separate. Final zero counters are not a lossless
+recording claim. No heap-invariance, client-association or broad-matrix credit.
+[Earlier failures](../../tests/hil/evidence/wifi-name-listen-dev389-390-failures.json)
+retain the runner identity error, unresolved query timeout and incomplete USB
+capture followed by a misleading cross-deadline retry. Automatic capture retries
+are disabled in this timed runner; a later pass does not establish the USB root cause.
+
+## Previous product delta — RB-M267 (14 September 2026)
 
 Ordinary dev.388 on both DIVs: static RAM **237864 B**, linked flash **3624264 B**,
 app **3624768 B**, OTA free **569536 B** (45248 B above the 512 KiB floor).

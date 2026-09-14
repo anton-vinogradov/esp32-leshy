@@ -7,6 +7,17 @@ lives in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md).
 
 ## Top-level goals
 
+Name-listener refinement: `E-BUILD-255 / E-AUTO-234 / E-HIL-251 / E-UX-101 / RB-M268`
+bind PR-004/009/011 and NFR-002/010 to [ordinary dev.390](../../tests/hil/evidence/wifi-name-listen-1.0.0-dev.390.json).
+Host decoder/catalog/safety/render contracts, ASan/UBSan, 28 evidence-checker and
+8 fragmented-console tests pass. Physical scope: 20.001-second no-name outcome,
+live AP frame provenance without RSSI/sample replacement, 1.056-second touch Stop,
+scan restoration and 13 TFT frames with 26 dynamic / zero static timer pixels.
+Both Home/none/lease 0; history capacity drops are visible, not erased by final
+counter reset. [Three earlier failures](../../tests/hil/evidence/wifi-name-listen-dev389-390-failures.json)
+remain retained. Client association/conflicts are host-only; USB diagnostic loss
+still needs root-cause qualification. Wi-Fi **17/21**, total **24/62**, broad **15/15 due**.
+
 Ordinary two-DIV acceptance: `E-BUILD-254 / E-AUTO-233 / E-HIL-250 / E-UX-100 / RB-M267`
 bind PR-004/009/011 and NFR-002/010 to the [dev.388 product-network record](../../tests/hil/evidence/wifi-product-network-1.0.0-dev.388.json).
 Same ordinary image, explicit menu Start, passive same-AP hidden/visible/hidden

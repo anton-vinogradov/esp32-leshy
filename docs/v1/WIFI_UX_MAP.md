@@ -6,7 +6,7 @@ Document: **target UX, with the implementation checkpoint below**.
 The agreed direction is a task tree, understandable labels and distinct OK/Right
 roles where useful. Publishing mockups does not close implementation or HIL gates.
 
-## Installed checkpoint — 14 September, dev.388
+## Installed checkpoint — 14 September, dev.390
 
 Implemented: Nearby networks → summary → OK signal finder / Right actions →
 protection, password preparation, or four information branches (identity,
@@ -36,8 +36,16 @@ changed 29 dynamic / zero static pixels. Both finish Home with radio off.
 The separate self-check branch below is documented here; the interactive mockup
 still represents the main Wi-Fi task tree, not this new tool.
 
+Dev.390 adds **All information → Name and device → Listen for name**:
+review the selected channel and 20-second limit, then OK or the real Start button.
+Right only navigates; OK/touch stops reception, Left stops first and returns on
+the next press. Static hints say Start/stop; only changed text/button regions
+are repainted. Results distinguish no name, source/confirmation/conflict and
+failure; after cleanup, the same network's scan resumes. Physical client-name
+qualification remains separate; this is not a promise to reveal every hidden SSID.
+
 Still target design: contextual Lab shortcut, radar pause,
-expanded hidden-name/source/conflicts and remaining end-to-end wizard
+physical client-name validation and remaining end-to-end wizard
 refinements. Observations currently explains RSSI limits; it is not a new per-AP
 traffic inspector. Reorganising UI does not increment the feature count.
 
@@ -71,7 +79,10 @@ flowchart TD
     A --> P["Check password"]
     A --> F["All information"]
     A --> L["Laboratory — separate admission"]
-    F --> H["Name and source / listen for hidden name"]
+    F --> H["Name and source"]
+    H --> NL["Listen for name: channel / 20 s / OK Start"]
+    NL --> NE["Name heard / not heard / failure"]
+    NE --> NS["Cleanup → resume the same network scan"]
     P --> PR["Prepare → record a connection"]
     PR --> R["Result: usable / incomplete / no data / error"]
     R --> X["Save → transfer to computer"]

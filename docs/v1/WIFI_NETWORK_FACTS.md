@@ -7,29 +7,41 @@ completion claim. [Screen map](WIFI_UX_MAP.md) · [Live status](STATUS.md).
 Source review: 13 September 2026. Prioritise information that identifies an owned
 network, explains protection/quality and helps choose the next step.
 
-14 September implementation: dev.384 supplies four themed information pages and
-a pixel-fitted UTF-8/escaped SSID display projection. The receive adapters,
-client-frame → AP merge, provenance/conflicts and client-association fixture below remain
-open; the UI change does not claim those measurements.
+14 September implementation: dev.390 includes the four themed information pages,
+pixel-fitted UTF-8/escaped SSIDs and **Name and device → Listen for name**.
+Explicit OK/touch starts a passive, selected-channel window of at most 20 seconds.
+Other channels pause; Stop/deadline restores ordinary scanning after receiver
+cleanup. Opening the page or pressing Right does not start reception.
 
 Host foundation (14 September): [bounded name decoder/tracker](../../firmware/leshy1/src/apps/wifi/WifiNetworkNameEvidence.h)
 now accepts complete AP beacon/probe-response and client association/reassociation
 frames, preserves 32-byte names, binds BSSID/channel and keeps conflicting names
 without changing AP RSSI. Confirmation and name age are separate. Native and
 ASan/UBSan tests cover malformed/truncated/duplicate elements and wrong addresses.
-This is **not wired to the live receiver yet**: the selected-channel window,
-schedule restoration, card merge and two-device positive/negative HIL remain open.
-It adds no radio owner, global RAM allocation, SD write or accepted feature.
+The decoder is now wired into that live window and the same AP card. The card
+shows AP/client provenance, AP confirmation, age and a conflict warning; first
+name evidence is preserved without overwriting RSSI or scan sample counts.
+It reuses the foreground radio lease, with no packet queue, SD write or PSRAM
+dependency. Static RAM grows by 872 B versus dev.388. A real client-association
+positive remains a separate gate; host coverage alone does not close it.
 
 ## User presentation
 
+Dev.390 [physical delta](../../tests/hil/evidence/wifi-name-listen-1.0.0-dev.390.json):
+20.001 s with no name, live AP-frame name, touch Stop, fresh scan restoration and
+13 TFT captures; countdown 26 changed dynamic / zero static pixels. Both boards
+finish Home/none/lease 0. This does not prove the real-client branch. The
+[earlier failed runs](../../tests/hil/evidence/wifi-name-listen-dev389-390-failures.json)
+remain retained; USB diagnostic reliability is not declared solved.
+
 Two-DIV validation follows [the product-firmware rule](GOVERNANCE.md#product-firmware-on-both-divs):
 the source is a normal, user-accessible bounded test-network role, not a separate
-test binary. Both DIVs now run ordinary dev.388; the [checked product-menu run](../../tests/hil/evidence/wifi-product-network-1.0.0-dev.388.json)
+test binary. The earlier ordinary dev.388 [checked product-menu run](../../tests/hil/evidence/wifi-product-network-1.0.0-dev.388.json)
 passed explicit Start, passive same-AP discovery, manual Stop and deadline Stop
 (host observed 60.395 s). Eight TFT captures include a countdown delta of
-29 dynamic / zero static pixels; both boards end Home/none/lease 0 with no drops
-or SD operations. Reconnection restored boot; the earlier
+29 dynamic / zero static pixels; both boards end Home/none/lease 0 with zero
+final drop counters and SD operations. Final reset counters do not prove a
+lossless full session. Reconnection restored boot; the earlier
 [startup blocker](../../tests/hil/evidence/wifi-product-network-dev386-boot-blocker.json)
 remains retained and its root cause is not conclusively established.
 The verified hidden → visible → hidden

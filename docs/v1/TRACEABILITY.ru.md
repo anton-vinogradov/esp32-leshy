@@ -7,6 +7,17 @@
 
 ## Цели верхнего уровня
 
+Доработка имени: `E-BUILD-255 / E-AUTO-234 / E-HIL-251 / E-UX-101 / RB-M268`
+связывает PR-004/009/011 и NFR-002/010 с [обычной dev.390](../../tests/hil/evidence/wifi-name-listen-1.0.0-dev.390.json).
+Прошли host-контракты decoder/catalog/safety/render, ASan/UBSan, 28 тестов evidence
+и 8 тестов фрагментированного console. Физически: 20,001 с без имени, источник
+из кадра AP без подмены RSSI/отсчётов, touch Stop 1,056 с, возврат скана и
+13 кадров TFT; таймер меняет 26 динамических / ноль статических пикселей.
+Оба Home/none/lease 0; capacity drops истории показаны до сброса счётчиков.
+[Три прежних отказа](../../tests/hil/evidence/wifi-name-listen-dev389-390-failures.json)
+сохранены. Association клиента/конфликты пока host-only; причина потерь USB
+не квалифицирована. Wi-Fi **17/21**, всего **24/62**, широкая cadence **15/15 — требуется**.
+
 Штатная двухплатная приёмка: `E-BUILD-254 / E-AUTO-233 / E-HIL-250 / E-UX-100 / RB-M267`
 связывает PR-004/009/011 и NFR-002/010 с [итогом product-сети dev.388](../../tests/hil/evidence/wifi-product-network-1.0.0-dev.388.json).
 Одинаковый обычный образ, явный Start через меню, пассивные наблюдения той же AP
