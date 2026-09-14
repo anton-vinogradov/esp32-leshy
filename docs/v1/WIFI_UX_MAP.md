@@ -6,7 +6,7 @@ Document: **target UX, with the implementation checkpoint below**.
 The agreed direction is a task tree, understandable labels and distinct OK/Right
 roles where useful. Publishing mockups does not close implementation or HIL gates.
 
-## Installed checkpoint — 14 September, dev.385
+## Installed checkpoint — 14 September, dev.388
 
 Implemented: Nearby networks → summary → OK signal finder / Right actions →
 protection, password preparation, or four information branches (identity,
@@ -25,6 +25,16 @@ Find anomalies. Opening the group starts no receiver or recording. Ten route
 states and five TFT captures passed the [menu-only delta](../../tests/hil/evidence/wifi-menu-1.0.0-dev.385.json),
 including touch, bounds, parent focus and Home cleanup. The deep-card/graph
 acceptance above is the dev.384 baseline, not a repeated full gate.
+
+Dev.388 on both DIVs adds **Device → Self-check → Check Wi-Fi**. Radio stays off
+on entry; explicit Start creates an own test network for 60 seconds. Choose
+hidden/visible name and Stop without renewing the deadline. The second DIV uses
+Nearby networks. This is discovery only, no internet/client connection or SD.
+[Two-board evidence](../../tests/hil/evidence/wifi-product-network-1.0.0-dev.388.json):
+8 TFT captures, manual and timed Stop, same-AP name discovery/retention; countdown
+changed 29 dynamic / zero static pixels. Both finish Home with radio off.
+The separate self-check branch below is documented here; the interactive mockup
+still represents the main Wi-Fi task tree, not this new tool.
 
 Still target design: contextual Lab shortcut, radar pause,
 expanded hidden-name/source/conflicts and remaining end-to-end wizard
@@ -47,6 +57,9 @@ same navigation contract in English.
 
 ```mermaid
 flowchart TD
+    DEV["Device"] --> SELF["Self-check"] --> TEST["Check Wi-Fi"]
+    TEST --> START["Create own test network — 60 s / Stop"]
+    START -. "Second DIV receives" .-> N
     W["Wi-Fi"] --> N["Nearby networks"]
     W --> D["Devices on air"]
     W --> C["Channels"]

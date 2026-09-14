@@ -1,0 +1,112 @@
+{
+  "schema": "leshy.wifi_product_network.acceptance.v1",
+  "status": "passed",
+  "failures": [],
+  "app_elf_sha256": "1348a46e337335d3a82b21c43adb76b7c43299eb1e46ad71863c5d1253ea46fc",
+  "image_sha256": "48a117e959ddee0ad529b58277a6cd3af815bb636385a29f96c69a099c61b680",
+  "version": "1.0.0-dev.388",
+  "source_commit": "a42deb5a7d49e6ef7b06b448a04ad8f84509ae08",
+  "run_sha256": "3a2a79e5dceaf3969d37ede8ce69568cd4edaba81539d635cfe5b740bf7e0771",
+  "boards": 2,
+  "ordinary_product_ui_only": true,
+  "name_states": {
+    "hidden": {
+      "ssid_known": false,
+      "signal_samples": 12,
+      "hidden_resolutions": 0
+    },
+    "hidden_no_name": {
+      "ssid_known": false,
+      "signal_samples": 14,
+      "hidden_resolutions": 0
+    },
+    "resolved": {
+      "ssid_known": true,
+      "signal_samples": 15,
+      "hidden_resolutions": 1
+    },
+    "retained": {
+      "ssid_known": true,
+      "signal_samples": 17,
+      "hidden_resolutions": 1
+    }
+  },
+  "deadline_observed_s": 60.395,
+  "countdown_pixels": {
+    "dynamic_pixels": 29,
+    "static_pixels": 0
+  },
+  "final": {
+    "source": {
+      "page": "home",
+      "runtime_owner": "none",
+      "lease_mask": 0,
+      "safety_latched": false,
+      "safety_state": "armed",
+      "survey_scan_dropped": 0,
+      "survey_dropped": 0,
+      "survey_timeline_overflow": 0,
+      "survey_product_store_bytes_written": 0,
+      "survey_product_filesystem_mount_attempts": 0
+    },
+    "receiver": {
+      "page": "home",
+      "runtime_owner": "none",
+      "lease_mask": 0,
+      "safety_latched": false,
+      "safety_state": "armed",
+      "survey_scan_dropped": 0,
+      "survey_dropped": 0,
+      "survey_timeline_overflow": 0,
+      "survey_product_store_bytes_written": 0,
+      "survey_product_filesystem_mount_attempts": 0
+    }
+  },
+  "heap": {
+    "source": {
+      "heap_total": 140428,
+      "heap_free": 64576,
+      "heap_min_free": 21632
+    },
+    "receiver": {
+      "heap_total": 140428,
+      "heap_free": 58944,
+      "heap_min_free": 16344
+    }
+  },
+  "screens": {
+    "hidden": {
+      "png_sha256": "4763854cf46ba3208c1acb73503001169469df80808db0806b061883d836a2eb",
+      "rgb565_sha256": "20962fc9989f23d5d8348715371682648fa47499f0f6830dc82b98722b4c27c2"
+    },
+    "hidden_no_name": {
+      "png_sha256": "10a809d885cbd71f2d2f3b006cb9b40454ab705e422ed52cb9df177e0e60392f",
+      "rgb565_sha256": "70aa1246c63686e3d29864735f2e78c49b359d16b3ac92870db932ef440f2c82"
+    },
+    "resolved": {
+      "png_sha256": "cb37ab6c4d98bf1af651a7be4a2cc0afd56b4c48f65825eaee899f374e23c06c",
+      "rgb565_sha256": "5bbe152a8daef77033395ae180685f0de8c81bb0d1f26e0102e6066e0e4971d5"
+    },
+    "retained": {
+      "png_sha256": "cb37ab6c4d98bf1af651a7be4a2cc0afd56b4c48f65825eaee899f374e23c06c",
+      "rgb565_sha256": "5bbe152a8daef77033395ae180685f0de8c81bb0d1f26e0102e6066e0e4971d5"
+    },
+    "source-deadline": {
+      "png_sha256": "349798be4f0b645bc75c9ac0037a0e8d579a629ef5ac63a9d22a99ed241cb3e7",
+      "rgb565_sha256": "140ddadfa557fd19f8a70c4a5aeb33553d8b6a82b28d002837c79e94b892d3af"
+    },
+    "source-ready": {
+      "png_sha256": "75d9f17d647f700b36fc0a84fc267e8e72cfc0c9102117a68fe6588b59c98fb1",
+      "rgb565_sha256": "0bc4a61cdf682e464ed60fba8e6b3e3173582e29abb212f4ddb253844ac1d33f"
+    },
+    "source-running": {
+      "png_sha256": "8fb0ea035aaaccbf1f6623e9c860108a66e340a9b87a76b8f64d96ffa9504ff6",
+      "rgb565_sha256": "c7ce21d2b8dede402f5ea8b678e982dd459d55cf193938cc284d60475a6972d6"
+    },
+    "source-running-later": {
+      "png_sha256": "96b0087c264b648701bbc2de386a7444f93b7aa59aca8f6b1f1e6949989a748b",
+      "rgb565_sha256": "74381421da373ef9059db42d5a528480547413db92def00a0a67f776e15c5f7b"
+    }
+  },
+  "limits": "AP hidden-visible-hidden discovery only, not client-frame name enrichment. No physical BOOT/lock-fault injection, association/internet, optical flicker, heap-invariance, endurance or broad-matrix acceptance. Startup-power interval uses PHY default."
+}

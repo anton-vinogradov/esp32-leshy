@@ -9,7 +9,7 @@ network, explains protection/quality and helps choose the next step.
 
 14 September implementation: dev.384 supplies four themed information pages and
 a pixel-fitted UTF-8/escaped SSID display projection. The receive adapters,
-client-frame → AP merge, provenance/conflicts and hidden-name fixture below remain
+client-frame → AP merge, provenance/conflicts and client-association fixture below remain
 open; the UI change does not claim those measurements.
 
 Host foundation (14 September): [bounded name decoder/tracker](../../firmware/leshy1/src/apps/wifi/WifiNetworkNameEvidence.h)
@@ -25,11 +25,14 @@ It adds no radio owner, global RAM allocation, SD write or accepted feature.
 
 Two-DIV validation follows [the product-firmware rule](GOVERNANCE.md#product-firmware-on-both-divs):
 the source is a normal, user-accessible bounded test-network role, not a separate
-test binary. Dev.386 adds that source role in ordinary firmware; physical
-acceptance is blocked by original-board startup/USB failure before AP start.
-Dev.387 adds boot-stage evidence/retry-budget diagnostics but has not been flashed;
-see the [retained blocker](../../tests/hil/evidence/wifi-product-network-dev386-boot-blocker.json).
-Hidden → visible → hidden
+test binary. Both DIVs now run ordinary dev.388; the [checked product-menu run](../../tests/hil/evidence/wifi-product-network-1.0.0-dev.388.json)
+passed explicit Start, passive same-AP discovery, manual Stop and deadline Stop
+(host observed 60.395 s). Eight TFT captures include a countdown delta of
+29 dynamic / zero static pixels; both boards end Home/none/lease 0 with no drops
+or SD operations. Reconnection restored boot; the earlier
+[startup blocker](../../tests/hil/evidence/wifi-product-network-dev386-boot-blocker.json)
+remains retained and its root cause is not conclusively established.
+The verified hidden → visible → hidden
 beacons check AP-name discovery/retention only; they do not prove learning a name
 from a client's association while the AP remains hidden. Both cases need their
 own observations. Neither requires the laptop's Wi-Fi.

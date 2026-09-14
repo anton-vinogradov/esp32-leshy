@@ -2,14 +2,29 @@
 
 *Read in: **English** · [Русский](RESOURCE_BUDGETS.ru.md)*
 
-## Latest source/build — RB-M266 (14 September 2026)
+## Latest product delta — RB-M267 (14 September 2026)
+
+Ordinary dev.388 on both DIVs: static RAM **237864 B**, linked flash **3624264 B**,
+app **3624768 B**, OTA free **569536 B** (45248 B above the 512 KiB floor).
+No PSRAM dependency or full-screen framebuffer added. Firmware/runner `a42deb5`.
+[Checked two-board record](../../tests/hil/evidence/wifi-product-network-1.0.0-dev.388.json):
+8 TFT frames; countdown 29 changed dynamic / 0 static pixels; deadline Stop
+observed by the host at 60.395 s, including polling latency. Final source heap
+total/free/min **140428/64576/21632 B**, receiver **140428/58944/16344 B**.
+Both Home/none/lease 0, zero drops/SD operations. These are endpoint measurements,
+not heap invariance, endurance, optical flicker or a broad-matrix acceptance.
+The configured 2 dBm limit applies after Wi-Fi starts; startup uses PHY default.
+
+## Previous blocked deployment — RB-M266 (14 September 2026)
 
 Ordinary Wi-Fi test-network role: dev.386 static RAM **237864 B** (+512),
 app **3624096 B**, OTA free **570208 B**. Full host checks passed; source-board
 startup failed before AP testing. Dev.387 startup logging/retry-budget follow-up:
 static RAM **237864 B**, linked flash **3624272 B**, app **3624768 B**,
 OTA free **569536 B** (45248 B above floor). Clean-target delta and build passed.
-The follow-up could not connect to the original's bootloader and was not written.
+At that checkpoint the follow-up could not connect to the original's bootloader
+and was not written. After physical reconnection, dev.387 and dev.388 booted;
+RB-M267 records the subsequent narrow acceptance, not proof of the root cause.
 [Blocked deployment digest](../../tests/hil/evidence/wifi-product-network-dev386-boot-blocker.json).
 Safe-Mode heap is not comparable with a working AP; no runtime heap-invariance,
 two-DIV acceptance, feature credit or cadence reset is claimed.
