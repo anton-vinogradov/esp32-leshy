@@ -211,7 +211,25 @@ def main():
                 action(source, "left")
                 action(source, "down")
                 action(source, "right")
-                require(ap(source)["active"] and ap(source)["hidden"], "fresh hidden AP missing")
+                name_source = ap(source)
+                require(name_source["active"] and name_source["hidden"], "fresh hidden AP missing")
+                report["states"]["name_source"] = name_source
+                # Session privacy deliberately changes the own AP identity on
+                # every Start. Re-select the new target; do not wait for the old
+                # AP to reappear and misdiagnose a correct receiver as stale.
+                identity = bssid_hash(name_source["bssid"])
+                action(receiver, "left")
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    state = ui(receiver)
+                    if state["wifi_network_selected_identity_hash"] == identity: break
+                    if state["wifi_network_selection"] + 1 >= state["wifi_network_visible_size"]:
+                        for _ in range(32):
+                            if ui(receiver)["wifi_network_selection"] == 0: break
+                            action(receiver, "up")
+                    else: action(receiver, "down")
+                require(state["wifi_network_selected_identity_hash"] == identity, "new private AP not found")
+                action(receiver, "right")
                 for key in ("right", "down", "down", "right", "right", "right"):
                     action(receiver, key)
                 def detail():
@@ -232,6 +250,7 @@ def main():
                     raise TimeoutError(label)
                 ready = detail()
                 require(ready["name_listen_state"] == "idle" and not ready["name_receiver_owned"], "page started receiver")
+                require(not ready["ssid_known"], "fresh hidden target unexpectedly named")
                 report["states"]["name_ready"] = ready
                 screen(receiver, "name-ready")
                 action(receiver, "right")
@@ -276,6 +295,9 @@ def main():
                 for _ in range(5): action(receiver, "left")
                 require(ui(receiver)["wifi_product_view"] == "networks", "name Back path did not return to list")
                 report["name_listener_scope"] = "passive_ap_frames_timeout_touch_stop_restore_no_client_association"
+                after_name_ui = ui(receiver)
+                report["name_history_retention"] = {k:after_name_ui.get(k) for k in
+                    ("survey_received", "survey_forwarded", "survey_dropped", "survey_scan_dropped")}
             action(source, "left")
             stopped = ap(source)
             require(not stopped["radio_started"] and stopped["cleanup_complete"] and
